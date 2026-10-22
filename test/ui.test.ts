@@ -6,7 +6,7 @@ import type { ChromeCtx } from '../src/ui/chrome.ts';
 import { drawHelp, drawPicker, drawTooSmall, drawBox } from '../src/ui/overlays.ts';
 import { Screen } from '../src/term/screen.ts';
 import { isWide } from '../src/term/width.ts';
-import { lab } from '../src/themes/lab.ts';
+import { mines } from '../src/cave/biomes/mines.ts';
 import { THEMES } from '../src/themes/index.ts';
 import { Stage } from '../src/world/stage.ts';
 import { ACTIVITIES } from '../src/agents.ts';
@@ -43,7 +43,7 @@ test('activity glyphs are single narrow characters', () => {
 });
 
 function ctx(): ChromeCtx {
-  const stage = new Stage(lab);
+  const stage = new Stage(mines);
   stage.layout({ x: 0, y: 1, w: 92, h: 33 });
   const agents: AgentInfo[] = [
     { id: 'L', name: 'atlas', role: 'lead', project: 'animus', activity: 'write', detail: 'Edit cli.ts', since: NOW - 65000, lastSeen: NOW },
@@ -51,7 +51,7 @@ function ctx(): ChromeCtx {
   ];
   stage.sync(agents, NOW);
   return {
-    theme: lab,
+    theme: mines,
     actors: stage.actors(),
     selectedId: 'S',
     account: { name: 'Ada', plan: 'max' },
@@ -69,7 +69,7 @@ test('header shows brand, theme, account and counts', () => {
   drawHeader(s, { x: 0, y: 0, w: 120, h: 1 }, ctx());
   const text = s.toText();
   assert.match(text, /ANIMUS/);
-  assert.match(text, /Mad Science Lab/);
+  assert.match(text, /The Mines/);
   assert.match(text, /Ada/);
   assert.match(text, /2 working/);
 });
@@ -106,13 +106,13 @@ test('overlays draw inside the screen', () => {
   const s = new Screen(100, 30);
   drawBox(s, { x: 2, y: 2, w: 10, h: 4 }, [1, 1, 1], [2, 2, 2], 'hi');
   assert.equal(s.charAt(2, 2), '╭');
-  drawHelp(s, { x: 0, y: 1, w: 100, h: 27 }, lab);
+  drawHelp(s, { x: 0, y: 1, w: 100, h: 27 }, mines);
   assert.match(s.toText(), /quit/);
   const p = new Screen(100, 30);
   drawPicker(p, { x: 0, y: 1, w: 100, h: 27 }, THEMES, 0, 0);
   for (const t of THEMES) assert.ok(p.toText().includes(t.name), t.name);
   const tiny = new Screen(40, 10);
-  drawTooSmall(tiny, lab);
+  drawTooSmall(tiny, mines);
   assert.match(tiny.toText(), /60.20/);
   for (const sc of [s, p, tiny]) for (const ch of sc.ch) assert.ok(!isWide(ch), ch);
 });

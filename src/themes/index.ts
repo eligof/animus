@@ -1,11 +1,7 @@
 import type { Theme } from './types.ts';
-import { lab } from './lab.ts';
-import { club } from './club.ts';
-import { den } from './den.ts';
-import { station } from './station.ts';
-import { cafe } from './cafe.ts';
+import { BIOMES } from '../cave/biomes/index.ts';
 
-export const THEMES: readonly Theme[] = [lab, club, den, station, cafe];
+export const THEMES: readonly Theme[] = BIOMES;
 
 export function getTheme(id: string): Theme | undefined {
   return THEMES.find((t) => t.id === id);

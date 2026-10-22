@@ -8,13 +8,14 @@ import { parseKeys } from '../src/term/terminal.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { AgentSource, AgentInfo } from '../src/agents.ts';
 import { traitsFor } from '../src/world/character.ts';
+import { wizardSprite } from '../src/cave/wizard.ts';
 import { tempDir } from './helpers.ts';
 
 const START = 1_700_000_000_000;
 const key = (s: string) => parseKeys(s)[0];
 
 function demoWorld(): World {
-  const w = new World({ theme: getTheme('lab')!, live: null, demo: true, account: { name: 'Ada', plan: 'max' }, rootLabel: '~/.claude', start: START });
+  const w = new World({ theme: getTheme('mines')!, live: null, demo: true, account: { name: 'Ada', plan: 'max' }, rootLabel: '~/.claude', start: START });
   w.resize(120, 36);
   return w;
 }
@@ -94,7 +95,7 @@ test('space pauses, q quits, d toggles demo', () => {
 
 test('live world with no agents shows a demo hint', () => {
   const empty: AgentSource = { label: 'live', poll: (): AgentInfo[] => [], drainEvents: () => [] };
-  const w = new World({ theme: getTheme('lab')!, live: empty, demo: false, account: null, rootLabel: '/x/.claude', start: START });
+  const w = new World({ theme: getTheme('mines')!, live: empty, demo: false, account: null, rootLabel: '/x/.claude', start: START });
   const now = advance(w, 2);
   const s = new Screen(120, 36);
   w.draw(s, now);
@@ -116,12 +117,18 @@ test('characters are visible in the scene after ticking', () => {
   const now = advance(w, 20);
   const s = new Screen(120, 36);
   w.draw(s, now);
-  // The demo lead's shirt colour, under the theme's ambient light, must
+  // With the lighting off, colours from the demo lead's own sprite must
   // appear among the scene's pixels.
-  const shirt = traitsFor('demo-atlas', 'lead').shirt;
-  const amb = w.theme.lighting?.ambient ?? [255, 255, 255];
-  const want = shirt.map((c, k) => (c * amb[k]) / 255);
-  const near = (n: number) => [(n >> 16) & 255, (n >> 8) & 255, n & 255].every((c, k) => Math.abs(c - want[k]) <= 12);
+  w.handleKey(key('l'));
+  w.draw(s, now);
+  const tr = traitsFor('demo-atlas', 'lead');
+  const palette = new Set<number>();
+  for (const pose of ['idle', 'walk', 'write', 'read', 'think', 'run', 'search', 'web'] as const) {
+    for (const back of [false, true]) {
+      for (const row of wizardSprite(tr, pose, 1, { back, flip: false }).px) for (const c of row) if (c) palette.add((c[0] << 16) | (c[1] << 8) | c[2]);
+    }
+  }
+  const near = (n: number) => palette.has(n);
   let found = false;
   for (let y = 1; y < 34; y++) for (let x = 0; x < 92; x++) {
     const i = y * 120 + x;
@@ -145,7 +152,7 @@ test('theme switch plays a wipe transition', { skip: THEMES.length < 2 && 'needs
 
 test('empty live scene shows a centered hint', () => {
   const empty: AgentSource = { label: 'live', poll: (): AgentInfo[] => [], drainEvents: () => [] };
-  const w = new World({ theme: getTheme('lab')!, live: empty, demo: false, account: null, rootLabel: '~/.claude', start: START });
+  const w = new World({ theme: getTheme('mines')!, live: empty, demo: false, account: null, rootLabel: '~/.claude', start: START });
   w.resize(120, 36);
   const now = advance(w, 1);
   const s = new Screen(120, 36);
@@ -163,7 +170,7 @@ test('a failing live source never breaks the world', () => {
     },
     drainEvents: () => [],
   };
-  const w = new World({ theme: getTheme('lab')!, live: flaky, demo: false, account: null, rootLabel: '~', start: START });
+  const w = new World({ theme: getTheme('mines')!, live: flaky, demo: false, account: null, rootLabel: '~', start: START });
   w.resize(120, 36);
   const now = advance(w, 2);
   const s = new Screen(120, 36);

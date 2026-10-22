@@ -8,7 +8,7 @@ import { THEMES, getTheme, themeIds } from './themes/index.ts';
 
 export const USAGE = `usage: animus [options]
 
-  Watch your Claude Code agents work as pixel characters in an isometric room.
+  Watch your Claude Code agents work as tiny wizards in a Noita-style pixel cave.
 
 options:
   -t, --theme <id>      scene preset (see --list-themes)

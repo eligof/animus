@@ -3,59 +3,67 @@ import { clip } from '../claude/activity.ts';
 import type { RGB } from '../term/color.ts';
 import type { Rect, Screen } from '../term/screen.ts';
 import { BOLD } from '../term/screen.ts';
-import { drawBox } from '../iso/box.ts';
-import { PixelCanvas } from '../iso/canvas.ts';
-import { Shader } from '../iso/light.ts';
-import type { ScreenLight } from '../iso/light.ts';
-import { drawRoom, layoutRoom } from '../iso/room.ts';
-import type { Placed, Room, Spot } from '../iso/room.ts';
-import { characterSprite } from '../iso/sprites.ts';
-import type { Facing, Rig } from '../iso/sprites.ts';
-import { noise } from '../themes/art.ts';
-import type { Lamp, StationKind, Theme } from '../themes/types.ts';
+import { CLEAR, PixelCanvas } from '../iso/canvas.ts';
+import { blitSprite, drawParticles, Glow } from '../cave/glow.ts';
+import { hub, planLayout } from '../cave/layout.ts';
+import { buildTables, M } from '../cave/materials.ts';
+import type { Tables } from '../cave/materials.ts';
+import { updateParticles } from '../cave/particles.ts';
+import { Caster } from '../cave/raycast.ts';
+import { explode, heal, step } from '../cave/sim.ts';
+import { depthOf, project } from '../cave/types.ts';
+import type { Biome, Ctx, Facing, Layout, Particle, PointLight, Slot, StationKind, View } from '../cave/types.ts';
+import { Voxels } from '../cave/voxels.ts';
+import { wizardSprite } from '../cave/wizard.ts';
 import { poseFor, traitsFor } from './character.ts';
 import type { Pose, Traits } from './character.ts';
 import { Rng, hashString } from './rng.ts';
-
-export type { Placed } from '../iso/room.ts';
 
 // How pixels map to terminal cells: 'half' = 1x2 square pixels per cell
 // (upper half block), 'sextant' = 2x3 pixels per cell (2x3 sextant glyphs,
 // pixels about 3:4), three times the resolution where the terminal draws
 // sextants well.
 export type PixelMode = 'half' | 'sextant';
-const GRID: Record<PixelMode, { fx: number; fy: number; maxTw: number }> = {
-  half: { fx: 1, fy: 2, maxTw: 12 },
-  sextant: { fx: 2, fy: 3, maxTw: 24 },
+const GRID: Record<PixelMode, { fx: number; fy: number }> = {
+  half: { fx: 1, fy: 2 },
+  sextant: { fx: 2, fy: 3 },
 };
 
-const WALK = 3; // tiles per second
-const ENTER_MS = 600;
+const WALK = 14; // voxels per second
+const ENTER_MS = 700;
 const BUBBLE_MS = 3000;
-const SLOT_OFFSETS = [0, -0.9, 0.9, -1.8, 1.8, -2.7, 2.7];
-// Poses done with the back to the viewer, facing the furniture.
+const SIM_HZ = 36;
+const MARGIN = 6; // world-canvas border around the chunk, in pixels
+// Where a crowd at one prop stands: (along the wall, further out), voxels.
+const LANES: ReadonlyArray<readonly [number, number]> = [[0, 0], [-6, 0], [6, 0], [0, 6], [-6, 6], [6, 6], [-12, 0], [12, 0], [0, 12], [-12, 6], [12, 6]];
+// Poses done with the back to the viewer, facing the prop.
 const FACES_STATION = new Set<Pose>(['write', 'read', 'search', 'web', 'run', 'think']);
+
+type Spot = { x: number; y: number };
 
 export type Actor = {
   info: AgentInfo;
   traits: Traits;
   phase: number;
-  gx: number;
-  gy: number;
+  x: number;
+  y: number;
+  z: number; // standing height, eased toward the ground under the feet; -1 = unknown
   path: Spot[];
-  station: Placed | null;
-  slot: number;
+  station: Slot | null;
+  lane: number;
   state: 'enter' | 'walk' | 'work' | 'leave';
   facing: Facing;
   bornAt: number;
   bubbleUntil: number;
   gone: boolean;
-  fx: number;
+  fx: number; // seconds since the last activity effect
   order: number;
+  boomed: number; // `since` of the error that last exploded
+  cheered: number; // `since` of the finish last celebrated
 };
 
-// World-space particle; `glyph` ones are drawn as text cells, the rest as pixels.
-type Particle = { gx: number; gy: number; gz: number; vx: number; vy: number; vz: number; color: RGB; life: number; glyph?: string };
+// Letters drifting up in text cells (z's of a sleeper, a '!' on errors).
+type Glyph = { x: number; y: number; z: number; vz: number; ch: string; color: RGB; life: number };
 
 export function stationKindFor(a: Activity): StationKind | null {
   switch (a) {
@@ -70,26 +78,46 @@ export function stationKindFor(a: Activity): StationKind | null {
   }
 }
 
-// The scene: an isometric room from the theme, with agents as pixel
-// characters walking to the furniture for their current activity.
+// The scene: an isometric chunk of a Noita-style cave, every voxel
+// simulated, with agents as tiny wizards walking to the prop for their
+// current activity — where their work has physical effects.
 export class Stage {
-  private theme: Theme;
+  private biome: Biome;
   private rect: Rect = { x: 0, y: 0, w: 0, h: 0 };
-  private room: Room | null = null;
-  private canvas = new PixelCanvas(0, 0);
-  private shader = new Shader();
-  // Theme lighting (grade, lamps, bloom); off draws the raw art.
+  private mode: PixelMode;
+  // Lighting (grade, glow, bloom); off draws the flat materials.
   lit = true;
+
+  private L: Layout | null = null;
+  private v: Voxels | null = null;
+  private T: Tables;
+  private caster: Caster | null = null;
+  private glow = new Glow();
+  private view: View = { ox: 0, oy: 0 };
+  private world = new PixelCanvas(0, 0); // the whole chunk, lit
+  private screen = new PixelCanvas(0, 0); // the part shown in the scene rect
+  private albedo = new Int32Array(0);
+  private emit = new Int32Array(0);
+  private depth = new Float32Array(0);
+  private cam = { x: 0, y: 0, set: false };
+  private worldKey = '';
+
   private cast = new Map<string, Actor>();
   private particles: Particle[] = [];
+  private glyphs: Glyph[] = [];
+  private lights: PointLight[] = [];
   private rng = new Rng(1234);
+  private simRng = new Rng(4321);
+  private tick = 0;
+  private simAcc = 0;
+  private clock = 0;
   private seq = 0;
-  private mode: PixelMode;
   private placedLabels: Array<{ x: number; y: number; w: number }> = [];
 
-  constructor(theme: Theme, mode: PixelMode = 'half') {
-    this.theme = theme;
+  constructor(biome: Biome, mode: PixelMode = 'half') {
+    this.biome = biome;
     this.mode = mode;
+    this.T = buildTables(biome.colors);
   }
 
   get pixels(): PixelMode {
@@ -106,13 +134,20 @@ export class Stage {
     return this.placedLabels;
   }
 
-  setTheme(theme: Theme): void {
-    this.theme = theme;
+  setTheme(biome: Biome): void {
+    this.biome = biome;
+    this.T = buildTables(biome.colors);
+    this.worldKey = '';
     this.layout(this.rect);
   }
 
-  stations(): Placed[] {
-    return this.room?.placed ?? [];
+  stations(): Slot[] {
+    return this.L?.slots ?? [];
+  }
+
+  // The live voxel world (for tests and tools).
+  voxels(): Voxels | null {
+    return this.v;
   }
 
   actors(): Actor[] {
@@ -129,55 +164,89 @@ export class Stage {
 
   layout(r: Rect): void {
     this.rect = r;
+    // Nothing to show: keep the world as it is and skip drawing.
+    if (r.w <= 0 || r.h <= 0) return;
     const g = GRID[this.mode];
-    this.canvas = new PixelCanvas(r.w * g.fx, r.h * g.fy);
-    // Cells are about twice as tall as wide, so a pixel is (1/fx) wide and
-    // (2/fy) tall in cell widths.
-    const ky = g.fy / (2 * g.fx);
-    this.room = r.w > 0 && r.h > 0 ? layoutRoom(r.w * g.fx, r.h * g.fy, this.theme, ky, g.maxTw) : null;
+    const cw = r.w * g.fx;
+    const ch = r.h * g.fy;
+    this.screen = new PixelCanvas(cw, ch);
+    const L = planLayout(cw, ch);
+    const key = `${this.biome.id}:${L.W}x${L.D}x${L.H}`;
+    if (key !== this.worldKey) this.build(L, key);
+    else this.L = L;
+    this.cam.set = false;
     for (const a of this.cast.values()) {
-      if (this.room) {
-        a.gx = Math.max(0.3, Math.min(this.room.W - 0.3, a.gx));
-        a.gy = Math.max(0.3, Math.min(this.room.D - 0.3, a.gy));
-      }
+      Object.assign(a, this.clampToFloor(a));
+      a.z = -1;
       a.station = null;
       a.path = [];
-      if (a.state === 'enter') {
-        const door = this.door();
-        if (door) Object.assign(a, { gx: door.spot.gx, gy: door.spot.gy });
-      }
+      if (a.state === 'enter') Object.assign(a, this.door()?.spot ?? {});
       if (a.state === 'leave') this.retargetExit(a);
       else this.retarget(a);
     }
   }
 
-  private door(): Placed | undefined {
-    return this.room?.placed.find((p) => p.kind === 'entrance');
+  // Generates the biome into a fresh world sized for the layout and casts
+  // every pixel once.
+  private build(L: Layout, key: string): void {
+    this.worldKey = key;
+    this.L = L;
+    const v = new Voxels(L.W, L.D, L.H);
+    this.biome.generate(v, L, new Rng(hashString(this.biome.id)));
+    v.commitBase();
+    this.v = v;
+    const w = L.W + L.D + 2 * MARGIN;
+    const h = Math.ceil((L.W + L.D) / 2) + L.H + 2 * MARGIN;
+    this.view = { ox: L.D + MARGIN, oy: L.H + MARGIN };
+    this.world = new PixelCanvas(w, h);
+    this.albedo = new Int32Array(w * h);
+    this.emit = new Int32Array(w * h);
+    this.depth = new Float32Array(w * h);
+    this.caster = new Caster(v, this.T, w, h, this.view);
+    const b = this.biome.backdrop;
+    // Translucent edges against the void blend over the biome's backdrop.
+    this.caster.backdrop = (b[0] << 16) | (b[1] << 8) | b[2];
+    this.caster.renderAll();
+    this.particles = [];
+    this.glyphs = [];
+    this.lights = [];
+  }
+
+  private door(): Slot | undefined {
+    return this.L?.slots.find((s) => s.kind === 'entrance');
   }
 
   private clampToFloor(s: Spot): Spot {
-    if (!this.room) return s;
-    return { gx: Math.max(0.3, Math.min(this.room.W - 0.3, s.gx)), gy: Math.max(0.3, Math.min(this.room.D - 0.3, s.gy)) };
+    const L = this.L;
+    if (!L) return { x: s.x, y: s.y };
+    return { x: Math.max(L.T + 1, Math.min(L.W - 2, s.x)), y: Math.max(L.T + 1, Math.min(L.D - 2, s.y)) };
+  }
+
+  // Inside some prop's footprint (grown by `margin`).
+  private inside(s: Spot, margin: number): boolean {
+    return this.stations().some((p) => {
+      const [x0, x1, y0, y1] = p.wall === 'right' ? [p.x0, p.x0 + p.len, p.y0, p.y0 + p.dep] : [p.x0, p.x0 + p.dep, p.y0, p.y0 + p.len];
+      return s.x > x0 - margin && s.x < x1 + margin && s.y > y0 - margin && s.y < y1 + margin;
+    });
   }
 
   private retarget(a: Actor): void {
     const kind = stationKindFor(a.info.activity);
-    if (!kind || !this.room) return;
-    const st = this.room.placed.find((p) => p.kind === kind);
+    if (!kind || !this.L) return;
+    const st = this.L.slots.find((p) => p.kind === kind);
     if (!st) return;
     if (a.station === st && a.path.length === 0 && a.state === 'work') return;
-    const taken = new Set([...this.cast.values()].filter((o) => o !== a && o.station === st).map((o) => o.slot));
-    // First free slot whose spot is clear of every piece of furniture.
+    const taken = new Set([...this.cast.values()].filter((o) => o !== a && o.station === st).map((o) => o.lane));
     const spotFor = (k: number): Spot => {
-      const off = SLOT_OFFSETS[k];
-      return this.clampToFloor(st.at.wall === 'right' ? { gx: st.spot.gx + off, gy: st.spot.gy } : { gx: st.spot.gx, gy: st.spot.gy + off });
+      const [along, out] = LANES[k % LANES.length];
+      return this.clampToFloor(st.wall === 'right' ? { x: st.spot.x + along, y: st.spot.y + out } : { x: st.spot.x + out, y: st.spot.y + along });
     };
-    let slot = 0;
-    while (slot < SLOT_OFFSETS.length - 1 && (taken.has(slot) || this.blocked(spotFor(slot)))) slot++;
-    if (this.blocked(spotFor(slot))) slot = 0;
+    // The first free lane clear of every prop; past those, any free lane.
+    const free = [...LANES.keys()].filter((k) => !taken.has(k));
+    const lane = free.find((k) => !this.inside(spotFor(k), 1.5)) ?? free[0] ?? 0;
     a.station = st;
-    a.slot = slot;
-    this.walkTo(a, spotFor(slot));
+    a.lane = lane;
+    this.walkTo(a, spotFor(lane));
     if (a.state === 'work') a.state = 'walk';
   }
 
@@ -188,38 +257,24 @@ export class Stage {
     else a.path = [];
   }
 
-  private inside(s: Spot, margin: number): boolean {
-    return this.stations().some((p) => {
-      const { len, dep } = p.station.size;
-      const [x0, x1, y0, y1] = p.at.wall === 'right'
-        ? [p.at.along, p.at.along + len, p.at.out, p.at.out + dep]
-        : [p.at.out, p.at.out + dep, p.at.along, p.at.along + len];
-      return s.gx > x0 - margin && s.gx < x1 + margin && s.gy > y0 - margin && s.gy < y1 + margin;
-    });
-  }
-
-  private blocked(s: Spot): boolean {
-    return this.inside(s, 0.3);
-  }
-
-  // Straight there, or through the middle of the room when the straight
-  // line would cut through furniture (it all stands against the walls).
+  // Straight there, or through the middle of the cave when the straight
+  // line would cut through a prop (they all stand against the walls).
   private walkTo(a: Actor, to: Spot): void {
-    const from = { gx: a.gx, gy: a.gy };
+    const L = this.L;
+    const from = { x: a.x, y: a.y };
     const clips = (p: Spot, q: Spot) => {
-      const n = Math.ceil(Math.hypot(q.gx - p.gx, q.gy - p.gy) / 0.15);
+      const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / 0.5);
       for (let i = 1; i < n; i++) {
         const k = i / n;
-        if (this.inside({ gx: p.gx + (q.gx - p.gx) * k, gy: p.gy + (q.gy - p.gy) * k }, 0.05)) return true;
+        if (this.inside({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k }, 0.5)) return true;
       }
       return false;
     };
-    if (!this.room || !clips(from, to)) {
+    if (!L || !clips(from, to)) {
       a.path = [to];
       return;
     }
-    const mid = { gx: this.room.W * 0.55, gy: this.room.D * 0.55 };
-    a.path = [mid, to];
+    a.path = [hub(L), to];
   }
 
   sync(agents: AgentInfo[], now: number): void {
@@ -255,17 +310,17 @@ export class Stage {
   }
 
   private spawn(info: AgentInfo, now: number): void {
-    const door = this.door();
-    const at = door?.spot ?? { gx: 1, gy: 1 };
+    const at = this.door()?.spot ?? { x: 12, y: 12 };
     const a: Actor = {
       info,
       traits: traitsFor(info.id, info.role, info.agentType),
       phase: hashString(info.id) % 997,
-      gx: at.gx,
-      gy: at.gy,
+      x: at.x,
+      y: at.y,
+      z: -1,
       path: [],
       station: null,
-      slot: 0,
+      lane: 0,
       state: 'enter',
       facing: { back: false, flip: false },
       bornAt: now,
@@ -273,13 +328,16 @@ export class Stage {
       gone: false,
       fx: 0,
       order: this.seq++,
+      boomed: -1,
+      cheered: -1,
     };
     this.cast.set(info.id, a);
     this.retarget(a);
-    this.burst(a, 12, this.theme.palette.accent);
+    this.sparkle(a, 16, a.traits.color);
   }
 
   update(dt: number, now: number): void {
+    this.clock += dt;
     for (const a of this.cast.values()) {
       if (a.state === 'enter' && now - a.bornAt < ENTER_MS) continue;
       if (a.state === 'enter') a.state = a.path.length ? 'walk' : 'work';
@@ -287,211 +345,250 @@ export class Stage {
       if (a.path.length === 0) {
         if (a.state === 'leave') {
           a.gone = true;
-          this.burst(a, 12, this.theme.palette.accent2);
+          this.sparkle(a, 16, a.traits.color);
         } else if (a.state === 'walk') {
           a.state = 'work';
         }
       } else if (a.state === 'work') {
         a.state = 'walk';
       }
-      this.emit(a, dt, now);
+      this.settle(a, dt);
+      this.effects(a, dt, now);
     }
     for (const [id, a] of this.cast) if (a.gone) this.cast.delete(id);
-    for (const p of this.stations()) p.users = 0;
-    for (const a of this.cast.values()) if (a.station && a.state === 'work') a.station.users++;
-    for (const p of this.particles) {
-      p.gx += p.vx * dt;
-      p.gy += p.vy * dt;
-      p.gz += p.vz * dt;
-      p.life -= dt;
+    for (const g of this.glyphs) {
+      g.z += g.vz * dt;
+      g.life -= dt;
     }
-    this.particles = this.particles.filter((p) => p.life > 0);
+    this.glyphs = this.glyphs.filter((g) => g.life > 0);
+    this.simulate(dt);
+  }
+
+  // Eases the standing height toward the ground under the feet. The ground
+  // is looked for at most a step above the current height, so a wizard
+  // never pops onto a mound or a falling grain above their head.
+  private settle(a: Actor, dt: number): void {
+    const v = this.v;
+    if (!v) return;
+    const x = Math.floor(a.x);
+    const y = Math.floor(a.y);
+    const target = v.ground(x, y, a.z < 0 ? v.H - 1 : Math.floor(a.z) + 3);
+    if (a.z < 0) a.z = target;
+    else a.z += Math.max(-40 * dt, Math.min(20 * dt, target - a.z));
+  }
+
+  // Props and weather, then the physics at a fixed rate, healing, and the
+  // free particles.
+  private simulate(dt: number): void {
+    const v = this.v;
+    const L = this.L;
+    if (!v || !L) return;
+    this.lights = [];
+    const c: Ctx = {
+      v,
+      rng: this.simRng,
+      t: this.clock,
+      dt,
+      spawn: (p) => this.add(p),
+      light: (l) => this.lights.push(l),
+    };
+    const actors = [...this.cast.values()];
+    for (const s of L.slots) {
+      const active = s.kind === 'entrance'
+        ? actors.some((a) => (a.state === 'enter' || a.state === 'leave') && Math.hypot(a.x - s.spot.x, a.y - s.spot.y) < 8)
+        : actors.some((a) => a.station === s && a.state === 'work');
+      this.biome.props[s.kind].tick?.(c, s, active);
+    }
+    this.biome.weather?.(c, L);
+    this.simAcc = Math.min(this.simAcc + dt, 3 / SIM_HZ);
+    while (this.simAcc >= 1 / SIM_HZ) {
+      step(v, this.T, this.simRng, this.tick++, (p) => this.add(p));
+      this.simAcc -= 1 / SIM_HZ;
+    }
+    heal(v, this.T, this.simRng, 1500, (x, y, z) => actors.some((a) => Math.abs(x + 0.5 - a.x) < 3 && Math.abs(y + 0.5 - a.y) < 3 && z < a.z + 14));
+    updateParticles(this.particles, v, this.T, dt, this.simRng);
   }
 
   private move(a: Actor, dt: number): void {
     let budget = WALK * dt;
     while (a.path.length && budget > 1e-9) {
       const wp = a.path[0];
-      const dx = wp.gx - a.gx;
-      const dy = wp.gy - a.gy;
+      const dx = wp.x - a.x;
+      const dy = wp.y - a.y;
       const dist = Math.hypot(dx, dy);
       if (dist > 1e-6) {
         // Screen direction decides the view: up-screen walks away from us.
         a.facing = { back: dx + dy < 0, flip: dx - dy < 0 };
       }
       if (dist <= budget) {
-        a.gx = wp.gx;
-        a.gy = wp.gy;
+        a.x = wp.x;
+        a.y = wp.y;
         budget -= dist;
         a.path.shift();
       } else {
-        a.gx += (dx / dist) * budget;
-        a.gy += (dy / dist) * budget;
+        a.x += (dx / dist) * budget;
+        a.y += (dy / dist) * budget;
         budget = 0;
       }
     }
   }
 
   private add(p: Particle): void {
-    if (this.particles.length < 400) this.particles.push(p);
+    if (this.particles.length < 1500) this.particles.push(p);
   }
 
-  private burst(a: Actor, n: number, color: RGB): void {
+  private groundAt(x: number, y: number): number {
+    return this.v ? this.v.ground(Math.floor(x), Math.floor(y)) : 0;
+  }
+
+  // Where an actor's feet are (eased), or the ground below if not yet known.
+  private zOf(a: Actor): number {
+    return a.z >= 0 ? a.z : this.groundAt(a.x, a.y);
+  }
+
+  private sparkle(a: { x: number; y: number }, n: number, color: RGB): void {
+    const z = this.groundAt(a.x, a.y);
     for (let i = 0; i < n; i++) {
       const ang = (i / n) * Math.PI * 2;
-      this.add({ gx: a.gx, gy: a.gy, gz: 1.2, vx: Math.cos(ang) * 1.2, vy: Math.sin(ang) * 1.2, vz: 1 + this.rng.next(), color, life: 0.5 + this.rng.next() * 0.3 });
+      this.add({ kind: 'spark', x: a.x, y: a.y, z: z + 4 + this.rng.next() * 6, vx: Math.cos(ang) * 6, vy: Math.sin(ang) * 6, vz: 4 + this.rng.next() * 6, life: 0.6 + this.rng.next() * 0.4, color, glow: true, gravity: 10 });
     }
   }
 
-  private emit(a: Actor, dt: number, now: number): void {
+  // What an agent's state does to the world beyond its prop: errors blow a
+  // crater, finishing sets off fireworks, delegating casts a bolt at the
+  // subagent, long naps drift z's.
+  private effects(a: Actor, dt: number, now: number): void {
     a.fx += dt;
-    if (a.state !== 'work') return;
-    const pal = this.theme.palette;
+    const v = this.v;
+    const L = this.L;
+    if (!v || !L) return;
     const r = this.rng;
+    const act = a.info.activity;
     const every = (s: number) => {
       if (a.fx < s) return false;
       a.fx = 0;
       return true;
     };
-    const head = 2.6;
-    const at = (vz: number, color: RGB, life: number, glyph?: string, spread = 0.3): Particle => ({
-      gx: a.gx + r.range(-spread, spread),
-      gy: a.gy + r.range(-spread, spread),
-      gz: head,
-      vx: 0,
-      vy: 0,
-      vz,
-      color,
-      life,
-      glyph,
-    });
-    const act = a.info.activity;
+    const z = this.zOf(a);
+    const head = z + 12;
+    const pal = this.biome.palette;
+    if (act === 'error' && a.boomed !== a.info.since && a.state !== 'enter') {
+      a.boomed = a.info.since;
+      // Toward the middle of the cave, so the crater opens in front of them.
+      const kx = Math.sign(L.W * 0.55 - a.x) * 6;
+      const ky = Math.sign(L.D * 0.55 - a.y) * 6;
+      explode(v, this.T, Math.round(a.x + kx), Math.round(a.y + ky), z, 4, this.simRng, (p) => this.add(p));
+    }
+    if (act === 'error' && every(0.7)) this.glyphs.push({ x: a.x, y: a.y, z: head + 2, vz: 4, ch: '!', color: pal.bad, life: 0.8 });
+    if (act === 'done' && a.cheered !== a.info.since) {
+      a.cheered = a.info.since;
+      const colors = [pal.accent, pal.accent2, pal.good, pal.warn, a.traits.color];
+      for (let i = 0; i < 46; i++) {
+        const ang = r.next() * Math.PI * 2;
+        const sp = 4 + r.next() * 8;
+        this.add({ kind: 'spark', x: a.x, y: a.y, z: head + 4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: 10 + r.next() * 12, life: 0.8 + r.next() * 0.8, color: r.pick(colors), glow: true, gravity: 14 });
+      }
+      for (let i = 0; i < 10; i++) {
+        this.add({ kind: 'debris', x: a.x + r.range(-2, 2), y: a.y + r.range(-2, 2), z: head + 6, vx: r.range(-4, 4), vy: r.range(-4, 4), vz: 6 + r.next() * 6, life: 4, color: [255, 211, 74], glow: true, gravity: 24, mat: M.GOLD_DUST });
+      }
+    }
+    if (act === 'delegate' && every(1.2)) {
+      const sub = [...this.cast.values()].find((o) => o.info.parentId === a.info.id && o.state !== 'leave');
+      if (sub) {
+        const tz = this.zOf(sub) + 8;
+        this.add({ kind: 'bolt', x: a.x, y: a.y, z: head, vx: 0, vy: 0, vz: 6, life: 3, color: a.traits.color, glow: true, gravity: 0, target: { x: sub.x, y: sub.y, z: tz } });
+      }
+    }
+    if (act === 'talk' && every(0.5)) this.add({ kind: 'glint', x: a.x + r.range(-2, 2), y: a.y + r.range(-2, 2), z: head + 2, vx: 0, vy: 0, vz: 3, life: 0.5, color: a.traits.color, glow: true, gravity: 0 });
     const idleFor = (now - a.info.since) / 1000;
-    if (act === 'write' && every(0.25)) this.add({ ...at(1.5, pal.accent, 0.5), gz: 1.6 });
-    else if (act === 'run' && every(0.15)) this.add({ ...at(2.5, pal.warn, 0.4, undefined, 0.5), gz: 1.8 });
-    else if (act === 'search' && every(1.4)) this.add(at(0.6, pal.accent2, 1.2, '?', 0));
-    else if (act === 'web' && every(0.3)) this.add({ ...at(0.4, pal.accent, 0.6), vx: 0.8, vy: -0.8 });
-    else if (act === 'think' && every(0.6)) this.add(at(0.9, pal.dim, 1.1));
-    else if (act === 'delegate' && every(0.5)) this.add({ ...at(0, pal.accent2, 0.5, '»', 0), vx: 1.5, vy: 1.5 });
-    else if (act === 'error' && every(0.5)) this.add(at(0.8, pal.bad, 0.8, '!', 0));
-    else if (act === 'done' && every(0.06)) this.add({ ...at(-1.2, r.pick([pal.accent, pal.accent2, pal.good, pal.warn, a.traits.color]), 1.2, undefined, 0.6), gz: 3 });
-    else if (act === 'idle' && idleFor >= 20 && every(1.1)) this.add({ ...at(0.6, pal.dim, 2, r.pick(['z', 'Z']), 0), vx: 0.2, vy: -0.2 });
+    if (act === 'idle' && idleFor >= 20 && every(1.1)) this.glyphs.push({ x: a.x, y: a.y, z: head + 2, vz: 5, ch: r.pick(['z', 'Z']), color: pal.dim, life: 2 });
   }
 
   draw(s: Screen, t: number, now: number, selectedId: string | null): void {
     this.placedLabels = [];
-    const room = this.room;
     const r = this.rect;
-    if (!room || r.w <= 0 || r.h <= 0) return;
-    const c = this.canvas;
-    const iso = room.iso;
-    c.clear(this.theme.backdrop);
-    drawRoom(c, room, this.theme, t, now);
-    const door = this.door();
-    const actors = [...this.cast.values()];
-    for (const p of [...room.placed].sort((m, n) => m.depth - n.depth)) {
-      let active = p.users > 0;
-      if (p === door) {
-        // The door counts as in use while someone comes or goes, so themes
-        // can light it up (users) like any other station.
-        active = actors.some((a) => (a.state === 'enter' || a.state === 'leave') && Math.hypot(a.gx - p.spot.gx, a.gy - p.spot.gy) < 1.2);
-        p.users = active ? 1 : 0;
-      }
-      // One shared clock, so themes can keep every piece on the same beat.
-      for (const b of p.station.model(t, active)) drawBox(c, iso, b, p.at);
-    }
-    // Bigger tiles get more detailed characters.
-    const rig: Rig = this.mode === 'sextant' ? (iso.hx >= 9 ? 'XL' : iso.hx >= 6 ? 'L' : 'S') : iso.hx >= 5 ? 'L' : 'S';
-    // Contact shadows belong to the floor: drawn before the capture so the
-    // lamps light them like the floor around them.
-    for (const a of actors) this.drawShadow(c, a, rig);
-    // What glows by itself is marked before anyone walks in front of it.
-    const lighting = this.lit ? this.theme.lighting : undefined;
-    if (lighting) this.shader.capture(c);
+    const v = this.v;
+    const caster = this.caster;
+    if (!this.L || !v || !caster || r.w <= 0 || r.h <= 0) return;
+    caster.update(v.takeChanges());
+    const { w, h } = this.world;
+    this.albedo.set(caster.albedo);
+    this.emit.set(caster.emit);
+    this.depth.set(caster.depth);
+    const lights = [...this.lights];
+    const actors = [...this.cast.values()].sort((m, n) => m.x + m.y - (n.x + n.y));
     const sprites = new Map<Actor, { sx: number; sy: number; top: number }>();
-    const items: Array<{ depth: number; draw: () => void }> = [];
     for (const a of actors) {
-      items.push({ depth: a.gx + a.gy, draw: () => sprites.set(a, this.drawActor(c, a, t, now, rig)) });
+      const z = this.zOf(a);
+      const idleFor = (now - a.info.since) / 1000;
+      const walking = a.path.length > 0 && a.state !== 'enter';
+      const pose = poseFor(a.info.activity, idleFor, walking);
+      let facing = a.facing;
+      if (!walking && a.station) {
+        // At the prop: backs to us for the work, facing us otherwise.
+        facing = FACES_STATION.has(pose) ? { back: true, flip: a.station.wall === 'left' } : { back: false, flip: a.station.wall === 'left' };
+      } else if (!walking) {
+        facing = { back: false, flip: a.facing.flip };
+      }
+      const sp = wizardSprite(a.traits, pose, t, facing, a.phase);
+      const [sx, sy] = project(this.view, a.x, a.y, z);
+      // Fading in at the door: drawn only once the entrance flash is over.
+      if (a.state !== 'enter' || now - a.bornAt > ENTER_MS * 0.5) blitSprite(this.albedo, this.emit, this.depth, w, h, sp, sx, sy, depthOf(a.x, a.y, z) + 1);
+      sprites.set(a, { sx, sy, top: Math.round(sy) - sp.ay + sp.dy });
+      if (sp.light) {
+        // Offsets are pixels from the anchor (before the sprite's own hop);
+        // a pixel right is half a voxel along +x and -y, a pixel up one z.
+        const l = sp.light;
+        const lx = l.dx + sp.dx;
+        const ly = l.dy + sp.dy;
+        lights.push({ x: a.x + lx / 2, y: a.y - lx / 2, z: z - ly, color: l.color, radius: l.radius, intensity: l.intensity });
+      }
     }
-    for (const p of this.particles) {
-      if (p.glyph) continue;
-      items.push({ depth: p.gx + p.gy, draw: () => { const [x, y] = iso.toScreen(p.gx, p.gy, p.gz); c.set(x, y, p.color); } });
-    }
-    for (const it of items.sort((m, n) => m.depth - n.depth)) it.draw();
-    this.theme.ambient?.(c, room, t);
-    if (lighting) this.shader.apply(c, this.lights(room, t, now), lighting);
+    drawParticles(this.albedo, this.emit, this.depth, w, h, this.particles, this.view);
+    this.glow.compose(this.world, this.albedo, this.emit, this.view, lights, this.biome.grade, this.lit, this.biome.backdrop);
+    this.crop(actors, sprites, selectedId);
     const g = GRID[this.mode];
-    if (this.mode === 'sextant') c.blitSextant(s, r, this.theme.backdrop);
-    else c.blit(s, r, this.theme.backdrop);
-    for (const p of this.particles) {
-      if (!p.glyph) continue;
-      const [x, y] = iso.toScreen(p.gx, p.gy, p.gz);
-      const cx = r.x + Math.floor(Math.round(x) / g.fx);
-      const cy = r.y + Math.floor(Math.round(y) / g.fy);
-      if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) s.put(cx, cy, p.glyph, p.color);
+    if (this.mode === 'sextant') this.screen.blitSextant(s, r, this.biome.backdrop);
+    else this.screen.blit(s, r, this.biome.backdrop);
+    for (const p of this.glyphs) {
+      const [x, y] = project(this.view, p.x, p.y, p.z);
+      const cx = r.x + Math.floor(Math.round(x - this.cam.x) / g.fx);
+      const cy = r.y + Math.floor(Math.round(y - this.cam.y) / g.fy);
+      if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) s.put(cx, cy, p.ch, p.color);
     }
     this.drawLabels(s, actors, sprites, now, selectedId, t);
   }
 
-  // Station and room lamps as pools on the screen. A floor circle of radius
-  // R projects to an ellipse with half-axes R*hx*√2 by R*hy/√2.
-  private lights(room: Room, t: number, now: number): ScreenLight[] {
-    const iso = room.iso;
-    const out: ScreenLight[] = [];
-    const add = (gx: number, gy: number, gz: number, l: Lamp) => {
-      const [x, y] = iso.toScreen(gx, gy, 0);
-      out.push({ x, y, rx: l.radius * iso.hx * Math.SQRT2, ry: l.radius * iso.hy * Math.SQRT1_2, up: gz * iso.hy, color: l.color, intensity: l.intensity });
-    };
-    for (const p of room.placed) {
-      const got = p.station.light?.(t, p.users > 0);
-      if (!got) continue;
-      for (const l of Array.isArray(got) ? got : [got]) {
-        if (p.at.wall === 'right') add(p.at.along + l.a, p.at.out + l.b, l.z, l);
-        else add(p.at.out + l.b, p.at.along + l.a, l.z, l);
-      }
+  // Copies the visible window of the lit chunk into the screen canvas:
+  // centred when it fits, otherwise following the selected agent (or the
+  // crowd) with a smooth pan.
+  private crop(actors: Actor[], sprites: Map<Actor, { sx: number; sy: number; top: number }>, selectedId: string | null): void {
+    const W = this.world;
+    const S = this.screen;
+    const focus = (len: number, view: number, at: number) => (len <= view ? (len - view) / 2 : Math.max(0, Math.min(len - view, at - view / 2)));
+    let fx = W.w / 2;
+    let fy = W.h / 2;
+    const sel = actors.find((a) => a.info.id === selectedId);
+    const pts = sel ? [sprites.get(sel)!] : actors.map((a) => sprites.get(a)!);
+    if (pts.length) {
+      fx = pts.reduce((sum, p) => sum + p.sx, 0) / pts.length;
+      fy = pts.reduce((sum, p) => sum + p.sy - 8, 0) / pts.length;
     }
-    for (const l of this.theme.lighting?.lights?.(room, t, now) ?? []) add(l.gx, l.gy, l.gz, l);
-    return out;
-  }
-
-  private drawShadow(c: PixelCanvas, a: Actor, rig: Rig): void {
-    const iso = this.room!.iso;
-    const [sx, sy] = iso.toScreen(a.gx, a.gy, 0);
-    const rx = rig === 'XL' ? 8 : rig === 'L' ? 4 : 3;
-    const ry = Math.max(1, rx * 0.42 * iso.ky);
-    for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) {
-      for (let dx = -rx; dx <= rx; dx++) {
-        if ((dx / rx) ** 2 + (dy / ry) ** 2 <= 1) c.blend(sx + dx, sy + dy, [0, 0, 0], 0.28);
-      }
+    const tx = focus(W.w, S.w, fx);
+    const ty = focus(W.h, S.h, fy);
+    if (!this.cam.set) Object.assign(this.cam, { x: tx, y: ty, set: true });
+    this.cam.x += (tx - this.cam.x) * 0.15;
+    this.cam.y += (ty - this.cam.y) * 0.15;
+    const ox = Math.round(this.cam.x);
+    const oy = Math.round(this.cam.y);
+    S.data.fill(CLEAR);
+    for (let y = 0; y < S.h; y++) {
+      const wy = y + oy;
+      if (wy < 0 || wy >= W.h) continue;
+      const x0 = Math.max(0, -ox);
+      const x1 = Math.min(S.w, W.w - ox);
+      if (x1 > x0) S.data.set(W.data.subarray(wy * W.w + x0 + ox, wy * W.w + x1 + ox), y * S.w + x0);
     }
-  }
-
-  private drawActor(c: PixelCanvas, a: Actor, t: number, now: number, rig: Rig): { sx: number; sy: number; top: number } {
-    const iso = this.room!.iso;
-    const [sx, sy] = iso.toScreen(a.gx, a.gy, 0);
-    const idleFor = (now - a.info.since) / 1000;
-    const walking = a.path.length > 0 && a.state !== 'enter';
-    const pose = poseFor(a.info.activity, idleFor, walking);
-    let facing = a.facing;
-    if (!walking && a.station) {
-      // At the furniture: backs to us for desk work, faces us otherwise.
-      facing = FACES_STATION.has(pose) ? { back: true, flip: a.station.at.wall === 'left' } : { back: false, flip: a.station.at.wall === 'left' };
-    } else if (!walking) {
-      facing = { back: false, flip: a.facing.flip };
-    }
-    const sp = characterSprite(a.traits, pose, t, facing, a.phase, rig);
-    const left = Math.round(sx) - sp.ax + sp.dx;
-    const top = Math.round(sy) - sp.ay + sp.dy;
-    const born = a.state === 'enter' ? Math.min(1, (now - a.bornAt) / ENTER_MS) : 1;
-    for (let y = 0; y < sp.h; y++) {
-      for (let x = 0; x < sp.w; x++) {
-        const p = sp.px[y][x];
-        if (!p) continue;
-        if (born < 1 && noise(y * 11 + x, a.phase) > born) continue;
-        c.set(left + x, top + y, p);
-      }
-    }
-    return { sx, sy, top };
   }
 
   // Name tags and speech bubbles in text cells, placed so they never
@@ -499,8 +596,10 @@ export class Stage {
   // that collides tries one row higher, otherwise it is skipped.
   private drawLabels(s: Screen, actors: Actor[], sprites: Map<Actor, { sx: number; sy: number; top: number }>, now: number, selectedId: string | null, t: number): void {
     const r = this.rect;
-    const pal = this.theme.palette;
+    const pal = this.biome.palette;
     const g = GRID[this.mode];
+    const ox = Math.round(this.cam.x);
+    const oy = Math.round(this.cam.y);
     const taken: Array<[number, number, number]> = [];
     const free = (y: number, x0: number, x1: number) => y >= r.y && !taken.some(([ty, a, b]) => ty === y && x0 < b + 1 && a < x1 + 1);
     const order = [...actors].sort((m, n) => {
@@ -513,8 +612,9 @@ export class Stage {
       if (!at) continue;
       const selected = a.info.id === selectedId;
       // Sprites are anchored on the rounded pixel column.
-      const cx = r.x + Math.floor(Math.round(at.sx) / g.fx);
-      const headRow = r.y + Math.floor(at.top / g.fy);
+      const cx = r.x + Math.floor((Math.round(at.sx) - ox) / g.fx);
+      const headRow = r.y + Math.floor((at.top - oy) / g.fy);
+      if (cx < r.x || cx >= r.x + r.w || headRow <= r.y || headRow > r.y + r.h) continue;
       const fit = (w: number) => Math.max(r.x, Math.min(r.x + r.w - w, cx - Math.floor(w / 2)));
       const place = (text: string, ys: number[]): [number, number] | null => {
         const w = [...text].length;
