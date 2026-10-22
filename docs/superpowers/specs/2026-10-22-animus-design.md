@@ -82,8 +82,23 @@ Each agent has one current `Activity`:
 | `think` | latest block is `thinking`, or session `busy` with no newer tool |
 | `talk` | latest block is assistant `text` (and turn not ended) |
 | `done` | subagent: last assistant message `stop_reason: end_turn`, no pending tool, file quiet ≥ 5 s |
-| `idle` | session status `idle`, or no transcript activity ≥ 60 s |
+| `idle` | session status `idle` |
 | `error` | latest `tool_result` has `is_error: true` (shown ~3 s, then reverts to `think`) |
+
+Implementation notes (revised during build):
+- Claude Code writes one record per content block and often leaves
+  `stop_reason` null, so a response ending in text with no pending tool also
+  ends the turn.
+- No pending tool, turn not over and no write for 8 s → `think` ("thinking…"):
+  the model is generating its next step.
+- Session status `waiting` (blocked on the user) → `talk` "needs your input";
+  `AskUserQuestion` → `talk`; `TodoWrite`/`Task*` → `think` "planning".
+- Unfinished subagents stay visible up to 60 min without writes (one model
+  generation can take many minutes); finished transcripts are cached so they
+  are not re-read.
+- All transcript-derived text is sanitized (C0/C1 controls, bidi and
+  zero-width marks dropped, wide glyphs replaced); `Screen.text` repeats this
+  as a backstop.
 
 Each activity change carries a short human detail: `Edit cli.ts`,
 `$ git status`, `Grep "TODO"`, `WebSearch terminal sprites`, `→ code-reviewer`.
@@ -136,7 +151,8 @@ uses demo only. With no live agents, the footer offers `d` to toggle demo.
 ├ footer: event ticker · key hints ─────────────────┴─────────────┘
 ```
 
-Under 100 columns the roster is hidden (selected agent shown in footer).
+Under 110 columns the roster is hidden and the selected agent is shown in the
+ticker row instead.
 Minimum supported size 60×20; smaller shows a "make me bigger" card.
 
 ### Characters
@@ -169,9 +185,12 @@ up + confetti · `error` red `!` and shake · long idle → sleeping `z Z`.
 ### Scene simulation
 
 - Theme supplies stations (`write`, `read`, `search`, `run`, `web`, `think`,
-  `idle`, plus an entrance). Stations are laid out left→right on the floor
-  line; each has slots so several agents can share it (slots spread across
-  the station width and in front of it).
+  `idle`, plus an entrance). Scenes at least 17 rows tall get two levels: a
+  mezzanine (read, search, web) and the ground floor (entrance, write, run,
+  think, idle), joined by ladders at both edges; actors take the shorter
+  route. Shorter scenes put everything on one floor. Stations are packed
+  left→right with equal gaps when they fit; each has slots so several agents
+  can share it.
 - `delegate` and `talk` use the `think` station; `error` stays in place;
   `done` stays in place (celebrating).
 - An actor whose activity changes picks the least-crowded matching station
@@ -197,8 +216,8 @@ Theme contract:
 type Theme = {
   id: string; name: string; tagline: string;
   palette: Palette;                        // named RGB roles for UI + scene
-  drawBackdrop(s: Screen, r: Rect, t: number): void;   // wall, floor, decor
-  drawAmbient(s: Screen, r: Rect, t: number): void;    // foreground fx
+  drawBackdrop(s: Screen, r: Rect, t: number, floors: number[]): void; // wall, floors, decor
+  drawAmbient(s: Screen, r: Rect, t: number, floors: number[]): void;  // foreground fx
   stations: StationDef[];                  // one per StationKind
   entrance: StationDef;
 };
