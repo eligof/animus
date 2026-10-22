@@ -3,16 +3,18 @@ import { readFileSync } from 'node:fs';
 import { runInteractive, snapshot } from './app.ts';
 import { claudeRoot } from './claude/paths.ts';
 import { loadConfig } from './config.ts';
+import { detectPixelMode } from './term/renderer.ts';
 import { THEMES, getTheme, themeIds } from './themes/index.ts';
 
 export const USAGE = `usage: animus [options]
 
-  Watch your Claude Code agents work as little characters in a 2D scene.
+  Watch your Claude Code agents work as pixel characters in an isometric room.
 
 options:
   -t, --theme <id>      scene preset (see --list-themes)
       --demo            simulated crew instead of live Claude data
       --fps <n>         frames per second (default 18)
+      --pixels <mode>   auto, half or sextant (2x3 pixels per cell; default auto)
       --claude-dir <p>  Claude config dir (default $CLAUDE_CONFIG_DIR or ~/.claude)
       --list-themes     list scene presets
       --snapshot        render one frame to stdout and exit
@@ -39,6 +41,7 @@ export async function main(argv: string[]): Promise<number> {
         theme: { type: 'string', short: 't' },
         demo: { type: 'boolean' },
         fps: { type: 'string' },
+        pixels: { type: 'string' },
         'claude-dir': { type: 'string' },
         'list-themes': { type: 'boolean' },
         snapshot: { type: 'boolean' },
@@ -85,14 +88,18 @@ export async function main(argv: string[]): Promise<number> {
   if (fps === null) return fail('--fps must be a number from 1 to 60');
   const root = claudeRoot(values['claude-dir']);
   const demo = Boolean(values.demo);
+  const want = values.pixels ?? loadConfig().pixels ?? 'auto';
+  if (want !== 'auto' && want !== 'half' && want !== 'sextant') return fail('--pixels must be auto, half or sextant');
+  const pixels = want === 'auto' ? detectPixelMode() : want;
+  const lights = loadConfig().lights ?? true;
 
   if (values.snapshot) {
     const width = num('width', values.width, 120, 20, 1000);
     const height = num('height', values.height, 36, 8, 500);
     const at = num('at', values.at, 12, 0, 3600);
     if (width === null || height === null || at === null) return fail('--width/--height/--at must be positive numbers');
-    process.stdout.write(snapshot({ theme, demo, fps, root, width: Math.floor(width), height: Math.floor(height), at }) + '\n');
+    process.stdout.write(snapshot({ theme, demo, fps, root, pixels, lights, width: Math.floor(width), height: Math.floor(height), at }) + '\n');
     return 0;
   }
-  return runInteractive({ theme, demo, fps, root });
+  return runInteractive({ theme, demo, fps, root, pixels, lights });
 }

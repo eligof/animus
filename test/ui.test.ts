@@ -116,3 +116,17 @@ test('overlays draw inside the screen', () => {
   assert.match(tiny.toText(), /60.20/);
   for (const sc of [s, p, tiny]) for (const ch of sc.ch) assert.ok(!isWide(ch), ch);
 });
+
+test('the wipe dims both pixels of every cell behind the curtain', async () => {
+  const { drawWipe } = await import('../src/ui/overlays.ts');
+  const s = new Screen(40, 6);
+  s.clear([200, 200, 200], [200, 200, 200]);
+  for (let i = 0; i < s.ch.length; i++) s.ch[i] = '▀';
+  drawWipe(s, { x: 0, y: 0, w: 40, h: 6 }, 0.25, [255, 0, 0], [0, 0, 0]);
+  const behind = 35;
+  for (let y = 0; y < 6; y++) {
+    assert.ok(s.fgAt(behind, y)[0] < 100, `fg ${s.fgAt(behind, y)}`);
+    assert.ok(s.bgAt(behind, y)[0] < 100, `bg ${s.bgAt(behind, y)}`);
+  }
+  assert.ok(s.ch.join('').includes('▓██▓'));
+});

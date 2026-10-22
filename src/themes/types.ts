@@ -1,12 +1,16 @@
 import type { RGB } from '../term/color.ts';
-import type { Rect, Screen } from '../term/screen.ts';
+import type { Box } from '../iso/box.ts';
+import type { PixelCanvas } from '../iso/canvas.ts';
+import type { Grade } from '../iso/light.ts';
+import type { Room } from '../iso/room.ts';
 
 export type StationKind = 'write' | 'read' | 'search' | 'run' | 'web' | 'think' | 'idle';
 
 export const STATION_KINDS: readonly StationKind[] = ['write', 'read', 'search', 'run', 'web', 'think', 'idle'];
 
+// UI colours (header, roster, footer, bubbles).
 export type Palette = {
-  bg: RGB; // outside the scene / letterbox
+  bg: RGB;
   wall: RGB;
   wall2: RGB;
   floor: RGB;
@@ -15,49 +19,56 @@ export type Palette = {
   dim: RGB;
   accent: RGB;
   accent2: RGB;
-  panel: RGB; // header/footer/roster background
+  panel: RGB;
   panelText: RGB;
   border: RGB;
-  bubble: RGB; // speech bubbles
+  bubble: RGB;
   bubbleText: RGB;
   good: RGB;
   warn: RGB;
   bad: RGB;
 };
 
-// Station art: `rows` are glyphs, `fg`/`bg` are same-shaped grids of single
-// character keys into StationDef.colors. A space glyph with no bg key is
-// transparent. Use art()/byChar() from art.ts to build these.
-export type Art = {
-  rows: string[];
-  fg: string[];
-  bg: string[] | null;
-  w: number;
-  h: number;
-  cells: Array<Array<{ ch: string; f: string; b: string }>>;
-};
+// A lamp: a pool of `color` light `radius` tiles wide on the floor below
+// it, also lighting whatever stands above the pool up to its height.
+export type Lamp = { color: RGB; radius: number; intensity: number };
+// A lamp in the room, in tile coordinates (gx, gy on the floor, gz up).
+export type RoomLight = Lamp & { gx: number; gy: number; gz: number };
+// A lamp on a piece of furniture, in the station's frame (see IsoStation).
+export type StationLight = Lamp & { a: number; b: number; z: number };
 
-export type StationDef = {
-  kind: StationKind | 'entrance';
+// A piece of furniture: a voxel model in its own frame (`a` along the wall,
+// `b` out into the room, `z` up; all in tile units) that fits inside `size`.
+// `active` is true while an agent works at it. `light` is what it casts
+// (screens, flames, lamps), if anything.
+export type IsoStation = {
   name: string;
-  frames: Art[]; // idle animation, max 11 wide x 6 tall
-  active?: Art[]; // animation while an agent works here
-  fps: number;
-  colors: Record<string, RGB>;
+  size: { len: number; dep: number; h: number };
+  model(t: number, active: boolean): Box[];
+  light?(t: number, active: boolean): StationLight | StationLight[] | null;
 };
 
-// `floors` lists the top row of each 2-row floor band, top level first. The
-// stage stands station art on the first band row and characters' feet on the
-// second. Everything a theme draws must stay inside `r`. `now` (ms epoch) is
-// the scene's clock for anything showing the time of day; it follows the
-// simulation, so demo snapshots stay reproducible.
-export type Theme = {
+// The scene's light: a grade (ambient light, haze, bloom, vignette) over
+// the finished room, plus room lamps not tied to furniture.
+export type Lighting = Grade & { lights?(room: Room, t: number, now: number): RoomLight[] };
+
+// A scene preset drawn as an isometric room. `floor` paints floor pixels at
+// tile coordinates; `wall` paints the two back walls (`u` along the wall in
+// tiles from the back corner, `v` up in height units, `now` is the scene
+// clock for anything showing the time of day). `ambient` draws effects over
+// the finished scene.
+export type IsoTheme = {
   id: string;
   name: string;
   tagline: string;
   palette: Palette;
-  stations: StationDef[];
-  entrance: StationDef;
-  drawBackdrop(s: Screen, r: Rect, t: number, floors: number[], now?: number): void;
-  drawAmbient(s: Screen, r: Rect, t: number, floors: number[]): void;
+  backdrop: RGB;
+  wallH: number;
+  floor(gx: number, gy: number, t: number): RGB;
+  wall(side: 'left' | 'right', u: number, v: number, t: number, now: number): RGB;
+  stations: Record<StationKind | 'entrance', IsoStation>;
+  ambient?(c: PixelCanvas, room: Room, t: number): void;
+  lighting?: Lighting;
 };
+
+export type Theme = IsoTheme;

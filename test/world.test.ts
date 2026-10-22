@@ -7,6 +7,7 @@ import { Screen } from '../src/term/screen.ts';
 import { parseKeys } from '../src/term/terminal.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { AgentSource, AgentInfo } from '../src/agents.ts';
+import { traitsFor } from '../src/world/character.ts';
 import { tempDir } from './helpers.ts';
 
 const START = 1_700_000_000_000;
@@ -115,8 +116,18 @@ test('characters are visible in the scene after ticking', () => {
   const now = advance(w, 20);
   const s = new Screen(120, 36);
   w.draw(s, now);
-  const scene = s.toText().split('\n').slice(1, 34).map((l) => l.slice(0, 92)).join('\n');
-  assert.match(scene, /[•°^×\-.o▪■◎][ᴗ_~.ωo▿\-][•°^×\-.o▪■◎]/, 'no character faces drawn in the scene');
+  // The demo lead's shirt colour, under the theme's ambient light, must
+  // appear among the scene's pixels.
+  const shirt = traitsFor('demo-atlas', 'lead').shirt;
+  const amb = w.theme.lighting?.ambient ?? [255, 255, 255];
+  const want = shirt.map((c, k) => (c * amb[k]) / 255);
+  const near = (n: number) => [(n >> 16) & 255, (n >> 8) & 255, n & 255].every((c, k) => Math.abs(c - want[k]) <= 12);
+  let found = false;
+  for (let y = 1; y < 34; y++) for (let x = 0; x < 92; x++) {
+    const i = y * 120 + x;
+    if (near(s.fg[i]) || near(s.bg[i])) found = true;
+  }
+  assert.ok(found, 'the lead character is not drawn in the scene');
 });
 
 test('theme switch plays a wipe transition', { skip: THEMES.length < 2 && 'needs two themes' }, () => {
@@ -171,7 +182,7 @@ test('without a roster the footer shows the selected agent', () => {
   assert.match(ticker, /^ ▸ /, ticker);
 });
 
-test('picker: moving previews without committing, esc cancels, enter commits', () => {
+test('picker: moving previews without committing, esc cancels, enter commits', { skip: THEMES.length < 3 && 'needs three themes' }, () => {
   const w = demoWorld();
   const ids = themeIds();
   w.handleKey(key('p'));
@@ -195,4 +206,49 @@ test('the paused label stays visible on narrow terminals', () => {
   const s = new Screen(80, 24);
   w.draw(s, now);
   assert.match(s.toText().split('\n')[0], /❚❚ paused/);
+});
+
+test('r switches between half-block and sextant pixels', () => {
+  const w = demoWorld();
+  assert.equal(w.pixels, 'half');
+  assert.equal(w.handleKey(key('r')), 'prefs');
+  assert.equal(w.pixels, 'sextant');
+  const now = advance(w, 2);
+  const s = new Screen(120, 36);
+  w.draw(s, now);
+  assert.ok(s.ch.some((ch) => { const cp = ch.codePointAt(0)!; return cp >= 0x1fb00 && cp <= 0x1fb3b; }));
+  w.handleKey(key('r'));
+  assert.equal(w.pixels, 'half');
+});
+
+test('config keeps the pixel mode and lighting', () => {
+  const p = join(tempDir('animus-cfg2'), 'c.json');
+  saveConfig({ theme: 'den', pixels: 'sextant', lights: false }, p);
+  assert.deepEqual(loadConfig(p), { theme: 'den', pixels: 'sextant', lights: false });
+});
+
+test('l turns the lighting off and on', () => {
+  const w = demoWorld();
+  const now = advance(w, 2);
+  const lit = new Screen(120, 36);
+  w.draw(lit, now);
+  assert.equal(w.lights, true);
+  assert.equal(w.handleKey(key('l')), 'prefs');
+  assert.equal(w.lights, false);
+  const flat = new Screen(120, 36);
+  w.draw(flat, now);
+  let diff = 0;
+  for (let i = 0; i < lit.fg.length; i++) if (lit.fg[i] !== flat.fg[i] || lit.bg[i] !== flat.bg[i]) diff++;
+  assert.ok(diff > 500, `only ${diff} cells changed`);
+});
+
+test('only preferences the user changed are saved', () => {
+  const w = demoWorld();
+  assert.deepEqual(w.prefs(), {});
+  w.handleKey(key('t'));
+  assert.deepEqual(w.prefs(), {});
+  w.handleKey(key('r'));
+  assert.deepEqual(w.prefs(), { pixels: 'sextant' });
+  w.handleKey(key('l'));
+  assert.deepEqual(w.prefs(), { pixels: 'sextant', lights: false });
 });

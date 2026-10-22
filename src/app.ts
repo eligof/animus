@@ -2,14 +2,15 @@ import { homedir } from 'node:os';
 import { sep } from 'node:path';
 import { readAccount } from './claude/account.ts';
 import { ClaudeSource } from './claude/source.ts';
-import { saveConfig } from './config.ts';
+import { loadConfig, saveConfig } from './config.ts';
 import { Renderer, detectColorMode, renderLines } from './term/renderer.ts';
 import { Screen } from './term/screen.ts';
 import { Terminal } from './term/terminal.ts';
 import type { Theme } from './themes/types.ts';
 import { World } from './world/world.ts';
+import type { PixelMode } from './world/stage.ts';
 
-export type RunOpts = { theme: Theme; demo: boolean; fps: number; root: string };
+export type RunOpts = { theme: Theme; demo: boolean; fps: number; root: string; pixels: PixelMode; lights?: boolean };
 
 // Demo snapshots start from a fixed instant so they are reproducible.
 const DEMO_EPOCH = Date.UTC(2026, 9, 22, 21, 30, 0);
@@ -22,6 +23,8 @@ export function tildify(p: string): string {
 function makeWorld(o: RunOpts, start: number, liveInterval?: number): World {
   return new World({
     theme: o.theme,
+    pixels: o.pixels,
+    lights: o.lights,
     live: o.demo ? null : new ClaudeSource(o.root, liveInterval === undefined ? {} : { intervalMs: liveInterval }),
     demo: o.demo,
     account: readAccount(o.root),
@@ -118,7 +121,7 @@ export function runInteractive(o: RunOpts): Promise<number> {
     let saveTimer: NodeJS.Timeout | undefined;
     const persist = () => {
       saveTimer = undefined;
-      saveConfig({ theme: world.theme.id });
+      saveConfig({ ...loadConfig(), theme: world.theme.id, ...world.prefs() });
     };
     flushSave = () => {
       if (saveTimer) {
@@ -129,7 +132,7 @@ export function runInteractive(o: RunOpts): Promise<number> {
     term.onKey((k) => {
       const r = world.handleKey(k);
       if (r === 'quit') finish(0);
-      else if (r === 'theme') {
+      else if (r === 'theme' || r === 'prefs') {
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(persist, 500);
       }

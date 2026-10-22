@@ -133,7 +133,7 @@ export function drawRoster(s: Screen, r: Rect, c: ChromeCtx): void {
 }
 
 const KEYS: Array<[string, string]> = [
-  ['t', 'theme'], ['p', 'presets'], ['tab', 'select'], ['d', 'demo'], ['space', 'pause'], ['?', 'help'], ['q', 'quit'],
+  ['t', 'theme'], ['p', 'presets'], ['tab', 'select'], ['d', 'demo'], ['r', 'pixels'], ['space', 'pause'], ['?', 'help'], ['q', 'quit'],
 ];
 
 export function drawFooter(s: Screen, r: Rect, c: ChromeCtx): void {

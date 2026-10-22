@@ -102,3 +102,12 @@ test('tildify only shortens paths inside the home directory', async () => {
   assert.equal(tildify(home), '~');
   assert.equal(tildify(home + '2/.claude'), home + '2/.claude');
 });
+
+test('--pixels selects the cell format', () => {
+  const sex = run('--snapshot', '--demo', '--pixels', 'sextant');
+  assert.equal(sex.status, 0, sex.stderr);
+  assert.ok([...sex.stdout].some((ch) => { const cp = ch.codePointAt(0)!; return cp >= 0x1fb00 && cp <= 0x1fb3b; }));
+  const half = run('--snapshot', '--demo', '--pixels', 'half');
+  assert.ok(half.stdout.includes('▀'));
+  assert.equal(run('--snapshot', '--pixels', 'huge').status, 2);
+});

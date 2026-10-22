@@ -1,66 +1,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
-import { STATION_KINDS } from '../src/themes/types.ts';
-import type { Art, StationDef } from '../src/themes/types.ts';
-import { art, byChar, frameAt, drawArt, wallBands } from '../src/themes/art.ts';
-import { Screen } from '../src/term/screen.ts';
-import { isWide } from '../src/term/width.ts';
-import type { Theme } from '../src/themes/types.ts';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
+import { STATION_KINDS } from '../src/themes/types.ts';
+import type { Theme } from '../src/themes/types.ts';
+import { PixelCanvas, CLEAR } from '../src/iso/canvas.ts';
+import { drawRoom, layoutRoom } from '../src/iso/room.ts';
+import { drawBox } from '../src/iso/box.ts';
+import { noise, pulse, frac, inside, checker } from '../src/themes/art.ts';
 
 // ANIMUS_THEME_FILE=src/themes/x.ts lints a theme module that is not
 // registered yet (its default export).
-const extraFile = process.env.ANIMUS_THEME_FILE;
 async function loadTheme(file: string): Promise<Theme> {
   const mod = await import(pathToFileURL(resolve(file)).href);
-  const found = mod.default ?? Object.values(mod).find((v) => v && typeof v === 'object' && 'drawBackdrop' in (v as object));
+  const found = mod.default ?? Object.values(mod).find((v) => v && typeof v === 'object' && 'stations' in (v as object));
   if (!found) throw new Error(`${file} exports no theme`);
   return found as Theme;
 }
+const extraFile = process.env.ANIMUS_THEME_FILE;
 const EXTRA: Theme[] = extraFile ? [await loadTheme(extraFile)] : [];
 
-test('art pads rows and fg grids to a rectangle', () => {
-  const a = art(['ab', 'c'], ['xx', 'x']);
-  assert.equal(a.w, 2);
-  assert.equal(a.h, 2);
-  assert.deepEqual(a.rows, ['ab', 'c ']);
-  assert.deepEqual(a.fg, ['xx', 'x ']);
-  assert.equal(a.bg, null);
-});
+const isRGB = (c: unknown) => Array.isArray(c) && c.length === 3 && c.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
 
-test('byChar builds a key grid from a char map', () => {
-  assert.deepEqual(byChar(['█▒ ', ' x'], { '█': 'a', '▒': 'b' }, 'z'), ['ab ', ' z']);
-});
-
-test('drawArt treats unkeyed spaces as transparent', () => {
-  const s = new Screen(4, 1);
-  s.clear([1, 1, 1]);
-  s.put(1, 0, 'Q');
-  drawArt(s, art(['A B'], ['a a'], ['  k']), 0, 0, { a: [9, 9, 9], k: [7, 7, 7] });
-  assert.equal(s.charAt(0, 0), 'A');
-  assert.equal(s.charAt(1, 0), 'Q');
-  assert.equal(s.charAt(2, 0), 'B');
-  assert.deepEqual(s.bgAt(2, 0), [7, 7, 7]);
-});
-
-test('frameAt cycles frames and prefers active frames', () => {
-  const f1 = art(['1'], ['a']);
-  const f2 = art(['2'], ['a']);
-  const act = art(['A'], ['a']);
-  const def: StationDef = { kind: 'write', name: 'x', frames: [f1, f2], active: [act], fps: 2, colors: { a: [0, 0, 0] } };
-  assert.equal(frameAt(def, 0, false), f1);
-  assert.equal(frameAt(def, 0.6, false), f2);
-  assert.equal(frameAt(def, 0.6, true), act);
-});
-
-test('wallBands splits the scene above each floor', () => {
-  const bands = wallBands({ x: 0, y: 1, w: 80, h: 30 }, [14, 29]);
-  assert.deepEqual(bands, [
-    { x: 0, y: 1, w: 80, h: 13 },
-    { x: 0, y: 16, w: 80, h: 13 },
-  ]);
+test('art helpers', () => {
+  assert.ok(noise(3) >= 0 && noise(3) < 1);
+  assert.equal(noise(3), noise(3));
+  assert.equal(pulse(0, 2), 0);
+  assert.equal(pulse(1, 2), 1);
+  assert.equal(frac(-0.25), 0.75);
+  assert.equal(inside(1, 1, 0, 0, 2, 2), true);
+  assert.equal(inside(2, 1, 0, 0, 2, 2), false);
+  assert.deepEqual(checker(0.5, 0.5, 1, [1, 1, 1], [2, 2, 2]), [1, 1, 1]);
+  assert.deepEqual(checker(1.5, 0.5, 1, [1, 1, 1], [2, 2, 2]), [2, 2, 2]);
 });
 
 test('registry exposes unique ids', () => {
@@ -71,81 +43,118 @@ test('registry exposes unique ids', () => {
   assert.equal(getTheme('nope'), undefined);
 });
 
-function lintArt(themeId: string, def: StationDef, a: Art): void {
-  const where = `${themeId}/${def.kind}/${def.name}`;
-  assert.ok(a.w <= 11 && a.h <= 6, `${where} too big ${a.w}x${a.h}`);
-  assert.equal(a.rows.length, a.h, where);
-  assert.equal(a.fg.length, a.h, where);
-  if (a.bg) assert.equal(a.bg.length, a.h, where);
-  for (let y = 0; y < a.h; y++) {
-    const row = [...a.rows[y]];
-    const fg = [...a.fg[y]];
-    const bg = a.bg ? [...a.bg[y]] : null;
-    assert.equal(row.length, a.w, `${where} row ${y} width`);
-    assert.equal(fg.length, a.w, `${where} fg ${y} width`);
-    if (bg) assert.equal(bg.length, a.w, `${where} bg ${y} width`);
-    for (let x = 0; x < a.w; x++) {
-      assert.ok(!isWide(row[x]), `${where} wide glyph '${row[x]}'`);
-      if (row[x] !== ' ') {
-        assert.notEqual(fg[x], ' ', `${where} '${row[x]}' at ${x},${y} has no fg key`);
-        assert.ok(def.colors[fg[x]], `${where} unknown fg key '${fg[x]}'`);
-      }
-      if (bg && bg[x] !== ' ') assert.ok(def.colors[bg[x]], `${where} unknown bg key '${bg[x]}'`);
-    }
-  }
-}
-
 for (const theme of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === e.id))]) {
-  test(`theme ${theme.id}: stations cover every kind with valid art`, () => {
+  test(`theme ${theme.id}: identity and palette`, () => {
     assert.ok(theme.name && theme.tagline);
-    const kinds = theme.stations.map((s) => s.kind).sort();
-    assert.deepEqual(kinds, [...STATION_KINDS].sort());
-    assert.equal(theme.entrance.kind, 'entrance');
-    for (const def of [...theme.stations, theme.entrance]) {
-      assert.ok(def.frames.length > 0, `${def.name} has no frames`);
-      assert.ok(def.fps > 0);
-      for (const a of [...def.frames, ...(def.active ?? [])]) lintArt(theme.id, def, a);
-    }
+    assert.ok(isRGB(theme.backdrop));
+    assert.ok(theme.wallH >= 2.4 && theme.wallH <= 4.5, `wallH ${theme.wallH}`);
+    for (const [k, v] of Object.entries(theme.palette)) assert.ok(isRGB(v), `palette.${k}`);
   });
 
-  test(`theme ${theme.id}: palette is complete`, () => {
-    for (const [k, v] of Object.entries(theme.palette)) {
-      assert.equal(v.length, 3, k);
-      for (const n of v) assert.ok(Number.isInteger(n) && n >= 0 && n <= 255, `${k}=${v}`);
-    }
-  });
-
-  test(`theme ${theme.id}: backdrop and ambient draw at many sizes`, () => {
-    const cases: Array<[number, number, number[]]> = [
-      [60, 14, [12]],
-      [120, 33, [15, 32]],
-      [200, 50, [24, 48]],
-      [40, 8, [6]],
-    ];
-    for (const [w, h, floors] of cases) {
-      for (const t of [0, 1.7, 13.3, 600.05]) {
-        const s = new Screen(w + 4, h + 3);
-        const r = { x: 2, y: 1, w, h };
-        s.clear([0, 0, 0]);
-        theme.drawBackdrop(s, r, t, floors.map((f) => f + 1));
-        theme.drawAmbient(s, r, t, floors.map((f) => f + 1));
-        for (const ch of s.ch) assert.ok(!isWide(ch), `${theme.id} drew wide '${ch}'`);
-        for (const [x, y] of [[0, 0], [1, 5], [w + 3, h + 2], [w + 2, 3], [10, 0], [10, h + 1]]) {
-          assert.equal(s.charAt(x, y), ' ', `${theme.id} drew outside its rect at ${x},${y}`);
-          assert.deepEqual(s.bgAt(x, y), [0, 0, 0], `${theme.id} painted outside its rect at ${x},${y}`);
+  test(`theme ${theme.id}: every station kind has a model inside its footprint`, () => {
+    for (const kind of [...STATION_KINDS, 'entrance' as const]) {
+      const st = theme.stations[kind];
+      assert.ok(st, `missing ${kind}`);
+      assert.ok(st.name);
+      const { len, dep, h } = st.size;
+      assert.ok(len >= 0.5 && len <= 2.5 && dep > 0 && dep <= 1.5 && h > 0 && h <= theme.wallH, `${kind} size ${len}x${dep}x${h}`);
+      for (const t of [0, 0.37, 1.9, 7.3, 61.2]) {
+        for (const active of [false, true]) {
+          const boxes = st.model(t, active);
+          assert.ok(boxes.length > 0, `${kind} empty`);
+          for (const b of boxes) {
+            const where = `${theme.id}/${kind} box ${JSON.stringify({ a: b.a, b: b.b, z: b.z, len: b.len, dep: b.dep, h: b.h })}`;
+            assert.ok(b.a >= -1e-9 && b.b >= -1e-9 && b.z >= -1e-9, where);
+            assert.ok(b.a + b.len <= len + 1e-9 && b.b + b.dep <= dep + 1e-9 && b.z + b.h <= h + 1e-9, where);
+            assert.ok(b.len > 0 && b.dep > 0 && b.h > 0, where);
+            assert.ok(isRGB(b.color), where);
+            if (b.paint) {
+              for (const face of ['top', 'front', 'side'] as const) {
+                for (const [u, v] of [[0, 0], [b.len / 2, b.h / 2], [b.len * 0.99, b.h * 0.99]]) {
+                  const c = b.paint(face, u, v);
+                  assert.ok(c === null || c === undefined || isRGB(c), `${where} paints ${JSON.stringify(c)}`);
+                }
+              }
+            }
+          }
         }
       }
     }
   });
+
+  test(`theme ${theme.id}: floor and wall painters return colours`, () => {
+    for (const [gx, gy] of [[0, 0], [0.5, 3.2], [9.9, 7.7], [15, 12]]) assert.ok(isRGB(theme.floor(gx, gy, 1.3)), `floor ${gx},${gy}`);
+    for (const side of ['left', 'right'] as const) {
+      for (let u = 0; u < 14; u += 0.37) {
+        for (let v = 0; v < theme.wallH; v += 0.23) {
+          assert.ok(isRGB(theme.wall(side, u, v, 2.2, Date.UTC(2026, 0, 1))), `wall ${side} ${u},${v}`);
+        }
+      }
+    }
+  });
+
+  test(`theme ${theme.id}: lighting grade and lamps are sane`, () => {
+    const L = theme.lighting;
+    assert.ok(L, 'no lighting');
+    assert.ok(isRGB(L.ambient) && Math.max(...L.ambient) >= 60, `ambient ${L.ambient}`);
+    for (const k of ['haze', 'bloom', 'vignette'] as const) assert.ok(L[k] === undefined || (L[k]! >= 0 && L[k]! <= 1), `${k} ${L[k]}`);
+    const sane = (l: { color: unknown; radius: number; intensity: number }, where: string) => {
+      assert.ok(isRGB(l.color), `${where} colour`);
+      assert.ok(l.radius > 0 && l.radius <= 6, `${where} radius ${l.radius}`);
+      assert.ok(l.intensity >= 0 && l.intensity <= 2, `${where} intensity ${l.intensity}`);
+    };
+    let lit = 0;
+    for (const kind of [...STATION_KINDS, 'entrance' as const]) {
+      const st = theme.stations[kind];
+      if (!st.light) continue;
+      lit++;
+      for (const t of [0, 0.37, 1.9, 7.3, 61.2]) {
+        for (const active of [false, true]) {
+          const got = st.light(t, active);
+          for (const l of got ? (Array.isArray(got) ? got : [got]) : []) {
+            sane(l, `${kind} light`);
+            assert.ok(l.a >= 0 && l.a <= st.size.len && l.b >= 0 && l.b <= st.size.dep + 2 && l.z >= 0 && l.z <= theme.wallH, `${kind} light at ${l.a},${l.b},${l.z}`);
+          }
+        }
+      }
+    }
+    assert.ok(lit >= 3, `only ${lit} stations cast light`);
+    const room = layoutRoom(200, 120, theme);
+    for (const t of [0, 3.3, 61.2]) {
+      for (const l of L.lights?.(room, t, Date.UTC(2026, 0, 1, 21)) ?? []) {
+        sane(l, 'room light');
+        assert.ok(l.gx >= -0.5 && l.gx <= room.W + 0.5 && l.gy >= -0.5 && l.gy <= room.D + 0.5 && l.gz >= 0 && l.gz <= theme.wallH + 1, `room light at ${l.gx},${l.gy},${l.gz}`);
+      }
+    }
+  });
+
+  test(`theme ${theme.id}: the whole room draws at many sizes and times`, () => {
+    for (const [w, h] of [[60, 34], [92, 66], [172, 114], [300, 160]]) {
+      const room = layoutRoom(w, h, theme);
+      for (const t of [0, 1.7, 13.3, 600.05]) {
+        const c = new PixelCanvas(w, h);
+        c.data.fill(CLEAR);
+        drawRoom(c, room, theme, t, Date.UTC(2026, 0, 1, 12));
+        for (const p of room.placed) for (const b of p.station.model(t, true)) drawBox(c, room.iso, b, p.at);
+        theme.ambient?.(c, room, t);
+        assert.equal(c.data.length, w * h);
+      }
+    }
+  });
 }
 
-test('wall clocks in themes follow the scene clock', () => {
-  const now = new Date(2026, 0, 1, 3, 7, 0).getTime();
-  for (const id of ['lab', 'club']) {
+test('wall clocks follow the scene clock', () => {
+  for (const id of ['lab', 'cafe', 'den']) {
     const theme = getTheme(id)!;
-    const s = new Screen(200, 50);
-    s.clear([0, 0, 0]);
-    theme.drawBackdrop(s, { x: 0, y: 0, w: 200, h: 50 }, 0.6, [24, 48], now);
-    assert.match(s.toText(), /03:07/, `${id} clock ignores the scene time`);
+    const paint = (now: number) => {
+      const out: string[] = [];
+      for (const side of ['left', 'right'] as const) {
+        for (let u = 0; u < 12; u += 0.05) for (let v = 0; v < theme.wallH; v += 0.05) out.push(String(theme.wall(side, u, v, 0, now)));
+      }
+      return out;
+    };
+    const a = paint(Date.UTC(2026, 0, 1, 9, 5));
+    const b = paint(Date.UTC(2026, 0, 1, 14, 47));
+    assert.ok(a.some((c, i) => c !== b[i]), `${id}: the clock ignores the time`);
   }
 });

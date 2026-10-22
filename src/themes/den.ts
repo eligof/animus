@@ -1,8 +1,15 @@
-import { hex, mix } from '../term/color.ts';
 import type { RGB } from '../term/color.ts';
-import type { Rect, Screen } from '../term/screen.ts';
-import type { Art, Palette, StationDef, Theme } from './types.ts';
-import { art, drawFloors, noise, pulse, textIn, wallBands } from './art.ts';
+import { hex, mix } from '../term/color.ts';
+import type { Box, Face } from '../iso/box.ts';
+import type { PixelCanvas } from '../iso/canvas.ts';
+import { CLEAR } from '../iso/canvas.ts';
+import type { Placed, Room } from '../iso/room.ts';
+import { localToScreen } from '../iso/room.ts';
+import type { IsoStation, IsoTheme, Palette } from './types.ts';
+import { frac, inside, noise } from './art.ts';
+
+// Hacker's Den: a basement hideout lit by CRTs. Near-black panels with
+// matrix rain, phosphor greens, amber accents and a little hot magenta.
 
 const P: Palette = {
   bg: hex('#020403'),
@@ -24,695 +31,1048 @@ const P: Palette = {
   bad: hex('#ff2a8a'),
 };
 
-const GREEN = hex('#39ff6e');
-const MAGENTA = hex('#ff2a8a');
-const AMBER = hex('#ffb000');
-const BLACK: RGB = [0, 0, 0];
-
-// Mutable key grid so stations can be composed procedurally, then frozen
-// into Art with toArt().
-type Cell = { ch: string; f: string; b: string };
-type Grid = Cell[][];
-
-function grid(rows: string[], fg: string[], bg: string[] = []): Grid {
-  const w = Math.max(...rows.map((r) => [...r].length));
-  return rows.map((row, y) => {
-    const ch = [...row];
-    const f = [...(fg[y] ?? '')];
-    const b = [...(bg[y] ?? '')];
-    return Array.from({ length: w }, (_, x) => ({ ch: ch[x] ?? ' ', f: f[x] ?? ' ', b: b[x] ?? ' ' }));
-  });
-}
-
-function set(g: Grid, x: number, y: number, ch: string, f: string, b?: string): void {
-  const row = g[y];
-  if (!row || x < 0 || x >= row.length) return;
-  row[x] = { ch, f, b: b ?? row[x].b };
-}
-
-function toArt(g: Grid): Art {
-  return art(
-    g.map((r) => r.map((c) => c.ch).join('')),
-    g.map((r) => r.map((c) => c.f).join('')),
-    g.map((r) => r.map((c) => c.b).join('')),
-  );
-}
-
-const keys = (line: string, k: string) => [...line].map((c) => (c === ' ' ? ' ' : k)).join('');
-const frames = (n: number, fn: (i: number) => Art) => Array.from({ length: n }, (_, i) => fn(i));
-
-// ── write: triple-CRT rig ────────────────────────────────────────────────
-const RIG = {
-  f: hex('#66726b'), s: hex('#032412'), g: hex('#7dffa0'), h: hex('#2fae58'), a: hex('#ffb000'),
-  d: hex('#3a2e24'), k: hex('#1f6b3a'), K: hex('#9dffb6'),
+const C = {
+  // phosphor greens, darkest to brightest
+  g0: hex('#04140a'),
+  g1: hex('#0b3a1b'),
+  g2: hex('#15692f'),
+  g3: hex('#22a447'),
+  g4: hex('#39ff6e'),
+  g5: hex('#c8ffd6'),
+  amber: hex('#ffb000'),
+  amberMid: hex('#b87a00'),
+  amberDim: hex('#5a3d00'),
+  magenta: hex('#ff2a8a'),
+  magentaPale: hex('#ff9ccb'),
+  magentaDim: hex('#5c0f35'),
+  red: hex('#e8283c'),
+  redDim: hex('#5a0c16'),
+  black: hex('#000000'),
+  // room shell
+  wall: hex('#0e1813'),
+  seam: hex('#070c09'),
+  rail: hex('#18241d'),
+  base: hex('#050806'),
+  baseHi: hex('#18211c'),
+  tray: hex('#2a3530'),
+  trayHi: hex('#46554d'),
+  trayLo: hex('#151c18'),
+  cap: hex('#030504'),
+  // floor
+  tileA: hex('#22282b'),
+  tileB: hex('#1e2427'),
+  tileHi: hex('#2b3236'),
+  grout: hex('#0e1214'),
+  speckHi: hex('#2a3134'),
+  speckLo: hex('#171c1e'),
+  glint: hex('#7fa08c'),
+  cable: hex('#08090a'),
+  cableMid: hex('#2f3538'),
+  cableHi: hex('#4a5358'),
+  cableG: hex('#145a2c'),
+  cableGHi: hex('#2a8c4a'),
+  rug: hex('#0f2318'),
+  rugEdge: hex('#1b3d29'),
+  rugHem: hex('#08140d'),
+  trace: hex('#22703f'),
+  pad: hex('#b8862a'),
+  // materials
+  steel: hex('#4b5751'),
+  steelHi: hex('#6d7c74'),
+  steelLo: hex('#2c3430'),
+  graphite: hex('#262c29'),
+  desk: hex('#2e2823'),
+  deskTop: hex('#4a4038'),
+  putty: hex('#4d4c45'),
+  puttyLo: hex('#2e2e2a'),
+  keyboard: hex('#6a675c'),
+  rack: hex('#2b363e'),
+  rackHi: hex('#5a6a74'),
+  server: hex('#3c4a53'),
+  serverHi: hex('#687a85'),
+  ledOff: hex('#0c2414'),
+  paper: hex('#e8e4d4'),
+  paperLo: hex('#b9b3a0'),
+  cork: hex('#7c512a'),
+  corkHi: hex('#946338'),
+  corkLo: hex('#5c3a1c'),
+  frame: hex('#3a2615'),
+  bean: hex('#5e1a52'),
+  beanHi: hex('#7d2a6e'),
+  beanLo: hex('#3e0f36'),
+  card: hex('#a07a4a'),
+  cardHi: hex('#bf9660'),
+  cardLo: hex('#6e5030'),
+  cheese: hex('#f2c14e'),
+  crust: hex('#c98a3e'),
+  pepperoni: hex('#b02a24'),
+  dish: hex('#aab5af'),
+  dishHi: hex('#dfe7e2'),
+  dishLo: hex('#6f7a74'),
+  scopeBg: hex('#031208'),
+  sky: hex('#0e1640'),
+  skyLow: hex('#2c1d5c'),
+  city: hex('#05060e'),
+  cityWin: hex('#ffcf5a'),
+  cityWin2: hex('#7ee8ff'),
+  cityWinDim: hex('#4a3c18'),
+  moon: hex('#f1f0d8'),
+  bulb: hex('#ffd27a'),
+  clockCase: hex('#0a0705'),
+  clockOff: hex('#2e1e00'),
+  lampOn: hex('#2bff88'), // the door lamp: also read back by ambient (exact match)
+  lampOff: hex('#a8182a'),
 };
 
-const RIG_ROWS = ['   ┌───┐   ', '┌──┤   ├──┐', '│  │   │  │', '│  │   │  │', '└──┴┬─┬┴──┘', '▀▀▀▀▀▀▀▀▀▀▀'];
+const BINDERS = ['#2e7d4f', '#d8d2bf', '#b87a00', '#5a6b73', '#8e2a5a', '#2e7d4f', '#1f4f7a'].map(hex);
+const MANUALS = ['#a03030', '#1f6f43', '#d8d2bf', '#2a4f7a'].map(hex);
+const RACK_LED = [C.g4, C.g4, C.g3, C.amber, C.g4];
+const CONSOLE_LED = [C.g4, C.amber, C.magenta];
+const CABLES = [hex('#252d29'), hex('#17602f'), hex('#6a1a46')];
+const LOOM = [hex('#1c6e38'), hex('#2a3f55'), hex('#8a5c00'), hex('#121614'), hex('#7a1a4e'), hex('#1c6e38')];
 
-// Fills a screen with pseudo-code starting at `line`, so bumping `line`
-// scrolls it up.
-function code(g: Grid, x0: number, y0: number, w: number, h: number, line: number, seed: number, hot: string): void {
-  for (let y = 0; y < h; y++) {
-    const ln = line + y;
-    const indent = noise(ln, seed + 3) < 0.3 ? 1 : 0;
-    for (let x = indent; x < w; x++) {
-      const n = noise(ln * 17 + x * 5, seed);
-      if (n > 0.74) continue;
-      const k = noise(ln * 3 + x, seed + 7) < 0.14 ? hot : n < 0.45 ? 'g' : 'h';
-      set(g, x0 + x, y0 + y, n < 0.08 ? '▪' : '▬', k);
-    }
+// Matrix rain: index 0 is barely-there, 7 is the bright end of a tail.
+const RAIN: RGB[] = Array.from({ length: 8 }, (_, i) => mix(C.wall, i < 4 ? C.g2 : C.g3, 0.25 + (i / 7) * 0.75));
+const SCOPE: RGB[] = Array.from({ length: 8 }, (_, i) => mix(C.scopeBg, C.g4, i / 7));
+const SCREEN_G = { bg: hex('#0f4d25'), bgOn: hex('#156a33'), ink: hex('#5cff8c'), inkHi: C.g5 };
+const SCREEN_A = { bg: hex('#5a3a00'), bgOn: hex('#6e4800'), ink: hex('#ffc23a'), inkHi: hex('#ffe9a8') };
+const NEON_GLOW = mix(C.wall, C.magenta, 0.28);
+const NEON_GLOW_FAR = mix(C.wall, C.magenta, 0.12);
+const NEON_OFF = mix(C.wall, C.magenta, 0.35);
+const DOOR_LIGHT: RGB[] = Array.from({ length: 8 }, (_, i) => mix(C.black, C.g3, (i / 7) ** 1.6 * 0.75));
+
+const box = (a: number, b: number, z: number, len: number, dep: number, h: number, color: RGB, paint?: Box['paint']): Box => ({ a, b, z, len, dep, h, color, paint });
+const front = (f: Face) => f === 'front';
+
+// ── floor ────────────────────────────────────────────────────────────────
+// Dark rubber tiles with speckle, a circuit-board rug, a cable run hugging
+// the furniture along both walls, and the odd glint. Lines are ~0.2+ tiles
+// thick so they stay solid at 5-6 px tiles.
+const RUG_X0 = 2.9;
+const RUG_Y0 = 2.9;
+const RUG_X1 = 6.1;
+const RUG_Y1 = 5.3;
+
+function rug(gx: number, gy: number): RGB {
+  const ex = Math.min(gx - RUG_X0, RUG_X1 - gx);
+  const ey = Math.min(gy - RUG_Y0, RUG_Y1 - gy);
+  const e = ex < ey ? ex : ey;
+  if (e < 0.12) return C.rugHem;
+  if (e < 0.34) return e > 0.2 && e < 0.28 ? C.trace : C.rugEdge;
+  // Circuit traces: rows of runs with gold pads at their ends.
+  const row = Math.floor((gy - RUG_Y0 - 0.34) / 0.4);
+  const fy = frac((gy - RUG_Y0 - 0.34) / 0.4);
+  const x = gx - RUG_X0 - 0.34;
+  const s0 = noise(row, 51) * 1.2;
+  const s1 = s0 + 0.5 + noise(row, 52) * 1.6;
+  if (fy > 0.25 && fy < 0.75 && x > s0 && x < s1) return x - s0 < 0.22 || s1 - x < 0.22 ? C.pad : C.trace;
+  // A vertical via between rows here and there.
+  const vx = 0.4 + noise(row, 53) * 2.0;
+  if (fy <= 0.25 && x > vx && x < vx + 0.2 && noise(row, 54) > 0.4) return C.trace;
+  return C.rug;
+}
+
+function floor(gx: number, gy: number, t: number): RGB {
+  // Cable runs hugging the furniture: along the right wall and the left wall.
+  if (gy > 1.4 && gy < 1.9 && gx > 1.45) {
+    const d = gy - 1.64 - 0.06 * Math.sin(gx * 1.9);
+    if (d > -0.16 && d < 0.16) return d > 0.08 ? C.cable : d < -0.08 ? C.cableHi : C.cableMid;
   }
-}
-
-function rig(frame: number, active: boolean): Art {
-  const g = grid(
-    RIG_ROWS,
-    [...RIG_ROWS.slice(0, 5).map((r) => keys(r, 'f')), 'dddkkkkkddd'],
-    ['           ', '    sss    ', ' ss sss ss ', ' ss sss ss ', '           ', '           '],
-  );
-  if (active) {
-    code(g, 4, 1, 3, 3, frame, 1, 'a');
-    code(g, 1, 2, 2, 2, frame * 2, 2, 'g');
-    code(g, 8, 2, 2, 2, frame + 7, 3, 'a');
-    for (let x = 3; x <= 7; x++) if (noise(frame * 11 + x, 4) < 0.35) set(g, x, 5, '▀', 'K');
-  } else {
-    const slow = Math.floor(frame / 4);
-    code(g, 4, 1, 3, 2, 0, 1, 'a');
-    set(g, 4, 3, '$', 'a');
-    if (frame % 6 < 3) set(g, 5, 3, '▌', 'g');
-    code(g, 1, 2, 2, 2, slow, 2, 'g');
-    code(g, 8, 2, 2, 2, slow + 7, 3, 'a');
+  if (gx > 1.3 && gx < 1.8 && gy > 1.45) {
+    const d = gx - 1.54 - 0.06 * Math.sin(gy * 2.1);
+    if (d > -0.16 && d < 0.16) return d > 0.08 ? C.cable : d < -0.08 ? C.cableHi : C.cableMid;
   }
-  return toArt(g);
-}
-
-const write: StationDef = {
-  kind: 'write',
-  name: 'triple-CRT rig',
-  fps: 6,
-  colors: RIG,
-  frames: frames(12, (i) => rig(i, false)),
-  active: frames(12, (i) => rig(i, true)),
-};
-
-// ── read: stack of manuals + desk lamp ───────────────────────────────────
-const LAMP = {
-  m: hex('#5b6660'), v: hex('#1f7a3d'), c: hex('#4a3a14'), o: hex('#b58a2e'), C: hex('#ffd98a'),
-  r: hex('#4a1820'), R: hex('#a8323e'), b: hex('#18234a'), B: hex('#2f4fa8'), y: hex('#4a3a10'), Y: hex('#b0821f'),
-  p: hex('#8f8672'), P: hex('#f2e8cf'), w: hex('#efe6cc'),
-};
-
-const PAGE: Array<[number, string] | null> = [[4, '▁'], [4, '╱'], [5, '│'], [6, '╲'], [6, '▁'], null];
-
-function manuals(lit: boolean, page: number, flick: number): Art {
-  const t = lit ? 'P' : 'p';
-  const [r, b, y] = lit ? ['R', 'B', 'Y'] : ['r', 'b', 'y'];
-  const g = grid(
-    ['  ╭──────╮ ', ' ▟█▙     │ ', '         │ ', '  K&R C  │ ', ' RFC 791 │ ', ' TCP/IP ▄█▄'],
-    ['  mmmmmmmm ', ' vvv     m ', '         m ', `  ${keys('K&R C', t)}  m `, ` ${keys('RFC 791', t)} m `, ` ${keys('TCP/IP', t)} mmm`],
-    ['           ', '           ', '           ', ` ${r.repeat(7)}   `, `${b.repeat(9)}  `, `${y.repeat(8)}   `],
-  );
-  if (lit) {
-    set(g, 1, 2, '░', 'o');
-    set(g, 2, 2, flick ? '▓' : '▒', 'C');
-    set(g, 3, 2, '░', 'o');
-  } else {
-    for (let x = 1; x <= 3; x++) set(g, x, 2, '░', 'c');
+  if (gx > RUG_X0 && gx < RUG_X1 && gy > RUG_Y0 && gy < RUG_Y1) return rug(gx, gy);
+  const ix = Math.floor(gx);
+  const iy = Math.floor(gy);
+  const fx = gx - ix;
+  const fy = gy - iy;
+  if (fx < 0.09 || fy < 0.09) return C.grout;
+  if (fx < 0.2 || fy < 0.2) return C.tileHi;
+  const n = noise(Math.floor(gx * 6) + Math.floor(gy * 6) * 4099, 3);
+  if (n > 0.93) return C.speckHi;
+  if (n < 0.07) return C.speckLo;
+  // A glint now and then (scuffed rubber catching the CRT light).
+  const tile = ix * 131 + iy * 7919;
+  if (noise(tile, 17) > 0.75) {
+    const dx = fx - 0.3 - noise(tile, 18) * 0.4;
+    const dy = fy - 0.3 - noise(tile, 19) * 0.4;
+    if (dx * dx + dy * dy < 0.018 && frac(t * 0.23 + noise(tile, 20)) < 0.1) return C.glint;
   }
-  const p = page >= 0 ? PAGE[page % PAGE.length] : null;
-  if (p) set(g, p[0], 2, p[1], 'w');
-  return toArt(g);
+  return ((ix + iy) & 1) === 1 ? C.tileA : C.tileB;
 }
 
-const read: StationDef = {
-  kind: 'read',
-  name: 'manual stack',
-  fps: 5,
-  colors: LAMP,
-  frames: [manuals(false, -1, 0)],
-  active: frames(6, (i) => manuals(true, i, i % 2)),
-};
+// ── walls ────────────────────────────────────────────────────────────────
+const BASE_TOP = 0.25;
+const TRAY_BOT = 3.62;
+const TRAY_TOP = 3.8;
+const RAIN_TOP = 3.62;
 
-// ── search: radar scope ──────────────────────────────────────────────────
-const RADAR = {
-  f: hex('#4a524c'), s: hex('#021a0a'), g: hex('#b8ffc8'), h: hex('#2fbf5a'), H: hex('#16602f'),
-  c: hex('#1a5c30'), b: hex('#d8ffe0'), a: hex('#ffb000'), m: hex('#ff2a8a'), d: hex('#140d00'),
-};
+// Columns of falling glyphs: each 0.5-unit column has its own speed, tail
+// length and pause, all hashed from the column index.
+function rain(side: 'left' | 'right', u: number, v: number, t: number): RGB {
+  const cu = u * 2;
+  const col = Math.floor(cu);
+  if (cu - col >= 0.5) return panel(u, v);
+  const id = side === 'left' ? col + 977 : col;
+  const h = noise(id, 7);
+  const speed = 0.8 + h * 1.4;
+  const tail = 0.9 + frac(h * 7.31) * 1.5;
+  const cycle = RAIN_TOP + tail + 0.8 + frac(h * 13.7) * 3.5;
+  const head = RAIN_TOP - frac((t * speed) / cycle + frac(h * 29.3)) * cycle;
+  const d = v - head;
+  if (d < 0 || d >= tail) return panel(u, v);
+  const cell = Math.floor(v * 5);
+  const mutate = noise(cell * 31 + id, 4) > 0.75 ? Math.floor(t * 5) : 0;
+  if (d >= 0.2 && noise(id * 131 + cell, 3 + mutate) < 0.3) return panel(u, v);
+  if (d < 0.2) return C.g5;
+  return RAIN[Math.min(7, Math.floor((1 - d / tail) * 8))];
+}
 
-// Sweep cells per bearing (N, NE, E, SE, S, SW, W, NW) around the hub at 5,2.
-const SWEEP: Array<Array<[number, number, string]>> = [
-  [[5, 1, '│']],
-  [[6, 1, '╱'], [7, 1, '╱']],
-  [[6, 2, '─'], [7, 2, '─'], [8, 2, '─']],
-  [[6, 3, '╲'], [7, 3, '╲']],
-  [[5, 3, '│']],
-  [[4, 3, '╱'], [3, 3, '╱']],
-  [[4, 2, '─'], [3, 2, '─'], [2, 2, '─']],
-  [[4, 1, '╲'], [3, 1, '╲']],
+function panel(u: number, v: number): RGB {
+  if (frac(u / 2.4) < 0.08) return C.seam;
+  if (v >= 1.1 && v < 1.3) return v < 1.2 ? C.seam : C.rail;
+  return C.wall;
+}
+
+// Cables sagging from the tray (two runs with different spans; some spans
+// stay tucked in the tray).
+function droop(u: number, v: number, off: number): RGB | null {
+  for (let k = 0; k < 2; k++) {
+    const span = 1.9 + k * 0.7;
+    const x = (u + off + k * 0.9) / span;
+    const seg = Math.floor(x);
+    const n = noise(seg, k + 40);
+    if (n < 0.35) continue;
+    const f = x - seg;
+    const cv = TRAY_BOT - (0.1 + 0.22 * n) * 4 * f * (1 - f);
+    if (v > cv - 0.11 && v < cv + 0.11) return CABLES[n > 0.93 ? 1 + k : 0];
+  }
+  return null;
+}
+
+function tray(u: number, v: number): RGB {
+  if (v >= TRAY_TOP) return C.cap;
+  if (v >= TRAY_TOP - 0.06) return C.trayHi;
+  if (frac(u / 1.6) < 0.12) return C.trayLo;
+  return v < TRAY_BOT + 0.05 ? C.trayLo : C.tray;
+}
+
+// "HACK_" in a 3x5 pixel font, magenta neon with a blinking green cursor.
+const NEON_GLYPHS = [
+  [5, 5, 7, 5, 5],
+  [2, 5, 7, 5, 5],
+  [7, 4, 4, 4, 7],
+  [5, 5, 6, 5, 5],
+  [0, 0, 0, 0, 7],
 ];
+const NEON_U = 0.6;
+const NEON_V = 2.6;
+const FPX = 0.2;
+const NEON_COLS = 19;
 
-type Blip = { x: number; y: number; dir: number; k: string };
-const BLIPS: Blip[] = [{ x: 8, y: 1, dir: 1, k: 'b' }, { x: 2, y: 3, dir: 5, k: 'b' }];
-const BLIPS_HOT: Blip[] = [...BLIPS, { x: 9, y: 2, dir: 2, k: 'a' }, { x: 2, y: 1, dir: 7, k: 'b' }, { x: 8, y: 3, dir: 3, k: 'm' }];
-
-function radar(dir: number, blips: Blip[]): Art {
-  const g = grid(
-    ['  ╭─────╮  ', ' ╱       ╲ ', '│    +    │', ' ╲       ╱ ', '  ╰──┬──╯  ', '  ▐000°▌   '],
-    ['  fffffff  ', ' f       f ', 'f    c    f', ' f       f ', '  fffffff  ', '  daaaad   '],
-    ['           ', '  sssssss  ', ' sssssssss ', '  sssssss  ', '           ', '   dddd    '],
-  );
-  for (const [x, y, ch] of SWEEP[(dir + 6) % 8]) set(g, x, y, ch, 'H');
-  for (const [x, y, ch] of SWEEP[(dir + 7) % 8]) set(g, x, y, ch, 'h');
-  for (const [x, y, ch] of SWEEP[dir]) set(g, x, y, ch, 'g');
-  for (const b of blips) {
-    const age = (dir - b.dir + 8) % 8;
-    const fade = b.k === 'b' ? (age <= 2 ? 'h' : 'H') : b.k;
-    if (age === 0) set(g, b.x, b.y, '●', b.k);
-    else if (age <= 2) set(g, b.x, b.y, '●', fade);
-    else if (age <= 4) set(g, b.x, b.y, '·', fade);
-  }
-  [...String(dir * 45).padStart(3, '0')].forEach((c, i) => set(g, 3 + i, 5, c, 'a'));
-  return toArt(g);
+function neonLit(cx: number, cy: number): boolean {
+  if (cx < 0 || cy < 0 || cx >= NEON_COLS || cy >= 5) return false;
+  const col = cx % 4;
+  if (col === 3) return false;
+  return ((NEON_GLYPHS[(cx / 4) | 0][cy] >> (2 - col)) & 1) === 1;
 }
 
-const search: StationDef = {
-  kind: 'search',
-  name: 'radar scope',
-  fps: 6,
-  colors: RADAR,
-  frames: frames(16, (i) => radar(Math.floor(i / 2), BLIPS)),
-  active: frames(8, (i) => radar(i, BLIPS_HOT)),
-};
+function neon(u: number, v: number, t: number): RGB | null {
+  if (u < NEON_U - 2 * FPX || u >= NEON_U + (NEON_COLS + 2) * FPX || v < NEON_V - 2 * FPX || v >= NEON_V + 7 * FPX) return null;
+  const cx = Math.floor((u - NEON_U) / FPX);
+  const cy = 4 - Math.floor((v - NEON_V) / FPX);
+  if (neonLit(cx, cy)) {
+    const g = (cx / 4) | 0;
+    if (g === 4) return Math.floor(t * 2) % 2 === 0 ? C.g4 : null;
+    // A letter stutters every so often.
+    if (noise(g, Math.floor(t * 9)) > 0.985 || (g === 2 && noise(Math.floor(t * 3), 66) > 0.93)) return NEON_OFF;
+    return (cy === 0 || cy === 4) && (cx & 1) === 0 ? C.magentaPale : C.magenta;
+  }
+  let near = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (neonLit(cx + dx, cy + dy) && ((cx + dx) / 4 | 0) < 4) near++;
+  if (near >= 2) return NEON_GLOW;
+  if (near === 1) return NEON_GLOW_FAR;
+  return null;
+}
 
-// ── run: server rack ─────────────────────────────────────────────────────
-const RACK = {
-  f: hex('#4a524c'), k: hex('#0b0f0c'), K: hex('#121814'), g: hex('#39ff6e'), o: hex('#123d20'),
-  a: hex('#ffb000'), m: hex('#ff2a8a'), d: hex('#5b6660'), D: hex('#ffd27a'), c: hex('#2fbf5a'),
-};
+// Wall router: box, two antennas, blinking LEDs, a cable up to the tray.
+function router(u: number, v: number, t: number, k: number): RGB | null {
+  if (u >= 0.2 && u < 0.4 && v >= 3.1 && v < 3.5) return C.steelLo;
+  if (u >= 1.2 && u < 1.4 && v >= 3.1 && v < 3.56) return C.steelLo;
+  if (u >= 0.8 && u < 1.0 && v >= 3.1 && v < TRAY_BOT) return C.cable;
+  if (!inside(u, v, 0, 2.7, 1.6, 3.1)) return null;
+  if (v >= 3.0) return C.steel;
+  if (v >= 2.8 && v < 2.9 && u >= 0.2 && u < 1.4) {
+    const i = Math.floor((u - 0.2) / 0.2);
+    if ((i & 1) === 1) return C.graphite;
+    const on = noise(i + k * 9, Math.floor(t * (4 + i)) + k) > 0.35;
+    return on ? (i === 4 ? C.amber : C.g4) : C.ledOff;
+  }
+  return C.graphite;
+}
 
-function rack(frame: number, active: boolean): Art {
-  const g = grid(
-    [' ┌───────┐ ', ' │       ├╮', ' │       ││', ' │       ││', ' │       ││', ' └┴─────┴┘╰'],
-    [' fffffffff ', ' f       fc', ' f       fc', ' f       fc', ' f       fc', ' fffffffffc'],
-    ['           ', '  kkkkkkk  ', '  KKKKKKK  ', '  kkkkkkk  ', '  KKKKKKK  ', '           '],
-  );
-  for (let row = 0; row < 4; row++) {
-    for (let i = 0; i < 4; i++) {
-      const id = row * 4 + i;
-      let on: boolean;
-      let key: string;
-      if (active) {
-        const n = noise(frame * 37 + id, 5);
-        on = n < 0.55;
-        key = n < 0.04 ? 'm' : n < 0.14 ? 'a' : 'g';
+// Basement window high on the left wall: bars, night sky, twinkling city.
+function cityWindow(u: number, v: number, t: number): RGB | null {
+  if (!inside(u, v, 0.2, 2.4, 2.8, 3.5)) return null;
+  if (u < 0.4 || u >= 2.6 || v < 2.5 || v >= 3.4) return v < 2.5 ? C.steelHi : C.steel;
+  if ((u >= 1.0 && u < 1.2) || (u >= 1.8 && u < 2.0)) return C.steelLo;
+  const b = Math.floor((u - 0.4) / 0.4);
+  const top = 2.66 + noise(b, 21) * 0.46;
+  if (v < top) {
+    const wx = Math.floor((u - 0.4) / 0.2);
+    const wy = Math.floor(v * 10);
+    if ((wx & 1) === 0 && (wy & 1) === 0 && v < top - 0.08) {
+      const id = wx * 17 + wy * 131;
+      const n = noise(id, Math.floor(t / 3 + noise(id, 5) * 9));
+      if (n > 0.6) return n > 0.93 ? C.cityWin2 : C.cityWin;
+      if (n > 0.45) return C.cityWinDim;
+    }
+    return C.city;
+  }
+  const mu = u - 2.3;
+  const mv = v - 3.22;
+  if (mu * mu + mv * mv < 0.014) return C.moon;
+  if (noise(Math.floor(u * 10) * 57 + Math.floor(v * 10), 9) > 0.93 && noise(Math.floor(u * 10), Math.floor(t * 1.3)) > 0.3) return C.g5;
+  return v > 3.2 ? C.sky : C.skyLow;
+}
+
+// Poster: a wireframe planet under a magenta title strip ("hack the
+// planet", as far as 5 px of text allows). Bigger rooms only.
+const POSTER_U = 7.2;
+
+function poster(u: number, v: number, t: number): RGB | null {
+  const x = u - POSTER_U;
+  if (!inside(x, v, 0, 2.3, 1.4, 3.5)) return null;
+  if (x < 0.1 || x >= 1.3 || v < 2.4 || v >= 3.4) return C.paperLo;
+  if (v >= 3.1) {
+    const ch = Math.floor((x - 0.2) / 0.2);
+    if (x >= 0.2 && x < 1.2 && v < 3.3 && v >= 3.2 && noise(ch, 61) > 0.15) return C.magenta;
+    return C.black;
+  }
+  const du = x - 0.7;
+  const dv = v - 2.75;
+  const r2 = du * du + dv * dv;
+  if (r2 < 0.105) {
+    if (r2 > 0.07) return C.g4;
+    if (frac((du + t * 0.1) / 0.2) < 0.35 || frac(dv / 0.2) < 0.4) return C.g3;
+    return C.g1;
+  }
+  return C.black;
+}
+
+// Amber LED clock on the left wall. The left wall's `u` runs right-to-left
+// on screen, so columns are read from the far end. Unlit segments glow
+// faintly like a real 7-segment display.
+const DIGITS = [
+  [7, 5, 5, 5, 7], [2, 6, 2, 2, 7], [7, 1, 7, 4, 7], [7, 1, 7, 1, 7], [5, 5, 7, 1, 1],
+  [7, 4, 7, 1, 7], [7, 4, 7, 5, 7], [7, 1, 1, 1, 1], [7, 5, 7, 5, 7], [7, 5, 7, 1, 7],
+];
+// Local-time offset, looked up once per scene minute rather than per pixel
+// (so a DST switch shows up within a minute).
+let tzAt = NaN;
+let tzMin = 0;
+function tzOffset(now: number): number {
+  const m = Math.floor(now / 60000);
+  if (m !== tzAt) {
+    tzAt = m;
+    tzMin = new Date(now).getTimezoneOffset();
+  }
+  return tzMin;
+}
+const CLOCK_U = 3.2;
+const CLOCK_V = 2.4;
+
+function ledClock(u: number, v: number, now: number): RGB | null {
+  if (!inside(u, v, CLOCK_U - 0.2, CLOCK_V - 0.2, CLOCK_U + 3.6, CLOCK_V + 1.2)) return null;
+  const cx = 16 - Math.floor((u - CLOCK_U) / FPX);
+  const cy = 4 - Math.floor((v - CLOCK_V) / FPX);
+  if (cx < 0 || cx > 16 || cy < 0 || cy > 4) return C.clockCase;
+  const mins = Math.floor(now / 60000 - tzOffset(now));
+  const day = ((mins % 1440) + 1440) % 1440;
+  if (cx === 8) return (cy === 1 || cy === 3) && Math.floor(now / 1000) % 2 === 0 ? C.amber : C.clockCase;
+  const slot = cx < 8 ? (cx / 4) | 0 : 2 + (((cx - 10) / 4) | 0);
+  const col = cx < 8 ? cx % 4 : (cx - 10) % 4;
+  if (col === 3 || cx === 9) return C.clockCase;
+  const hh = Math.floor(day / 60);
+  const mm = day % 60;
+  const d = slot === 0 ? Math.floor(hh / 10) : slot === 1 ? hh % 10 : slot === 2 ? Math.floor(mm / 10) : mm % 10;
+  if (((DIGITS[d][cy] >> (2 - col)) & 1) === 1) return C.amber;
+  return ((DIGITS[8][cy] >> (2 - col)) & 1) === 1 ? C.clockOff : C.clockCase;
+}
+
+// A 1U switch with port LEDs (left wall, repeating).
+function switchBox(u: number, v: number, t: number, k: number): RGB | null {
+  if (u >= 0.6 && u < 0.8 && v >= 3.1 && v < TRAY_BOT) return C.cable;
+  if (!inside(u, v, 0, 2.8, 1.4, 3.1)) return null;
+  if (v >= 3.0) return C.steel;
+  if (u >= 0.2 && u < 1.2 && v < 2.9) {
+    const i = Math.floor((u - 0.2) / 0.2);
+    if ((i & 1) === 1) return C.graphite;
+    return noise(i + k * 7, Math.floor(t * 7) + i) > 0.4 ? C.g4 : C.ledOff;
+  }
+  return C.graphite;
+}
+
+function wall(side: 'left' | 'right', u: number, v: number, t: number, now: number): RGB {
+  if (v >= TRAY_BOT) return tray(u, v);
+  if (v < BASE_TOP) return v >= BASE_TOP - 0.06 ? C.baseHi : C.base;
+  if (v > 2.2) {
+    if (side === 'right') {
+      if (u < 4.8) {
+        const n = neon(u, v, t);
+        if (n) return n;
       } else {
-        on = noise(id, 6) < 0.6;
-        if (noise(id, 7) < 0.25) on = (frame + id) % 4 < 2;
-        key = noise(id, 8) < 0.15 ? 'a' : 'g';
+        const k = Math.floor((u - 4.8) / 6.4);
+        const r = router(u - 4.8 - k * 6.4, v, t, k);
+        if (r) return r;
       }
-      set(g, 2 + i, 1 + row, '▪', on ? key : 'o');
+      if (u > 4.6 && v > 3.2) {
+        const d = droop(u, v, 0);
+        if (d) return d;
+      }
+    } else {
+      const w = cityWindow(u, v, t) ?? ledClock(u, v, now) ?? poster(u, v, t);
+      if (w) return w;
+      if (u >= 9.2) {
+        const k = Math.floor((u - 9.2) / 5.2);
+        const s = switchBox(u - 9.2 - k * 5.2, v, t, k);
+        if (s) return s;
+      }
+      if (u > 8.8 && v > 3.2) {
+        const d = droop(u, v, 0.35);
+        if (d) return d;
+      }
     }
-    const busy = active && noise(frame * 13 + row, 9) < 0.5;
-    set(g, 7, 1 + row, '═', busy ? 'D' : 'd');
-    set(g, 8, 1 + row, '═', 'd');
   }
-  return toArt(g);
+  return rain(side, u, v, t);
 }
 
-const run: StationDef = {
-  kind: 'run',
+// ── stations ─────────────────────────────────────────────────────────────
+// A CRT screen painter for a box front: green code, an amber hex dump, or
+// a bar graph, scrolling `s` lines. The glass is lit so it reads as a
+// glowing screen even at 5-6 px tiles.
+function crt(kind: number, len: number, h: number, s: number, t: number, active: boolean): Box['paint'] {
+  const pal = kind === 1 ? SCREEN_A : SCREEN_G;
+  const bg = active ? pal.bgOn : pal.bg;
+  return (f, u, v) => {
+    if (f === 'top') return frac(u * 4) < 0.35 && v > 0.15 && v < 0.4 ? C.puttyLo : undefined;
+    if (!front(f)) return undefined;
+    if (u < 0.12 || u >= len - 0.12 || v < 0.14 || v >= h - 0.1) {
+      if (v < 0.1 && u > len - 0.32 && u < len - 0.14) return active ? C.g4 : C.g2;
+      return undefined;
+    }
+    const x = u - 0.12;
+    const y = h - 0.1 - v;
+    if (kind === 2) {
+      const c = Math.floor(x / 0.12);
+      const bar = (0.2 + noise(c + s, 31) * 0.7) * (h - 0.24);
+      return v - 0.14 < bar && frac(x / 0.12) < 0.6 ? (c === (s & 7) ? pal.inkHi : pal.ink) : bg;
+    }
+    const row = Math.floor(y / 0.2);
+    if ((row & 1) === 1) return bg;
+    const line = (row >> 1) + s;
+    const w = len - 0.24;
+    if (kind === 1) {
+      if (frac(x / 0.3) > 0.66) return bg;
+      return noise(Math.floor(x / 0.1) + line * 13, 8) > 0.3 ? pal.ink : bg;
+    }
+    const indent = noise(line, 2) > 0.6 ? 0.12 : 0;
+    const end = 0.15 + noise(line, 1) * (w - 0.15);
+    if (x < indent || x > end) return row === 0 && x > end && x < end + 0.12 && Math.floor(t * 3) % 2 === 0 ? pal.inkHi : bg;
+    if (noise(Math.floor(x / 0.1) + line * 31, 3) < 0.15) return bg;
+    return noise(line, 4) > 0.75 ? pal.inkHi : pal.ink;
+  };
+}
+
+const write: IsoStation = {
+  name: 'CRT battlestation',
+  size: { len: 2.2, dep: 1.2, h: 2.45 },
+  light: (t, active) => ({ a: 1.1, b: 1.8, z: 1.6, color: hex('#2bff88'), radius: 2, intensity: active ? 0.75 + 0.1 * noise(Math.floor(t * 9)) : 0.45 }),
+  model: (t, active) => {
+    const s = Math.floor(t * (active ? 9 : 1.2));
+    return [
+      box(0, 0.1, 0, 0.12, 1.05, 0.9, C.desk),
+      box(2.08, 0.1, 0, 0.12, 1.05, 0.9, C.desk),
+      box(1.45, 0.2, 0, 0.5, 0.8, 0.8, C.graphite, (f, u, v) => {
+        if (!front(f)) return undefined;
+        if (inside(u, v, 0.08, 0.56, 0.42, 0.68)) return C.seam;
+        if (inside(u, v, 0.08, 0.32, 0.22, 0.46)) return C.g4;
+        if (inside(u, v, 0.28, 0.32, 0.42, 0.46)) return active && noise(Math.floor(t * 14), 5) > 0.4 ? C.amber : C.amberDim;
+        return undefined;
+      }),
+      box(0, 0, 0.9, 2.2, 1.2, 0.1, C.deskTop),
+      box(0.04, 0.16, 1.0, 1.0, 0.54, 0.9, C.putty, crt(0, 1.0, 0.9, s, t, active)),
+      box(1.16, 0.16, 1.0, 1.0, 0.54, 0.9, C.putty, crt(1, 1.0, 0.9, s + 3, t, active)),
+      box(0.6, 0.2, 1.9, 1.0, 0.48, 0.55, C.putty, crt(2, 1.0, 0.55, Math.floor(t * (active ? 6 : 1)), t, active)),
+      box(0.5, 0.82, 1.0, 1.1, 0.26, 0.05, C.keyboard, (f, u, v) => {
+        if (f !== 'top') return undefined;
+        const key = Math.floor(u * 9) + Math.floor(v * 5) * 11;
+        if (active && noise(key, Math.floor(t * 12)) > 0.86) return C.g4;
+        return frac(u * 9) < 0.25 || frac(v * 5) < 0.3 ? C.puttyLo : undefined;
+      }),
+      box(1.84, 0.86, 1.0, 0.15, 0.15, 0.24, C.g3, (f, _u, v) => (f === 'top' ? C.steelHi : v > 0.08 && v < 0.16 ? C.black : undefined)),
+    ];
+  },
+};
+
+const read: IsoStation = {
+  name: 'manual stacks',
+  size: { len: 1.4, dep: 0.9, h: 1.9 },
+  light: (_t, active) => (active ? { a: 0.7, b: 1.2, z: 1.8, color: hex('#ffcf7a'), radius: 1.1, intensity: 0.55 } : null),
+  model: (t, active) => {
+    const boxes: Box[] = [
+      // Low shelf with two rows of binders.
+      box(0, 0.05, 0, 1.4, 0.8, 0.76, C.desk, (f, u, v) => {
+        if (!front(f)) return undefined;
+        if (u < 0.1 || u >= 1.3 || v < 0.06 || v >= 0.7 || (v >= 0.36 && v < 0.42)) return undefined;
+        const shelf = v < 0.36 ? 0 : 1;
+        const i = Math.floor((u - 0.1) / 0.2) + shelf * 7;
+        if (v - (shelf ? 0.42 : 0.06) > 0.18 + noise(i, 11) * 0.1) return C.seam;
+        return BINDERS[i % BINDERS.length];
+      }),
+    ];
+    // A leaning tower of manuals: spines and page edges alternate.
+    let z = 0.76;
+    for (let i = 0; i < 4; i++) {
+      const th = 0.18;
+      const pages = (i & 1) === 1;
+      boxes.push(box(0.1 + noise(i, 71) * 0.08, 0.14 + noise(i, 72) * 0.08, z, 0.56, 0.5, th, MANUALS[i], (f, _u, v) => {
+        if (f === 'top' || !pages) return undefined;
+        return v > 0.04 && v < th - 0.04 ? C.paper : undefined;
+      }));
+      z += th;
+    }
+    if (active) {
+      // Open manual on the stack with a page turning over.
+      const turn = frac(t * 0.6);
+      boxes.push(box(0.12, 0.16, z, 0.56, 0.44, 0.04, C.paperLo, (f, u, v) => {
+        if (f !== 'top') return C.paperLo;
+        if (Math.abs(u - 0.28) < 0.04) return C.steel;
+        return frac(v * 5) < 0.45 && Math.abs(u - 0.28) > 0.08 && u > 0.06 && u < 0.5 ? C.steel : undefined;
+      }));
+      boxes.push(box(0.14 + turn * 0.4, 0.18, z + 0.04, 0.08, 0.4, 0.05 + Math.sin(turn * Math.PI) * 0.26, C.paper));
+    }
+    // Desk lamp: weighted base, post, arm and a green enamel shade.
+    const bulb = active ? C.bulb : C.amberMid;
+    boxes.push(
+      box(0.98, 0.3, 0.76, 0.3, 0.3, 0.06, C.graphite),
+      box(1.08, 0.4, 0.82, 0.1, 0.1, 0.72, C.steelHi),
+      box(0.86, 0.4, 1.5, 0.32, 0.1, 0.1, C.steelHi),
+      box(0.74, 0.32, 1.3, 0.3, 0.3, 0.22, C.g2, (f, _u, v) => (f === 'top' ? C.g3 : v < 0.08 ? bulb : undefined)),
+    );
+    return boxes;
+  },
+};
+
+const search: IsoStation = {
+  name: 'radar scope',
+  size: { len: 1.4, dep: 1.0, h: 1.9 },
+  light: (t) => ({ a: 0.7, b: 1.4, z: 1.2, color: hex('#3dff7a'), radius: 1.3, intensity: 0.35 + 0.25 * Math.max(0, Math.sin(t * 2.5)) }),
+  model: (t, active) => {
+    const sweep = t * (active ? 4.2 : 1.1);
+    const epoch = Math.floor(t / 9);
+    const blips = active ? 4 : 2;
+    return [
+      box(0, 0.15, 0, 1.4, 0.85, 0.85, C.steelLo, (f, u, v) => {
+        if (!front(f)) return f === 'side' && frac(v * 6) < 0.3 && v > 0.15 && v < 0.7 ? C.seam : undefined;
+        for (let k = 0; k < 3; k++) {
+          const du = u - 0.3 - k * 0.4;
+          const dv = v - 0.55;
+          if (du * du + dv * dv < 0.01) return k === 1 ? C.amber : C.steelHi;
+        }
+        if (v >= 0.2 && v < 0.3 && u >= 0.2 && u < 1.2) {
+          const i = Math.floor((u - 0.2) / 0.2);
+          if ((i & 1) === 1) return undefined;
+          return active && noise(i, Math.floor(t * 5)) > 0.4 ? C.g4 : C.ledOff;
+        }
+        return undefined;
+      }),
+      box(0.05, 0.05, 0.85, 1.3, 0.4, 1.05, C.steel, (f, u, v) => {
+        if (!front(f)) return undefined;
+        const du = 0.65 - u;
+        const dv = v - 0.52;
+        const r = Math.sqrt(du * du + dv * dv);
+        if (r > 0.5) return undefined;
+        if (r > 0.44) return C.graphite;
+        const ang = Math.atan2(dv, du);
+        const diff = (((sweep - ang) % 6.2832) + 6.2832) % 6.2832;
+        let lvl = diff < 1.8 ? 1 + (1 - diff / 1.8) * 5 : 1;
+        if (diff < 0.2) lvl = 7;
+        if (Math.abs(r - 0.24) < 0.04 || Math.abs(du) < 0.04 || Math.abs(dv) < 0.04) lvl = Math.max(lvl, 3);
+        for (let k = 0; k < blips; k++) {
+          const ba = noise(k, epoch * 3 + 1) * 6.2832;
+          const br = 0.1 + noise(k, epoch * 3 + 2) * 0.28;
+          const bx = Math.cos(ba) * br - du;
+          const by = Math.sin(ba) * br - dv;
+          if (bx * bx + by * by < 0.004) {
+            const since = (((sweep - ba) % 6.2832) + 6.2832) % 6.2832;
+            const b = 7 - since * 1.4;
+            if (active && k === 0 && b > 2) return C.amber;
+            lvl = Math.max(lvl, b);
+          }
+        }
+        return SCOPE[Math.max(0, Math.min(7, Math.floor(lvl)))];
+      }),
+      box(0, 0.45, 0.85, 1.4, 0.55, 0.08, C.steelLo, (f, u, v) => {
+        if (f !== 'top') return undefined;
+        if (v < 0.15 || v > 0.4 || u < 0.15 || u > 1.25) return undefined;
+        const i = Math.floor((u - 0.15) / 0.2) + (v > 0.28 ? 7 : 0);
+        if (frac((u - 0.15) / 0.2) > 0.6) return undefined;
+        const on = noise(i, Math.floor(t * (active ? 6 : 1))) > (active ? 0.4 : 0.75);
+        return on ? CONSOLE_LED[i % 3] : C.ledOff;
+      }),
+    ];
+  },
+};
+
+const run: IsoStation = {
   name: 'server rack',
-  fps: 8,
-  colors: RACK,
-  frames: frames(8, (i) => rack(i, false)),
-  active: frames(10, (i) => rack(i, true)),
+  size: { len: 1.2, dep: 1.0, h: 3.62 },
+  light: (_t, active) => ({ a: 0.6, b: 1.3, z: 2, color: hex('#4fc3ff'), radius: 1.4, intensity: active ? 0.6 : 0.35 }),
+  model: (t, active) => {
+    const rate = active ? 11 : 1.6;
+    const thr = active ? 0.3 : 0.62;
+    return [
+      box(0, 0, 0, 1.2, 1.0, 2.3, C.rack, (f, u, v) => {
+        if (f === 'top') return frac(u * 5) < 0.4 && v > 0.15 && v < 0.85 ? C.server : C.rackHi;
+        if (f === 'side') return frac(v * 5) < 0.4 && u > 0.2 && u < 0.8 && v > 0.3 && v < 2.0 ? C.rack : undefined;
+        if (u < 0.1 || u >= 1.1 || v < 0.1 || v >= 2.2) return C.rackHi;
+        // 2U servers: two faceplate rows and a dark gap.
+        const r = Math.floor((2.2 - v) / 0.2);
+        const unit = (r / 3) | 0;
+        const slot = r - unit * 3;
+        if (slot === 2) return C.seam;
+        if (u < 0.5) return slot === 0 && frac((u - 0.1) / 0.2) < 0.5 ? C.serverHi : C.server;
+        const k = Math.floor((u - 0.5) / 0.2);
+        if ((k & 1) === 1 || k > 4) return C.server;
+        const id = r * 7 + k;
+        const on = noise(id, Math.floor(t * rate + noise(id, 5) * 10)) > thr;
+        return on ? RACK_LED[Math.floor(noise(id, 6) * RACK_LED.length)] : C.ledOff;
+      }),
+      // Cable loom up to the tray.
+      box(0.35, 0.05, 2.3, 0.5, 0.2, 1.32, C.cable, (f, u) => {
+        if (f === 'top') return undefined;
+        return LOOM[Math.floor((f === 'front' ? u : u * 2) / 0.1) % LOOM.length];
+      }),
+    ];
+  },
 };
 
-// ── web: satellite dish ──────────────────────────────────────────────────
-const DISH = {
-  w: hex('#aab3ad'), m: hex('#4a524c'), l: hex('#3d2a00'), L: hex('#ffb000'), g: hex('#39ff6e'),
-  s: hex('#7dffa0'), S: hex('#1f8a44'),
+const web: IsoStation = {
+  name: 'satellite dish',
+  size: { len: 1.3, dep: 1.1, h: 2.3 },
+  light: (t) => (Math.floor(t * 1.5) % 2 ? { a: 0.65, b: 0.55, z: 2.2, color: hex('#ff3b4f'), radius: 0.8, intensity: 0.4 } : null),
+  model: (t, active) => {
+    const blink = Math.floor(t * (active ? 6 : 1)) % 2 === 0;
+    return [
+      box(0.05, 0.1, 0, 0.4, 0.45, 0.3, C.graphite, (f, u, v) => {
+        if (!front(f) || v < 0.12 || v >= 0.2) return undefined;
+        const i = Math.floor((u - 0.05) / 0.1);
+        if (u < 0.05 || (i & 1) === 1 || i > 5) return undefined;
+        return noise(i, Math.floor(t * (active ? 9 : 1.5))) > 0.4 ? C.g4 : C.ledOff;
+      }),
+      box(0.5, 0.3, 0, 0.36, 0.36, 0.08, C.steelLo),
+      box(0.61, 0.41, 0.08, 0.14, 0.14, 1.27, C.steel),
+      box(0.56, 0.4, 1.3, 0.24, 0.18, 0.2, C.steelLo),
+      box(0.08, 0.58, 1.0, 1.2, 0.1, 1.2, C.dish, (f, u, v) => {
+        const du = u - 0.6;
+        const dv = v - 0.6;
+        const r2 = (du * du + dv * dv) / 0.3364;
+        if (f !== 'front') return f === 'top' && Math.abs(du) < 0.12 ? C.dishHi : null;
+        if (r2 > 1) return null;
+        if (r2 > 0.8) return C.dishHi;
+        // Concave bowl: the rim shades the upper part of the inside.
+        const s2 = (du * du + (dv - 0.16) * (dv - 0.16)) / 0.3364;
+        if (s2 > 0.62) return C.dishLo;
+        return r2 < 0.06 ? C.dishLo : C.dish;
+      }),
+      // Offset feed: an arm from the lower rim out to the LNB.
+      box(0.62, 0.68, 1.08, 0.12, 0.34, 0.1, C.graphite),
+      box(0.62, 0.94, 1.18, 0.12, 0.1, 0.34, C.graphite),
+      box(0.55, 0.9, 1.5, 0.26, 0.2, 0.22, C.steelLo, (f, _u, v) => (f === 'top' ? C.steel : v > 0.07 && v < 0.15 ? (active && blink ? C.g4 : C.ledOff) : undefined)),
+      box(0.64, 0.6, 2.2, 0.08, 0.06, 0.1, blink ? C.red : C.redDim),
+    ];
+  },
 };
 
-function dish(led: string, waves: number[]): Art {
-  const g = grid(
-    ['           ', '     ●     ', '▙  ╲ │ ╱  ▟', '▝█▄  │  ▄█▘', '  ▀▀▀█▀▀▀  ', '   ▄███▄   '],
-    ['           ', `     ${led}     `, 'w  m m m  w', 'www  m  www', '  wwwwwww  ', '   mmmmm   '],
-  );
-  for (const r of waves) {
-    const k = r <= 2 ? 's' : 'S';
-    set(g, 5 - r, 1, '(', k);
-    set(g, 5 + r, 1, ')', k);
-    if (r >= 2) {
-      set(g, 5 - r + 1, 0, '╭', k);
-      for (let x = 5 - r + 2; x <= 5 + r - 2; x++) set(g, x, 0, '─', k);
-      set(g, 5 + r - 1, 0, '╮', k);
+// Corkboard notes: [u0, v0, u1, v1, kind] (0 photo, 1 sticky, 2 clipping, 3 pink sticky).
+const NOTES: ReadonlyArray<readonly [number, number, number, number, number]> = [
+  [0.2, 0.78, 0.62, 1.28, 0],
+  [1.22, 0.92, 1.58, 1.28, 1],
+  [0.74, 0.18, 1.16, 0.58, 2],
+  [1.34, 0.2, 1.62, 0.5, 3],
+];
+const PINS = NOTES.map(([u0, , u1, v1]) => [(u0 + u1) / 2, v1 - 0.06] as const);
+const STRINGS = [
+  [0, 1], [0, 2], [1, 2], [2, 3], [0, 3],
+].map(([i, j]) => {
+  const [ax, ay] = PINS[i];
+  const [bx, by] = PINS[j];
+  const dx = bx - ax;
+  const dy = by - ay;
+  return { ax, ay, dx, dy, inv: 1 / (dx * dx + dy * dy) };
+});
+const NOTE_COL = [hex('#b9c2bb'), hex('#e8d44d'), C.paper, hex('#ff7ab8')];
+const NOTE_INK = hex('#a8942a');
+const STRING_OFF = hex('#7a1420');
+const STRING_ON = hex('#d0203a');
+const STRING_HOT = hex('#ff5a72');
+
+function cork(u: number, v: number, t: number, active: boolean): RGB | undefined {
+  if (u < 0.08 || u >= 1.72 || v < 0.08 || v >= 1.42) return C.frame;
+  for (let i = 0; i < PINS.length; i++) {
+    const du = u - PINS[i][0];
+    const dv = v - PINS[i][1];
+    if (du * du + dv * dv < 0.0036) return i % 3 === 1 ? C.amber : C.red;
+  }
+  for (let i = 0; i < STRINGS.length; i++) {
+    const s = STRINGS[i];
+    const px = u - s.ax;
+    const py = v - s.ay;
+    const k = Math.max(0, Math.min(1, (px * s.dx + py * s.dy) * s.inv));
+    const ex = px - k * s.dx;
+    const ey = py - k * s.dy;
+    if (ex * ex + ey * ey < 0.0081) {
+      if (!active) return STRING_OFF;
+      return frac(k * 1.5 - t * 1.2 + i * 0.37) < 0.3 ? STRING_HOT : STRING_ON;
     }
   }
-  return toArt(g);
+  for (let i = 0; i < NOTES.length; i++) {
+    const [u0, v0, u1, v1, kind] = NOTES[i];
+    if (u < u0 || u >= u1 || v < v0 || v >= v1) continue;
+    const x = (u - u0) / (u1 - u0);
+    const y = (v - v0) / (v1 - v0);
+    if (kind === 0) {
+      // Photo: a grey silhouette, circled in red.
+      const cx = x - 0.5;
+      const cy = y - 0.45;
+      const r = cx * cx + cy * cy;
+      if (r > 0.1 && r < 0.16) return C.red;
+      if ((cx * cx + (y - 0.6) ** 2 < 0.03) || (y < 0.35 && Math.abs(cx) < 0.3)) return C.graphite;
+      return NOTE_COL[0];
+    }
+    if (kind === 2) return frac(y * 4) < 0.4 && x > 0.1 && x < 0.9 ? C.paperLo : C.paper;
+    if (kind === 1 && y < 0.7 && y > 0.2 && frac(y * 4) < 0.4) return NOTE_INK;
+    return NOTE_COL[kind];
+  }
+  const n = noise(Math.floor(u * 10) * 37 + Math.floor(v * 10), 13);
+  return n > 0.8 ? C.corkHi : n < 0.2 ? C.corkLo : C.cork;
 }
 
-const web: StationDef = {
-  kind: 'web',
-  name: 'satellite dish',
-  fps: 4,
-  colors: DISH,
-  frames: [dish('L', []), dish('l', []), dish('l', []), dish('l', [])],
-  active: frames(4, (i) => dish(i % 2 ? 'g' : 'L', [i + 1, ((i + 2) % 4) + 1])),
-};
-
-// ── think: conspiracy board ──────────────────────────────────────────────
-const BOARD = {
-  w: hex('#5a3b24'), c: hex('#6e4c2d'), p: hex('#e6dfc8'), y: hex('#f2c94c'), r: hex('#8a2028'),
-  R: hex('#ff3b4a'), n: hex('#ff2a8a'), g: hex('#39ff6e'), a: hex('#ffb000'),
-};
-
-const STRINGS: Array<Array<[number, number, string]>> = [
-  [[2, 2, '╲'], [3, 2, '─'], [4, 2, '─']],
-  [[8, 2, '╱'], [7, 2, '─'], [6, 2, '─']],
-  [[3, 3, '─'], [4, 3, '─'], [6, 3, '─'], [7, 3, '─']],
-];
-
-function corkboard(stage: number, hot: boolean, mark: string, markKey: string): Art {
-  const g = grid(
-    ['┌─────────┐', '│●▀  ?  ▀●│', '│    ●    │', '│●▄  ▪  ▄●│', '└┬───────┬┘', ' ┸       ┸ '],
-    ['wwwwwwwwwww', 'wnp  a  ygw', 'w    n    w', 'way  p  pnw', 'wwwwwwwwwww', ' w       w '],
-    ['           ', ' ccccccccc ', ' ccccccccc ', ' ccccccccc ', '           ', '           '],
-  );
-  for (let i = 0; i < stage; i++) for (const [x, y, ch] of STRINGS[i]) set(g, x, y, ch, hot ? 'R' : 'r');
-  set(g, 5, 1, mark, markKey);
-  return toArt(g);
-}
-
-const think: StationDef = {
-  kind: 'think',
+const think: IsoStation = {
   name: 'conspiracy board',
-  fps: 2,
-  colors: BOARD,
-  frames: [corkboard(2, false, '?', 'a'), corkboard(2, false, '?', 'p')],
-  active: [
-    corkboard(0, false, '?', 'a'),
-    corkboard(1, false, '?', 'a'),
-    corkboard(2, false, '?', 'a'),
-    corkboard(3, false, '?', 'a'),
-    corkboard(3, true, '!', 'n'),
-    corkboard(3, false, '!', 'a'),
-    corkboard(3, true, '!', 'n'),
-    corkboard(3, false, '!', 'a'),
+  size: { len: 1.8, dep: 0.6, h: 2.45 },
+  light: () => ({ a: 0.9, b: 0.9, z: 2.2, color: hex('#ffd27a'), radius: 1.5, intensity: 0.5 }),
+  model: (t, active) => [
+    box(0, 0, 0.95, 1.8, 0.08, 1.5, C.frame, (f, u, v) => (front(f) ? cork(u, v, t, active) : undefined)),
+    box(0.5, 0.05, 0, 0.8, 0.55, 0.85, C.steelLo, (f, u, v) => {
+      if (!front(f)) return undefined;
+      if (frac(v / 0.42) < 0.1) return C.seam;
+      if (Math.abs(u - 0.4) < 0.12 && frac(v / 0.42) > 0.55 && frac(v / 0.42) < 0.7) return C.steelHi;
+      if (v > 0.6 && v < 0.7 && u > 0.12 && u < 0.32) return C.amber;
+      return undefined;
+    }),
   ],
 };
 
-// ── idle: beanbag + pizza box ────────────────────────────────────────────
-const CHILL = {
-  b: hex('#5a1846'), h: hex('#8a2a6a'), s: hex('#3a0f2e'), k: hex('#8a6a3a'), t: hex('#c0392b'), z: hex('#e0a030'),
-  p: hex('#a31f1f'), c: hex('#c08a3a'), m: hex('#8fa39a'), M: hex('#4d5c55'), n: hex('#ffb000'), N: hex('#39ff6e'),
-};
-
-const STEAM: Array<[string, string]> = [
-  ['        ~  ', '         ~ '],
-  ['         ~ ', '        ~  '],
-  ['        · ~', '        ~  '],
-  ['       ~ · ', '         ~ '],
-];
-
-function chill(steam: number, slices: number, note: number): Art {
-  const [s0, s1] = STEAM[steam % STEAM.length];
-  const g = grid(
-    [s0, s1, '       ▗▄▄▖', '▗██▖   ▐ZA▌', '█████▙▖▐  ▌', '███████▝▀▀▘'],
-    [keys(s0, 'M'), keys(s1, 'm'), '       kkkk', 'bhhb   kttk', 'bbbbbbbc  c', 'ssssssskkkk'],
-    ['           ', '           ', '           ', '        kk ', '        zz ', '           '],
-  );
-  for (let i = 0; i < 2; i++) set(g, 8 + i, 4, i < slices ? '●' : '·', i < slices ? 'p' : 'c', i < slices ? 'z' : 'k');
-  if (note >= 0) set(g, 2 + (note % 2), note % 2, note % 2 ? '♫' : '♪', note % 4 < 2 ? 'n' : 'N');
-  return toArt(g);
+// Rounds off the corners of a beanbag lump.
+function lump(len: number, dep: number, h: number): Box['paint'] {
+  return (f, u, v) => {
+    const w = f === 'side' ? dep : len;
+    if (f === 'top') {
+      const eu = Math.min(u, len - u);
+      const ev = Math.min(v, dep - v);
+      if (eu < 0.08 && ev < 0.08) return null;
+      return eu > 0.2 && ev > 0.15 && noise(Math.floor(u * 6) + Math.floor(v * 6) * 9, 2) > 0.7 ? C.beanHi : undefined;
+    }
+    const eu = Math.min(u, w - u);
+    if (eu < 0.07 && v > h - 0.1) return null;
+    return v < 0.08 ? C.beanLo : undefined;
+  };
 }
 
-const idle: StationDef = {
-  kind: 'idle',
-  name: 'beanbag & pizza',
-  fps: 3,
-  colors: CHILL,
-  frames: frames(4, (i) => chill(i, 2, -1)),
-  active: frames(12, (i) => chill(i, 2 - Math.min(2, Math.floor(i / 4)), i)),
-};
-
-// ── entrance: steel hatch ────────────────────────────────────────────────
-const HATCH = {
-  m: hex('#2e3430'), d: hex('#6b746f'), e: hex('#2a302c'), r: hex('#a3aca6'), y: hex('#ffb000'), z: hex('#14140f'),
-  x: hex('#010302'), l: hex('#1f6b3a'), k: hex('#1c211e'), K: hex('#8a948e'), g: hex('#39ff6e'), G: hex('#145c2d'), n: hex('#ff2a8a'),
-};
-
-function hatch(open: boolean, led: string, keysLit: boolean): Art {
-  const inner = open ? '   ' : '▒▒▒';
-  const mid = open ? '   ' : '▒◙▒';
-  const g = grid(
-    ['▞▞▞▞▞▞▞   ', '█┌───┐█▗▄▖', `█│${inner}│█▐●▌`, `█│${mid}│█▐▪▌`, `█│${inner}│█▝▀▘`, '█└───┘█   '],
-    ['yyyyyyy   ', 'mdddddmkkk', `md${keys(inner, 'd')}dmk${led}k`, `md${open ? '   ' : 'drd'}dmk${keysLit ? 'g' : 'K'}k`, `md${keys(inner, 'd')}dmkkk`, 'mdddddm   '],
-    ['zzzzzzz   ', '          ', `  ${open ? 'xxx' : 'eee'}   k `, `  ${open ? 'xxx' : 'eee'}   k `, `  ${open ? 'xxx' : 'eee'}     `, '          '],
-  );
-  if (open) for (let x = 2; x <= 4; x++) set(g, x, 4, '▄', 'l');
-  return toArt(g);
+function pizza(eaten: number): Box['paint'] {
+  return (f, u, v) => {
+    if (f !== 'top') return undefined;
+    const du = u - 0.36;
+    const dv = v - 0.4;
+    const r2 = du * du + dv * dv;
+    if (r2 > 0.09) return u < 0.03 || u > 0.69 || v > 0.75 ? C.cardHi : undefined;
+    const slice = Math.floor(((Math.atan2(dv, du) + Math.PI) / 6.2832) * 8) % 8;
+    if (slice < eaten) return noise(Math.floor(u * 14) + Math.floor(v * 14) * 15, 4) > 0.8 ? C.cardLo : undefined;
+    if (r2 > 0.06) return C.crust;
+    return noise(Math.floor(u * 12) + Math.floor(v * 12) * 13, 6) > 0.8 ? C.pepperoni : C.cheese;
+  };
 }
 
-const entrance: StationDef = {
-  kind: 'entrance',
+const idle: IsoStation = {
+  name: 'beanbag and pizza',
+  size: { len: 2.0, dep: 1.3, h: 0.95 },
+  light: () => ({ a: 1, b: 1.6, z: 0.6, color: hex('#ff9a4a'), radius: 1.1, intensity: 0.3 }),
+  model: (t, active) => {
+    const eaten = active ? 2 + (Math.floor(t / 4) % 5) : 3;
+    return [
+      box(0.05, 0.15, 0, 1.05, 1.1, 0.32, C.bean, lump(1.05, 1.1, 0.32)),
+      box(0.1, 0.16, 0.32, 0.95, 0.46, 0.5, C.bean, lump(0.95, 0.46, 0.5)),
+      box(0.12, 0.62, 0.32, 0.9, 0.58, 0.12, C.bean, lump(0.9, 0.58, 0.12)),
+      box(1.2, 0.28, 0, 0.72, 0.06, 0.66, C.card, (f, u, v) => {
+        if (!front(f)) return undefined;
+        if (u < 0.05 || u > 0.67 || v > 0.6) return C.cardLo;
+        return noise(Math.floor(u * 8) + Math.floor(v * 8) * 9, 8) > 0.82 ? C.cardLo : C.cardHi;
+      }),
+      box(1.2, 0.34, 0, 0.72, 0.8, 0.07, C.card, pizza(eaten)),
+      box(1.82, 1.12, 0, 0.13, 0.13, 0.22, C.magenta, (f, _u, v) => (f !== 'top' && v > 0.08 && v < 0.14 ? C.g5 : f === 'top' ? C.steelHi : undefined)),
+    ];
+  },
+};
+
+const entrance: IsoStation = {
   name: 'steel hatch',
-  fps: 4,
-  colors: HATCH,
-  frames: [hatch(false, 'n', false)],
-  active: [hatch(true, 'g', true), hatch(true, 'G', false), hatch(true, 'g', false), hatch(true, 'G', true)],
-};
-
-// ── backdrop decor ───────────────────────────────────────────────────────
-type DecorKind = 'window' | 'poster' | 'router' | 'cracker' | 'neon';
-type Decor = { kind: DecorKind; x: number; y: number; w: number; h: number };
-
-const DECOR_SIZE: Record<DecorKind, [number, number]> = {
-  window: [18, 4],
-  poster: [13, 4],
-  router: [9, 3],
-  cracker: [10, 3],
-  neon: [12, 3],
-};
-
-const ORDER: DecorKind[] = ['window', 'poster', 'router', 'cracker', 'neon'];
-
-// Places wall decor in the free space above each level's stations (the
-// bottom 7 rows of every band are left to stations and characters).
-function layout(r: Rect, floors: number[]): Decor[] {
-  const out: Decor[] = [];
-  wallBands(r, floors).forEach((band, level) => {
-    const top = band.y + (level === 0 ? 2 : 1);
-    const free = band.y + band.h - 7 - top;
-    if (free < 2) return;
-    let x = band.x + 3;
-    for (let i = 0; i < ORDER.length; i++) {
-      const kind = ORDER[(i + level * 2) % ORDER.length];
-      const [w, minH] = DECOR_SIZE[kind];
-      const h = kind === 'window' ? Math.min(6, free) : minH;
-      if (h < minH || h > free) continue;
-      if (x + w > band.x + band.w - 2) continue;
-      out.push({ kind, x, y: top, w, h });
-      x += w + Math.max(4, Math.floor((band.w - 70) / 5));
-    }
-  });
-  return out;
-}
-
-function cput(s: Screen, r: Rect, x: number, y: number, ch: string, fg?: RGB, bg?: RGB): void {
-  if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) s.put(x, y, ch, fg, bg);
-}
-
-const FRAME = hex('#3a403c');
-const SKY_TOP = hex('#04071a');
-const SKY_LOW = hex('#1a1840');
-const TOWERS = [hex('#03050c'), hex('#080b18')];
-const LIGHTS = ['#ffcf6a', '#ffe9a8', '#8fd3ff', '#ff9f43'].map(hex);
-const MOON = hex('#e8e4c8');
-const STAR = hex('#d8e0ff');
-
-function drawWindow(s: Screen, r: Rect, d: Decor, t: number): void {
-  const iw = d.w - 2;
-  const ih = d.h - 2;
-  const mid = Math.floor(iw / 2);
-  textIn(s, r, d.x, d.y, `┌${'─'.repeat(mid)}┬${'─'.repeat(iw - mid - 1)}┐`, FRAME);
-  textIn(s, r, d.x, d.y + d.h - 1, `└${'─'.repeat(mid)}┴${'─'.repeat(iw - mid - 1)}┘`, FRAME);
-  for (let iy = 0; iy < ih; iy++) {
-    const y = d.y + 1 + iy;
-    const sky = mix(SKY_TOP, SKY_LOW, ih > 1 ? iy / (ih - 1) : 1);
-    cput(s, r, d.x, y, '│', FRAME);
-    cput(s, r, d.x + d.w - 1, y, '│', FRAME);
-    for (let ix = 0; ix < iw; ix++) {
-      const x = d.x + 1 + ix;
-      if (ix === mid) {
-        cput(s, r, x, y, '│', FRAME, sky);
-        continue;
+  size: { len: 1.3, dep: 0.22, h: 2.45 },
+  light: (_t, active) => ({ a: 0.65, b: 0.6, z: 2.3, color: hex('#2bff88'), radius: 1, intensity: active ? 0.7 : 0.15 }),
+  model: (_t, active) => [
+    box(0.3, 0, 0, 1.0, 0.12, 2.45, C.steel, (f, u, v) => {
+      if (!front(f)) return undefined;
+      if (v >= 2.12) return frac((u + v) * 3) < 0.5 ? C.amber : C.black;
+      if (u < 0.14 || u >= 0.86) return u < 0.06 || u >= 0.94 ? C.steelLo : undefined;
+      if (active) {
+        if (u < 0.24) return C.steelHi;
+        if (frac(v * 4) < 0.18) return DOOR_LIGHT[Math.max(0, Math.min(7, Math.round((1 - v / 2.1) * 7)))];
+        return DOOR_LIGHT[Math.max(0, Math.min(7, Math.round((1 - v / 2.1) * 5) - 1))];
       }
-      const b = Math.floor(ix / 3);
-      const height = 1 + Math.floor(noise(b, 43) * (ih > 2 ? ih - 1 : ih));
-      if (iy >= ih - height) {
-        const tower = TOWERS[b % 2];
-        const cell = ix * 7 + iy * 131;
-        const lit = noise(cell, 45) < 0.45;
-        const blink = noise(cell, 46 + Math.floor(t * 0.4 + noise(cell, 47) * 7)) < 0.12;
-        if (lit !== blink) cput(s, r, x, y, '▪', LIGHTS[Math.floor(noise(cell, 48) * LIGHTS.length)], tower);
-        else cput(s, r, x, y, ' ', undefined, tower);
-      } else if (iy === 0 && ix === iw - 3) {
-        cput(s, r, x, y, '●', MOON, sky);
-      } else if (noise(ix * 5 + iy, 49) > 0.86) {
-        const tw = 0.3 + 0.7 * pulse(t, 2.5 + noise(ix, 50) * 3, noise(ix, 51) * 5);
-        cput(s, r, x, y, '·', mix(sky, STAR, tw), sky);
-      } else {
-        cput(s, r, x, y, ' ', undefined, sky);
+      const du = u - 0.5;
+      const dv = v - 1.1;
+      const r2 = du * du + dv * dv;
+      if (r2 < 0.07) {
+        if (r2 > 0.045 || r2 < 0.004) return C.steelHi;
+        if (Math.abs(du) < 0.035 || Math.abs(dv) < 0.035) return C.steelHi;
+        return C.steelLo;
       }
-    }
-  }
-}
-
-function drawPoster(s: Screen, r: Rect, d: Decor, t: number): void {
-  const paper = hex('#1e0716');
-  for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) cput(s, r, d.x + x, d.y + y, ' ', undefined, paper);
-  const glow = pulse(t, 3.2);
-  const ink = mix(MAGENTA, hex('#ffd0e6'), 0.3 * glow);
-  const tape = hex('#8f8c7a');
-  cput(s, r, d.x, d.y, '▀', tape, paper);
-  cput(s, r, d.x + d.w - 1, d.y, '▀', tape, paper);
-  const center = (str: string) => d.x + Math.floor((d.w - str.length) / 2);
-  textIn(s, r, center('HACK THE'), d.y + 1, 'HACK THE', ink, paper);
-  textIn(s, r, center('PLANET!'), d.y + 2, 'PLANET!', mix(AMBER, hex('#fff0c0'), 0.25 * glow), paper);
-  textIn(s, r, d.x + 2, d.y + 3, '~~~~◉~~~~', mix(paper, GREEN, 0.55), paper);
-}
-
-function drawRouter(s: Screen, r: Rect, d: Decor, t: number): void {
-  const body = hex('#20262a');
-  const shelf = hex('#2e2620');
-  const ant = hex('#4a524c');
-  for (let y = d.y; y < d.y + d.h; y++) for (let x = d.x; x < d.x + d.w; x++) cput(s, r, x, y, ' ');
-  cput(s, r, d.x + 2, d.y, '╻', ant);
-  cput(s, r, d.x + 6, d.y, '╻', ant);
-  cput(s, r, d.x + 1, d.y + 1, '▐', body);
-  cput(s, r, d.x + 7, d.y + 1, '▌', body);
-  const states = [
-    true,
-    Math.floor(t * 1.2) % 2 === 0,
-    noise(Math.floor(t * 9), 52) > 0.35,
-    noise(Math.floor(t * 6), 53) > 0.45,
-    noise(Math.floor(t / 1.5), 54) > 0.8,
-  ];
-  const colors = [GREEN, AMBER, GREEN, GREEN, MAGENTA];
-  for (let i = 0; i < 5; i++) cput(s, r, d.x + 2 + i, d.y + 1, '●', states[i] ? colors[i] : mix(colors[i], body, 0.8), body);
-  for (let x = 0; x < d.w; x++) cput(s, r, d.x + x, d.y + 2, '▀', shelf);
-}
-
-const HEX = '0123456789ABCDEF';
-
-function drawCracker(s: Screen, r: Rect, d: Decor, t: number): void {
-  const face = hex('#0d0900');
-  const target = 'DEADBEEF';
-  const period = 9;
-  const phase = ((t % period) + period) % period;
-  const found = Math.min(target.length, Math.floor((phase / (period - 1.5)) * (target.length + 1)));
-  const done = found >= target.length;
-  textIn(s, r, d.x, d.y, '┌─CRACK──┐', FRAME);
-  textIn(s, r, d.x, d.y + 2, '└────────┘', FRAME);
-  cput(s, r, d.x, d.y + 1, '│', FRAME);
-  cput(s, r, d.x + 9, d.y + 1, '│', FRAME);
-  for (let i = 0; i < target.length; i++) {
-    const x = d.x + 1 + i;
-    if (i < found) {
-      const c = done && Math.floor(t * 4) % 2 ? hex('#d8ffe0') : GREEN;
-      cput(s, r, x, d.y + 1, target[i], c, face);
-    } else {
-      const ch = HEX[Math.floor(noise(i, Math.floor(t * 14)) * 16)];
-      cput(s, r, x, d.y + 1, ch, mix(AMBER, face, 0.45), face);
-    }
-  }
-}
-
-function drawNeon(s: Screen, r: Rect, d: Decor, t: number): void {
-  const wire = hex('#2a302c');
-  cput(s, r, d.x + 2, d.y, '╎', wire);
-  cput(s, r, d.x + d.w - 3, d.y, '╎', wire);
-  const text = 'NO CARRIER';
-  const stutter = noise(Math.floor(t * 12), 91) > 0.94;
-  const level = stutter ? 0.25 : 0.85 + 0.15 * Math.sin(t * 5);
-  for (let x = d.x; x < d.x + d.w; x++) cput(s, r, x, d.y + 1, ' ');
-  for (let y = d.y; y < d.y + d.h; y++) {
-    for (let x = d.x; x < d.x + d.w; x++) {
-      const edge = Math.min(x - d.x, d.x + d.w - 1 - x);
-      const a = (y === d.y + 1 ? 0.2 : 0.07) * Math.min(1, (edge + 1) / 3) * level;
-      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) s.blendBg(x, y, MAGENTA, a);
-    }
-  }
-  [...text].forEach((ch, i) => {
-    if (ch === ' ') return;
-    const broken = i === 3 && noise(Math.floor(t * 7), 92) > 0.6;
-    const k = broken ? 0.15 : level;
-    cput(s, r, d.x + 1 + i, d.y + 1, ch, mix(hex('#3a0820'), mix(MAGENTA, hex('#ffd6ea'), 0.35), k));
-  });
-}
-
-// Ceiling cable bundle: a tray with cables drooping between clamps.
-const CABLES = ['#1f8a44', '#b07a00', '#4a524c', '#7a1a4a', '#2fbf5a'].map(hex);
-
-function drawCables(s: Screen, r: Rect): void {
-  const tray = hex('#262b28');
-  const clamp = hex('#5b6660');
-  const span = 13;
-  for (let x = r.x; x < r.x + r.w; x++) {
-    const u = (x - r.x + 4) % span;
-    cput(s, r, x, r.y, '▀', u === 0 ? clamp : tray);
-    if (r.h < 4) continue;
-    const idx = Math.floor((x - r.x + 4) / span);
-    const color = CABLES[Math.floor(noise(idx, 31) * CABLES.length)];
-    const ch = u === 1 ? '╰' : u === span - 1 ? '╯' : u === 0 ? ' ' : '─';
-    if (noise(idx, 32) < 0.8 && ch !== ' ') cput(s, r, x, r.y + 1, ch, color);
-  }
-}
-
-// ── matrix rain ──────────────────────────────────────────────────────────
-const RAIN_GLYPHS = [...'01$#%&*+<>{}[]=01'];
-const RAIN = hex('#2fd862');
-const RAIN_HEAD = hex('#c8ffd6');
-
-function drawRain(s: Screen, r: Rect, t: number, band: Rect, rowBg: (y: number) => RGB): void {
-  if (band.h < 2) return;
-  for (let x = band.x; x < band.x + band.w; x++) {
-    const cx = x - r.x;
-    if (noise(cx, 11) > 0.3) continue;
-    const speed = 3 + noise(cx, 12) * 6;
-    const len = 4 + Math.floor(noise(cx, 13) * 7);
-    const cycle = band.h + len + 4 + Math.floor(noise(cx, 14) * band.h);
-    const head = Math.floor((((t * speed + noise(cx, 15) * 97) % cycle) + cycle) % cycle);
-    for (let i = 0; i < len; i++) {
-      const yy = head - i;
-      if (yy < 0 || yy >= band.h) continue;
-      const y = band.y + yy;
-      const zone = yy >= band.h - 7 ? 0.4 : 1;
-      const bg = rowBg(y);
-      const fg = i === 0 ? mix(bg, RAIN_HEAD, 0.8 * zone) : mix(bg, RAIN, (1 - i / len) * 0.55 * zone);
-      const bucket = Math.floor(t * 3 + noise(cx * 7 + yy, 16) * 5);
-      cput(s, r, x, y, RAIN_GLYPHS[Math.floor(noise(cx * 131 + yy * 7, bucket) * RAIN_GLYPHS.length)], fg);
-    }
-  }
-}
-
-const GLOW = hex('#0f2e1a');
-const CONCRETE = [hex('#1a1d1b'), hex('#161917'), hex('#1e211f')];
-const CABLE_G = hex('#1d4a2a');
-const CABLE_A = hex('#4a3410');
-const GLINT = hex('#9dffb6');
-const GRIT = hex('#2a2e2b');
-const SLAB = hex('#202421');
-
-function drawBackdrop(s: Screen, r: Rect, t: number, floors: number[]): void {
-  const bands = wallBands(r, floors);
-  // Per-row wall tones: dark at the ceiling, faint CRT-green glow near floors.
-  const tones: Array<[RGB, RGB]> = [];
-  for (let y = r.y; y < r.y + r.h; y++) {
-    const band = bands.find((b) => y >= b.y && y < b.y + b.h);
-    const k = band ? ((y - band.y) / Math.max(1, band.h)) ** 2 * 0.55 : 0;
-    tones.push([mix(P.wall, GLOW, k), mix(P.wall2, GLOW, k)]);
-  }
-  const rowBg = (y: number) => tones[Math.max(0, Math.min(tones.length - 1, y - r.y))][0];
-  for (let y = r.y; y < r.y + r.h; y++) {
-    const [a, b] = tones[y - r.y];
-    const row = Math.floor((y - r.y) / 2);
-    for (let x = r.x; x < r.x + r.w; x++) {
-      const block = (Math.floor((x - r.x + (row % 2) * 4) / 8) + row) % 2;
-      s.put(x, y, ' ', P.text, block ? a : b);
-    }
-  }
-  for (const band of bands) drawRain(s, r, t, band, rowBg);
-  drawCables(s, r);
-  for (const d of layout(r, floors)) {
-    if (d.kind === 'window') drawWindow(s, r, d, t);
-    else if (d.kind === 'poster') drawPoster(s, r, d, t);
-    else if (d.kind === 'router') drawRouter(s, r, d, t);
-    else if (d.kind === 'cracker') drawCracker(s, r, d, t);
-    else drawNeon(s, r, d, t);
-  }
-  drawFloors(s, r, floors, (x, row, level) => {
-    const bg = CONCRETE[Math.floor(noise(x * 3 + row * 977 + level * 7919, 61) * 3)];
-    if (row === 0) {
-      const glint = noise(x * 13 + level, 63 + Math.floor(t * 1.5 + noise(x, 64) * 3));
-      if (glint > 0.985) return { ch: '·', fg: GLINT, bg };
-      return { ch: x % 9 === 4 ? '▔' : ' ', fg: GRIT, bg };
-    }
-    const kind = noise(Math.floor((x + level * 5) / 11), 62 + level);
-    if (kind < 0.4) return { ch: '─', fg: CABLE_G, bg };
-    if (kind < 0.6) return { ch: '─', fg: CABLE_A, bg };
-    return { ch: noise(x, 65) > 0.93 ? '·' : ' ', fg: GRIT, bg };
-  });
-  // Underside of the mezzanine.
-  for (const fy of floors.slice(0, -1)) {
-    const y = fy + 2;
-    if (y < r.y || y >= r.y + r.h) continue;
-    for (let x = r.x; x < r.x + r.w; x++) s.put(x, y, '▀', SLAB);
-  }
-}
+      const pv = v - 1.78;
+      if (du * du + pv * pv < 0.012) return C.g1;
+      if (u < 0.2 || u >= 0.8 || v < 0.06 || v >= 2.05) return frac(v * 3) < 0.1 || frac(u * 4) < 0.08 ? C.steelHi : C.steelLo;
+      return frac(v / 0.7) < 0.05 ? C.steelLo : undefined;
+    }),
+    box(0.36, 0.12, 0, 0.88, 0.1, 0.03, active ? C.g3 : C.steelLo),
+    box(0.04, 0, 1.0, 0.22, 0.2, 0.36, C.graphite, (f, u, v) => {
+      if (!front(f)) return undefined;
+      if (v > 0.26 && v < 0.32 && u > 0.05 && u < 0.17) return active ? C.g4 : C.red;
+      if (u > 0.04 && u < 0.18 && v > 0.04 && v < 0.22) return (Math.floor(u * 14) + Math.floor(v * 14)) % 2 === 0 ? C.steelHi : C.steelLo;
+      return undefined;
+    }),
+    box(0.72, 0.12, 2.24, 0.16, 0.08, 0.14, active ? C.lampOn : C.lampOff, () => (active ? C.lampOn : C.lampOff)),
+  ],
+};
 
 // ── ambient ──────────────────────────────────────────────────────────────
-const isFree = (s: Screen, x: number, y: number) => s.charAt(x, y) === ' ';
+// Additive light straight into the canvas buffer (no allocations).
+function addPx(c: PixelCanvas, x: number, y: number, r: number, g: number, b: number): void {
+  if (x < 0 || y < 0 || x >= c.w || y >= c.h) return;
+  const i = y * c.w + x;
+  const cur = c.data[i];
+  if (cur === CLEAR) return;
+  const nr = ((cur >> 16) & 255) + r;
+  const ng = ((cur >> 8) & 255) + g;
+  const nb = (cur & 255) + b;
+  c.data[i] = ((nr > 255 ? 255 : nr) << 16) | ((ng > 255 ? 255 : ng) << 8) | (nb > 255 ? 255 : nb);
+}
 
-function glitch(s: Screen, r: Rect, t: number): void {
-  const slot = Math.floor(t / 5.3);
-  if (noise(slot, 81) < 0.6) return;
-  const start = noise(slot, 82) * 5;
-  const local = t - slot * 5.3;
-  if (local < start || local >= start + 0.18) return;
-  const y0 = r.y + Math.floor(noise(slot, 83) * r.h);
-  const h = 1 + Math.floor(noise(slot, 84) * 2);
-  const shift = (1 + Math.floor(noise(slot, 85) * 3)) * (noise(slot, 86) < 0.5 ? -1 : 1);
-  for (let y = y0; y < Math.min(y0 + h, r.y + r.h); y++) {
-    const row: Array<{ ch: string; fg: RGB; bg: RGB }> = [];
-    for (let x = r.x; x < r.x + r.w; x++) row.push({ ch: s.charAt(x, y), fg: s.fgAt(x, y), bg: s.bgAt(x, y) });
-    for (let x = r.x; x < r.x + r.w; x++) {
-      const src = x - shift - r.x;
-      if (src >= 0 && src < row.length) s.put(x, y, row[src].ch, row[src].fg, row[src].bg);
-      s.blendBg(x, y, MAGENTA, 0.18);
-      s.blendFg(x, y, MAGENTA, 0.3);
+function blendPx(c: PixelCanvas, x: number, y: number, col: RGB, a: number): void {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  if (xi < 0 || yi < 0 || xi >= c.w || yi >= c.h) return;
+  const i = yi * c.w + xi;
+  const cur = c.data[i];
+  if (cur === CLEAR) return;
+  const r = (cur >> 16) & 255;
+  const g = (cur >> 8) & 255;
+  const b = cur & 255;
+  c.data[i] = (Math.round(r + (col[0] - r) * a) << 16) | (Math.round(g + (col[1] - g) * a) << 8) | Math.round(b + (col[2] - b) * a);
+}
+
+// A soft point light: every pixel around it is mapped back to the floor or
+// the wall behind it and brightened by distance. With `wallAbove < 0` it
+// lights the floor only; otherwise only wall pixels above that height (so
+// furniture standing in front is not washed out). `scan` adds rolling CRT
+// scanlines to lit wall pixels.
+function light(c: PixelCanvas, room: Room, lx: number, ly: number, lz: number, rad: number, col: RGB, k: number, t: number, wallAbove = -1, scan = 0): void {
+  const floorOnly = wallAbove < 0;
+  const iso = room.iso;
+  const hh = iso.hh;
+  const [cx, cy] = iso.toScreen(lx, ly, 0);
+  const ext = rad * 1.42 * hh;
+  const x0 = Math.max(0, Math.floor(cx - ext));
+  const x1 = Math.min(c.w - 1, Math.ceil(cx + ext));
+  const y0 = Math.max(0, Math.floor(cy - ext / 2 - room.wallH * hh));
+  const y1 = Math.min(c.h - 1, Math.ceil(cy + ext / 2));
+  const r2 = rad * rad;
+  const roll = (t * 26) % 40;
+  for (let py = y0; py <= y1; py++) {
+    const sy = py + 0.5;
+    const line = scan > 0 ? ((py & 1) === 0 ? 1 : 1 - scan) * (Math.abs(((py - roll) % 40 + 40) % 40 - 3) < 3 ? 1.3 : 1) : 1;
+    for (let px = x0; px <= x1; px++) {
+      const a = (px + 0.5 - iso.ox) / hh;
+      const bsum = (sy - iso.oy) / (hh / 2);
+      let gx = (a + bsum) / 2;
+      let gy = (bsum - a) / 2;
+      let gz = 0;
+      let wallPx = false;
+      if (gx >= 0 && gy >= 0) {
+        if (gx > room.W || gy > room.D || !floorOnly) continue;
+      } else if (floorOnly) {
+        continue;
+      } else if (a >= 0) {
+        gx = a;
+        gy = 0;
+        gz = ((a * hh) / 2 + iso.oy - sy) / hh;
+        wallPx = true;
+      } else {
+        gx = 0;
+        gy = -a;
+        gz = ((-a * hh) / 2 + iso.oy - sy) / hh;
+        wallPx = true;
+      }
+      if (gz > room.wallH || (wallPx && gz < wallAbove)) continue;
+      const dx = gx - lx;
+      const dy = gy - ly;
+      const dz = gz - lz;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= r2) continue;
+      const f = 1 - d2 / r2;
+      const s = f * f * k * (wallPx ? line : 1);
+      addPx(c, px, py, (col[0] * s) | 0, (col[1] * s) | 0, (col[2] * s) | 0);
     }
   }
 }
 
-function drawAmbient(s: Screen, r: Rect, t: number): void {
-  const inside = (x: number, y: number) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
-  // Stray bits drifting up through the air.
-  const span = Math.max(1, r.h - 4);
-  for (let i = 0; i < Math.max(3, Math.floor(r.w / 12)); i++) {
-    const period = 6 + noise(i, 71) * 6;
-    const p = (((t + noise(i, 72) * period) % period) + period) % period / period;
-    const x = r.x + Math.floor(noise(i, 73) * r.w + Math.sin(t * 0.8 + i) * 1.2);
-    const y = r.y + r.h - 3 - Math.floor(p * span);
-    if (!inside(x, y) || !isFree(s, x, y)) continue;
-    const bit = noise(i, 74 + Math.floor(t * 1.5)) < 0.5 ? '0' : '1';
-    s.put(x, y, bit, mix(GREEN, P.wall, 0.45 + p * 0.45));
-  }
-  // CRT scanlines with a faint flicker, plus a slow rolling refresh bar.
-  const dark = 0.1 + 0.035 * Math.sin(t * 9.3) + 0.02 * Math.sin(t * 23.7);
-  const bar = r.y + Math.floor(((t / 6) % 1) * (r.h + 6)) - 3;
-  for (let y = r.y; y < r.y + r.h; y++) {
-    const odd = (y - r.y) % 2 === 1;
-    const inBar = y >= bar && y < bar + 2;
-    if (!odd && !inBar) continue;
-    for (let x = r.x; x < r.x + r.w; x++) {
-      if (odd) s.blendBg(x, y, BLACK, dark);
-      if (inBar) s.blendBg(x, y, GREEN, 0.035);
-    }
-  }
-  glitch(s, r, t);
+const LIGHT_G: RGB = [40, 200, 90];
+const LIGHT_A: RGB = [220, 150, 40];
+const LIGHT_DOOR: RGB = [30, 230, 110];
+const STEAM = hex('#d8e0dc');
+const BIT = C.g4;
+const BIT_HI = C.g5;
+const GLITCH = C.magenta;
+const BACKDROP = hex('#020403');
+const BACKDROP_PX = (BACKDROP[0] << 16) | (BACKDROP[1] << 8) | BACKDROP[2];
+const BIT_SOURCES = ['write', 'run', 'search', 'web', 'write', 'run'];
+
+function stationAt(room: Room, kind: string): Placed | undefined {
+  for (const p of room.placed) if (p.kind === kind) return p;
+  return undefined;
 }
 
-export const den: Theme = {
+// Where a local station point sits in world coordinates.
+function world(p: Placed, a: number, b: number): [number, number] {
+  return p.at.wall === 'right' ? [p.at.along + a, p.at.out + b] : [p.at.out + b, p.at.along + a];
+}
+
+function ambient(c: PixelCanvas, room: Room, t: number): void {
+  const flick = 0.9 + 0.1 * noise(Math.floor(t * 15), 3);
+  // CRT glow: a pool on the floor in front of the rig and a scanlined halo
+  // on the wall above it.
+  const rig = stationAt(room, 'write');
+  if (rig) {
+    const on = rig.users > 0;
+    const [fx, fy] = world(rig, 1.1, 1.9);
+    light(c, room, fx, fy, 0.2, 2.4, LIGHT_G, (on ? 0.42 : 0.26) * flick, t);
+    const [wx, wy] = world(rig, 1.1, 0);
+    light(c, room, wx, wy, 2.2, 1.9, LIGHT_G, (on ? 0.7 : 0.4) * flick, t, 2.45, 0.5);
+  }
+  // Radar scope casts a faint green wash.
+  const radar = stationAt(room, 'search');
+  if (radar) {
+    const [lx, ly] = world(radar, 0.7, 1.5);
+    light(c, room, lx, ly, 0.2, 1.5, LIGHT_G, radar.users > 0 ? 0.24 : 0.1, t);
+  }
+  // Desk lamp: a warm pool in front of the manuals.
+  const lamp = stationAt(room, 'read');
+  if (lamp) {
+    const on = lamp.users > 0;
+    const [lx, ly] = world(lamp, 0.85, 1.3);
+    light(c, room, lx, ly, 0.2, on ? 1.7 : 1.2, LIGHT_A, on ? 0.34 : 0.12, t);
+  }
+  // Open hatch: green light from the stairwell spills across the floor.
+  const door = stationAt(room, 'entrance');
+  if (door) {
+    if (door.users > 0) {
+      const [lx, ly] = world(door, 0.8, 0.7);
+      light(c, room, lx, ly, 0.1, 2.2, LIGHT_DOOR, 0.45 * flick, t);
+    }
+  }
+  // Signal arcs leaving the dish while someone is online: ")))" upward.
+  const dish = stationAt(room, 'web');
+  if (dish && dish.users > 0) {
+    const [sx, sy] = localToScreen(room, dish, 0.68, 0.7, 2.25);
+    const hh = room.iso.hh;
+    for (let k = 0; k < 3; k++) {
+      const p = frac(t * 0.8 + k / 3);
+      const r = 2 + p * hh * 2.4;
+      const steps = Math.max(3, Math.round(r * 0.9));
+      for (let i = 0; i <= steps; i++) {
+        const ang = -1.57 - 0.5 + (i / steps) * 1.0;
+        blendPx(c, sx + Math.cos(ang) * r, sy + Math.sin(ang) * r, p < 0.3 ? C.g5 : C.g4, 0.85 * (1 - p));
+      }
+    }
+  }
+  // Steam off the pizza while someone lounges.
+  const bag = stationAt(room, 'idle');
+  if (bag && bag.users > 0) {
+    for (let i = 0; i < 4; i++) {
+      const p = frac(t * 0.5 + i / 4);
+      const [x, y] = localToScreen(room, bag, 1.56 + Math.sin(t * 2 + i * 1.7) * 0.1, 0.74, 0.1 + p * 1.1);
+      blendPx(c, x, y, STEAM, 0.5 * (1 - p));
+    }
+  }
+  // Bits drifting up off the machines, livelier while they are busy.
+  for (let i = 0; i < 14; i++) {
+    const src = stationAt(room, BIT_SOURCES[i % BIT_SOURCES.length]);
+    if (!src) continue;
+    const size = src.station.size;
+    const period = 3 + noise(i, 31) * 3;
+    const q = t / period + noise(i, 32);
+    const p = frac(q);
+    const cycle = Math.floor(q);
+    const a0 = 0.1 + noise(i * 7 + cycle, 33) * (size.len - 0.2);
+    const top = Math.min(size.h, 2.4);
+    const [x, y] = localToScreen(room, src, a0, size.dep * 0.6, top * 0.7 + p * 1.6);
+    const busy = src.users > 0;
+    const a = Math.sin(p * Math.PI) * (busy ? 0.85 : 0.35);
+    const hi = busy && noise(i, Math.floor(t * 4)) > 0.7;
+    blendPx(c, x, y, hi ? BIT_HI : BIT, a);
+    // A "1" is two pixels tall, a "0" stays a dot.
+    if (noise(i * 7 + cycle, 35) > 0.5) blendPx(c, x, y - 1, BIT, a * 0.8);
+  }
+  // Rare glitch: a short band of rows slips sideways, tinted magenta.
+  const g = Math.floor(t / 7);
+  const start = g * 7 + noise(g, 91) * 6;
+  if (noise(g, 92) > 0.3 && t >= start && t < start + 0.16) {
+    const rows = 2 + Math.floor(noise(g, 94) * 4);
+    const y0 = Math.floor(noise(g, 93) * Math.max(1, c.h - rows));
+    const shift = (noise(g, 95) > 0.5 ? 1 : -1) * (2 + Math.floor(noise(g, 96) * 4));
+    const xa = Math.floor(noise(g, 97) * c.w * 0.5);
+    const xb = Math.min(c.w, xa + Math.floor(c.w * (0.3 + noise(g, 98) * 0.4)));
+    for (let y = y0; y < y0 + rows && y < c.h; y++) {
+      const row = y * c.w;
+      if (shift > 0) c.data.copyWithin(row + xa + shift, row + xa, row + xb - shift);
+      else c.data.copyWithin(row + xa, row + xa - shift, row + xb);
+      for (let x = xa; x < xb; x++) if (c.data[row + x] !== BACKDROP_PX) blendPx(c, x, y, GLITCH, 0.3);
+    }
+  }
+}
+
+export const den: IsoTheme = {
   id: 'den',
   name: "Hacker's Den",
-  tagline: 'green rain, warm pizza and a radar that never sleeps',
+  tagline: 'green rain on the walls, pizza on the floor, root on the box',
   palette: P,
-  stations: [write, read, search, run, web, think, idle],
-  entrance,
-  drawBackdrop,
-  drawAmbient,
+  backdrop: BACKDROP,
+  wallH: 3.9,
+  floor,
+  wall,
+  stations: { write, read, search, run, web, think, idle, entrance },
+  ambient,
+  lighting: { ambient: hex('#74847c'), haze: 0.2, bloom: 0.65, vignette: 0.3 },
 };
 
 export default den;

@@ -42,6 +42,8 @@ const HELP: Array<[string, string]> = [
   ['tab / shift-tab', 'select agent (← → too)'],
   ['esc', 'clear selection / close'],
   ['d', 'toggle the demo crew'],
+  ['r', 'pixels: half blocks / sextants'],
+  ['l', 'lighting on / off'],
   ['space', 'pause animation'],
   ['?', 'this help'],
   ['q / ctrl-c', 'quit'],
@@ -97,6 +99,24 @@ export function drawPicker(s: Screen, r: Rect, themes: readonly Theme[], index: 
     s.text(box.x + 7, y + 1, clip(th.tagline, end - box.x - 8), p.dim, bg, 0, end - 1);
   });
   s.text(box.x + 2, box.y + box.h - 2, '↑↓ preview · enter apply · esc cancel', p.dim, p.panel, 0, end);
+}
+
+// Curtain sweep across `r` at `p` (0..1): everything behind the band is
+// dimmed — both pixels of a half-block cell — and the band is drawn on top.
+export function drawWipe(s: Screen, r: Rect, p: number, accent: RGB, backdrop: RGB): void {
+  if (p < 0 || p >= 1) return;
+  const band = '░▒▓██▓▒░';
+  const bx = r.x + Math.floor(p * (r.w + band.length)) - band.length;
+  for (let y = r.y; y < r.y + r.h; y++) {
+    for (let x = Math.max(r.x, bx + band.length); x < r.x + r.w; x++) {
+      s.blendBg(x, y, backdrop, 0.7);
+      s.blendFg(x, y, backdrop, 0.7);
+    }
+    [...band].forEach((ch, i) => {
+      const x = bx + i;
+      if (x >= r.x && x < r.x + r.w) s.put(x, y, ch, accent);
+    });
+  }
 }
 
 export function drawTooSmall(s: Screen, theme: Theme, t = 0): void {

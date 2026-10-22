@@ -2,11 +2,18 @@ export type RGB = readonly [number, number, number];
 
 const clamp255 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 
+const HEX_CACHE = new Map<string, RGB>();
+
+// Parsed colours are cached and frozen, so painters may call hex() per pixel.
 export function hex(h: string): RGB {
+  const hit = HEX_CACHE.get(h);
+  if (hit) return hit;
   let v = h.startsWith('#') ? h.slice(1) : h;
   if (v.length === 3) v = v.split('').map((c) => c + c).join('');
   const n = parseInt(v, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const c = Object.freeze([(n >> 16) & 255, (n >> 8) & 255, n & 255] as const);
+  if (HEX_CACHE.size < 4096) HEX_CACHE.set(h, c);
+  return c;
 }
 
 export function mix(a: RGB, b: RGB, t: number): RGB {

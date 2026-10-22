@@ -66,3 +66,14 @@ test('renderLines emits one ANSI line per row without cursor moves', async () =>
   assert.equal(lines[0].replace(/\x1b\[[0-9;]*m/g, ''), 'abc');
   assert.ok(lines[1].endsWith('\x1b[0m'));
 });
+
+test('detectPixelMode picks sextants only where terminals draw them', async () => {
+  const { detectPixelMode } = await import('../src/term/renderer.ts');
+  assert.equal(detectPixelMode({ ALACRITTY_WINDOW_ID: '1' }), 'sextant');
+  assert.equal(detectPixelMode({ TERM: 'xterm-kitty' }), 'sextant');
+  assert.equal(detectPixelMode({ TERM_PROGRAM: 'WezTerm' }), 'sextant');
+  assert.equal(detectPixelMode({ GHOSTTY_RESOURCES_DIR: '/x' }), 'sextant');
+  assert.equal(detectPixelMode({ TERM: 'foot' }), 'sextant');
+  assert.equal(detectPixelMode({ TERM: 'xterm-256color' }), 'half');
+  assert.equal(detectPixelMode({ TERM_PROGRAM: 'Apple_Terminal' }), 'half');
+});

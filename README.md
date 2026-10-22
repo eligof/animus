@@ -1,34 +1,44 @@
 # animus
 
-Your Claude Code agents, as little animated characters working in a 2D
-terminal scene.
+Your Claude Code agents, as little pixel-art characters working in an
+isometric room in your terminal.
 
 Every running Claude Code session and every subagent it spawns gets its own
-procedurally generated character (humans, robots, cats, aliens, ghosts). What
-the character does on screen follows what the agent is doing right now: it
-types at the workbench while editing files, pulls books off the shelf while
-reading, scans while grepping, works the machine while running shell
-commands, waves a radio while browsing the web, ponders at the chalkboard
-while thinking, celebrates with confetti when a subagent finishes, and dozes
-off when a session waits for you.
+procedurally generated character (humans, robots, cats, aliens, ghosts, with
+hair, outfits and accessories). What the character does follows what the
+agent is doing right now: it types at the desk while editing files, reads at
+the bookshelf, scans while grepping, works the machine while running shell
+commands, takes a call while browsing the web, ponders at the board while
+thinking, celebrates with confetti when a subagent finishes, and dozes off
+when a session waits for you.
 
-```
- ◆ ANIMUS ▸ Mad Science Lab                       ● 8 working  ○ 0 idle  ◉ you   LIVE   21:30
-        ┃   ┃   ┃   ┃     ▪                ▪     │● ● ● ● ● │    ▟!▙    │21:30│      │ CREW 8
-       ▟█▙ ▐█▌ (█) ▟█▙    ▪▪          ▪▪▪▪▪▪     │▂▅▇██▅▃▁▁▂│           └─────┘      │ •ᴗ• atlas            2s
-              ┌─────────┐                ┌────────┐       Fix flaky…    ╱┃╲         │  ▶ $ make lint
-              │▌▐█▌▐▌█▐▌│                │╲╱╲╱╲╱╲╱│                 GitHub get_pu… │ └◎ᴗ◎ Add edge cases  5s
-              ├─────────┤                ├────Draft roa…     ▄●▄     ┌──┸──┐        │   ✎ Edit cli.ts
- ║ ║          │█▐▌▌█▐▌▐█│                │ ▪▪ ◉ ▪ ▄▄▄▖       ◎ᴗ◎     │◉ ▤▤▤│   ▄╨▄  │ └•ᴗ• Draft roadmap   3s
-▔╟─╢    ▔     │▐▌█▐▌▌█▐▌│       ▔       ▔└────────°~°   ▔   ▐█╋█╲    └─────┘   ◎▿◎  │   … thinking…
-```
+![Mad Science Lab](docs/screenshots/lab.png)
 
-(Plain-text excerpt; the real thing is full truecolor and moves at 18 fps.)
+The scene is real pixel art: every terminal cell shows several pixels (two
+with `▀` half blocks, six with Unicode sextants where the terminal draws
+them), drawn as a 2:1 isometric diorama with voxel furniture, outlined and
+shaded characters and contact shadows. The room grows with your terminal.
+
+Each preset is lit like a scene: an ambient grade, pools of coloured light
+from screens, lamps, neon and spotlights (furniture glows brighter while an
+agent works at it, and characters pick up the light as they walk through),
+bloom around everything that glows by itself, haze and a soft vignette.
+Press `l` to see the raw art.
 
 ## Run it
 
 Requires Node ≥ 23.6 (runs TypeScript directly, no build, no dependencies)
-and a terminal with truecolor and a font with block/box-drawing glyphs.
+and a truecolor terminal (most modern ones: kitty, WezTerm, Ghostty,
+Alacritty, Konsole, GNOME Terminal, iTerm2, Windows Terminal). Bigger
+windows give bigger rooms and more detailed characters.
+
+Terminals that draw Unicode sextants themselves (Alacritty, kitty, WezTerm,
+Ghostty, foot) get **sextant pixels**: 2x3 pixels per cell instead of 1x2, three
+times the resolution, with characters drawn natively at that density (round
+heads, eye shine, shirt motifs, two-tone shoes). Elsewhere animus uses half
+blocks; press `r` or pass `--pixels` to switch. Detection goes by the
+terminal's environment variables, so if the sextant blocks look wrong (say,
+a multiplexer or a font without them), press `r` once: the choice is saved.
 
 ```sh
 node bin/animus.js            # live: watch the Claude Code agents on this machine
@@ -57,8 +67,10 @@ Start Claude Code in another terminal (or several) and they walk in.
 `node bin/animus.js --list-themes` prints the installed presets. The last
 preset you picked is remembered in `~/.config/animus/config.json`.
 
-Tall terminals get a two-level scene (a mezzanine plus the ground floor,
-connected by ladders); shorter ones get a single floor.
+| | |
+| --- | --- |
+| ![Underground Club](docs/screenshots/club.png) | ![Hacker's Den](docs/screenshots/den.png) |
+| ![Orbital Station](docs/screenshots/station.png) | ![Cozy Café](docs/screenshots/cafe.png) |
 
 ## Keys
 
@@ -70,6 +82,8 @@ connected by ladders); shorter ones get a single floor.
 | `tab` / `shift-tab`, `←` `→` | select an agent (shows its current action) |
 | `esc` | clear selection / close overlay |
 | `d` | toggle the demo crew (mixes with live agents) |
+| `r` | pixels: half blocks / sextants (remembered) |
+| `l` | lighting on / off (remembered) |
 | `space` | pause |
 | `?` | help |
 | `q`, `ctrl-c` | quit |
@@ -121,6 +135,7 @@ Use `--claude-dir` (or `CLAUDE_CONFIG_DIR`) to point at another config dir.
 animus --snapshot [--demo] [--theme id] [--width 120] [--height 36] [--at 12]
     render one frame as ANSI text to stdout (good for previews and CI)
 animus --fps <n>      frame rate (default 18)
+animus --pixels <m>   auto (default), half or sextant
 animus --help | --version
 ```
 
@@ -128,20 +143,27 @@ animus --help | --version
 
 ```sh
 node --test "test/**/*.test.ts"                       # all tests
-node scripts/preview-theme.ts src/themes/lab.ts       # eyeball a preset's art
+node scripts/preview-theme.ts src/themes/lab.ts --out /tmp/lab.png   # render a preset to PNG
 ANIMUS_THEME_FILE=src/themes/x.ts node --test test/themes.test.ts   # lint a new preset
 ```
 
 Layout: `src/claude` (read-only connector), `src/demo` (simulated crew),
-`src/world` (characters, stage simulation, world composition), `src/themes`
-(presets), `src/ui` (header, roster, ticker, overlays), `src/term` (cell
-screen, diffing ANSI renderer, terminal handling).
+`src/iso` (pixel canvas, isometric projection, voxel boxes, room layout,
+pixel characters), `src/world` (traits, stage simulation, world
+composition), `src/themes` (presets), `src/ui` (header, roster, ticker,
+overlays), `src/term` (cell screen, diffing ANSI renderer, terminal
+handling).
 
 ### Adding a preset
 
-Create `src/themes/<id>.ts` exporting a `Theme` (see `src/themes/types.ts`,
-and `src/themes/lab.ts` as the reference): a palette, seven stations
-(write, read, search, run, web, think, idle) plus an entrance, each with idle
-and active animation frames (max 11×6 cells, width-1 glyphs only), and
-`drawBackdrop` / `drawAmbient` functions that animate from the time `t`.
-Register it in `src/themes/index.ts`.
+Create `src/themes/<id>.ts` exporting an `IsoTheme` (see
+`src/themes/types.ts`, and `src/themes/lab.ts` as the reference): UI
+palette, floor and wall painters (called per pixel with tile/wall
+coordinates and the time `t`), and eight pieces of furniture — write, read,
+search, run, web, think, idle and the entrance door — each a voxel model
+`model(t, active)` returning boxes in its own frame (`a` along the wall, `b`
+into the room, `z` up) with optional per-face painters for screens, books,
+lights. An optional `ambient` draws effects over the finished scene.
+Check it with `ANIMUS_THEME_FILE=src/themes/<id>.ts node --test
+test/themes.test.ts` and the PNG preview, then register it in
+`src/themes/index.ts`.

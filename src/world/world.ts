@@ -8,8 +8,9 @@ import type { Theme } from '../themes/types.ts';
 import { drawFooter, drawHeader, drawRoster } from '../ui/chrome.ts';
 import type { ChromeCtx } from '../ui/chrome.ts';
 import { computeLayout } from '../ui/layout.ts';
-import { drawHelp, drawPicker, drawTooSmall } from '../ui/overlays.ts';
+import { drawHelp, drawPicker, drawTooSmall, drawWipe } from '../ui/overlays.ts';
 import { Stage } from './stage.ts';
+import type { PixelMode } from './stage.ts';
 
 export type WorldOpts = {
   theme: Theme;
@@ -18,6 +19,8 @@ export type WorldOpts = {
   account: Account | null;
   rootLabel: string;
   start: number;
+  pixels?: PixelMode;
+  lights?: boolean;
 };
 
 const MAX_EVENTS = 60;
@@ -46,10 +49,12 @@ export class World {
   private start: number;
   private themeChangedAt = -Infinity;
   private pickerOrigin = '';
+  private touched = { pixels: false, lights: false };
 
   constructor(o: WorldOpts) {
     this.theme = o.theme;
-    this.stage = new Stage(o.theme);
+    this.stage = new Stage(o.theme, o.pixels ?? 'half');
+    this.stage.lit = o.lights ?? true;
     this.live = o.live;
     this.demoOn = o.demo;
     this.account = o.account;
@@ -161,18 +166,24 @@ export class World {
 
   // Curtain sweep across the scene for a moment after switching presets.
   private drawWipe(s: Screen, r: Rect, now: number): void {
-    const p = (now - this.themeChangedAt) / WIPE_MS;
-    if (p < 0 || p >= 1) return;
-    const band = '░▒▓██▓▒░';
-    const bx = r.x + Math.floor(p * (r.w + band.length)) - band.length;
-    const c = this.theme.palette.accent;
-    for (let y = r.y; y < r.y + r.h; y++) {
-      for (let x = Math.max(r.x, bx + band.length); x < r.x + r.w; x++) s.blendBg(x, y, this.theme.palette.bg, 0.7);
-      [...band].forEach((ch, i) => {
-        const x = bx + i;
-        if (x >= r.x && x < r.x + r.w) s.put(x, y, ch, c);
-      });
-    }
+    drawWipe(s, r, (now - this.themeChangedAt) / WIPE_MS, this.theme.palette.accent, this.theme.palette.bg);
+  }
+
+  get pixels(): PixelMode {
+    return this.stage.pixels;
+  }
+
+  get lights(): boolean {
+    return this.stage.lit;
+  }
+
+  // Display preferences the user changed this session (with r / l), the
+  // only ones worth saving: an auto-detected pixel mode stays automatic.
+  prefs(): { pixels?: PixelMode; lights?: boolean } {
+    const out: { pixels?: PixelMode; lights?: boolean } = {};
+    if (this.touched.pixels) out.pixels = this.stage.pixels;
+    if (this.touched.lights) out.lights = this.stage.lit;
+    return out;
   }
 
   private themeIndex(): number {
@@ -201,7 +212,8 @@ export class World {
     this.selectedId = ids[i < 0 ? (delta > 0 ? 0 : ids.length - 1) : (i + delta + ids.length) % ids.length];
   }
 
-  handleKey(k: Key): 'quit' | 'theme' | null {
+  // 'theme' and 'prefs' mean something worth saving to the config changed.
+  handleKey(k: Key): 'quit' | 'theme' | 'prefs' | null {
     if (k.name === 'ctrl-c' || k.name === 'q') return 'quit';
     if (/^[1-9]$/.test(k.name)) {
       const i = Number(k.name) - 1;
@@ -250,6 +262,14 @@ export class World {
         this.demoOn = !this.demoOn;
         if (this.demoOn && !this.demo) this.demo = new DemoSource(7, this.lastTick);
         return null;
+      case 'r':
+        this.stage.setMode(this.stage.pixels === 'half' ? 'sextant' : 'half');
+        this.touched.pixels = true;
+        return 'prefs';
+      case 'l':
+        this.stage.lit = !this.stage.lit;
+        this.touched.lights = true;
+        return 'prefs';
       case 'space':
         this.paused = !this.paused;
         return null;
