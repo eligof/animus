@@ -1,4 +1,8 @@
-import { M } from './materials.ts';
+import { M, MATERIALS } from './materials.ts';
+
+// Materials something can stand on: solids and powders.
+const FOOTING = new Uint8Array(256);
+for (const m of MATERIALS) if (m && (m.kind === 'solid' || m.kind === 'powder')) FOOTING[m.id] = 1;
 
 // Colour variant 0..7 for voxel i: a well-mixed hash, so neighbours along
 // every axis differ (a plain multiplicative hash streaks along layers).
@@ -194,8 +198,7 @@ export class Voxels {
   ground(x: number, y: number, from = this.H - 1): number {
     if (x < 0 || y < 0 || x >= this.W || y >= this.D) return 0;
     for (let z = Math.min(from, this.H - 1); z >= 0; z--) {
-      const m = this.mat[this.idx(x, y, z)];
-      if (m !== M.AIR && m < M.WATER) return z + 1;
+      if (FOOTING[this.mat[this.idx(x, y, z)]]) return z + 1;
     }
     return 0;
   }

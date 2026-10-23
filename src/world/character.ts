@@ -6,7 +6,19 @@ import { hashString, Rng } from './rng.ts';
 export const SPRITE_W = 5;
 export const SPRITE_H = 4;
 
-export type Pose = 'idle' | 'walk' | 'write' | 'read' | 'think' | 'run' | 'search' | 'web' | 'delegate' | 'talk' | 'done' | 'error' | 'sleep';
+// Work poses follow the agent's activity; the rest are the little life in
+// between: sitting, carrying a block (and placing it on a build), cheering,
+// waving, sipping a drink, stretching, chatting face to face, flinching at a
+// bang, dancing, petting a critter.
+export type Pose =
+  | 'idle' | 'walk' | 'write' | 'read' | 'think' | 'run' | 'search' | 'web' | 'delegate' | 'talk' | 'done' | 'error' | 'sleep'
+  | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet';
+// Little pictures that pop up over a character's head.
+export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup';
+// How characters dress in a scene: wizards in the caves, lab coats in the
+// lab, party outfits in the club, hoodies in the den, space suits on the
+// station, everyday clothes in the café.
+export type Costume = 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual';
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
 

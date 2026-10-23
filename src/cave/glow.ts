@@ -173,7 +173,15 @@ export class Glow {
   private bloom = new Grid(BLOOM_CELL);
   private vig = new Float32Array(0);
   private vigFor = NaN;
+  // The lights as they were when the current hold began (see compose).
+  private held: PointLight[] = [];
+  private heldAt: number | null = null;
 
+  // `hold` (HD): the step of ambient time this frame is in. A light that
+  // stays put (same place and colour) keeps the intensity and radius it
+  // had when the step began, so flicker changes the picture a few times a
+  // second, all at once, instead of every frame; lights that move (the
+  // ones characters carry) follow every frame. Null: every frame as is.
   compose(
     out: PixelCanvas,
     albedo: Int32Array,
@@ -183,8 +191,10 @@ export class Glow {
     grade: Grade,
     lit: boolean,
     backdrop: RGB,
+    hold: number | null = null,
   ): void {
     const { w, h, data } = out;
+    lights = this.hold(lights, hold);
     if (!lit) {
       raw(data, albedo, emit, w * h);
       return;
@@ -211,6 +221,25 @@ export class Glow {
       bloom.off();
     }
     shade(data, w, h, albedo, emit, this.vignette(grade.vignette), light, bloom, grade.ambient, backdrop);
+  }
+
+  private hold(lights: readonly PointLight[], at: number | null): readonly PointLight[] {
+    if (at === null || at !== this.heldAt) {
+      this.heldAt = at;
+      this.held = at === null ? [] : lights.slice();
+      return lights;
+    }
+    const out = lights.slice();
+    const held = this.held;
+    for (let i = 0; i < out.length; i++) {
+      const l = out[i];
+      const was = held[i];
+      const c = l.color;
+      if (was && was.x === l.x && was.y === l.y && was.z === l.z && was.color[0] === c[0] && was.color[1] === c[1] && was.color[2] === c[2]) out[i] = was;
+      else held[i] = l;
+    }
+    held.length = out.length;
+    return out;
   }
 
   private resize(w: number, h: number): void {

@@ -110,4 +110,8 @@ test('--pixels selects the cell format', () => {
   const half = run('--snapshot', '--demo', '--pixels', 'half');
   assert.ok(half.stdout.includes('▀'));
   assert.equal(run('--snapshot', '--pixels', 'huge').status, 2);
+  // A snapshot is text, so HD falls back to sextant cells.
+  const hd = run('--snapshot', '--demo', '--pixels', 'hd');
+  assert.equal(hd.status, 0, hd.stderr);
+  assert.ok([...hd.stdout].some((ch) => { const cp = ch.codePointAt(0)!; return cp >= 0x1fb00 && cp <= 0x1fb3b; }));
 });

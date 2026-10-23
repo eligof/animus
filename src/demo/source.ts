@@ -35,7 +35,7 @@ const SUB_MIX: ReadonlyArray<readonly [Activity, number]> = [
 
 const MAX_SUBS = 7;
 
-type Sim = { info: AgentInfo; next: number; endsAt: number; doneUntil: number; nextSpawn: number; subType?: number };
+type Sim = { info: AgentInfo; next: number; endsAt: number; doneUntil: number; nextSpawn: number; idleAt: number; subType?: number };
 
 // A scripted, deterministic crew so the stage can be shown without live data.
 export class DemoSource implements AgentSource {
@@ -59,6 +59,7 @@ export class DemoSource implements AgentSource {
       endsAt: Infinity,
       doneUntil: Infinity,
       nextSpawn: now + this.rng.range(2500, 8000),
+      idleAt: now + this.rng.range(15000, 45000), // the first wait comes early
     });
   }
 
@@ -84,6 +85,7 @@ export class DemoSource implements AgentSource {
       endsAt: now + this.rng.range(20000, 60000),
       doneUntil: Infinity,
       nextSpawn: Infinity,
+      idleAt: Infinity,
       subType: ti,
     });
   }
@@ -113,9 +115,12 @@ export class DemoSource implements AgentSource {
         s.nextSpawn = now + this.rng.range(8000, 20000);
       }
       if (now < s.next) continue;
-      if (s.info.role === 'lead' && s.info.activity !== 'idle' && this.rng.chance(0.1)) {
+      // Leads wait for "you" every minute or two, long enough to wander,
+      // chat and help build.
+      if (now >= s.idleAt) {
         this.change(s, 'idle', now);
-        s.next = now + this.rng.range(6000, 15000);
+        s.next = now + this.rng.range(25000, 45000);
+        s.idleAt = now + this.rng.range(60000, 120000);
         continue;
       }
       const act = this.rng.weighted(s.info.role === 'lead' ? LEAD_MIX : SUB_MIX);

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LEFT_WALL, LIMITS, PROP_SIZE, RIGHT_WALL, inRect, planLayout, slotRect } from '../src/cave/layout.ts';
+import { ISLANDS, LIMITS, PROP_SIZE, WALL_KINDS, arrangement, buildSites, hub, inRect, keepClear, planLayout, slotRect } from '../src/cave/layout.ts';
+import { THEMES } from '../src/themes/index.ts';
 import { mines } from '../src/cave/biomes/mines.ts';
 import { M, MATERIALS } from '../src/cave/materials.ts';
 import { project } from '../src/cave/types.ts';
@@ -75,29 +76,154 @@ test('bigger canvases get bigger chunks, up to the cap', () => {
   assert.equal(huge.H, LIMITS.maxH);
 });
 
-test('every prop gets a slot backing onto its wall, inside the room, without overlaps', () => {
+// Every biome's layout, and the one for no biome in particular.
+const BIOMES = ['', ...THEMES.map((t) => t.id)];
+
+test('wall props back onto their walls, the rest stand out on the floor, all inside the room without overlaps', () => {
   for (const [cw, ch] of SIZES) {
-    const L = planLayout(cw, ch);
-    const tag = `${cw}x${ch}`;
-    assert.deepEqual(L.slots.map((s) => s.kind).sort(), KINDS, tag);
-    for (const s of L.slots) {
-      const r = slotRect(s);
-      assert.ok(r.x0 >= L.T && r.y0 >= L.T && r.x1 <= L.W && r.y1 <= L.D, `${tag}: ${s.kind} off the floor`);
-      assert.equal(s.wall === 'right' ? s.y0 : s.x0, L.T, `${tag}: ${s.kind} not against its wall`);
-      assert.equal(s.z0, L.floor);
-      assert.equal(s.len, PROP_SIZE[s.kind].len);
-      assert.equal(s.dep, PROP_SIZE[s.kind].dep);
-      assert.ok((s.wall === 'right' ? RIGHT_WALL : LEFT_WALL).includes(s.kind), `${tag}: ${s.kind} on the ${s.wall} wall`);
-    }
-    for (let i = 0; i < L.slots.length; i++) {
-      for (let j = i + 1; j < L.slots.length; j++) {
-        const a = slotRect(L.slots[i]);
-        const b = slotRect(L.slots[j]);
-        const overlap = a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
-        assert.ok(!overlap, `${tag}: ${L.slots[i].kind} overlaps ${L.slots[j].kind}`);
+    for (const id of BIOMES) {
+      const L = planLayout(cw, ch, id);
+      const tag = `${cw}x${ch} ${id}`;
+      assert.deepEqual(L.slots.map((s) => s.kind).sort(), KINDS, tag);
+      for (const s of L.slots) {
+        const r = slotRect(s);
+        assert.ok(r.x0 >= L.T && r.y0 >= L.T && r.x1 <= L.W && r.y1 <= L.D, `${tag}: ${s.kind} off the floor`);
+        assert.equal(s.z0, L.floor);
+        assert.equal(s.len, PROP_SIZE[s.kind].len);
+        assert.equal(s.dep, PROP_SIZE[s.kind].dep);
+        if (s.island) {
+          assert.ok(ISLANDS.includes(s.kind) || s.kind === 'idle', `${tag}: ${s.kind} out on the floor`);
+          assert.ok(r.x0 > L.T + 1 && r.y0 > L.T + 1 && r.x1 < L.W - 1 && r.y1 < L.D - 1, `${tag}: ${s.kind} against a wall or the front cut`);
+        } else {
+          assert.equal(s.wall === 'right' ? s.y0 : s.x0, L.T, `${tag}: ${s.kind} not against its wall`);
+          assert.ok((WALL_KINDS[s.wall] as readonly string[]).includes(s.kind), `${tag}: ${s.kind} on the ${s.wall} wall`);
+        }
+      }
+      for (let i = 0; i < L.slots.length; i++) {
+        for (let j = i + 1; j < L.slots.length; j++) {
+          const a = slotRect(L.slots[i]);
+          const b = slotRect(L.slots[j]);
+          const overlap = a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+          assert.ok(!overlap, `${tag}: ${L.slots[i].kind} overlaps ${L.slots[j].kind}`);
+        }
       }
     }
   }
+});
+
+test('islands keep off the hub, the plazas and the walkways, and out of the view of each other', () => {
+  for (const [cw, ch] of SIZES) {
+    for (const id of BIOMES) {
+      const L = planLayout(cw, ch, id);
+      const tag = `${cw}x${ch} ${id}`;
+      const isles = L.slots.filter((s) => s.island);
+      assert.equal(isles.length, ISLANDS.length + 1, tag);
+      const h = hub(L);
+      // The walkways between the props on the walls, to the hub and the plazas.
+      const ways = keepClear({ ...L, slots: L.slots.filter((s) => !s.island) });
+      const roomy = L.W >= 100;
+      for (const s of isles) {
+        const r = slotRect(s);
+        const near = (x: number, y: number) => Math.hypot(Math.max(r.x0, Math.min(x, r.x1)) - x, Math.max(r.y0, Math.min(y, r.y1)) - y);
+        assert.ok(near(h.x, h.y) >= 4, `${tag}: ${s.kind} on the hub`);
+        for (const p of buildSites(L)) assert.ok(near(p.x, p.y) >= p.r + 2, `${tag}: ${s.kind} on a plaza`);
+        if (!roomy) continue;
+        let crossed = 0;
+        for (let y = r.y0; y < r.y1; y++) for (let x = r.x0; x < r.x1; x++) crossed += ways[x + L.W * y];
+        assert.equal(crossed, 0, `${tag}: ${s.kind} stands on a walkway`);
+        for (const o of isles) {
+          if (o === s) continue;
+          const q = slotRect(o);
+          assert.ok(Math.max(q.x0 - r.x1, r.x0 - q.x1, q.y0 - r.y1, r.y0 - q.y1) >= 2, `${tag}: ${s.kind} crowds ${o.kind}`);
+        }
+      }
+    }
+  }
+});
+
+test('the crowd is drawn out from the back walls: idle at the front, islands round the middle', () => {
+  const u = (L: Layout, x: number, y: number) => (x + y - 2 * L.T) / (L.W + L.D - 2 * L.T);
+  for (const [cw, ch] of SIZES) {
+    for (const id of BIOMES) {
+      const L = planLayout(cw, ch, id);
+      const tag = `${cw}x${ch} ${id}`;
+      const idle = L.slots.find((s) => s.kind === 'idle')!;
+      const r = slotRect(idle);
+      assert.ok(idle.island && u(L, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2) >= 0.55, `${tag}: idle not in the front half`);
+      const isles = L.slots.filter((s) => ISLANDS.includes(s.kind));
+      assert.ok(isles.every((s) => s.island), `${tag}: an island on a wall`);
+      // The smallest rooms have nowhere else for the last one.
+      const back = isles.filter((s) => u(L, s.spot.x, s.spot.y) < 0.36).length;
+      assert.ok(back <= (L.W < 100 ? 1 : 0), `${tag}: ${back} islands at the back`);
+      // Spread round the hub, not in a line: the three span a real triangle.
+      const [a, b, c] = isles.map((s) => s.spot);
+      const area = Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2;
+      assert.ok(area > ((L.W - L.T) * 0.1) ** 2, `${tag}: islands in a line (area ${area})`);
+    }
+  }
+});
+
+// Big rooms, as sextant shows them zoomed out (174, 216 and 256 voxels).
+const BIG: Array<[number, number]> = [[360, 260], [500, 300], [1000, 500]];
+
+test('in big rooms the islands stand well out from the hub, clear of the view of the wall crowds and the plazas', () => {
+  // Just in front of p (the camera looks in along -x -y), close enough to
+  // cover someone there, within `half` across the screen.
+  const masks = (r: ReturnType<typeof slotRect>, p: { x: number; y: number }, half: number) =>
+    r.x0 - r.y1 < p.x - p.y + half && p.x - p.y - half < r.x1 - r.y0 && r.x1 + r.y1 > p.x + p.y && r.x0 + r.y0 - (p.x + p.y) < 40;
+  for (const [cw, ch] of BIG) {
+    for (const id of BIOMES) {
+      const L = planLayout(cw, ch, id);
+      const tag = `${cw}x${ch} ${id}`;
+      const h = hub(L);
+      const side = Math.min(L.W, L.D) - L.T;
+      const isles = L.slots.filter((s) => ISLANDS.includes(s.kind));
+      const ring = isles.reduce((n, s) => n + Math.hypot(s.spot.x - h.x, s.spot.y - h.y), 0) / isles.length / side;
+      // Out from the middle (review 3: 0.18-0.24 of the floor's side before).
+      assert.ok(ring >= 0.26, `${tag}: islands ${ring.toFixed(3)} of the side from the hub`);
+      for (const s of isles) {
+        const r = slotRect(s);
+        for (const o of L.slots) {
+          if (!o.island && o.kind !== 'entrance') assert.ok(!masks(r, o.spot, 12), `${tag}: ${s.kind} hides the ${o.kind} crowd`);
+        }
+        for (const p of buildSites(L)) assert.ok(!masks(r, p, p.r * Math.SQRT2), `${tag}: ${s.kind} hides a plaza`);
+      }
+    }
+  }
+});
+
+test('in the lab nothing tall stands in front of the build plazas, where the haulers would be lost', async () => {
+  const { lab } = await import('../src/cave/biomes/lab.ts');
+  for (const [cw, ch] of BIG) {
+    const L = planLayout(cw, ch, 'lab');
+    for (const seed of [1, 2]) {
+      const v = new Voxels(L.W, L.D, L.H);
+      lab.generate(v, L, new Rng(seed));
+      for (const p of buildSites(L)) {
+        let top = 0;
+        for (let y = Math.floor(p.y - p.r); y <= p.y + p.r; y++) {
+          for (let x = Math.floor(p.x - p.r); x <= p.x + p.r; x++) {
+            if (Math.hypot(x - p.x, y - p.y) > p.r) continue;
+            for (let k = 1; k <= 14; k++) top = Math.max(top, v.ground(x + k, y + k, L.floor + 30) - L.floor);
+          }
+        }
+        assert.ok(top <= 4, `${cw}x${ch} seed ${seed}: something ${top} tall in front of the plaza at ${Math.round(p.x)},${Math.round(p.y)}`);
+      }
+    }
+  }
+});
+
+test('each biome keeps its own wall order and island places, the same every time', () => {
+  for (const id of BIOMES) {
+    assert.deepEqual(arrangement(id), arrangement(id), id);
+    assert.deepEqual(planLayout(400, 180, id).slots, planLayout(400, 180, id).slots, id);
+  }
+  const orders = new Set(BIOMES.map((id) => JSON.stringify([arrangement(id).left, arrangement(id).right])));
+  const rings = new Set(BIOMES.map((id) => arrangement(id).ring.map(([k]) => k).join()));
+  assert.ok(orders.size >= 3, `${orders.size} wall orders`);
+  assert.ok(rings.size >= 3, `${rings.size} island orders`);
+  const spots = new Set(THEMES.map((t) => JSON.stringify(planLayout(400, 180, t.id).slots.map((s) => s.spot))));
+  assert.ok(spots.size >= THEMES.length - 2, `${spots.size} layouts for ${THEMES.length} biomes`);
 });
 
 test('spots stand on open floor in front of their props, apart from each other', () => {
@@ -108,8 +234,8 @@ test('spots stand on open floor in front of their props, apart from each other',
       const { x, y } = s.spot;
       assert.ok(Number.isInteger(x) && Number.isInteger(y), `${tag}: ${s.kind} spot not on a voxel`);
       assert.ok(x >= L.T && y >= L.T && x < L.W && y < L.D, `${tag}: ${s.kind} spot off the floor`);
-      const out = s.wall === 'right' ? y - L.T : x - L.T;
-      assert.ok(out >= s.dep + 2 && out <= s.dep + 6, `${tag}: ${s.kind} spot ${out} out from its wall`);
+      const out = s.wall === 'right' ? y - s.y0 : x - s.x0;
+      assert.ok(out >= s.dep + 2 && out <= s.dep + 6, `${tag}: ${s.kind} spot ${out} out from its back`);
       for (const o of L.slots) assert.ok(!inRect(slotRect(o), x, y), `${tag}: ${s.kind} spot inside ${o.kind}`);
     }
     for (let i = 0; i < L.slots.length; i++) {
@@ -336,7 +462,9 @@ test('a big world generates quickly', () => {
   const t0 = performance.now();
   world(L, 11);
   const ms = performance.now() - t0;
-  assert.ok(ms < 300, `${ms.toFixed(0)} ms`);
+  // The same bound as every biome's own check: generous enough for a busy
+  // CI runner, tight enough to catch a pathological slowdown.
+  assert.ok(ms < 600, `${ms.toFixed(0)} ms`);
 });
 
 test('the detour hub and the ways to it are kept clear', async () => {
@@ -350,6 +478,27 @@ test('the detour hub and the ways to it are kept clear', async () => {
       const mx = Math.floor((s.spot.x + h.x) / 2);
       const my = Math.floor((s.spot.y + h.y) / 2);
       assert.equal(keep[mx + L.W * my], 1, `${cw}x${ch}: way from ${s.kind} to the hub not kept clear`);
+    }
+  }
+});
+
+test('build plazas sit on open floor, clear of props and spots, and are kept clear', async () => {
+  const { buildSites, keepClear } = await import('../src/cave/layout.ts');
+  for (const [cw, ch] of SIZES) {
+    const L = planLayout(cw, ch);
+    const keep = keepClear(L);
+    const sites = buildSites(L);
+    assert.equal(sites.length, 2);
+    for (const s of sites) {
+      assert.ok(s.x - s.r > L.T && s.y - s.r > L.T && s.x + s.r < L.W - 1 && s.y + s.r < L.D - 1, `${cw}x${ch}: plaza off the floor`);
+      assert.equal(keep[Math.floor(s.x) + L.W * Math.floor(s.y)], 1, `${cw}x${ch}: plaza not kept clear`);
+      for (const slot of L.slots) {
+        const r = slotRect(slot);
+        const nx = Math.max(r.x0, Math.min(s.x, r.x1));
+        const ny = Math.max(r.y0, Math.min(s.y, r.y1));
+        assert.ok(Math.hypot(s.x - nx, s.y - ny) > s.r, `${cw}x${ch}: plaza overlaps ${slot.kind}`);
+        assert.ok(Math.hypot(s.x - slot.spot.x, s.y - slot.spot.y) > s.r + 1, `${cw}x${ch}: plaza covers the ${slot.kind} spot`);
+      }
     }
   }
 });

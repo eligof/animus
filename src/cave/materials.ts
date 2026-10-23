@@ -73,8 +73,26 @@ export const M = {
   STEAM: 41,
   TOXIC: 42,
   SPORES: 43,
+  COFFEE: 36,
   // fire
   FIRE: 50,
+  // built interiors (lab, club, den, station, café...)
+  PLASTER: 60,
+  TILE: 61,
+  CARPET: 62,
+  CONCRETE: 63,
+  PLASTIC: 64,
+  LEAF: 65,
+  PAPER: 66,
+  // self-lit fixtures
+  NEON_PINK: 70,
+  NEON_CYAN: 71,
+  NEON_GREEN: 72,
+  NEON_PURPLE: 73,
+  LAMP: 74,
+  SCREEN: 75,
+  LED_RED: 76,
+  LED_AMBER: 77,
   // Outside the world: reads as solid rock to the simulation.
   OUT: 255,
 } as const;
@@ -131,11 +149,27 @@ export const MATERIALS: readonly (Material | undefined)[] = (() => {
   add(mat({ id: M.ACID, name: 'acid', kind: 'liquid', density: 3, colors: '#7dff3a', alpha: 0.65, spread: 0.1, glow: hex('#2f7a10') }));
   add(mat({ id: M.SLUDGE, name: 'toxic sludge', kind: 'liquid', density: 4, colors: '#9fbf2a', alpha: 0.8, spread: 0.1, glow: hex('#2a3a06') }));
   add(mat({ id: M.POTION, name: 'potion', kind: 'liquid', density: 3, colors: '#d34cff', alpha: 0.6, spread: 0.12, glow: hex('#5a1a7a') }));
+  add(mat({ id: M.COFFEE, name: 'coffee', kind: 'liquid', density: 3, colors: '#4a2a16', alpha: 0.9, spread: 0.08 }));
   add(mat({ id: M.SMOKE, name: 'smoke', kind: 'gas', density: 0, colors: '#3c3a3e', alpha: 0.3, spread: 0.15, life: [40, 120] }));
   add(mat({ id: M.STEAM, name: 'steam', kind: 'gas', density: 0, colors: '#c8d4dc', alpha: 0.22, spread: 0.06, life: [30, 90] }));
   add(mat({ id: M.TOXIC, name: 'toxic gas', kind: 'gas', density: 0, colors: '#7ad83a', alpha: 0.28, spread: 0.12, life: [60, 160], glow: hex('#14300a') }));
   add(mat({ id: M.SPORES, name: 'spores', kind: 'gas', density: 0, colors: '#c8ff9a', alpha: 0.2, spread: 0.2, life: [80, 200], glow: hex('#2a4a1a') }));
   add(mat({ id: M.FIRE, name: 'fire', kind: 'fire', density: 0, colors: [hex('#fff3a0'), hex('#ffe066'), hex('#ffc23a'), hex('#ffa024'), hex('#ff7a18'), hex('#ff5410'), hex('#e83a10'), hex('#b0240c')], alpha: 0.85, glow: hex('#ff8a20'), life: [8, 30] }));
+  add(mat({ id: M.PLASTER, name: 'plaster', kind: 'solid', density: 8, colors: '#c9c2b5', alpha: 1, spread: 0.06, soluble: true }));
+  add(mat({ id: M.TILE, name: 'tile', kind: 'solid', density: 9, colors: '#d8dde2', alpha: 1, spread: 0.05 }));
+  add(mat({ id: M.CARPET, name: 'carpet', kind: 'solid', density: 4, colors: '#7a2e3a', alpha: 1, spread: 0.1, flammable: 0.02, burnsTo: M.ASH, soluble: true }));
+  add(mat({ id: M.CONCRETE, name: 'concrete', kind: 'solid', density: 9, colors: '#7d7f80', alpha: 1, spread: 0.12, soluble: true }));
+  add(mat({ id: M.PLASTIC, name: 'plastic', kind: 'solid', density: 5, colors: '#3d6fb5', alpha: 1, spread: 0.06 }));
+  add(mat({ id: M.LEAF, name: 'leaves', kind: 'solid', density: 3, colors: '#3f8f3a', alpha: 1, spread: 0.25, flammable: 0.05, burnsTo: M.ASH, soluble: true }));
+  add(mat({ id: M.PAPER, name: 'paper', kind: 'solid', density: 3, colors: '#efe8d6', alpha: 1, spread: 0.05, flammable: 0.15, burnsTo: M.ASH, soluble: true }));
+  add(mat({ id: M.NEON_PINK, name: 'pink neon', kind: 'solid', density: 6, colors: '#ff5cbc', alpha: 1, spread: 0.08, glow: hex('#ff2a9a') }));
+  add(mat({ id: M.NEON_CYAN, name: 'cyan neon', kind: 'solid', density: 6, colors: '#5ceeff', alpha: 1, spread: 0.08, glow: hex('#20c8ff') }));
+  add(mat({ id: M.NEON_GREEN, name: 'green neon', kind: 'solid', density: 6, colors: '#8dff6a', alpha: 1, spread: 0.08, glow: hex('#40e040') }));
+  add(mat({ id: M.NEON_PURPLE, name: 'purple neon', kind: 'solid', density: 6, colors: '#c07bff', alpha: 1, spread: 0.08, glow: hex('#8a40ff') }));
+  add(mat({ id: M.LAMP, name: 'lamp', kind: 'solid', density: 6, colors: '#fff2c8', alpha: 1, spread: 0.04, glow: hex('#ffd890') }));
+  add(mat({ id: M.SCREEN, name: 'screen', kind: 'solid', density: 6, colors: '#7fe0ff', alpha: 1, spread: 0.1, glow: hex('#3aa8d8') }));
+  add(mat({ id: M.LED_RED, name: 'red light', kind: 'solid', density: 6, colors: '#ff5050', alpha: 1, spread: 0.06, glow: hex('#ff2020') }));
+  add(mat({ id: M.LED_AMBER, name: 'amber light', kind: 'solid', density: 6, colors: '#ffb84a', alpha: 1, spread: 0.06, glow: hex('#ff9010') }));
   return t;
 })();
 

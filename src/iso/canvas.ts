@@ -41,6 +41,13 @@ const dist2 = (a: number, b: number) => {
   return dr * dr + dg * dg + db * db;
 };
 const unpack = (n: number): RGB => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+// Luma-weighted distance: the eye forgives blue errors more than green.
+const wdist = (a: number, b: number) => {
+  const dr = ((a >> 16) & 255) - ((b >> 16) & 255);
+  const dg = ((a >> 8) & 255) - ((b >> 8) & 255);
+  const db = (a & 255) - (b & 255);
+  return 0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db;
+};
 
 // A grid of square pixels. Each terminal cell shows two of them stacked
 // (upper half block: fg = top pixel, bg = bottom pixel).
@@ -98,11 +105,13 @@ export class PixelCanvas {
   }
 
   // Composites into `r` with sextant glyphs: each cell shows a 2x3 block of
-  // pixels in two colours — the block's most common colour as background and
-  // its most distinct one as foreground, every pixel snapped to the nearer.
+  // pixels in two of its own colours, every pixel snapped to the nearer. Two
+  // colours come out exact; with more, every pair is tried and the one with
+  // the least error wins (the more used one as background).
   blitSextant(s: Screen, r: Rect, fallback: RGB = [0, 0, 0]): void {
     const fb = pack(fallback);
     const px = new Int32Array(6);
+    const cols = new Int32Array(6);
     for (let cy = 0; cy < r.h; cy++) {
       const sy = r.y + cy;
       if (sy < 0 || sy >= s.height) continue;
@@ -123,30 +132,37 @@ export class PixelCanvas {
           s.attr[i] = 0;
           continue;
         }
-        let bg = px[0];
-        let bgCount = 0;
-        for (let i = 0; i < 6; i++) {
-          let n = 0;
-          for (let j = 0; j < 6; j++) if (px[j] === px[i]) n++;
-          if (n > bgCount) {
-            bgCount = n;
-            bg = px[i];
-          }
+        let n = 0;
+        for (let k = 0; k < 6; k++) {
+          let j = 0;
+          while (j < n && cols[j] !== px[k]) j++;
+          if (j === n) cols[n++] = px[k];
         }
-        let fg = bg;
-        let score = -1;
-        for (let i = 0; i < 6; i++) {
-          if (px[i] === bg) continue;
-          let n = 0;
-          for (let j = 0; j < 6; j++) if (px[j] === px[i]) n++;
-          const sc = dist2(px[i], bg) * Math.sqrt(n);
-          if (sc > score) {
-            score = sc;
-            fg = px[i];
+        let fg = cols[1];
+        let bg = cols[0];
+        if (n > 2) {
+          let best = Infinity;
+          for (let a = 0; a < n; a++) {
+            for (let b = a + 1; b < n; b++) {
+              let e = 0;
+              for (let k = 0; k < 6 && e < best; k++) e += Math.min(wdist(px[k], cols[a]), wdist(px[k], cols[b]));
+              if (e < best) {
+                best = e;
+                fg = cols[a];
+                bg = cols[b];
+              }
+            }
           }
         }
         let bits = 0;
-        if (fg !== bg) for (let k = 0; k < 6; k++) if (px[k] === fg || dist2(px[k], fg) < dist2(px[k], bg)) bits |= 1 << k;
+        for (let k = 0; k < 6; k++) if (px[k] === fg || (px[k] !== bg && dist2(px[k], fg) < dist2(px[k], bg))) bits |= 1 << k;
+        // The more used colour is the background.
+        let on = 0;
+        for (let k = 0; k < 6; k++) on += (bits >> k) & 1;
+        if (on > 3) {
+          bits ^= 63;
+          [fg, bg] = [bg, fg];
+        }
         s.ch[i] = SEXTANT[bits];
         s.fg[i] = fg;
         s.bg[i] = bg;

@@ -20,6 +20,8 @@ export type WorldOpts = {
   rootLabel: string;
   start: number;
   pixels?: PixelMode;
+  // The terminal can show images, so r may cycle into HD.
+  images?: boolean;
   lights?: boolean;
 };
 
@@ -49,11 +51,17 @@ export class World {
   private start: number;
   private themeChangedAt = -Infinity;
   private pickerOrigin = '';
+  // The scene fills the whole terminal (f): no header, roster or footer.
+  full = false;
   private touched = { pixels: false, lights: false };
+  private images: boolean;
+  // A passing tip at the start of the ticker row (see flash).
+  private tip = { text: '', until: -Infinity };
 
   constructor(o: WorldOpts) {
     this.theme = o.theme;
     this.stage = new Stage(o.theme, o.pixels ?? 'half');
+    this.images = o.images ?? false;
     this.stage.lit = o.lights ?? true;
     this.live = o.live;
     this.demoOn = o.demo;
@@ -99,7 +107,7 @@ export class World {
   // Lays the stage out for a terminal size; call before the first tick and
   // on every resize so agents spawn on real floors.
   resize(cols: number, rows: number): void {
-    const L = computeLayout(cols, rows);
+    const L = computeLayout(cols, rows, this.full);
     if (!L.tooSmall) this.ensureLayout(L.scene);
   }
 
@@ -121,7 +129,7 @@ export class World {
   }
 
   draw(s: Screen, now: number): void {
-    const L = computeLayout(s.width, s.height);
+    const L = computeLayout(s.width, s.height, this.full);
     if (L.tooSmall) {
       drawTooSmall(s, this.theme, (now - this.start) / 1000);
       return;
@@ -139,15 +147,16 @@ export class World {
       mode: this.mode(),
       events: this.events,
       notice: this.notice(),
+      tip: now < this.tip.until ? this.tip.text : '',
       t: (now - this.start) / 1000,
       now,
       paused: this.paused,
       selectionInFooter: !L.roster,
     };
-    drawHeader(s, L.header, ctx);
+    if (L.header.h) drawHeader(s, L.header, ctx);
     if (L.roster) drawRoster(s, L.roster, ctx);
-    drawFooter(s, L.footer, ctx);
-    if (this.overlay === 'help') drawHelp(s, L.scene, this.theme);
+    if (L.footer.h) drawFooter(s, L.footer, ctx);
+    if (this.overlay === 'help') drawHelp(s, L.scene, this.theme, this.images);
     else if (this.overlay === 'picker') drawPicker(s, L.scene, THEMES, this.themeIndex(), ctx.t);
   }
 
@@ -171,6 +180,20 @@ export class World {
 
   get pixels(): PixelMode {
     return this.stage.pixels;
+  }
+
+  // Shows `text` in the footer's ticker row until `until`.
+  flash(text: string, until: number): void {
+    this.tip = { text, until };
+  }
+
+  // HD mode: the terminal's cell size, and the image to show this frame.
+  setCell(w: number, h: number): void {
+    this.stage.setCell(w, h);
+  }
+
+  hdImage(): ReturnType<Stage['hdImage']> {
+    return this.stage.hdImage();
   }
 
   get lights(): boolean {
@@ -215,8 +238,8 @@ export class World {
   // 'theme' and 'prefs' mean something worth saving to the config changed.
   handleKey(k: Key): 'quit' | 'theme' | 'prefs' | null {
     if (k.name === 'ctrl-c' || k.name === 'q') return 'quit';
-    if (/^[1-9]$/.test(k.name)) {
-      const i = Number(k.name) - 1;
+    if (/^[0-9]$/.test(k.name)) {
+      const i = k.name === '0' ? 9 : Number(k.name) - 1;
       if (i >= THEMES.length) return null;
       this.setTheme(THEMES[i].id);
       return this.overlay === 'picker' ? null : 'theme';
@@ -248,7 +271,10 @@ export class World {
         return null;
       case 'escape':
         if (this.overlay !== 'none') this.overlay = 'none';
-        else this.selectedId = null;
+        else {
+          this.selectedId = null;
+          this.stage.zoomAuto();
+        }
         return null;
       case 'tab':
       case 'right':
@@ -263,7 +289,10 @@ export class World {
         if (this.demoOn && !this.demo) this.demo = new DemoSource(7, this.lastTick);
         return null;
       case 'r':
-        this.stage.setMode(this.stage.pixels === 'half' ? 'sextant' : 'half');
+        {
+          const cycle: PixelMode[] = this.images ? ['half', 'sextant', 'hd'] : ['half', 'sextant'];
+          this.stage.setMode(cycle[(cycle.indexOf(this.stage.pixels) + 1) % cycle.length]);
+        }
         this.touched.pixels = true;
         return 'prefs';
       case 'l':
@@ -272,6 +301,20 @@ export class World {
         return 'prefs';
       case 'space':
         this.paused = !this.paused;
+        return null;
+      case '+':
+      case '=':
+        this.stage.zoomBy(1);
+        return null;
+      case '-':
+      case '_':
+        this.stage.zoomBy(-1);
+        return null;
+      case 'z':
+        this.stage.zoomAuto();
+        return null;
+      case 'f':
+        this.full = !this.full;
         return null;
     }
     return null;

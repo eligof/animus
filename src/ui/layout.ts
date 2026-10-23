@@ -7,8 +7,18 @@ export const MIN_ROWS = 20;
 const ROSTER_W = 28;
 const ROSTER_MIN_COLS = 110;
 
-export function computeLayout(cols: number, rows: number): Layout {
+// `full`: the scene takes the whole terminal (no header, roster or footer).
+export function computeLayout(cols: number, rows: number, full = false): Layout {
   const tooSmall = cols < MIN_COLS || rows < MIN_ROWS;
+  if (full) {
+    return {
+      header: { x: 0, y: 0, w: cols, h: 0 },
+      scene: { x: 0, y: 0, w: cols, h: rows },
+      roster: null,
+      footer: { x: 0, y: rows, w: cols, h: 0 },
+      tooSmall,
+    };
+  }
   const bodyH = Math.max(0, rows - 3);
   const roster = cols >= ROSTER_MIN_COLS ? { x: cols - ROSTER_W, y: 1, w: ROSTER_W, h: bodyH } : null;
   return {

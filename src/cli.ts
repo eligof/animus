@@ -4,6 +4,7 @@ import { runInteractive, snapshot } from './app.ts';
 import { claudeRoot } from './claude/paths.ts';
 import { loadConfig } from './config.ts';
 import { detectPixelMode } from './term/renderer.ts';
+import { supportsImages } from './term/kitty.ts';
 import { THEMES, getTheme, themeIds } from './themes/index.ts';
 
 export const USAGE = `usage: animus [options]
@@ -14,7 +15,8 @@ options:
   -t, --theme <id>      scene preset (see --list-themes)
       --demo            simulated crew instead of live Claude data
       --fps <n>         frames per second (default 18)
-      --pixels <mode>   auto, half or sextant (2x3 pixels per cell; default auto)
+      --pixels <mode>   auto, half, sextant (2x3 pixels per cell) or hd (a real
+                        image: kitty, Ghostty, WezTerm); default auto
       --claude-dir <p>  Claude config dir (default $CLAUDE_CONFIG_DIR or ~/.claude)
       --list-themes     list scene presets
       --snapshot        render one frame to stdout and exit
@@ -89,8 +91,8 @@ export async function main(argv: string[]): Promise<number> {
   const root = claudeRoot(values['claude-dir']);
   const demo = Boolean(values.demo);
   const want = values.pixels ?? loadConfig().pixels ?? 'auto';
-  if (want !== 'auto' && want !== 'half' && want !== 'sextant') return fail('--pixels must be auto, half or sextant');
-  const pixels = want === 'auto' ? detectPixelMode() : want;
+  if (want !== 'auto' && want !== 'half' && want !== 'sextant' && want !== 'hd') return fail('--pixels must be auto, half, sextant or hd');
+  const pixels = want === 'auto' ? (supportsImages() ? 'hd' : detectPixelMode()) : want;
   const lights = loadConfig().lights ?? true;
 
   if (values.snapshot) {
@@ -98,7 +100,8 @@ export async function main(argv: string[]): Promise<number> {
     const height = num('height', values.height, 36, 8, 500);
     const at = num('at', values.at, 12, 0, 3600);
     if (width === null || height === null || at === null) return fail('--width/--height/--at must be positive numbers');
-    process.stdout.write(snapshot({ theme, demo, fps, root, pixels, lights, width: Math.floor(width), height: Math.floor(height), at }) + '\n');
+    // A snapshot is text: HD falls back to sextant cells.
+    process.stdout.write(snapshot({ theme, demo, fps, root, pixels: pixels === 'hd' ? 'sextant' : pixels, lights, width: Math.floor(width), height: Math.floor(height), at }) + '\n');
     return 0;
   }
   return runInteractive({ theme, demo, fps, root, pixels, lights });

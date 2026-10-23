@@ -1,3 +1,5 @@
+import { parseCellSize } from './kitty.ts';
+
 export type Key = { name: string; ch: string; ctrl: boolean; shift: boolean };
 
 const SEQUENCES: Record<string, string> = {
@@ -132,11 +134,21 @@ export class Terminal {
     if (s) this.out.write(s);
   }
 
+  // Called with the cell size in pixels when the terminal answers
+  // CELL_SIZE_QUERY (the answer arrives mixed into the key input).
+  onCellSize(cb: (size: { w: number; h: number }) => void): void {
+    this.cellCb = cb;
+  }
+
+  private cellCb: ((size: { w: number; h: number }) => void) | undefined;
+
   onKey(cb: (k: Key) => void): void {
     const decoder = new KeyDecoder();
     let timer: NodeJS.Timeout | undefined;
     this.inp.on('data', (d: string | Buffer) => {
       if (timer) clearTimeout(timer);
+      const size = parseCellSize(String(d));
+      if (size) this.cellCb?.(size);
       for (const k of decoder.push(String(d))) cb(k);
       if (decoder.pending()) {
         timer = setTimeout(() => {

@@ -130,3 +130,23 @@ test('the wipe dims both pixels of every cell behind the curtain', async () => {
   }
   assert.ok(s.ch.join('').includes('▓██▓'));
 });
+
+test('a passing tip leads the ticker row', () => {
+  const c = ctx();
+  c.tip = 'HD mode: run animus in kitty, Ghostty or WezTerm';
+  const s = new Screen(120, 2);
+  drawFooter(s, { x: 0, y: 0, w: 120, h: 2 }, c);
+  const ticker = s.toText().split('\n')[0];
+  assert.match(ticker, /^ HD mode: run animus in kitty, Ghostty or WezTerm {2}· {2}.*Edit cli\.ts/);
+});
+
+test('help says where HD is when the terminal shows no images', () => {
+  const plain = new Screen(100, 30);
+  drawHelp(plain, { x: 0, y: 1, w: 100, h: 27 }, mines, false);
+  assert.match(plain.toText(), /HD needs kitty, Ghostty or WezTerm/);
+  assert.match(plain.toText(), /quit/);
+  const kitty = new Screen(100, 30);
+  drawHelp(kitty, { x: 0, y: 1, w: 100, h: 27 }, mines, true);
+  assert.doesNotMatch(kitty.toText(), /HD needs/);
+  assert.match(kitty.toText(), /sextants \/ HD/);
+});

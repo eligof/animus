@@ -38,6 +38,33 @@ test('subagents finish and leave', () => {
   assert.ok(stillThere.length < doneIds.size, 'finished agents never left');
 });
 
+test('leads wait for you every minute or two, while most of the crew keeps busy', () => {
+  const step = 0.5;
+  const frames = simulate(new DemoSource(7, START), 900, step);
+  for (const id of ['demo-atlas', 'demo-nova']) {
+    const starts: number[] = [];
+    const lens: number[] = [];
+    let from = -1;
+    frames.forEach((list, k) => {
+      const idle = list.find((a) => a.id === id)!.activity === 'idle';
+      if (idle && from < 0) from = k * step;
+      if (!idle && from >= 0) {
+        starts.push(from);
+        lens.push(k * step - from);
+        from = -1;
+      }
+    });
+    assert.ok(starts.length >= 6, `${id} waited ${starts.length} times in 15 minutes`);
+    assert.ok(starts[0] <= 60, `${id} first waits at ${starts[0]} s`);
+    for (const l of lens) assert.ok(l >= 25 && l <= 45 + step, `${id} waited ${l} s`);
+    // A wait starts at the end of a step (at most 7 s) once it is due.
+    for (let k = 1; k < starts.length; k++) assert.ok(starts[k] - starts[k - 1] >= 60 && starts[k] - starts[k - 1] <= 120 + 7 + step, `${id} waits ${starts[k] - starts[k - 1]} s apart`);
+  }
+  const all = frames.flat();
+  const busy = all.filter((a) => a.activity !== 'idle').length / all.length;
+  assert.ok(busy >= 0.75, `only ${(100 * busy).toFixed(0)}% busy`);
+});
+
 test('activities vary and events are emitted', () => {
   const src = new DemoSource(11, START);
   simulate(src, 40);

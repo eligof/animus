@@ -5,6 +5,10 @@ export type Rect = { x: number; y: number; w: number; h: number };
 
 export const BOLD = 1;
 
+// A colour slot set to this uses the terminal's default colour (SGR 39/49).
+// Scene cells in HD mode take it so the image drawn under them shows.
+export const DEFAULT = -1;
+
 const pack = (c: RGB) => (c[0] << 16) | (c[1] << 8) | c[2];
 const unpack = (n: number): RGB => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 
@@ -73,6 +77,20 @@ export class Screen {
       cx++;
     }
     return cx;
+  }
+
+  // Blank cells on the terminal's default background over `r`: windows for
+  // an image drawn under the cells.
+  punch(r: Rect): void {
+    for (let y = Math.max(0, r.y); y < Math.min(this.height, r.y + r.h); y++) {
+      for (let x = Math.max(0, r.x); x < Math.min(this.width, r.x + r.w); x++) {
+        const i = y * this.width + x;
+        this.ch[i] = ' ';
+        this.fg[i] = DEFAULT;
+        this.bg[i] = DEFAULT;
+        this.attr[i] = 0;
+      }
+    }
   }
 
   fill(r: Rect, ch: string, fg?: RGB, bg?: RGB): void {

@@ -1,6 +1,7 @@
 import type { RGB } from '../term/color.ts';
+import type { Sky } from './sky.ts';
 import type { Palette } from '../themes/types.ts';
-import type { Pose, Traits } from '../world/character.ts';
+import type { Costume, Emote, Pose, Traits } from '../world/character.ts';
 import type { Rng } from '../world/rng.ts';
 import type { Voxels } from './voxels.ts';
 
@@ -76,7 +77,13 @@ export type WizardSprite = {
   light?: { dx: number; dy: number; color: RGB; radius: number; intensity: number };
 };
 
-export type WizardFn = (tr: Traits, pose: Pose, t: number, facing: Facing, phase?: number) => WizardSprite;
+// `costume` dresses the figure for the scene (default 'wizard'); `item` is
+// the colour of a block it carries overhead ('carry') or sets down ('place').
+export type FigureOpts = { costume?: Costume; item?: RGB };
+export type WizardFn = (tr: Traits, pose: Pose, t: number, facing: Facing, phase?: number, opts?: FigureOpts) => WizardSprite;
+
+// A small picture over a head (see Emote); (ax, ay) is its bottom centre.
+export type EmoteSprite = { w: number; h: number; px: Array<Array<RGB | null>>; glow: Array<Array<RGB | null>>; ax: number; ay: number };
 
 // ── layout ───────────────────────────────────────────────────────────────
 export type StationKind = 'write' | 'read' | 'search' | 'run' | 'web' | 'think' | 'idle';
@@ -88,9 +95,13 @@ export type SlotKind = StationKind | 'entrance';
 // `along` runs +y). (x0, y0) is the prop's back corner on the floor, z0 the
 // floor height there; `len` along the wall, `dep` out from it. `spot` is
 // where an agent stands to work it (floor coordinates, voxel units).
+// An `island` stands free out on the floor, built as if it backed onto
+// `wall` (the same frame, its front and its agent toward the viewer) with
+// nothing behind it.
 export type Slot = {
   kind: SlotKind;
   wall: 'left' | 'right';
+  island?: boolean;
   x0: number;
   y0: number;
   z0: number;
@@ -132,12 +143,24 @@ export type Prop = {
   tick?(c: Ctx, s: Slot, active: boolean): void;
 };
 
+// Somewhere idle characters like to be: a seat, a view, a drink, a dance
+// floor, a warm fire, a critter to pet. (x, y) is where they stand (floor
+// coordinates); `face` what they look at.
+export type Poi = { x: number; y: number; kind: 'seat' | 'view' | 'drink' | 'dance' | 'warm' | 'pet'; face?: { x: number; y: number } };
+
+// What characters build together in the open floor, block by block:
+// materials to build with (frame first) and the overall shape.
+export type BuildStyle = { mats: readonly number[]; shape: 'tower' | 'house' | 'pyramid' | 'statue' | 'machine' };
+
+export type Finale = { colors: RGB[]; mat?: number; glow?: boolean; gravity?: number };
+
 export type Biome = {
   id: string;
   name: string;
   tagline: string;
   palette: Palette; // UI chrome colours
   backdrop: RGB; // the void around the chunk
+  sky?: Sky; // something out in that void (see sky.ts)
   grade: Grade;
   // Material colour overrides for this biome (e.g. bluish rock).
   colors?: Partial<Record<number, string>>;
@@ -147,4 +170,12 @@ export type Biome = {
   props: Record<SlotKind, Prop>;
   // Ambient life each frame: drips, falling sand, lava falls, snow, spores.
   weather?(c: Ctx, L: Layout): void;
+  // How characters dress here (default 'wizard').
+  costume?: Costume;
+  // What a finish showers down (default: glowing gold dust that settles as
+  // voxels). Indoors leave out `mat`: the bits vanish where they land.
+  finale?: Finale;
+  // What they build together, and where idle characters like to go.
+  build?: BuildStyle;
+  pois?(L: Layout): Poi[];
 };

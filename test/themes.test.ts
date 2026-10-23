@@ -87,7 +87,7 @@ for (const b of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
   });
 
   test(`biome ${b.id}: generation is deterministic per seed`, () => {
-    const L = planLayout(320, 171);
+    const L = planLayout(320, 171, b.id);
     const x = world(b, L, 7);
     const y = world(b, L, 7);
     const z = world(b, L, 8);
@@ -98,7 +98,7 @@ for (const b of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
 
   test(`biome ${b.id}: solid walls and floor, open room, standable spots, contained pools`, () => {
     for (const [cw, ch] of SIZES) {
-      const L = planLayout(cw, ch);
+      const L = planLayout(cw, ch, b.id);
       const v = world(b, L);
       const tag = `${b.id} ${cw}x${ch}`;
       let wall = 0;
@@ -148,7 +148,7 @@ for (const b of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
 
   test(`biome ${b.id}: props and weather tick with sane lights and particles, flames clear of fuel`, () => {
     for (const [cw, ch] of SIZES) {
-      const L = planLayout(cw, ch);
+      const L = planLayout(cw, ch, b.id);
       const v = world(b, L);
       for (const active of [false, true]) {
         const { c, lights, parts } = stub(v);
@@ -173,7 +173,7 @@ for (const b of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
   });
 
   test(`biome ${b.id}: the world stays a cave under a minute of simulation`, () => {
-    const L = planLayout(320, 171);
+    const L = planLayout(320, 171, b.id);
     const v = world(b, L);
     v.commitBase();
     const T = buildTables(b.colors);
@@ -198,7 +198,7 @@ for (const b of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
   });
 
   test(`biome ${b.id}: a big world generates quickly`, () => {
-    const L = planLayout(1000, 500);
+    const L = planLayout(1000, 500, b.id);
     const t0 = performance.now();
     world(b, L);
     const ms = performance.now() - t0;

@@ -1,6 +1,7 @@
 import type { RGB } from '../term/color.ts';
 import { hex, mix } from '../term/color.ts';
 import type { Rng } from '../world/rng.ts';
+import { slotsOn } from './layout.ts';
 import type { Site } from './layout.ts';
 import type { Ctx, Layout, Prop, Slot, SlotKind } from './types.ts';
 import type { Voxels } from './voxels.ts';
@@ -201,8 +202,8 @@ export function roughenWalls(v: Voxels, L: Layout, rng: Rng, clearH = 24): void 
   const seed = rng.int(0, 0x3fffffff);
   for (const wall of ['left', 'right'] as const) {
     const end = wall === 'left' ? D : W;
-    const spans = L.slots.filter((s) => s.wall === wall).map((s) => (wall === 'left' ? s.y0 : s.x0));
-    const lens = L.slots.filter((s) => s.wall === wall).map((s) => s.len);
+    const spans = slotsOn(L, wall).map((s) => (wall === 'left' ? s.y0 : s.x0));
+    const lens = slotsOn(L, wall).map((s) => s.len);
     const behind = (a: number) => spans.some((p, k) => a >= p - 2 && a < p + lens[k] + 2);
     for (let a = T; a < end; a++) {
       const spared = behind(a);

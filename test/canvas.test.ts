@@ -95,6 +95,23 @@ test('sextant blit keeps the two dominant colours of busy cells', () => {
   assert.ok(used.includes('220,180,150') && used.includes('10,10,10'), used.join(' / '));
 });
 
+test('sextant blit splits a many-colour cell where the error is least, in its own colours', () => {
+  // A dark-to-light ramp: snapping to the two ends (the old rule) loses the
+  // middle; the best split keeps one shade from each half.
+  const c = new PixelCanvas(2, 3);
+  for (let k = 0; k < 6; k++) c.set(k % 2, Math.floor(k / 2), [k * 50, k * 50, k * 50]);
+  const s = new Screen(1, 1);
+  c.blitSextant(s, { x: 0, y: 0, w: 1, h: 1 });
+  const bits = sextantPattern(s.charAt(0, 0));
+  let err = 0;
+  for (let k = 0; k < 6; k++) {
+    const got = bits & (1 << k) ? s.fgAt(0, 0) : s.bgAt(0, 0);
+    err += (got[0] - k * 50) ** 2;
+  }
+  assert.ok(err <= 10_000, `error ${err}, snapping to the ends costs 25000`);
+  for (const col of [s.fgAt(0, 0), s.bgAt(0, 0)]) assert.equal(col[0] % 50, 0, `${col} is not a colour of the cell`);
+});
+
 test('every sextant glyph is a single narrow character', async () => {
   const { isWide } = await import('../src/term/width.ts');
   for (let cp = 0x1fb00; cp <= 0x1fb3b; cp++) assert.equal(isWide(String.fromCodePoint(cp)), false);

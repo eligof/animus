@@ -44,21 +44,29 @@ const HELP: Array<[string, string]> = [
   ['d', 'toggle the demo crew'],
   ['r', 'pixels: half blocks / sextants'],
   ['l', 'lighting on / off'],
+  ['+ / -', 'zoom in / out (z: auto)'],
+  ['f', 'fullscreen scene (hide the panels)'],
   ['space', 'pause animation'],
   ['?', 'this help'],
   ['q / ctrl-c', 'quit'],
 ];
 
-export function drawHelp(s: Screen, r: Rect, theme: Theme): void {
+// `images`: the terminal shows images, so r cycles into HD too; without,
+// a line under r says where HD is.
+export function drawHelp(s: Screen, r: Rect, theme: Theme, images = false): void {
   const p = theme.palette;
-  const box = centered(r, 58, HELP.length + 9);
+  const rows = HELP.flatMap(([k, what]): Array<[string, string]> => {
+    if (k !== 'r') return [[k, what]];
+    return images ? [[k, `${what} / HD`]] : [[k, what], ['', 'HD needs kitty, Ghostty or WezTerm']];
+  });
+  const box = centered(r, 58, rows.length + 9);
   drawBox(s, box, p.border, p.panel, 'HELP');
   const end = box.x + box.w - 1;
   let y = box.y + 2;
-  for (const [k, what] of HELP) {
+  for (const [k, what] of rows) {
     if (y >= box.y + box.h - 1) break;
     s.text(box.x + 3, y, k, p.accent, p.panel, BOLD, end);
-    s.text(box.x + 21, y, what, p.panelText, p.panel, 0, end);
+    s.text(box.x + 21, y, what, k ? p.panelText : p.dim, p.panel, 0, end);
     y++;
   }
   y++;
@@ -79,25 +87,38 @@ export function drawHelp(s: Screen, r: Rect, theme: Theme): void {
   }
 }
 
+// The preset picker, docked at the left so the live preview stays visible.
+// Up to six presets get a name and a tagline each; more get one row each
+// (the selected preset's tagline goes at the bottom), scrolling to keep the
+// selection in view.
 export function drawPicker(s: Screen, r: Rect, themes: readonly Theme[], index: number, t: number): void {
   const cur = themes[index] ?? themes[0];
   const p = cur.palette;
-  const box = centered(r, 64, themes.length * 3 + 5);
-  drawBox(s, box, p.border, p.panel, 'SCENE PRESETS');
+  const compact = themes.length > 6;
+  const per = compact ? 1 : 3;
+  const want = themes.length * per + (compact ? 7 : 5);
+  const w = Math.min(46, r.w - 2);
+  const box = { x: r.x + 1, y: r.y + 1, w, h: Math.max(8, Math.min(r.h - 2, want)) };
+  drawBox(s, box, p.border, p.panel, 'SCENES');
   const end = box.x + box.w - 1;
-  themes.forEach((th, i) => {
-    const y = box.y + 2 + i * 3;
-    if (y + 1 >= box.y + box.h - 1) return;
+  const visible = Math.max(1, Math.floor((box.h - (compact ? 6 : 4)) / per));
+  const first = Math.max(0, Math.min(themes.length - visible, index - Math.floor(visible / 2)));
+  for (let i = first; i < Math.min(themes.length, first + visible); i++) {
+    const th = themes[i];
+    const y = box.y + 2 + (i - first) * per;
     const sel = i === index;
     const bg = sel ? mix(p.panel, p.accent, 0.22) : p.panel;
-    s.fill({ x: box.x + 1, y, w: end - box.x - 1, h: 2 }, ' ', undefined, bg);
+    s.fill({ x: box.x + 1, y, w: end - box.x - 1, h: compact ? 1 : 2 }, ' ', undefined, bg);
     s.text(box.x + 2, y, sel ? (Math.floor(t * 3) % 2 ? '▸' : '▹') : ' ', p.accent, bg, BOLD, end);
-    s.text(box.x + 4, y, `${i + 1}`, p.dim, bg, 0, end);
-    s.text(box.x + 7, y, th.name, sel ? p.panelText : mix(p.panelText, p.panel, 0.25), bg, BOLD, end);
+    s.text(box.x + 4, y, i < 9 ? `${i + 1}` : i === 9 ? '0' : ' ', p.dim, bg, 0, end);
+    s.text(box.x + 6, y, clip(th.name, end - box.x - 18), sel ? p.panelText : mix(p.panelText, p.panel, 0.25), bg, BOLD, end - 11);
     const sw = [th.palette.wall, th.palette.floor, th.palette.accent, th.palette.accent2, th.palette.panel];
-    sw.forEach((c, k) => s.put(end - 12 + k * 2, y, '█', c, bg));
-    s.text(box.x + 7, y + 1, clip(th.tagline, end - box.x - 8), p.dim, bg, 0, end - 1);
-  });
+    sw.forEach((c, k) => s.put(end - 10 + k * 2, y, '█', c, bg));
+    if (!compact) s.text(box.x + 6, y + 1, clip(th.tagline, end - box.x - 7), p.dim, bg, 0, end - 1);
+  }
+  if (first > 0) s.put(end - 1, box.y + 1, '▲', p.dim, p.panel);
+  if (first + visible < themes.length) s.put(end - 1, box.y + box.h - (compact ? 4 : 3), '▼', p.dim, p.panel);
+  if (compact) s.text(box.x + 2, box.y + box.h - 3, clip(cur.tagline, end - box.x - 3), p.dim, p.panel, 0, end);
   s.text(box.x + 2, box.y + box.h - 2, '↑↓ preview · enter apply · esc cancel', p.dim, p.panel, 0, end);
 }
 

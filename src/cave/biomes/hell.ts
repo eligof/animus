@@ -3,18 +3,22 @@ import { hex } from '../../term/color.ts';
 import type { Palette } from '../../themes/types.ts';
 import type { Rng } from '../../world/rng.ts';
 import type { Site } from '../layout.ts';
-import { keepClear, openSites, wallGaps } from '../layout.ts';
+import { slotsOn, wallGaps } from '../layout.ts';
 import { M } from '../materials.ts';
 import type { PropMats, Strata } from '../props.ts';
-import { digFace, entrance, fillStrata, flicker, grain, hangers, heap, isFlammable, isSolid, keepFire, makeProps, noise2, onWall, pit, puff, roughenWalls, veins, wx, wy } from '../props.ts';
-import type { Biome, Ctx, Grade, Layout, Prop, Slot, SlotKind } from '../types.ts';
+import { digFace, entrance, fillStrata, flicker, hangers, hash3, heap, isFlammable, isSolid, keepFire, makeProps, noise2, onWall, pit, puff, roughenWalls, veins, wx, wy } from '../props.ts';
+import type { Biome, BuildStyle, Ctx, Grade, Layout, Poi, Prop, Slot, SlotKind } from '../types.ts';
 import type { Voxels } from '../voxels.ts';
+import type { Disc, Pt } from './floor.ts';
+import { by, calm, campfirePoi, Floor, growth, scatter, WORN } from './floor.ts';
 
 // Hell: the bottom of everything. Blood-red and black rock banded with
-// obsidian and veined with brimstone, bones heaped on the floor, a lake of
-// lava, a lava fall pouring into a basin in the back corner and vents that
-// spit flame. Everything near the heat is stone, metal or bone, so the
-// place glows without burning down.
+// obsidian and veined with brimstone, a field of bones round a bone throne,
+// a lake and a pond of lava in obsidian basins, cracks of lava running
+// across the floor, a lava fall pouring into a basin in the back corner,
+// obsidian spires, brimstone outcrops and vents that spit flame.
+// Everything near the heat is stone, metal or bone, so the place glows
+// without burning down.
 
 // ── look ─────────────────────────────────────────────────────────────────
 const PALETTE: Palette = {
@@ -37,13 +41,13 @@ const PALETTE: Palette = {
   bad: hex('#ff3a2a'),
 };
 
-const GRADE: Grade = { ambient: hex('#301612'), illum: 1.2, bloom: 0.9, vignette: 0.4 };
+const GRADE: Grade = { ambient: hex('#8a4c36'), illum: 2, bloom: 1, vignette: 0.2 };
 
 // Blood-red and black rock, sulphur-bright brimstone, blood-dyed cloth and
 // black wax.
 const COLORS: Partial<Record<number, string>> = {
-  [M.ROCK]: '#74261b',
-  [M.ROCK_DARK]: '#2e1517',
+  [M.ROCK]: '#983a26',
+  [M.ROCK_DARK]: '#4c2622',
   [M.GRAVEL]: '#4e2e28',
   [M.BRICK]: '#6a2018',
   [M.CLOTH]: '#6e1420',
@@ -79,6 +83,9 @@ const PROPS: Record<SlotKind, Prop> = {
   search: digFace({ ...HELL_MATS, frame: M.METAL }), // iron-braced, so obsidian in the face still digs
   entrance: boneGate(HELL_MATS),
 };
+
+// An obsidian statue, trimmed in bone and gold.
+const BUILD: BuildStyle = { mats: [M.OBSIDIAN, M.ROCK_DARK, M.BONE, M.GOLD_ORE], shape: 'statue' };
 
 // Rock layers bottom to top: [material, weight, min, max thickness].
 const STRATA: Strata = {
@@ -119,44 +126,130 @@ const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n
 type Basin = { rx: number; ry: number; cells: Array<[number, number]>; fall: [number, number] };
 type Hell = {
   pools: Site[];
-  surface: Array<[number, number, number]>; // the lava's top voxels in the pools
+  surface: Array<[number, number, number]>; // the lava's top voxels in the pools and cracks
   basin: Basin | null;
   vents: Array<[number, number]>;
   sconces: Array<[number, number, number]>; // each one's middle lava voxel
+  cracks: Array<[number, number, number]>; // a few lava voxels along each crack, glowing
 };
 const STATE = new WeakMap<Voxels, Hell>();
+
+// ── plan ─────────────────────────────────────────────────────────────────
+// Where everything the characters visit goes, from the layout alone (so
+// pois() agrees with generate()): the lava lake and pond (warm, at a safe
+// distance), the basin under the fall (a view of it), the bone field with
+// its throne (a seat) and an imp, the spires; and the vents, away from
+// every walkway.
+type Plan = {
+  floor: Floor;
+  pools: Disc[];
+  basin: Basin | null;
+  bones: Disc | null;
+  throne: Pt | null;
+  spires: Disc[];
+  vents: Array<[number, number]>;
+  outcrops: Disc[];
+};
+
+const PLANS = new WeakMap<Layout, Plan>();
+
+function plan(L: Layout): Plan {
+  const hit = PLANS.get(L);
+  if (hit) return hit;
+  const { W, H, T, floor } = L;
+  const f = new Floor(L, 'hell');
+  const g = growth(L);
+  const hub = f.hub;
+  const span = H - floor;
+  const basin = cornerBasin(L, f.keep);
+  if (basin) {
+    // Stand back from the basin and watch the fall.
+    const [fx, fy] = basin.fall;
+    for (const k of [6, 8, 10, 4]) {
+      const p: Poi = { x: T + basin.rx + k, y: fy + Math.round(k * 0.7), kind: 'view', face: { x: fx, y: fy } };
+      if (f.reachable(p, null)) {
+        f.addPoi(p);
+        break;
+      }
+    }
+  }
+  // Lava: a lake and a pond, each in a crust (the disc covers the crust), warm at a safe distance.
+  const lr = clamp(Math.round(W * 0.11), 6, 16);
+  const pr = clamp(Math.round(W * 0.05), 3, 7);
+  const pools: Disc[] = [];
+  for (const [r, fx, fy] of [[lr, 0.76, 0.78], [pr, 0.93, 0.5]] as const) {
+    const d = f.place(Math.round(r * 1.65), f.at(fx, fy), { min: Math.round(r * 1.1), pois: (s) => [by(s, 'warm', 2, hub)] });
+    if (d) pools.push(d);
+  }
+  // The bone field: a throne of bones to sit on, an imp among the skulls.
+  let throne: Pt | null = null;
+  const bones = f.place(Math.round(7 + 4 * g), f.at(0.42, 0.93), {
+    min: 5,
+    inside: true,
+    pois: (s) => [
+      { x: Math.round(s.x), y: Math.round(s.y), kind: 'seat', face: { x: Math.round(hub.x), y: Math.round(hub.y) } },
+      by({ ...s, r: s.r - 2 }, 'pet', 0, hub, 1.6),
+    ],
+  });
+  if (bones) throne = { x: Math.round(bones.x), y: Math.round(bones.y) };
+  const warm = f.pois.length < 4 ? campfirePoi(L) : null;
+  if (warm && f.reachable(warm, null)) f.addPoi(warm);
+  // Obsidian spires, tall and black.
+  const spires: Disc[] = [];
+  for (let k = Math.round(1 + 3 * g); k > 0; k--) {
+    const tall = span * f.rng.range(0.35, 0.6);
+    const d = f.place(f.rng.range(3, 3.5 + 1.5 * g), f.at(f.rng.range(0.3, 1), f.rng.range(0.3, 1)), { min: 2.5, spread: 60, tall, ok: (s) => !f.hides(s.x, s.y, s.r, tall) });
+    if (d) spires.push({ ...d, tall });
+  }
+  // Vents, well off every walkway; brimstone outcrops, well away from the heat.
+  const vents: Array<[number, number]> = [];
+  for (let k = Math.round(2 + 4 * g); k > 0; k--) {
+    const d = f.place(4, f.at(f.rng.range(0.25, 1), f.rng.range(0.25, 1)), { min: 4, gap: 3, spread: 60 });
+    if (d) vents.push([Math.round(d.x), Math.round(d.y)]);
+  }
+  const hot = (s: Disc) =>
+    pools.some((p) => Math.hypot(s.x - p.x, s.y - p.y) < p.r + s.r + FAR) || vents.some(([x, y]) => Math.hypot(s.x - x, s.y - y) < s.r + FAR) || (basin !== null && s.x < T + basin.rx + FAR + s.r && s.y < T + basin.ry + FAR + s.r);
+  const outcrops: Disc[] = [];
+  for (let k = Math.round(1 + 3 * g); k > 0; k--) {
+    const d = f.place(f.rng.range(3, 4 + 2 * g), f.at(f.rng.range(0.25, 1), f.rng.range(0.25, 1)), { min: 2.5, spread: 60, ok: (s) => !hot(s) });
+    if (d) outcrops.push(d);
+  }
+  const P: Plan = { floor: f, pools, basin, bones, throne, spires, vents, outcrops };
+  PLANS.set(L, P);
+  return P;
+}
+
+// A disc site as the ellipse of a pool, its crust inside the disc.
+function ellipse(d: Disc, flat: number): Site {
+  const rx = Math.max(2, d.r / 1.65);
+  return { x: Math.round(d.x), y: Math.round(d.y), rx, ry: Math.max(2, rx * flat) };
+}
 
 // ── generate ─────────────────────────────────────────────────────────────
 function generate(v: Voxels, L: Layout, rng: Rng): void {
   const { W, D, T, floor } = L;
   clear(v);
-  const keep = keepClear(L);
-
-  // Where the heat goes: a lava lake (and a pond if there is room) out on
-  // the open floor, a basin under the lava fall in the back corner, vents.
-  const lr = clamp(Math.round(W * 0.11), 6, 16);
-  const pr = clamp(Math.round(W * 0.045), 3, 6);
-  const pools = openSites(L, rng, [
-    [lr, Math.round(lr * 0.7)],
-    [pr, Math.round(pr * 0.8)],
-  ]);
-  const basin = cornerBasin(L, keep);
-  const vents = ventSites(L, rng, keep, pools);
+  const P = plan(L);
+  const pools = P.pools.map((d, k) => ellipse(d, k ? 0.8 : 0.7));
+  const basin = P.basin;
+  const vents = P.vents;
 
   // Rock: walls, floor, a lip along the front cuts, bumps and boulders.
-  const free = freeFloor(L, keep, pools, basin, vents);
-  const top = columnTops(L, rng, free);
+  const free = P.floor.free(2);
+  const top = columnTops(L, rng, free, P.spires, P.outcrops);
   fillStrata(v, L, rng, STRATA, top);
-  scorch(v, L, rng, top);
+  scorch(v, L, rng, top, P.floor.trails);
   veins(v, L, rng, M.OBSIDIAN, Math.round((W * D) / 900), (m) => ROCKY.has(m));
   veins(v, L, rng, M.BRIMSTONE, Math.round((W * D) / 1500), (m) => ROCKY.has(m), [4, 9]);
   roughenWalls(v, L, rng);
+  for (const d of P.outcrops) brimstone(v, L, rng, d, top);
 
   const depth = Math.min(4, floor - 2);
   for (const p of pools) {
     pit(v, L, p, depth, M.LAVA);
     crust(v, L, rng, p);
   }
+  const cracks = fissures(v, L, rng, P, pools);
   if (basin) buildBasin(v, L, basin);
   for (const [x, y] of vents) buildVent(v, L, rng, x, y);
   // Before the props: their fire beds are meant to burn.
@@ -169,8 +262,10 @@ function generate(v: Voxels, L: Layout, rng: Rng): void {
     if (pools.some((p) => Math.hypot(x - p.x, y - p.y) < Math.max(p.rx, p.ry) + FAR)) return false;
     if (basin && x < T + basin.rx + FAR && y < T + basin.ry + FAR) return false;
     if (vents.some(([vx, vy]) => Math.hypot(x - vx, y - vy) < FAR)) return false;
+    if (cracks.some(([cx, cy]) => Math.hypot(x - cx, y - cy) < FAR)) return false;
     return !sconces.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < FAR);
   };
+  if (P.bones) boneField(v, L, rng, P.bones, P.throne, P.floor);
   litter(v, L, rng, free, far);
   hangers(v, L, rng, M.METAL, M.BRIMSTONE, Math.round((W + D) / 10), floor + CHAIN_H);
   if (basin) carveFall(v, L, basin);
@@ -182,7 +277,7 @@ function generate(v: Voxels, L: Layout, rng: Rng): void {
       for (let x = Math.floor(p.x - p.rx); x <= Math.ceil(p.x + p.rx); x++) if (v.get(x, y, z) === M.LAVA && v.get(x, y, z + 1) === M.AIR) surface.push([x, y, z]);
     }
   }
-  STATE.set(v, { pools, surface, basin, vents, sconces });
+  STATE.set(v, { pools, surface, basin, vents, sconces, cracks });
 }
 
 // Empties a reused world.
@@ -195,8 +290,8 @@ function clear(v: Voxels): void {
 // the corner is too tight.
 function cornerBasin(L: Layout, keep: Uint8Array): Basin | null {
   const { W, T } = L;
-  const xe = Math.min(...L.slots.filter((s) => s.wall === 'right').map((s) => s.x0)) - 3;
-  const ye = Math.min(...L.slots.filter((s) => s.wall === 'left').map((s) => s.y0)) - 3;
+  const xe = Math.min(...slotsOn(L, 'right').map((s) => s.x0)) - 3;
+  const ye = Math.min(...slotsOn(L, 'left').map((s) => s.y0)) - 3;
   for (let shrink = 0; shrink < 3; shrink++) {
     const rx = Math.min(8, xe - T) - shrink; // the rim reaches T + rx
     const ry = Math.min(8, ye - T) - shrink;
@@ -218,60 +313,17 @@ function cornerBasin(L: Layout, keep: Uint8Array): Basin | null {
   return null;
 }
 
-// Spots for the flame vents: open floor well clear of where agents work
-// and walk, of each other and of the pools (far enough to stand out from
-// their glow if there is room, else just clear of them).
-function ventSites(L: Layout, rng: Rng, keep: Uint8Array, pools: readonly Site[]): Array<[number, number]> {
-  const { W, D, T } = L;
-  const want = W >= 100 ? 3 : 2;
-  const out: Array<[number, number]> = [];
-  const clearOf = (x: number, y: number) => {
-    for (let dy = -5; dy <= 5; dy++) {
-      for (let dx = -5; dx <= 5; dx++) if (keep[x + dx + W * (y + dy)]) return false;
-    }
-    return true;
-  };
-  for (const apart of [11, 6]) {
-    for (let tries = 0; tries < 300 && out.length < want; tries++) {
-      const x = rng.int(T + 7, W - 9);
-      const y = rng.int(T + 7, D - 9);
-      if (!clearOf(x, y)) continue;
-      if (pools.some((p) => Math.hypot(x - p.x, y - p.y) < Math.max(p.rx, p.ry) + apart)) continue;
-      if (out.some(([ox, oy]) => Math.hypot(x - ox, y - oy) < 16)) continue;
-      out.push([x, y]);
-    }
-    if (out.length) break;
-  }
-  return out;
-}
-
-// Floor cells free for decor: not where agents work or walk, not round the
-// pools, the basin or the vents.
-function freeFloor(L: Layout, keep: Uint8Array, pools: readonly Site[], basin: Basin | null, vents: ReadonlyArray<[number, number]>): Uint8Array {
-  const { W, D, T } = L;
-  const free = new Uint8Array(W * D);
-  for (let y = T; y < D; y++) {
-    for (let x = T; x < W; x++) {
-      if (keep[x + W * y]) continue;
-      if (pools.some((p) => ((x - p.x) / (p.rx + 3)) ** 2 + ((y - p.y) / (p.ry + 3)) ** 2 <= 1)) continue;
-      if (basin && x <= T + basin.rx + 2 && y <= T + basin.ry + 2) continue;
-      if (vents.some(([vx, vy]) => Math.hypot(x - vx, y - vy) < 5)) continue;
-      free[x + W * y] = 1;
-    }
-  }
-  return free;
-}
-
 // Height of the rock in every column: the walls to H (a ragged voxel off
 // the top here and there), the floor to `floor`, with a lip rising along
 // the front cuts, bumps and low boulders on free floor.
-function columnTops(L: Layout, rng: Rng, free: Uint8Array): Uint8Array {
+function columnTops(L: Layout, rng: Rng, free: Uint8Array, spires: readonly Disc[], outcrops: readonly Disc[]): Uint8Array {
   const { W, D, H, T, floor } = L;
   const seed = rng.int(0, 0x3fffffff);
   const top = new Uint8Array(W * D);
-  const grow = (W - 72) / 98; // 0 at the smallest chunk, 1 at the largest
+  const grow = growth(L);
   const band = 5 + Math.round(grow * 8);
   const lip = 3 + grow * 6;
+  const cells: number[] = [];
   for (let y = 0; y < D; y++) {
     for (let x = 0; x < W; x++) {
       const c = x + W * y;
@@ -281,6 +333,7 @@ function columnTops(L: Layout, rng: Rng, free: Uint8Array): Uint8Array {
       }
       let h = floor;
       if (free[c]) {
+        cells.push(c);
         const edge = Math.min(W - 1 - x, D - 1 - y);
         if (edge < band) h += Math.max(0, Math.round((noise2(seed + 1, x * 0.09, y * 0.09) * 1.4 - 0.4) * lip * (1 - edge / band) ** 2));
         const b = noise2(seed + 2, x * 0.35, y * 0.35);
@@ -290,37 +343,64 @@ function columnTops(L: Layout, rng: Rng, free: Uint8Array): Uint8Array {
       top[c] = h;
     }
   }
-  for (let k = Math.round((W * D) / 1800); k > 0; k--) {
-    const cx = rng.int(T + 2, W - 3);
-    const cy = rng.int(T + 2, D - 3);
-    if (!free[cx + W * cy]) continue;
-    const r = rng.range(1.5, 3 + 2 * grow);
-    const tall = rng.int(2, 3 + Math.round(2 * grow));
+  const raise = (cx: number, cy: number, r: number, tall: number, shape: (d: number) => number, ok: (c: number) => boolean) => {
     for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
       for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
         const c = x + W * y;
         const d = Math.hypot(x - cx, y - cy) / r;
-        if (d >= 1 || !free[c]) continue;
-        top[c] = Math.max(top[c], floor + Math.round(tall * Math.sqrt(1 - d * d)));
+        if (d >= 1 || x < T || y < T || x >= W || y >= D || !ok(c)) continue;
+        top[c] = Math.min(H - 2, Math.max(top[c], floor + Math.round(tall * shape(d))));
       }
     }
+  };
+  // Boulders, low and lumpy.
+  for (let k = Math.round(cells.length / 260); k > 0 && cells.length; k--) {
+    const c = cells[rng.int(0, cells.length - 1)];
+    const r = rng.range(1.5, 3 + 3 * grow);
+    raise(c % W, Math.floor(c / W), r, rng.int(2, 3 + Math.round(3 * grow)), (d) => Math.sqrt(1 - d * d) * (0.7 + 0.3 * noise2(seed + 3, d * 5, r)), (cc) => free[cc] === 1);
   }
+  // Brimstone outcrops: craggy mounds (brimstone() yellows them).
+  for (const d of outcrops) raise(d.x, d.y, d.r, Math.round(4 + d.r), (q) => Math.max(0.2, (1 - q * q) * (0.6 + 0.5 * noise2(seed + 4, q * 4, d.x))), () => true);
+  // Spires: tall black cones.
+  for (const d of spires) raise(d.x, d.y, d.r, Math.round(d.tall ?? 12), (q) => (1 - q) ** 1.3, () => true);
   return top;
 }
 
-// The floor's top voxels: red rock, charred black in patches, glassy
-// obsidian where something once melted.
-function scorch(v: Voxels, L: Layout, rng: Rng, top: Uint8Array): void {
-  const { W, D, T } = L;
+// Brimstone through an outcrop, thickest on its crown, with crystals of it
+// standing on top.
+function brimstone(v: Voxels, L: Layout, rng: Rng, d: Disc, top: Uint8Array): void {
+  const { W, floor } = L;
+  const seed = rng.int(0, 0x3fffffff);
+  for (let y = Math.floor(d.y - d.r); y <= Math.ceil(d.y + d.r); y++) {
+    for (let x = Math.floor(d.x - d.r); x <= Math.ceil(d.x + d.r); x++) {
+      if (Math.hypot(x - d.x, y - d.y) > d.r) continue;
+      const h = top[x + W * y];
+      for (let z = floor; z < h; z++) if (noise2(seed, (x + z) * 0.4, (y - z) * 0.4) > 0.45 || z === h - 1) v.put(x, y, z, M.BRIMSTONE, 2 + Math.floor(hash3(seed, x, y, z) * 5));
+      if (h > floor + 3 && rng.chance(0.12)) for (let k = 0; k < rng.int(1, 3); k++) v.put(x, y, h + k, M.BRIMSTONE, 6);
+    }
+  }
+}
+
+// The floor's top voxels, in calm broad shades: red rock, charred black in
+// patches, glassy obsidian where something once melted; worn pale along
+// the walkways.
+function scorch(v: Voxels, L: Layout, rng: Rng, top: Uint8Array, trails: Uint8Array): void {
+  const { W, D, T, floor } = L;
   const seed = rng.int(0, 0x3fffffff);
   for (let y = T; y < D; y++) {
     for (let x = T; x < W; x++) {
-      const z = top[x + W * y] - 1;
+      const c = x + W * y;
+      const z = top[c] - 1;
+      if (z > floor + 2) continue; // rock standing on the floor keeps its layers
       const n = noise2(seed, x * 0.08, y * 0.08);
       const f = noise2(seed + 1, x * 0.45, y * 0.45);
-      const m = n < 0.4 || f < 0.06 ? M.ROCK_DARK : n > 0.85 || f > 0.92 ? M.OBSIDIAN : M.ROCK;
-      v.put(x, y, z, m, grain(seed, x, y, z));
-      if (n < 0.2) v.put(x, y, z - 1, M.ROCK_DARK, grain(seed, x, y, z - 1));
+      if (trails[c] && z === floor - 1) {
+        v.put(x, y, z, M.ROCK, WORN); // worn pale
+        continue;
+      }
+      const m = n < 0.24 || f < 0.05 ? M.ROCK_DARK : n > 0.88 || f > 0.94 ? M.OBSIDIAN : M.ROCK;
+      v.put(x, y, z, m, calm(seed + 2, x, y));
+      if (n < 0.2) v.put(x, y, z - 1, M.ROCK_DARK, 2);
     }
   }
 }
@@ -342,6 +422,115 @@ function crust(v: Voxels, L: Layout, rng: Rng, s: Site): void {
       v.put(x, y, z, glass ? M.OBSIDIAN : M.ROCK_DARK, glass ? rng.int(2, 6) : rng.int(0, 3));
       if (e < 1.8 && rng.chance(0.18) && v.get(x, y, z + 1) === M.AIR) v.put(x, y, z + 1, M.OBSIDIAN, rng.int(4, 7));
     }
+  }
+}
+
+// Cracks of lava in the floor, each in a lip of obsidian: from the pools
+// out toward the hub, and lone fissures across the open floor. The crust
+// stays whole where a walkway crosses, and they never open beside a
+// hollow. Returns a few voxels along each, for the light.
+function fissures(v: Voxels, L: Layout, rng: Rng, P: Plan, pools: readonly Site[]): Array<[number, number, number]> {
+  const { W, D, T, floor } = L;
+  const z = floor - 1;
+  const f = P.floor;
+  const grow = growth(L);
+  const out: Array<[number, number, number]> = [];
+  const solid = (x: number, y: number, zz: number) => isSolid(v.get(x, y, zz));
+  const open = (x: number, y: number) =>
+    x > T + 1 && y > T + 1 && x < W - 2 && y < D - 2 && !f.paths[x + W * y] &&
+    !f.sites.some((s) => !P.pools.includes(s) && Math.hypot(s.x - x, s.y - y) < s.r + 1) &&
+    solid(x, y, z) && solid(x, y, z - 1) && solid(x + 1, y, z) && solid(x - 1, y, z) && solid(x, y + 1, z) && solid(x, y - 1, z);
+  const crack = (x0: number, y0: number, a0: number, len: number) => {
+    let x = x0;
+    let y = y0;
+    let a = a0;
+    let n = 0;
+    for (let i = 0; i < len; i++) {
+      const cx = Math.round(x);
+      const cy = Math.round(y);
+      if (open(cx, cy)) {
+        v.put(cx, cy, z, M.LAVA, rng.int(2, 7));
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (v.get(cx + dx, cy + dy, z) !== M.LAVA) v.put(cx + dx, cy + dy, z, M.OBSIDIAN, rng.int(1, 4));
+        if (n++ % 9 === 4) out.push([cx, cy, z]);
+      }
+      a += rng.range(-0.35, 0.35);
+      x += Math.cos(a);
+      y += Math.sin(a);
+    }
+  };
+  // From the pools toward the hub.
+  pools.forEach((p, k) => {
+    for (let j = k ? 1 : rng.int(2, 3); j > 0; j--) {
+      const a = Math.atan2(f.hub.y - p.y, f.hub.x - p.x) + rng.range(-0.9, 0.9);
+      const e = 1.7;
+      crack(p.x + Math.cos(a) * p.rx * e, p.y + Math.sin(a) * p.ry * e, a, rng.int(20, 30 + Math.round(12 * grow)));
+    }
+  });
+  // Lone fissures on the open floor.
+  const free = f.free(2);
+  for (const q of scatter(L, rng, Math.round(3 + 11 * grow), 18, (x, y) => free[x + W * y] === 1)) crack(q.x, q.y, rng.range(0, Math.PI * 2), rng.int(12, 20 + Math.round(14 * grow)));
+  return out;
+}
+
+// The bone field: bones heaped and strewn, skulls, ribcages, and in the
+// middle a throne of obsidian and bone facing the room.
+function boneField(v: Voxels, L: Layout, rng: Rng, d: Disc, throne: Pt | null, f: Floor): void {
+  const { W, floor } = L;
+  const open = (x: number, y: number) => !f.paths[x + W * y] && Math.hypot(x - d.x, y - d.y) < d.r && v.ground(x, y, floor + 4) <= floor + 1;
+  const skip = (x: number, y: number) => !open(x, y);
+  for (let k = Math.round(d.r * 0.9); k > 0; k--) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(3, d.r - 1.5);
+    const x = Math.round(d.x + Math.cos(a) * r);
+    const y = Math.round(d.y + Math.sin(a) * r);
+    if (open(x, y)) bonePile(v, L, rng, x, y, rng.range(1.8, 3), skip);
+  }
+  for (let k = Math.round(d.r * 2.5); k > 0; k--) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(2.5, d.r);
+    const x = Math.round(d.x + Math.cos(a) * r);
+    const y = Math.round(d.y + Math.sin(a) * r);
+    const alongX = rng.chance(0.5);
+    const n = rng.int(2, 4);
+    let ok = true;
+    for (let i = 0; i < n && ok; i++) ok = open(alongX ? x + i : x, alongX ? y : y + i);
+    if (!ok) continue;
+    const g = v.ground(x, y, floor + 4);
+    for (let i = 0; i < n; i++) v.put(alongX ? x + i : x, alongX ? y : y + i, g, M.BONE, i === 0 || i === n - 1 ? 7 : 4);
+  }
+  // A ribcage or two: arches of bone over a spine.
+  for (let k = rng.int(1, 2); k > 0; k--) {
+    const a = rng.range(0, Math.PI * 2);
+    const x0 = Math.round(d.x + Math.cos(a) * d.r * 0.6);
+    const y0 = Math.round(d.y + Math.sin(a) * d.r * 0.6);
+    let ok = true;
+    for (let i = -1; i <= 6 && ok; i++) for (let q = -2; q <= 2 && ok; q++) ok = open(x0 + i, y0 + q);
+    if (!ok) continue;
+    for (let i = 0; i < 6; i++) {
+      v.put(x0 + i, y0, floor, M.BONE, 5);
+      if (i % 2) continue;
+      for (const q of [-2, 2]) v.put(x0 + i, y0 + q, floor, M.BONE, 4);
+      for (const q of [-2, -1, 1, 2]) v.put(x0 + i, y0 + q, floor + (Math.abs(q) === 2 ? 1 : 2), M.BONE, 6);
+      v.put(x0 + i, y0, floor + 3, M.BONE, 7);
+    }
+  }
+  if (!throne) return;
+  // The throne: an obsidian seat, a backrest of bone with skulls on its
+  // posts, armrests; it faces the hub.
+  const { x: tx, y: ty } = throne;
+  const fx = Math.sign(f.hub.x - tx) || 1;
+  const fy = Math.sign(f.hub.y - ty) || 1;
+  const backX = Math.abs(f.hub.x - tx) >= Math.abs(f.hub.y - ty); // the back runs along y, behind in x
+  for (let y = ty - 1; y <= ty + 1; y++) for (let x = tx - 1; x <= tx + 1; x++) for (let h = 0; h < 2; h++) v.put(x, y, floor + h, M.OBSIDIAN, h ? 5 : 2);
+  for (let q = -1; q <= 1; q++) {
+    const [bx, by] = backX ? [tx - 2 * fx, ty + q] : [tx + q, ty - 2 * fy];
+    for (let h = 0; h < 6; h++) v.put(bx, by, floor + h, q === 0 && h > 2 ? M.OBSIDIAN : M.BONE, h === 5 ? 7 : 4);
+  }
+  for (const q of [-2, 2]) {
+    const [ax, ay] = backX ? [tx, ty + q] : [tx + q, ty];
+    for (let h = 0; h < 3; h++) v.put(ax, ay, floor + h, M.BONE, h === 2 ? 7 : 3);
+    const [px, py] = backX ? [tx - 2 * fx, ty + q] : [tx + q, ty - 2 * fy];
+    floorSkull(v, px - (backX ? 0 : 1), py - (backX ? 1 : 0), floor, !backX);
   }
 }
 
@@ -437,7 +626,7 @@ function buildSconces(v: Voxels, L: Layout): Array<[number, number, number]> {
   const out: Array<[number, number, number]> = [];
   const z = L.floor + SCONCE_H;
   for (const wall of ['left', 'right'] as const) {
-    const spans = L.slots.filter((s) => s.wall === wall).map((s) => [wall === 'left' ? s.y0 : s.x0, s.len] as const);
+    const spans = slotsOn(L, wall).map((s) => [wall === 'left' ? s.y0 : s.x0, s.len] as const);
     const along: number[] = [];
     for (const [a0, a1] of wallGaps(L, wall)) if (a0 > L.T && a1 - a0 >= 6) along.push(Math.floor((a0 + a1) / 2));
     for (const [a0, len] of spans) along.push(a0 + Math.floor(len / 2));
@@ -633,6 +822,12 @@ function weather(c: Ctx, L: Layout): void {
   const st = STATE.get(c.v);
   if (!st) return;
   lakes(c, L, st);
+  // The cracks glow and breathe embers.
+  st.cracks.forEach(([x, y, z], k) => {
+    if (c.v.get(x, y, z) !== M.LAVA) return;
+    if (k % 2 === 0) c.light({ x: x + 0.5, y: y + 0.5, z: z + 2, color: LAVA_GLOW, radius: 16, intensity: 0.5 * flicker(c.t * 0.4, k * 3) });
+    if (c.rng.chance(c.dt * 0.4)) rise(c, x + 0.5, y + 0.5, z + 1);
+  });
   if (st.basin) fall(c, L, st.basin);
   jets(c, L, st.vents);
   st.sconces.forEach(([x, y, z], k) => {
@@ -770,11 +965,14 @@ export const hell: Biome = {
   tagline: 'Lava lakes, brimstone and the bones of the damned',
   palette: PALETTE,
   backdrop: hex('#080202'),
+  sky: 'embers',
   grade: GRADE,
   colors: COLORS,
   generate,
   props: PROPS,
   weather,
+  build: BUILD,
+  pois: (L) => plan(L).floor.pois.slice(),
 };
 
 export default hell;

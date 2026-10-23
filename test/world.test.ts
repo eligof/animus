@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { World } from '../src/world/world.ts';
-import { loadConfig, saveConfig, configPath } from '../src/config.ts';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { loadConfig, saveConfig, configPath, updateConfig } from '../src/config.ts';
+import { HD_TIP, hdTipOnce } from '../src/app.ts';
 import { Screen } from '../src/term/screen.ts';
 import { parseKeys } from '../src/term/terminal.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
@@ -48,9 +50,11 @@ test('t / T / digits switch themes', () => {
   assert.equal(w.theme.id, ids[1 % ids.length]);
   w.handleKey(key('T'));
   assert.equal(w.theme.id, ids[0]);
-  w.handleKey(key(String(THEMES.length)));
+  w.handleKey(key(THEMES.length === 10 ? '0' : String(THEMES.length)));
   assert.equal(w.theme.id, ids[THEMES.length - 1]);
-  assert.equal(w.handleKey(key('9')), null);
+  // A digit past the last preset does nothing (0 is the tenth).
+  const beyond = THEMES.length < 9 ? String(THEMES.length + 1) : THEMES.length < 10 ? '0' : null;
+  if (beyond) assert.equal(w.handleKey(key(beyond)), null);
 });
 
 test('picker previews live and closes', () => {
@@ -258,4 +262,59 @@ test('only preferences the user changed are saved', () => {
   assert.deepEqual(w.prefs(), { pixels: 'sextant' });
   w.handleKey(key('l'));
   assert.deepEqual(w.prefs(), { pixels: 'sextant', lights: false });
+});
+
+test('f gives the whole terminal to the scene and back', () => {
+  const w = demoWorld();
+  const now = advance(w, 2);
+  const s = new Screen(120, 36);
+  w.draw(s, now);
+  assert.match(s.toText().split('\n')[0], /ANIMUS/);
+  w.handleKey(key('f'));
+  w.draw(s, now + 50);
+  const text = s.toText();
+  assert.doesNotMatch(text.split('\n')[0], /ANIMUS/);
+  assert.doesNotMatch(text, /CREW/);
+  w.handleKey(key('f'));
+  w.draw(s, now + 100);
+  assert.match(s.toText().split('\n')[0], /ANIMUS/);
+});
+
+test('the HD tip shows once in the ticker row, then goes', () => {
+  const w = demoWorld();
+  const now = advance(w, 2);
+  w.flash(HD_TIP, now + 8000);
+  const s = new Screen(120, 36);
+  w.draw(s, now);
+  assert.match(s.toText(), /HD mode: run animus in kitty, Ghostty or WezTerm/);
+  w.draw(s, now + 8000);
+  assert.doesNotMatch(s.toText(), /HD mode/);
+});
+
+test('the HD tip is offered once ever, only without images', () => {
+  const p = join(tempDir('animus-tip'), 'animus', 'config.json');
+  assert.equal(hdTipOnce('hd', false, p), '');
+  assert.equal(hdTipOnce('sextant', true, p), '');
+  assert.equal(loadConfig(p).hdTipSeen, undefined, 'nothing written');
+  assert.equal(hdTipOnce('sextant', false, p), HD_TIP);
+  assert.equal(loadConfig(p).hdTipSeen, true);
+  assert.equal(hdTipOnce('half', false, p), '');
+  // Saving the theme later keeps it.
+  saveConfig({ ...loadConfig(p), theme: 'den' }, p);
+  assert.equal(hdTipOnce('half', false, p), '');
+});
+
+test('updateConfig sets one key, keeps the rest and leaves garbage alone', () => {
+  const dir = tempDir('animus-cfg3');
+  const p = join(dir, 'config.json');
+  writeFileSync(p, JSON.stringify({ theme: 'club', future: [1, 2] }));
+  assert.equal(updateConfig({ hdTipSeen: true }, p), true);
+  assert.deepEqual(JSON.parse(readFileSync(p, 'utf8')), { theme: 'club', future: [1, 2], hdTipSeen: true });
+  const bad = join(dir, 'bad.json');
+  writeFileSync(bad, '{ not json');
+  assert.equal(updateConfig({ hdTipSeen: true }, bad), false);
+  assert.equal(readFileSync(bad, 'utf8'), '{ not json');
+  writeFileSync(bad, '[1]');
+  assert.equal(updateConfig({ hdTipSeen: true }, bad), false);
+  assert.equal(updateConfig({ hdTipSeen: true }, join(dir, 'bad.json', 'x.json')), false, 'unwritable path: no throw');
 });

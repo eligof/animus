@@ -17,6 +17,8 @@ export type ChromeCtx = {
   mode: string;
   events: AgentEvent[];
   notice: string;
+  // A passing tip, at the start of the ticker row.
+  tip?: string;
   t: number;
   now: number;
   paused: boolean;
@@ -89,7 +91,9 @@ export function drawHeader(s: Screen, r: Rect, c: ChromeCtx): void {
   for (const [str, color] of parts) {
     if (rx >= end) break;
     const badge = str.startsWith(' ');
-    rx = s.text(rx, r.y, str, color, badge ? (c.mode === 'demo' ? p.warn : p.good) : p.panel, badge ? BOLD : 0, end) + 2;
+    // The mode badge is an outline, not a block: it labels, it doesn't shout.
+    if (badge) rx = s.text(rx, r.y, `[${str.trim()}]`, c.mode === 'demo' ? p.warn : p.good, p.panel, BOLD, end) + 2;
+    else rx = s.text(rx, r.y, str, color, p.panel, 0, end) + 2;
   }
 }
 
@@ -107,6 +111,8 @@ export function drawRoster(s: Screen, r: Rect, c: ChromeCtx): void {
   const bottom = r.y + r.h;
   for (let i = 0; i < c.actors.length; i++) {
     const a = c.actors[i];
+    // A gap between teams (each lead and its subagents), when there's room.
+    if (i > 0 && a.info.role === 'lead' && y + 3 <= bottom) y++;
     if (y + 2 > bottom) {
       s.text(r.x + 2, Math.min(y, bottom - 1), `+${c.actors.length - i} more`, p.dim, bg, 0, end);
       break;
@@ -123,7 +129,9 @@ export function drawRoster(s: Screen, r: Rect, c: ChromeCtx): void {
     }
     const age = elapsed(c.now - a.info.since);
     const nameEnd = end - age.length - 2;
-    s.text(indent + 4, y, clip(a.info.name, Math.max(1, nameEnd - indent - 4)), a.traits.color, rowBg, BOLD, nameEnd);
+    // Waiting and finished agents step back so the busy ones stand out.
+    const quiet = !working(a) && !sel;
+    s.text(indent + 4, y, clip(a.info.name, Math.max(1, nameEnd - indent - 4)), quiet ? mix(a.traits.color, rowBg, 0.45) : a.traits.color, rowBg, BOLD, nameEnd);
     s.text(end - age.length - 1, y, age, p.dim, rowBg, 0, end);
     const act = a.info.activity;
     s.put(indent + 1, y + 1, activityGlyph(act), activityColor(act, c.theme), rowBg);
@@ -133,7 +141,7 @@ export function drawRoster(s: Screen, r: Rect, c: ChromeCtx): void {
 }
 
 const KEYS: Array<[string, string]> = [
-  ['t', 'theme'], ['p', 'presets'], ['tab', 'select'], ['d', 'demo'], ['r', 'pixels'], ['space', 'pause'], ['?', 'help'], ['q', 'quit'],
+  ['t', 'theme'], ['p', 'pick'], ['tab', 'select'], ['+/-', 'zoom'], ['r', 'pixels'], ['space', 'pause'], ['?', 'help'], ['q', 'quit'],
 ];
 
 export function drawFooter(s: Screen, r: Rect, c: ChromeCtx): void {
@@ -143,6 +151,10 @@ export function drawFooter(s: Screen, r: Rect, c: ChromeCtx): void {
   fillRow(s, r, r.y, tickerBg);
   fillRow(s, r, r.y + 1, p.panel);
   let x = r.x + 1;
+  if (c.tip) {
+    x = s.text(x, r.y, c.tip, p.accent, tickerBg, BOLD, end);
+    x = s.text(x, r.y, '  ·  ', p.dim, tickerBg, 0, end);
+  }
   const sel = c.selectionInFooter ? c.actors.find((a) => a.info.id === c.selectedId) : undefined;
   if (sel) {
     x = s.text(x, r.y, '▸ ', sel.traits.color, tickerBg, BOLD, end);
@@ -153,21 +165,22 @@ export function drawFooter(s: Screen, r: Rect, c: ChromeCtx): void {
   }
   const recent = sel ? [] : c.events.slice(-12).reverse();
   if (!sel && recent.length === 0) s.text(x, r.y, 'waiting for agent activity…', p.dim, tickerBg, 0, end);
+  const colorOf = new Map(c.actors.map((a) => [a.info.id, a.traits.color] as const));
   recent.forEach((e, i) => {
     if (x >= end - 4) return;
     const fresh = c.now - e.at < 1500;
-    const d = new Date(e.at);
-    const stamp = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
     if (i > 0) x = s.text(x, r.y, '  ·  ', p.dim, tickerBg, 0, end);
-    x = s.text(x, r.y, stamp + ' ', p.dim, tickerBg, 0, end);
-    x = s.text(x, r.y, clip(e.name, 12), fresh ? p.accent2 : p.panelText, tickerBg, fresh ? BOLD : 0, end);
+    // How long ago, on the newest entry only: the rest read in order.
+    if (i === 0) x = s.text(x, r.y, `${elapsed(c.now - e.at)} `, p.dim, tickerBg, 0, end);
+    const who = colorOf.get(e.agentId) ?? p.panelText;
+    x = s.text(x, r.y, clip(e.name, 12), fresh ? who : mix(who, tickerBg, 0.25), tickerBg, BOLD, end);
     x = s.text(x, r.y, ` ${activityGlyph(e.activity)} `, activityColor(e.activity, c.theme), tickerBg, 0, end);
     x = s.text(x, r.y, clip(e.detail, 32), fresh ? p.panelText : mix(p.panelText, tickerBg, 0.4), tickerBg, 0, end);
   });
   x = r.x + 1;
   for (const [k, label] of KEYS) {
     if (x >= end) break;
-    x = s.text(x, r.y + 1, ` ${k} `, p.panel, p.accent, BOLD, end);
+    x = s.text(x, r.y + 1, ` ${k} `, p.panelText, mix(p.panel, p.accent, 0.35), BOLD, end);
     x = s.text(x, r.y + 1, ` ${label}  `, p.panelText, p.panel, 0, end);
   }
   if (c.notice) {

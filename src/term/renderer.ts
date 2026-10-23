@@ -9,13 +9,16 @@ export function detectColorMode(env: NodeJS.ProcessEnv = process.env): ColorMode
   return ct === 'truecolor' || ct === '24bit' ? 'truecolor' : '256';
 }
 
+// One colour slot of an SGR: `base` 38 (fg) or 48 (bg); -1 (DEFAULT) is the
+// terminal's own colour (39 / 49).
+function slot(mode: ColorMode, c: number, base: number): string {
+  if (c === -1) return String(base + 1);
+  const rgb: [number, number, number] = [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+  return mode === 'truecolor' ? `${base};2;${rgb[0]};${rgb[1]};${rgb[2]}` : `${base};5;${rgbTo256(rgb)}`;
+}
+
 function sgr(mode: ColorMode, fg: number, bg: number): string {
-  if (mode === 'truecolor') {
-    return `\x1b[38;2;${(fg >> 16) & 255};${(fg >> 8) & 255};${fg & 255};48;2;${(bg >> 16) & 255};${(bg >> 8) & 255};${bg & 255}m`;
-  }
-  const f = rgbTo256([(fg >> 16) & 255, (fg >> 8) & 255, fg & 255]);
-  const b = rgbTo256([(bg >> 16) & 255, (bg >> 8) & 255, bg & 255]);
-  return `\x1b[38;5;${f};48;5;${b}m`;
+  return `\x1b[${slot(mode, fg, 38)};${slot(mode, bg, 48)}m`;
 }
 
 // Whole screen as plain ANSI lines (no cursor addressing), for snapshots
