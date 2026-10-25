@@ -1,15 +1,11 @@
 import type { RGB } from '../term/color.ts';
 import { hex } from '../term/color.ts';
-import type { Block, Construction, Works } from '../cave/build.ts';
-import type { Critter } from '../cave/critter.ts';
-import { hub, slotRect } from '../cave/layout.ts';
-import { M } from '../cave/materials.ts';
-import type { EmoteSprite, Facing, Layout, Particle, Poi, Slot, SlotKind } from '../cave/types.ts';
-import type { Voxels } from '../cave/voxels.ts';
-import * as wizard from '../cave/wizard.ts';
+import type { Block, Construction, Works } from './build.ts';
 import type { Emote, Pose } from './character.ts';
+import type { Critter } from './critter.ts';
 import { Rng, hashString } from './rng.ts';
 import type { Actor } from './stage.ts';
+import type { Facing, Particle, Poi, Spot } from './types.ts';
 
 // The life between the work: idle characters wander between the spots
 // they like (a seat, a drink, a view, the dance floor, the fire, the
@@ -18,15 +14,15 @@ import type { Actor } from './stage.ts';
 // bang and cheers a finish. Every choice comes from the character's own
 // seeded Rng, so a scene plays out the same way every time.
 
-export type Spot = { x: number; y: number };
+export type { Spot };
 
 export const SLEEP_AFTER = 150; // seconds idle before a nap: awake long enough to wander, chat and build
 const WANDER = 0.7; // walking pace idling about, of the normal pace
 const HAUL = 0.85;
 const MAX_HAULERS = 4;
-const REACT_R = 40; // how far a bang or a cheer carries, voxels
+const REACT_R = 40; // how far a bang or a cheer carries, units
 const CHEER_R = 70; // everyone this near a build cheers it finished, and each quarter of the way
-const CHAT_GAP = 5; // voxels between two chatting characters
+const CHAT_GAP = 5; // units between two chatting characters
 const CHAT_EMOTES: readonly Emote[] = ['note', 'heart', 'idea', 'question'];
 
 // A short pose over whatever else is going on: a wave, a cheer, a flinch,
@@ -37,7 +33,7 @@ export type Errand =
   | { kind: 'visit'; poi: Poi; arrived: boolean; until: number; pose: Pose; since: number; beat: number }
   | { kind: 'chat'; with: string; arrived: boolean; until: number; since: number; beat: number; turn: number }
   | { kind: 'pet'; arrived: boolean; until: number; since: number }
-  | { kind: 'haul'; site: Construction; step: 'fetch' | 'pick' | 'carry' | 'place'; until: number; mat: number; trips: number; since: number }
+  | { kind: 'haul'; site: Construction; step: 'fetch' | 'pick' | 'carry' | 'place'; until: number; item: number; trips: number; since: number }
   | { kind: 'nap'; wake: number }; // clock time it next gets up for a moment
 
 export type Mind = {
@@ -76,7 +72,7 @@ export function newMind(id: string, clock: number): Mind {
 }
 
 // What a character looks like right now: its pose, what it faces, and the
-// material of a block it holds.
+// colour (an index into the world's build colours) of a block it holds.
 export type Look = { pose: Pose; face?: Spot; item?: number };
 
 // What life needs from the stage.
@@ -87,7 +83,7 @@ export type LifeHost = {
   leave(a: Actor): void; // out through the entrance
   idleFor(a: Actor): number; // seconds in the current activity
   spawn(p: Particle): void;
-  occupied(x: number, y: number, z: number): boolean; // someone stands in this voxel
+  occupied(x: number, y: number, z: number): boolean; // someone stands in this unit block
 };
 
 export function faceToward(a: Spot, f: Spot, fallback: Facing): Facing {
@@ -476,7 +472,7 @@ export class Life {
   }
 
   private haul(a: Actor, site: Construction, trips: number): void {
-    a.mind.errand = { kind: 'haul', site, step: 'fetch', until: 0, mat: 0, trips, since: this.clock };
+    a.mind.errand = { kind: 'haul', site, step: 'fetch', until: 0, item: 0, trips, since: this.clock };
     this.host.walk(a, this.fetchSpot(site, a));
   }
 
@@ -611,7 +607,7 @@ export class Life {
           this.end(a);
           return;
         }
-        e.mat = s.nextMat();
+        e.item = s.nextColor();
         s.carriers++;
         e.step = 'carry';
         e.since = c;
@@ -712,7 +708,7 @@ export class Life {
   private dust(s: Construction): void {
     const r = this.rng;
     for (let i = 0; i < 30; i++) {
-      this.host.spawn({ kind: 'glint', x: s.plaza.x + r.range(-s.reach, s.reach), y: s.plaza.y + r.range(-s.reach, s.reach), z: s.top.z * r.next(), vx: 0, vy: 0, vz: r.range(1, 4), life: r.range(0.6, 1.4), color: hex('#b8a78f'), glow: false, gravity: 0 });
+      this.host.spawn({ kind: 'smoke', x: s.plaza.x + r.range(-s.reach, s.reach), y: s.plaza.y + r.range(-s.reach, s.reach), z: s.top.z * r.next(), vx: 0, vy: 0, vz: r.range(1, 4), life: r.range(0.6, 1.4), color: hex('#b8a78f'), glow: false, gravity: 0 });
     }
   }
 
@@ -785,7 +781,8 @@ export class Life {
     return a.info.activity === 'idle' && this.host.idleFor(a) >= SLEEP_AFTER && this.clock >= a.mind.up;
   }
 
-  private carrying(a: Actor): boolean {
+  // Hauling a block: picking it up, carrying it or setting it down.
+  carrying(a: Actor): boolean {
     const e = a.mind.errand;
     return e?.kind === 'haul' && (e.step === 'pick' || e.step === 'carry' || e.step === 'place');
   }
@@ -847,8 +844,8 @@ export class Life {
     const e = a.mind.errand;
     if (e?.kind === 'haul') {
       const pile = { x: (e.site.pile.x0 + e.site.pile.x1) / 2, y: (e.site.pile.y0 + e.site.pile.y1) / 2 };
-      if (e.step === 'carry') return { pose: 'carry', item: e.mat };
-      if (e.step === 'place') return { pose: 'place', item: e.mat, face: e.site.plaza };
+      if (e.step === 'carry') return { pose: 'carry', item: e.item };
+      if (e.step === 'place') return { pose: 'place', item: e.item, face: e.site.plaza };
       if (e.step === 'pick') return { pose: 'place', face: pile };
       return { pose: walking ? 'walk' : 'idle' };
     }
@@ -876,105 +873,4 @@ function poseAt(kind: Poi['kind'], rng: Rng): Pose {
     case 'warm': return rng.chance(0.5) ? 'sit' : 'idle';
     default: return 'idle';
   }
-}
-
-// ── points of interest for scenes that name none ─────────────────────────
-// Warm spots and a seat by the idle prop's fire, views of the orb and the
-// shelves, a sip from the cauldron, the rim of any pool (water to drink,
-// lava to warm by, anything else to look at), a dance floor at the hub and
-// the critter's spot in front of it.
-export function defaultPois(L: Layout, v: Voxels): Poi[] {
-  const out: Poi[] = [];
-  const slot = (k: SlotKind) => L.slots.find((q) => q.kind === k);
-  const at = (q: Slot, along: number, outward: number): Spot => (q.wall === 'right' ? { x: q.spot.x + along, y: q.spot.y + outward } : { x: q.spot.x + outward, y: q.spot.y + along });
-  const mid = (q: Slot): Spot => {
-    const r = slotRect(q);
-    return { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 };
-  };
-  const fire = slot('idle');
-  if (fire) {
-    out.push({ ...at(fire, -9, 2), kind: 'warm', face: mid(fire) });
-    out.push({ ...at(fire, 9, 2), kind: 'warm', face: mid(fire) });
-    out.push({ ...at(fire, 4, 9), kind: 'seat', face: mid(fire) });
-  }
-  const orb = slot('web');
-  if (orb) out.push({ ...at(orb, 4, 10), kind: 'view', face: mid(orb) });
-  const shelf = slot('read');
-  if (shelf) out.push({ ...at(shelf, -5, 10), kind: 'view', face: mid(shelf) });
-  const pot = slot('run');
-  if (pot) out.push({ ...at(pot, 10, 3), kind: 'drink', face: mid(pot) });
-  const h = hub(L);
-  for (const p of pools(L, v)) {
-    const kind: Poi['kind'] = p.mat === M.WATER ? 'drink' : p.mat === M.LAVA ? 'warm' : 'view';
-    const d = Math.hypot(h.x - p.x, h.y - p.y) || 1;
-    const ux = (h.x - p.x) / d;
-    const uy = (h.y - p.y) / d;
-    // Out from the middle of the pool toward the hub, to just past its rim.
-    let k = 0;
-    while (k < 30 && isLiquid(v.base[v.idx(clampI(p.x + ux * k, 0, L.W - 1), clampI(p.y + uy * k, 0, L.D - 1), L.floor - 1)])) k++;
-    out.push({ x: p.x + ux * (k + 2), y: p.y + uy * (k + 2), kind, face: { x: p.x, y: p.y } });
-  }
-  const g = (L.W - L.T) * 0.13;
-  out.push({ x: h.x + 2, y: h.y - 3, kind: 'dance' });
-  out.push({ x: h.x - 3, y: h.y + 2, kind: 'dance' });
-  out.push({ x: h.x + g, y: h.y + g, kind: 'pet' });
-  return out.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) }));
-}
-
-const clampI = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(n)));
-const LIQUIDS = new Set<number>([M.WATER, M.OIL, M.LAVA, M.ACID, M.SLUDGE, M.POTION, M.COFFEE]);
-const isLiquid = (m: number) => LIQUIDS.has(m);
-
-// The middle of every liquid's pools on the floor (one spot per liquid).
-function pools(L: Layout, v: Voxels): Array<{ x: number; y: number; mat: number }> {
-  const sum = new Map<number, [number, number, number]>();
-  const z = L.floor - 1;
-  for (let y = L.T; y < L.D; y += 2) {
-    for (let x = L.T; x < L.W; x += 2) {
-      const m = v.base[v.idx(x, y, z)];
-      if (!isLiquid(m)) continue;
-      const s = sum.get(m) ?? [0, 0, 0];
-      s[0] += x;
-      s[1] += y;
-      s[2]++;
-      sum.set(m, s);
-    }
-  }
-  return [...sum.entries()].filter(([, s]) => s[2] >= 3).map(([mat, s]) => ({ x: s[0] / s[2], y: s[1] / s[2], mat }));
-}
-
-// ── emotes ───────────────────────────────────────────────────────────────
-// Drawn by the sprite module when it offers them; until then, tiny glyphs.
-const external = (wizard as unknown as { emoteSprite?: (e: Emote, t: number) => EmoteSprite }).emoteSprite;
-
-const GLYPHS: Record<Emote, { rows: string[]; color: string }> = {
-  excl: { rows: ['#', '#', '#', '.', '#'], color: '#ff4f3a' },
-  question: { rows: ['##.', '..#', '.#.', '...', '.#.'], color: '#8fd3ff' },
-  heart: { rows: ['#.#', '###', '.#.'], color: '#ff6b9d' },
-  note: { rows: ['.##', '.#.', '##.'], color: '#7ff0c0' },
-  idea: { rows: ['.#.', '###', '###', '.#.'], color: '#ffe066' },
-  sweat: { rows: ['.#.', '###', '.#.'], color: '#7fc8ff' },
-  zzz: { rows: ['###', '.#.', '###'], color: '#c8d0ff' },
-  anger: { rows: ['#.#', '.#.', '#.#'], color: '#ff3b3b' },
-  star: { rows: ['.#.', '###', '#.#'], color: '#ffd34a' },
-  cup: { rows: ['.:.', '##.', '###', '##.'], color: '#f4ead2' },
-};
-
-const cache = new Map<Emote, EmoteSprite>();
-
-function glyph(e: Emote): EmoteSprite {
-  const hit = cache.get(e);
-  if (hit) return hit;
-  const g = GLYPHS[e];
-  const col = hex(g.color);
-  const steam = hex('#cfd8e6');
-  const w = Math.max(...g.rows.map((r) => r.length));
-  const px = g.rows.map((r) => [...r.padEnd(w, '.')].map((ch) => (ch === '#' ? col : ch === ':' ? steam : null)));
-  const sp: EmoteSprite = { w, h: g.rows.length, px, glow: px.map((r) => r.slice()), ax: Math.floor(w / 2), ay: g.rows.length - 1 };
-  cache.set(e, sp);
-  return sp;
-}
-
-export function emoteArt(e: Emote, t: number): EmoteSprite {
-  return external ? external(e, t) : glyph(e);
 }

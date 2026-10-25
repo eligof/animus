@@ -2,8 +2,11 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-// hdTipSeen: the one-time hint that HD mode exists (see app.ts) was shown.
-export type Config = { theme?: string; pixels?: 'half' | 'sextant' | 'hd'; lights?: boolean; hdTipSeen?: boolean };
+// view: the scene (an image, where the terminal shows images) or the agent
+// dashboard (text); auto picks by the terminal. Keys from older versions
+// (pixels, hdTipSeen) are ignored.
+export type ViewPref = 'auto' | 'scene' | 'dashboard';
+export type Config = { theme?: string; view?: ViewPref; lights?: boolean };
 
 export function configPath(env: NodeJS.ProcessEnv = process.env): string {
   return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'animus', 'config.json');
@@ -14,9 +17,8 @@ export function loadConfig(path = configPath()): Config {
     const d = JSON.parse(readFileSync(path, 'utf8'));
     const cfg: Config = {};
     if (typeof d?.theme === 'string') cfg.theme = d.theme;
-    if (d?.pixels === 'half' || d?.pixels === 'sextant' || d?.pixels === 'hd') cfg.pixels = d.pixels;
+    if (d?.view === 'auto' || d?.view === 'scene' || d?.view === 'dashboard') cfg.view = d.view;
     if (typeof d?.lights === 'boolean') cfg.lights = d.lights;
-    if (typeof d?.hdTipSeen === 'boolean') cfg.hdTipSeen = d.hdTipSeen;
     return cfg;
   } catch {
     return {};

@@ -47,6 +47,75 @@ test('error tool_result flags error for 3s', () => {
   assert.equal(st.errorUntil, Date.parse(ts(2)) + 3000);
 });
 
+// A call a PreToolUse hook blocked, as Claude Code records it, and the
+// user turning a call down.
+const HOOK = 'PreToolUse:Bash hook error: [gate]: blocked until the facts are stated';
+const REJECTED = "The user doesn't want to proceed with this tool use. The tool use was rejected.";
+
+test('a call a hook blocked, or the user turned down, is no failure', () => {
+  for (const content of [HOOK, [{ type: 'text', text: HOOK }], REJECTED, [{ type: 'text', text: REJECTED }]]) {
+    const st = initialState(0);
+    applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'rm -rf build' } }]));
+    applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content }]));
+    assert.equal(st.activity, 'run', JSON.stringify(content));
+    assert.equal(st.errorUntil, 0);
+    assert.equal(st.pending.size, 0);
+  }
+  // A command whose output mentions a hook error still failed.
+  const st = initialState(0);
+  applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'make' } }]));
+  applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: `Exit code 1\n${HOOK}` }]));
+  assert.equal(st.activity, 'error');
+});
+
+test('a call the permission rules denied is no failure either', () => {
+  const denied = 'Permission to use Bash with command rm -rf build has been denied.';
+  for (const content of [denied, [{ type: 'text', text: denied }]]) {
+    const st = initialState(0);
+    applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'rm -rf build' } }]));
+    applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content }]));
+    assert.equal(st.activity, 'run', JSON.stringify(content));
+    assert.equal(st.errorUntil, 0);
+  }
+  // A command that failed for want of a permission did fail.
+  const st = initialState(0);
+  applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'cat /root/x' } }]));
+  applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'Permission to use /root/x: EACCES' }]));
+  assert.equal(st.activity, 'error');
+});
+
+test('a call a built-in permission check denied is no failure either', () => {
+  const denied = 'Permission for this command was denied by a built-in Claude Code check.';
+  for (const content of [denied, [{ type: 'text', text: denied }]]) {
+    const st = initialState(0);
+    applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'rm -rf build' } }]));
+    applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content }]));
+    assert.equal(st.activity, 'run', JSON.stringify(content));
+    assert.equal(st.errorUntil, 0);
+  }
+  // A server turning a command away is a real failure.
+  const st = initialState(0);
+  applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'git push' } }]));
+  applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'Permission for this command was denied by the remote: 403' }]));
+  assert.equal(st.activity, 'error');
+});
+
+test('a tool call the user interrupted is no failure', () => {
+  const stopped = '[Request interrupted by user for tool use]';
+  for (const content of [stopped, [{ type: 'text', text: stopped }]]) {
+    const st = initialState(0);
+    applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }]));
+    applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content }]));
+    assert.notEqual(st.activity, 'error', JSON.stringify(content));
+    assert.equal(st.errorUntil, 0);
+  }
+  // Output that only looks like it is a real failure.
+  const st = initialState(0);
+  applyRecord(st, assistant(1, [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'curl x' } }]));
+  applyRecord(st, user(2, [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: '[Request failed with status 500]' }]));
+  assert.equal(st.activity, 'error');
+});
+
 test('string user content is a new prompt', () => {
   const st = initialState(0);
   st.ended = true;

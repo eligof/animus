@@ -1,19 +1,31 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import type { Activity, AgentEvent, AgentInfo, AgentSource } from '../agents.ts';
+import type { Activity, AgentEvent, AgentInfo, AgentSource, Bubble, Gain, SendResult } from '../agents.ts';
 import { diffEvents } from '../agents.ts';
+import { roleOf } from '../pet/crew.ts';
+import { projectRoot } from '../pet/project.ts';
 import { clip } from './activity.ts';
+import { ChatReader } from './chat.ts';
+import { GainReader } from './gains.ts';
+import { entries, sendTo } from './inbox.ts';
+import type { Entry } from './inbox.ts';
 import { findTranscript } from './paths.ts';
 import { listSessions, pidAlive } from './sessions.ts';
 import { TranscriptTail, applyRecord, initialState } from './transcript.ts';
 import type { TranscriptState } from './transcript.ts';
+import { VitalsReader } from './vitals.ts';
 
 type Meta = { agentType: string; description: string; toolUseId: string; background: boolean; finished: boolean };
 
 type Tracked = {
   tail: TranscriptTail;
   state: TranscriptState;
+  vitals: VitalsReader;
+  chat: ChatReader;
+  gains: GainReader;
+  paid: boolean; // its finished run was settled (subagents)
   meta?: Meta;
+  crew?: string; // subagents: the crew its gains go to
   // Lead transcripts only: ids of tool calls that returned, and subagent
   // task notifications (agent id → status) — how Claude Code reports that a
   // subagent finished.
@@ -35,7 +47,18 @@ const STALE_TEXT_MS = 600_000;
 const THINK_AFTER_MS = 8000;
 // A session whose transcript does not exist yet is looked up again after this.
 const MISS_RETRY_MS = 5000;
+// Gains kept until drained, at most.
+const MAX_GAINS = 2000;
+// A gain stamped further ahead than this is a bad clock: it would lift its
+// role's saved floor (see pet/crew.ts) past every real one to come.
+const MAX_AHEAD_MS = 60_000;
+// A background subagent's run is settled by its task notification, which
+// can reach the lead's transcript minutes after the run's last write; with
+// none this long after it, the run is taken to have finished well.
+const NOTIFY_GRACE_MS = 60_000;
 const NOTIFICATION = /<task-id>([^<]+)<\/task-id>[\s\S]*?<status>([^<]+)<\/status>/g;
+// The notification's statuses for a run that went well.
+const COMPLETED = new Set(['completed', 'ok']);
 
 function present(st: TranscriptState, now: number): { activity: Activity; detail: string } {
   if (now < st.errorUntil) return { activity: 'error', detail: st.detail };
@@ -69,11 +92,14 @@ function readMeta(path: string): Meta | undefined {
   }
 }
 
-// Collects subagent finish signals from a lead transcript record.
+// Collects subagent finish signals from a lead transcript record. A task
+// notification comes as a user record, or (mid-turn) as an attachment of
+// a queued command; it is first written as it is queued for the lead,
+// right as the subagent finishes.
 function leadSignals(t: Tracked, rec: unknown): void {
-  const r = rec as { type?: string; message?: { content?: unknown } };
-  if (!r || r.type !== 'user') return;
-  const content = r.message?.content;
+  const r = rec as { type?: string; operation?: unknown; content?: unknown; attachment?: { type?: unknown; prompt?: unknown }; message?: { content?: unknown } };
+  if (!r) return;
+  const content = r.type === 'user' ? r.message?.content : r.type === 'attachment' && r.attachment?.type === 'queued_command' ? r.attachment.prompt : r.type === 'queue-operation' && r.operation === 'enqueue' ? r.content : undefined;
   const texts: string[] = [];
   if (typeof content === 'string') texts.push(content);
   else if (Array.isArray(content)) {
@@ -106,6 +132,8 @@ export class ClaudeSource implements AgentSource {
   private events: AgentEvent[] = [];
   private finished = new Map<string, number>(); // transcript path → mtime when seen finished
   private listed = new Set<string>(); // subagent transcripts seen during the current scan
+  private sessions = new Map<string, Entry>(); // as of the last scan, by session id
+  private gains: Gain[] = [];
 
   constructor(root: string, opts: Opts = {}) {
     this.root = root;
@@ -118,6 +146,24 @@ export class ClaudeSource implements AgentSource {
     const e = this.events;
     this.events = [];
     return e;
+  }
+
+  // Oldest first: each agent's are found in order, but the agents in turn.
+  drainGains(): Gain[] {
+    const g = this.gains.sort((a, b) => a.at - b.at);
+    this.gains = [];
+    return g;
+  }
+
+  // The gains a transcript showed since last collected, for `role` in `crew`.
+  private collect(t: Tracked, agent: string, crew: string, role: string, now: number): void {
+    for (const f of t.gains.take()) this.gain({ agent, crew, role, ...f }, now);
+  }
+
+  private gain(g: Gain, now: number): void {
+    if (!g.crew || g.at > now + MAX_AHEAD_MS) return;
+    if (this.gains.length >= MAX_GAINS) this.gains.shift();
+    this.gains.push(g);
   }
 
   poll(now: number): AgentInfo[] {
@@ -139,7 +185,16 @@ export class ClaudeSource implements AgentSource {
   private track(id: string, path: string, now: number, lead: boolean): Tracked {
     let t = this.tracked.get(id);
     if (!t || t.tail.path !== path) {
-      t = { tail: new TranscriptTail(path), state: initialState(now), results: new Set(), notified: new Map() };
+      t = {
+        tail: new TranscriptTail(path),
+        state: initialState(now),
+        vitals: new VitalsReader(),
+        chat: new ChatReader(),
+        gains: new GainReader(lead),
+        paid: false,
+        results: new Set(),
+        notified: new Map(),
+      };
       this.tracked.set(id, t);
     }
     for (const rec of t.tail.read()) {
@@ -149,8 +204,43 @@ export class ClaudeSource implements AgentSource {
       } catch {
         // A record we cannot interpret must not stop the others.
       }
+      try {
+        t.vitals.apply(rec);
+      } catch {
+        // Vitals are cosmetic: a bad record must not touch the state or the finish signals.
+      }
+      try {
+        t.chat.apply(rec);
+      } catch {
+        // Nor may the conversation.
+      }
+      try {
+        t.gains.apply(rec);
+      } catch {
+        // Nor what earns XP.
+      }
     }
     return t;
+  }
+
+  // An agent's conversation as read so far (see chat.ts); null for one
+  // this source does not track (gone, or not one of its agents).
+  chat(id: string): readonly Bubble[] | null {
+    return this.tracked.get(id)?.chat.bubbles() ?? null;
+  }
+
+  // Why an agent cannot be sent a message (null: it can), as of the last
+  // scan. A subagent runs inside its lead's session and has no inbox.
+  reach(id: string): string | null {
+    const e = this.sessions.get(id);
+    if (!e) return this.tracked.has(id) ? 'a subagent has no session of its own' : 'no live session';
+    return e.inbox.ok ? null : e.inbox.reason;
+  }
+
+  // Posts the user's text into a lead's session, its inbox looked up afresh.
+  send(id: string, text: string): Promise<SendResult> {
+    if (!this.sessions.has(id)) return Promise.resolve({ ok: false, reason: this.reach(id) ?? 'no live session' });
+    return sendTo(this.root, id, text, { alive: this.alive });
   }
 
   private transcriptFor(sessionId: string, now: number): string | null {
@@ -165,10 +255,14 @@ export class ClaudeSource implements AgentSource {
   private scan(now: number): AgentInfo[] {
     const out: AgentInfo[] = [];
     const seen = new Set<string>();
-    const sessions = listSessions(this.root, this.alive);
+    // One entry per session, chosen as send chooses (see entries).
+    const chosen = entries(listSessions(this.root, this.alive));
+    this.sessions = new Map(chosen.map((e) => [e.session.sessionId, e]));
+    const sessions = chosen.map((e) => e.session);
     for (const s of sessions) {
       const path = this.transcriptFor(s.sessionId, now);
       const project = clip(basename(s.cwd), 24) || 'session';
+      const crew = s.cwd ? projectRoot(s.cwd) : '';
       const lead: AgentInfo = {
         id: s.sessionId,
         name: clip(s.name || project, 18),
@@ -179,9 +273,13 @@ export class ClaudeSource implements AgentSource {
         since: s.updatedAt || now,
         lastSeen: s.updatedAt || now,
       };
+      if (crew) lead.crew = crew;
       seen.add(s.sessionId);
       if (path) {
-        const st = this.track(s.sessionId, path, now, true).state;
+        const t = this.track(s.sessionId, path, now, true);
+        const st = t.state;
+        lead.vitals = t.vitals.snapshot(now);
+        this.collect(t, s.sessionId, crew, 'lead', now);
         lead.lastSeen = Math.max(st.lastSeen, lead.lastSeen);
         if (st.lastSeen > 0) {
           lead.since = st.since;
@@ -192,12 +290,23 @@ export class ClaudeSource implements AgentSource {
           }
         }
       }
-      if (s.status === 'idle') Object.assign(lead, { activity: 'idle', detail: 'waiting for you' });
+      if (s.status === 'idle') {
+        Object.assign(lead, { activity: 'idle', detail: 'waiting for you' });
+        // Waiting for the user, whatever the transcript last said: a call
+        // never answered must not keep it at work.
+        if (lead.vitals) lead.vitals.midTool = false;
+      }
       else if (s.status === 'waiting') Object.assign(lead, { activity: 'talk', detail: 'needs your input' });
       out.push(lead);
-      if (path) out.push(...this.subagents(s.sessionId, path, project, now, seen));
+      if (path) out.push(...this.subagents(s.sessionId, path, project, crew, now, seen));
     }
-    for (const id of [...this.tracked.keys()]) if (!seen.has(id)) this.tracked.delete(id);
+    for (const [id, t] of [...this.tracked]) {
+      if (seen.has(id)) continue;
+      // A subagent gone before its type was ever known: its gains go to
+      // the default type, as they would had it finished.
+      if (t.crew !== undefined && !t.meta) this.collect(t, id, t.crew, roleOf({ role: 'sub' }), now);
+      this.tracked.delete(id);
+    }
     const live = new Set(sessions.map((s) => s.sessionId));
     for (const id of [...this.paths.keys()]) if (!live.has(id)) this.paths.delete(id);
     for (const id of [...this.missUntil.keys()]) if (!live.has(id)) this.missUntil.delete(id);
@@ -206,7 +315,7 @@ export class ClaudeSource implements AgentSource {
     return out;
   }
 
-  private subagents(sessionId: string, leadPath: string, project: string, now: number, seen: Set<string>): AgentInfo[] {
+  private subagents(sessionId: string, leadPath: string, project: string, crew: string, now: number, seen: Set<string>): AgentInfo[] {
     const dir = join(dirname(leadPath), sessionId, 'subagents');
     let files: string[];
     try {
@@ -235,8 +344,25 @@ export class ClaudeSource implements AgentSource {
         (lead?.notified.has(id) ?? false) ||
         (meta !== undefined && !meta.background && meta.toolUseId !== '' && (lead?.results.has(meta.toolUseId) ?? false)) ||
         (st.lastText && st.pending.size === 0 && quiet >= STALE_TEXT_MS);
+      // Its gains go to its type, held until its meta.json says which: a
+      // gain must go to the same role however often it is read, or it may
+      // be counted twice. One that finishes (or is gone) with none ever
+      // readable is the default type. Its finished run gains once, unless
+      // it was interrupted, or its notification says it did not complete
+      // (failed, killed). A background one's notification is waited for
+      // (see NOTIFY_GRACE_MS); the run is settled only then.
+      t.crew = crew;
+      const role = roleOf({ role: 'sub', agentType: meta?.agentType });
+      if (meta || finished) this.collect(t, id, crew, role, now);
+      const failed = lead?.notified.get(id);
+      if (finished && !t.paid && (failed !== undefined || !meta?.background || quiet >= NOTIFY_GRACE_MS)) {
+        t.paid = true;
+        if (!st.interrupted && (failed === undefined || COMPLETED.has(failed))) this.gain({ agent: id, at: st.lastSeen || m, key: 'finish', crew, role, kind: 'subagent' }, now);
+      }
       if (finished && quiet >= DONE_LINGER_MS) {
-        this.finished.set(path, m);
+        // Out of sight; one not settled yet is still read, for its notification.
+        if (t.paid) this.finished.set(path, m);
+        else seen.add(id);
         continue;
       }
       seen.add(id);
@@ -250,12 +376,15 @@ export class ClaudeSource implements AgentSource {
         ...present(st, now),
         since: st.since,
         lastSeen: Math.max(st.lastSeen, m),
+        vitals: t.vitals.snapshot(now),
       };
-      const failed = lead?.notified.get(id);
+      if (crew) info.crew = crew;
       if (finished && st.interrupted) Object.assign(info, { activity: 'idle', detail: 'interrupted' });
       else if (finished && (failed === 'failed' || failed === 'killed')) Object.assign(info, { activity: 'error', detail: failed });
       else if (finished) Object.assign(info, { activity: 'done', detail: 'finished' });
       else if (st.lastSeen === 0) Object.assign(info, { activity: 'think', detail: 'spinning up' });
+      // A finished subagent has no call out, whatever its transcript says.
+      if (finished && info.vitals) info.vitals.midTool = false;
       out.push(info);
     }
     return out;

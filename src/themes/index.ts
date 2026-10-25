@@ -1,7 +1,7 @@
 import type { Theme } from './types.ts';
-import { BIOMES } from '../cave/biomes/index.ts';
+import { WORLDS } from '../worlds/index.ts';
 
-export const THEMES: readonly Theme[] = BIOMES;
+export const THEMES: readonly Theme[] = WORLDS;
 
 export function getTheme(id: string): Theme | undefined {
   return THEMES.find((t) => t.id === id);

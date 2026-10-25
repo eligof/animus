@@ -1,17 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SLEEP_AFTER } from '../src/world/life.ts';
-import { hub } from '../src/cave/layout.ts';
-import { mines } from '../src/cave/biomes/mines.ts';
-import type { Biome, Layout } from '../src/cave/types.ts';
+import { hub } from '../src/world/layout.ts';
+import type { Layout } from '../src/world/types.ts';
 import type { Pose } from '../src/world/character.ts';
 import { Stage } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
-import { Screen } from '../src/term/screen.ts';
+import { mines } from '../src/worlds/mines.ts';
+import type { WorldDef } from '../src/worlds/types.ts';
 import type { AgentInfo, Activity } from '../src/agents.ts';
 
 const NOW = 1_700_000_000_000;
-const RECT = { x: 0, y: 1, w: 120, h: 33 };
+// A scene that plans the smallest room (72 units), as these were tuned in.
+const RECT = { x: 0, y: 1, w: 80, h: 21 };
 
 const agent = (id: string, activity: Activity, extra: Partial<AgentInfo> = {}): AgentInfo => ({
   id, name: id, role: 'sub', project: 'p', activity, detail: `${activity} detail`, since: NOW, lastSeen: NOW, ...extra,
@@ -20,8 +21,8 @@ const agent = (id: string, activity: Activity, extra: Partial<AgentInfo> = {}): 
 const awake = (id: string, now: number, extra: Partial<AgentInfo> = {}) => agent(id, 'idle', { since: now - 3000, ...extra });
 
 // The mines with a fixed set of spots round the hub, so these tests do not
-// hang on how the biome itself dresses its floor.
-const lively: Biome = {
+// hang on how the world itself dresses its floor.
+const lively: WorldDef = {
   ...mines,
   pois: (L: Layout) => {
     const h = hub(L);
@@ -35,8 +36,8 @@ const lively: Biome = {
   },
 };
 
-function newStage(biome: Biome = lively, r = RECT): Stage {
-  const stage = new Stage(biome, 'half');
+function newStage(world: WorldDef = lively, r = RECT): Stage {
+  const stage = new Stage(world);
   stage.layout(r);
   return stage;
 }
@@ -301,16 +302,18 @@ test('characters passing each other sometimes wave', () => {
 
 test('emotes pop up over heads, a few at a time, and are gone within 2.5 s', () => {
   const stage = newStage({ ...lively }, { x: 0, y: 1, w: 120, h: 33 });
-  const s = new Screen(120, 35);
   let now = run(stage, (n) => [agent('w1', 'write'), awake('i1', n), awake('i2', n), awake('i3', n), awake('i4', n), agent('w2', 'write')], 12);
   const crew = (n: number) => [agent('w1', 'done', { since: now }), awake('i1', n), awake('i2', n), awake('i3', n), awake('i4', n), agent('w2', 'write')];
   let most = 0;
   let any = 0;
   const lives: number[] = [];
   now = run(stage, crew, 6, now, (n) => {
-    stage.draw(s, (n - NOW) / 1000, n, null);
-    most = Math.max(most, stage.emotesShown);
-    any += stage.emotesShown;
+    const f = stage.frame(n, null)!;
+    const shown = f.figures.filter((g) => g.emote).length;
+    assert.equal(shown, stage.emotesShown);
+    for (const g of f.figures) if (g.emote) assert.ok(g.emote.t >= 0 && g.emote.t <= 2.5, `emote ${g.emote.kind} ${g.emote.t.toFixed(2)} s old`);
+    most = Math.max(most, shown);
+    any += shown;
     for (const a of stage.actors()) {
       const e = a.mind.emote;
       if (e) {
@@ -328,13 +331,24 @@ test('emotes pop up over heads, a few at a time, and are gone within 2.5 s', () 
 });
 
 test('labels never cover an emote or each other', () => {
-  const stage = new Stage(lively, 'sextant');
+  const stage = new Stage(lively);
   stage.layout({ x: 0, y: 1, w: 150, h: 46 });
-  const s = new Screen(150, 48);
   let now = run(stage, (n) => ['a', 'b', 'c', 'd', 'e'].map((id) => awake(id, n)), 20);
   now = run(stage, (n) => [...['a', 'b', 'c', 'd', 'e'].map((id) => awake(id, n)), agent('f', 'done', { since: now })], 3, now, (n) => {
-    stage.draw(s, (n - NOW) / 1000, n, null);
+    const f = stage.frame(n, null)!;
     const ls = stage.labels();
+    // Over every emote, the cells it shows in stay free of labels.
+    for (const g of f.figures) {
+      if (!g.emote) continue;
+      const c = f.camera;
+      const x = c.ox + (g.x - g.y) * c.s;
+      const top = c.oy + ((g.x + g.y) * c.s) / 2 - 20 * c.s;
+      const bottom = c.oy + ((g.x + g.y) * c.s) / 2 - 15.5 * c.s;
+      const col = c.cells.x + Math.floor(x / c.cell.w);
+      for (let row = c.cells.y + Math.floor(top / c.cell.h) + 1; row < c.cells.y + Math.floor(bottom / c.cell.h); row++) {
+        for (const l of ls) assert.ok(l.y !== row || col < l.x || col >= l.x + l.w, `a label covers ${g.id}'s emote`);
+      }
+    }
     for (let i = 0; i < ls.length; i++) {
       for (let j = i + 1; j < ls.length; j++) {
         const a = ls[i];
@@ -407,21 +421,21 @@ test('a long, busy session stays bounded', () => {
   if (cr) assert.ok(!cr.claimedBy || stage.actors().some((a) => a.info.id === cr.claimedBy), 'the critter is held by someone gone');
 });
 
-test('a big sextant frame with a living crew stays within budget', () => {
-  const stage = new Stage(lively, 'sextant');
+test('a big frame with a living crew stays within budget', () => {
+  const stage = new Stage(lively);
   stage.layout({ x: 0, y: 1, w: 200, h: 57 });
   const acts: Activity[] = ['write', 'read', 'search', 'run', 'web', 'think'];
   const crew = (n: number) => Array.from({ length: 12 }, (_, i) => (i < 4 ? awake(`p${i}`, n) : i < 6 ? agent(`p${i}`, 'done') : agent(`p${i}`, acts[i % acts.length])));
   let now = run(stage, crew, 30);
-  const s = new Screen(200, 60);
-  stage.draw(s, 0, now, null);
+  stage.frame(now, null);
   const t0 = performance.now();
   for (let i = 0; i < 40; i++) {
     now += 55;
     stage.sync(crew(now), now);
     stage.update(0.055, now);
-    stage.draw(s, i * 0.055, now, i % 10 === 0 ? 'p0' : null);
+    stage.frame(now, i % 10 === 0 ? 'p0' : null);
   }
   const ms = (performance.now() - t0) / 40;
-  assert.ok(ms < 40, `${ms.toFixed(2)} ms per frame`);
+  // The model's share of a frame: a few ms, leaving the scene its 25.
+  assert.ok(ms < 10, `${ms.toFixed(2)} ms per frame`);
 });

@@ -24,6 +24,8 @@ export type ChromeCtx = {
   paused: boolean;
   // No roster on screen: show the selected agent in the ticker row instead.
   selectionInFooter?: boolean;
+  // Where keys go in the chat window, when one is open (see World.chatFocus).
+  chat?: 'input' | 'log' | null;
 };
 
 const GLYPHS: Record<Activity, string> = {
@@ -141,7 +143,11 @@ export function drawRoster(s: Screen, r: Rect, c: ChromeCtx): void {
 }
 
 const KEYS: Array<[string, string]> = [
-  ['t', 'theme'], ['p', 'pick'], ['tab', 'select'], ['+/-', 'zoom'], ['r', 'pixels'], ['space', 'pause'], ['?', 'help'], ['q', 'quit'],
+  ['t', 'theme'], ['p', 'pick'], ['tab', 'select'], ['+/-', 'zoom'], ['r', 'view'], ['space', 'pause'], ['?', 'help'], ['q', 'quit'],
+];
+// While the chat's input has focus every app key types, so these instead.
+const CHAT_KEYS: Array<[string, string]> = [
+  ['⏎', 'send'], ['esc', 'log'], ['ctrl-c', 'quit'],
 ];
 
 export function drawFooter(s: Screen, r: Rect, c: ChromeCtx): void {
@@ -178,7 +184,7 @@ export function drawFooter(s: Screen, r: Rect, c: ChromeCtx): void {
     x = s.text(x, r.y, clip(e.detail, 32), fresh ? p.panelText : mix(p.panelText, tickerBg, 0.4), tickerBg, 0, end);
   });
   x = r.x + 1;
-  for (const [k, label] of KEYS) {
+  for (const [k, label] of c.chat === 'input' ? CHAT_KEYS : KEYS) {
     if (x >= end) break;
     x = s.text(x, r.y + 1, ` ${k} `, p.panelText, mix(p.panel, p.accent, 0.35), BOLD, end);
     x = s.text(x, r.y + 1, ` ${label}  `, p.panelText, p.panel, 0, end);

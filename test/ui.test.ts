@@ -6,7 +6,7 @@ import type { ChromeCtx } from '../src/ui/chrome.ts';
 import { drawHelp, drawPicker, drawTooSmall, drawBox } from '../src/ui/overlays.ts';
 import { Screen } from '../src/term/screen.ts';
 import { isWide } from '../src/term/width.ts';
-import { mines } from '../src/cave/biomes/mines.ts';
+import { mines } from '../src/worlds/mines.ts';
 import { THEMES } from '../src/themes/index.ts';
 import { Stage } from '../src/world/stage.ts';
 import { ACTIVITIES } from '../src/agents.ts';
@@ -133,20 +133,45 @@ test('the wipe dims both pixels of every cell behind the curtain', async () => {
 
 test('a passing tip leads the ticker row', () => {
   const c = ctx();
-  c.tip = 'HD mode: run animus in kitty, Ghostty or WezTerm';
+  c.tip = 'the scene needs kitty, Ghostty or WezTerm';
   const s = new Screen(120, 2);
   drawFooter(s, { x: 0, y: 0, w: 120, h: 2 }, c);
   const ticker = s.toText().split('\n')[0];
-  assert.match(ticker, /^ HD mode: run animus in kitty, Ghostty or WezTerm {2}· {2}.*Edit cli\.ts/);
+  assert.match(ticker, /^ the scene needs kitty, Ghostty or WezTerm {2}· {2}.*Edit cli\.ts/);
 });
 
-test('help says where HD is when the terminal shows no images', () => {
+test('help offers r for the scene only where the terminal shows images, and says where it is elsewhere', () => {
   const plain = new Screen(100, 30);
   drawHelp(plain, { x: 0, y: 1, w: 100, h: 27 }, mines, false);
-  assert.match(plain.toText(), /HD needs kitty, Ghostty or WezTerm/);
+  assert.match(plain.toText(), /the scene needs kitty, Ghostty or WezTerm/);
+  assert.doesNotMatch(plain.toText(), /scene \/ agent dashboard/);
   assert.match(plain.toText(), /quit/);
   const kitty = new Screen(100, 30);
   drawHelp(kitty, { x: 0, y: 1, w: 100, h: 27 }, mines, true);
-  assert.doesNotMatch(kitty.toText(), /HD needs/);
-  assert.match(kitty.toText(), /sextants \/ HD/);
+  assert.doesNotMatch(kitty.toText(), /needs/);
+  assert.match(kitty.toText(), /scene \/ agent dashboard/);
+  assert.doesNotMatch(kitty.toText(), /pixels|sextant|HD/);
+});
+
+test('help says when the crews are not being saved, under the keys, from the smallest screen but one up', () => {
+  const note = 'crews.json unreadable (EACCES): progress not saved this run';
+  for (const [w, h] of [[100, 30], [80, 24]]) {
+    const s = new Screen(w, h);
+    drawHelp(s, { x: 0, y: 1, w, h: h - 3 }, mines, true, note);
+    const text = s.toText();
+    assert.match(text, /quit/, `${w}×${h}`);
+    assert.match(text, /crews\.json unreadable \(EACCES\):/, `${w}×${h}`);
+    assert.match(text, /progress not saved this run/, `${w}×${h}`);
+    const rows = text.split('\n');
+    assert.ok(rows.findIndex((r) => r.includes('quit')) < rows.findIndex((r) => r.includes('crews.json')), 'under the keys');
+  }
+  const none = new Screen(100, 30);
+  drawHelp(none, { x: 0, y: 1, w: 100, h: 27 }, mines, true);
+  assert.doesNotMatch(none.toText(), /crews/);
+});
+
+test('the footer offers r for the view', () => {
+  const s = new Screen(120, 2);
+  drawFooter(s, { x: 0, y: 0, w: 120, h: 2 }, ctx());
+  assert.match(s.toText().split('\n')[1], / r  view /);
 });

@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { claudeRoot, findTranscript } from '../src/claude/paths.ts';
+import { inboxOf } from '../src/claude/inbox.ts';
 import { listSessions, pidAlive } from '../src/claude/sessions.ts';
 import { readAccount } from '../src/claude/account.ts';
 import { tempDir } from './helpers.ts';
@@ -95,4 +97,52 @@ test('readAccount stops at the first config file that exists', () => {
   writeFileSync(join(root, '.claude.json'), JSON.stringify({ primaryApiKey: 'x' }));
   writeFileSync(join(home, '.claude.json'), JSON.stringify({ oauthAccount: { displayName: 'Other', seatTier: 'pro' } }));
   assert.equal(readAccount(root), null);
+});
+
+test('listSessions keeps the inbox socket (a uds: prefix dropped) and the peer protocol', () => {
+  const root = tempDir('animus-reg');
+  mkdirSync(join(root, 'sessions'));
+  const base = { cwd: '/w', status: 'busy', updatedAt: 1, kind: 'interactive' };
+  writeFileSync(join(root, 'sessions', '1.json'), JSON.stringify({ ...base, pid: 1, sessionId: 'a', messagingSocketPath: '/run/user/1000/cc-socks/1.sock', peerProtocol: 1 }));
+  writeFileSync(join(root, 'sessions', '2.json'), JSON.stringify({ ...base, pid: 2, sessionId: 'b', messagingSocketPath: 'uds:/run/user/1000/cc-socks/2.sock', peerProtocol: 2 }));
+  writeFileSync(join(root, 'sessions', '3.json'), JSON.stringify({ ...base, pid: 3, sessionId: 'c' }));
+  assert.deepEqual(
+    listSessions(root, () => true).map((s) => [s.sessionId, s.socket, s.peerProtocol]),
+    [['a', '/run/user/1000/cc-socks/1.sock', 1], ['b', '/run/user/1000/cc-socks/2.sock', 2], ['c', '', 0]],
+  );
+});
+
+test('listSessions reads only regular registry files of at most 64 KB: never a FIFO, a link or a huge file', { skip: process.platform === 'win32' && 'no FIFOs' }, () => {
+  const root = tempDir('animus-reg-odd');
+  const dir = join(root, 'sessions');
+  mkdirSync(dir);
+  const entry = (pid: number, extra = {}) => JSON.stringify({ pid, sessionId: `s${pid}`, cwd: '/w', status: 'busy', updatedAt: 1, kind: 'interactive', ...extra });
+  writeFileSync(join(dir, '1.json'), entry(1));
+  execFileSync('mkfifo', [join(dir, '2.json')]);
+  writeFileSync(join(dir, '3.json'), entry(3, { pad: 'x'.repeat(70_000) }));
+  const elsewhere = join(tempDir('animus-reg-else'), '4.json');
+  writeFileSync(elsewhere, entry(4));
+  symlinkSync(elsewhere, join(dir, '4.json'));
+  // Read in a child process: a read that blocks on the FIFO stalls it, not
+  // the test.
+  const sessions = new URL('../src/claude/sessions.ts', import.meta.url).href;
+  const script = `import { listSessions } from ${JSON.stringify(sessions)}; console.log(JSON.stringify(listSessions(process.argv[1], () => true).map((s) => s.pid)));`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script, root], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(r.signal, null, 'it never blocked');
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), [1]);
+});
+
+test('a registry entry not owned by this user is kept without an inbox, with the reason', () => {
+  const root = tempDir('animus-reg-own');
+  mkdirSync(join(root, 'sessions'));
+  writeFileSync(join(root, 'sessions', '1.json'), JSON.stringify({ pid: 1, sessionId: 'a', cwd: '/w', status: 'busy', updatedAt: 1, kind: 'interactive', messagingSocketPath: '/run/user/1000/cc-socks/1.sock', peerProtocol: 1 }));
+  const me = process.getuid?.() ?? 0;
+  const mine = listSessions(root, () => true, me)[0];
+  assert.equal(mine.socket, '/run/user/1000/cc-socks/1.sock');
+  assert.equal(mine.refusal, undefined);
+  // A test cannot chown: the user it must belong to is made someone else.
+  const theirs = listSessions(root, () => true, me + 1)[0];
+  assert.deepEqual([theirs.socket, theirs.peerProtocol, theirs.refusal], ['', 0, 'its registry entry is not yours']);
+  assert.deepEqual(inboxOf(theirs, me), { ok: false, reason: 'its registry entry is not yours' });
 });

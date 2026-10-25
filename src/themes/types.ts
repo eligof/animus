@@ -1,7 +1,7 @@
 import type { RGB } from '../term/color.ts';
-import type { Biome } from '../cave/types.ts';
+import type { WorldDef } from '../worlds/types.ts';
 
-export type { StationKind } from '../cave/types.ts';
+export type { StationKind } from '../world/types.ts';
 
 // UI colours (header, roster, footer, bubbles).
 export type Palette = {
@@ -24,5 +24,5 @@ export type Palette = {
   bad: RGB;
 };
 
-// A scene preset: one cave biome (see src/cave/types.ts).
-export type Theme = Biome;
+// A scene preset: one illustrated world (see src/worlds/types.ts).
+export type Theme = WorldDef;

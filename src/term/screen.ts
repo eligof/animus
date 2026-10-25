@@ -6,7 +6,7 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export const BOLD = 1;
 
 // A colour slot set to this uses the terminal's default colour (SGR 39/49).
-// Scene cells in HD mode take it so the image drawn under them shows.
+// The scene's cells take it so the image drawn under them shows.
 export const DEFAULT = -1;
 
 const pack = (c: RGB) => (c[0] << 16) | (c[1] << 8) | c[2];
@@ -97,14 +97,15 @@ export class Screen {
     for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) this.put(x, y, ch, fg, bg);
   }
 
+  // A cell on the default colour (unknown here) takes `c` itself.
   blendBg(x: number, y: number, c: RGB, a: number): void {
     const i = this.index(x, y);
-    if (i >= 0) this.bg[i] = blend(this.bg[i], c, a);
+    if (i >= 0) this.bg[i] = this.bg[i] === DEFAULT ? pack(c) : blend(this.bg[i], c, a);
   }
 
   blendFg(x: number, y: number, c: RGB, a: number): void {
     const i = this.index(x, y);
-    if (i >= 0) this.fg[i] = blend(this.fg[i], c, a);
+    if (i >= 0) this.fg[i] = this.fg[i] === DEFAULT ? pack(c) : blend(this.fg[i], c, a);
   }
 
   charAt(x: number, y: number): string {

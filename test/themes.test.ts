@@ -4,204 +4,99 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { Theme } from '../src/themes/types.ts';
-import { planLayout } from '../src/cave/layout.ts';
-import { M, MATERIALS, buildTables } from '../src/cave/materials.ts';
-import { heal, step } from '../src/cave/sim.ts';
-import type { Ctx, Layout, Particle, PointLight, SlotKind } from '../src/cave/types.ts';
-import { Voxels } from '../src/cave/voxels.ts';
-import { Rng } from '../src/world/rng.ts';
+import { PROP_SIZE, planLayout } from '../src/world/layout.ts';
+import { planRoom, toWorld } from '../src/world/room.ts';
+import type { Particle, SlotKind } from '../src/world/types.ts';
+import { project } from '../src/world/frame.ts';
+import { recordingPen } from './helpers.ts';
 
-// Contract every biome must meet. ANIMUS_THEME_FILE=src/cave/biomes/x.ts
-// also checks a biome module that is not registered yet (its default
-// export, or the first exported object with `generate`).
+// Contract every world must meet. ANIMUS_THEME_FILE=src/worlds/x.ts also
+// checks a world module that is not registered yet (its default export, or
+// the first exported object with `stations`).
 async function loadTheme(file: string): Promise<Theme> {
   const mod = await import(pathToFileURL(resolve(file)).href);
-  const found = mod.default ?? Object.values(mod).find((v) => v && typeof v === 'object' && 'generate' in (v as object));
-  if (!found) throw new Error(`${file} exports no biome`);
+  const found = mod.default ?? Object.values(mod).find((v) => v && typeof v === 'object' && 'stations' in (v as object));
+  if (!found) throw new Error(`${file} exports no world`);
   return found as Theme;
 }
 const extraFile = process.env.ANIMUS_THEME_FILE;
 const EXTRA: Theme[] = extraFile ? [await loadTheme(extraFile)] : [];
 
-const SIZES: Array<[number, number]> = [[80, 40], [320, 171], [1000, 500]];
 const KINDS: SlotKind[] = ['entrance', 'idle', 'read', 'run', 'search', 'think', 'web', 'write'];
-const PARTICLE_KINDS = new Set(['spark', 'ember', 'debris', 'drop', 'rune', 'bolt', 'glint', 'zzz']);
+const COSTUMES = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual'];
+const CRITTERS = ['cat', 'rat', 'drone', 'slime', 'fox', 'imp'];
+const SHAPES = ['tower', 'house', 'pyramid', 'statue', 'machine'];
+const PARTICLE_KINDS = new Set(['spark', 'ember', 'confetti', 'smoke', 'steam', 'drop', 'glint', 'bolt', 'zzz']);
 const isRGB = (c: unknown) => Array.isArray(c) && c.length === 3 && c.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
-const kindOf = (m: number) => MATERIALS[m]?.kind ?? 'solid';
-const solid = (m: number) => kindOf(m) === 'solid';
-const liquid = (m: number) => kindOf(m) === 'liquid';
-
-function world(b: Theme, L: Layout, seed = 1): Voxels {
-  const v = new Voxels(L.W, L.D, L.H);
-  b.generate(v, L, new Rng(seed));
-  return v;
-}
-
-function stub(v: Voxels, seed = 3) {
-  const lights: PointLight[] = [];
-  const parts: Particle[] = [];
-  const c: Ctx = { v, rng: new Rng(seed), t: 0, dt: 1 / 30, spawn: (p) => parts.push(p), light: (l) => lights.push(l) };
-  return { c, lights, parts };
-}
-
-function sane(L: Layout, lights: PointLight[], parts: Particle[], tag: string): void {
-  for (const l of lights) {
-    assert.ok([l.x, l.y, l.z, l.radius, l.intensity].every(Number.isFinite), `${tag}: light not finite`);
-    assert.ok(l.x >= -1 && l.y >= -1 && l.z >= 0 && l.x <= L.W + 1 && l.y <= L.D + 1 && l.z <= L.H + 4, `${tag}: light outside the world`);
-    assert.ok(l.radius >= 6 && l.radius <= 40, `${tag}: light radius ${l.radius}`);
-    assert.ok(l.intensity > 0 && l.intensity <= 2, `${tag}: light intensity ${l.intensity}`);
-    assert.ok(isRGB(l.color), `${tag}: light colour`);
-  }
-  for (const p of parts) {
-    assert.ok(PARTICLE_KINDS.has(p.kind), `${tag}: particle kind ${p.kind}`);
-    assert.ok([p.x, p.y, p.z, p.vx, p.vy, p.vz, p.life, p.gravity].every(Number.isFinite), `${tag}: particle not finite`);
-    assert.ok(p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x <= L.W && p.y <= L.D && p.z <= L.H, `${tag}: ${p.kind} spawned outside the world`);
-    assert.ok(p.life > 0 && p.life <= 10, `${tag}: ${p.kind} life ${p.life}`);
-    assert.ok(isRGB(p.color), `${tag}: ${p.kind} colour`);
-    if (p.mat !== undefined) assert.ok(MATERIALS[p.mat] && kindOf(p.mat) !== 'air', `${tag}: ${p.kind} lands as nothing`);
-  }
-}
+const finite = (pts: Array<[number, number]>) => pts.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
 
 test('registry exposes unique ids', () => {
   const ids = themeIds();
   assert.equal(new Set(ids).size, ids.length);
-  assert.ok(ids.includes('mines'));
+  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell']);
   assert.equal(getTheme('mines')?.id, 'mines');
   assert.equal(getTheme('nope'), undefined);
 });
 
-for (const b of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === e.id))]) {
-  test(`biome ${b.id}: identity, palette and grade`, () => {
-    assert.ok(/^[a-z]+$/.test(b.id), `id ${b.id}`);
-    assert.ok(b.name && b.tagline);
-    assert.ok(isRGB(b.backdrop));
-    for (const [k, v] of Object.entries(b.palette)) assert.ok(isRGB(v), `palette.${k}`);
-    assert.ok(isRGB(b.grade.ambient), 'grade.ambient');
-    assert.ok(b.grade.illum >= 0 && b.grade.illum <= 2 && b.grade.bloom >= 0 && b.grade.bloom <= 2 && b.grade.vignette >= 0 && b.grade.vignette <= 1, 'grade ranges');
-    for (const [id, c] of Object.entries(b.colors ?? {})) {
-      assert.ok(MATERIALS[Number(id)], `colour override for unknown material ${id}`);
-      assert.match(String(c), /^#[0-9a-f]{6}$/i, `colour override ${id}`);
+for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === e.id))]) {
+  test(`world ${w.id}: identity, palette, costume, critter, finale and builds`, () => {
+    assert.ok(/^[a-z]+$/.test(w.id), `id ${w.id}`);
+    assert.ok(w.name && w.tagline);
+    assert.ok(isRGB(w.backdrop));
+    for (const [k, v] of Object.entries(w.palette)) assert.ok(isRGB(v), `palette.${k}`);
+    assert.ok(COSTUMES.includes(w.costume), `costume ${w.costume}`);
+    assert.ok(CRITTERS.includes(w.critter.kind) && isRGB(w.critter.body), 'critter');
+    assert.ok(w.finale.colors.length > 0 && w.finale.colors.every(isRGB), 'finale colours');
+    assert.ok(w.build.colors.length > 0 && w.build.colors.every(isRGB), 'build colours');
+    assert.ok(SHAPES.includes(w.build.shape), `build shape ${w.build.shape}`);
+    if (w.ambient) assert.ok(isRGB(w.ambient.tint) && w.ambient.strength >= 0 && w.ambient.strength <= 1, 'ambient');
+  });
+
+  test(`world ${w.id}: a prop for every station, fitting its slot, and sane decor`, () => {
+    for (const k of KINDS) {
+      const art = w.stations[k];
+      assert.ok(art, `no ${k} prop`);
+      assert.deepEqual([art.len, art.dep], [PROP_SIZE[k].len, PROP_SIZE[k].dep], `${k} footprint`);
+      assert.ok(art.height > 0 && art.height <= 40, `${k} ${art.height} tall`);
     }
-    assert.doesNotThrow(() => buildTables(b.colors));
-    for (const k of KINDS) assert.ok(b.props[k]?.name, `prop ${k}`);
-  });
-
-  test(`biome ${b.id}: generation is deterministic per seed`, () => {
-    const L = planLayout(320, 171, b.id);
-    const x = world(b, L, 7);
-    const y = world(b, L, 7);
-    const z = world(b, L, 8);
-    assert.ok(Buffer.from(x.mat).equals(Buffer.from(y.mat)));
-    assert.ok(Buffer.from(x.shade).equals(Buffer.from(y.shade)));
-    assert.ok(!Buffer.from(x.mat).equals(Buffer.from(z.mat)));
-  });
-
-  test(`biome ${b.id}: solid walls and floor, open room, standable spots, contained pools`, () => {
-    for (const [cw, ch] of SIZES) {
-      const L = planLayout(cw, ch, b.id);
-      const v = world(b, L);
-      const tag = `${b.id} ${cw}x${ch}`;
-      let wall = 0;
-      let wallSolid = 0;
-      let slab = 0;
-      let slabFull = 0;
-      let room = 0;
-      let roomAir = 0;
-      for (let z = 0; z < L.H; z++) {
-        for (let y = 0; y < L.D; y++) {
-          for (let x = 0; x < L.W; x++) {
-            const m = v.get(x, y, z);
-            if (x < L.T || y < L.T) {
-              wall++;
-              if (solid(m)) wallSolid++;
-            } else if (z < L.floor) {
-              slab++;
-              if (m !== M.AIR) slabFull++;
-            } else if (z > L.floor) {
-              room++;
-              if (m === M.AIR) roomAir++;
-            }
-          }
-        }
-      }
-      assert.ok(wallSolid / wall > 0.9, `${tag}: walls ${((100 * wallSolid) / wall).toFixed(1)}% solid`);
-      assert.ok(slabFull / slab > 0.95, `${tag}: floor ${((100 * slabFull) / slab).toFixed(1)}% filled`);
-      assert.ok(roomAir / room > 0.85, `${tag}: room ${((100 * roomAir) / room).toFixed(1)}% air`);
-      for (const s of L.slots) {
-        const { x, y } = s.spot;
-        const g = v.ground(x, y);
-        assert.ok(Math.abs(g - L.floor) <= 2, `${tag}: ${s.kind} spot ground ${g}, floor ${L.floor}`);
-        for (let z = g; z < g + 14; z++) assert.equal(v.get(x, y, z), M.AIR, `${tag}: ${s.kind} spot blocked at z ${z}`);
-      }
-      for (let i = 0; i < v.size; i++) {
-        const m = v.mat[i];
-        if (!liquid(m)) continue;
-        const x = v.xOf(i);
-        const y = v.yOf(i);
-        const z = v.zOf(i);
-        const where = `${tag}: ${MATERIALS[m]?.name} at ${x},${y},${z}`;
-        assert.notEqual(v.get(x, y, z - 1), M.AIR, `${where} over air`);
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) assert.notEqual(v.get(x + dx, y + dy, z), M.AIR, `${where} beside air`);
-      }
+    for (const d of w.decor ?? []) {
+      assert.ok(Number.isInteger(d.count) && d.count >= 0 && d.count <= 12, `decor count ${d.count}`);
+      assert.ok(d.art.len > 0 && d.art.dep > 0 && d.art.len <= 24 && d.art.dep <= 24 && d.art.height > 0, 'decor size');
     }
   });
 
-  test(`biome ${b.id}: props and weather tick with sane lights and particles, flames clear of fuel`, () => {
-    for (const [cw, ch] of SIZES) {
-      const L = planLayout(cw, ch, b.id);
-      const v = world(b, L);
+  test(`world ${w.id}: the room and every prop draw with the pen, inside the canvas`, () => {
+    const L = planLayout(305, 215, w.id);
+    const room = planRoom(w, L, 1);
+    const s = 4;
+    const cam = { s, ox: L.D * s + 20, oy: L.H * s + 20 };
+    const width = (L.W + L.D) * s + 40;
+    const height = ((L.W + L.D) / 2 + L.H) * s + 40;
+    const inside = (pts: Array<[number, number]>) => pts.every(([x, y]) => x >= -1 && y >= -1 && x <= width + 1 && y <= height + 1);
+    const pen = recordingPen(width, height);
+    w.room.draw({ pen, s, at: (x, y, z) => project(cam, x, y, z), W: L.W, D: L.D, H: L.H, T: L.T, t: 0, seed: 1 });
+    w.room.overlay?.({ pen, s, at: (x, y, z) => project(cam, x, y, z), W: L.W, D: L.D, H: L.H, T: L.T, t: 1, seed: 1 });
+    assert.ok(pen.fills > 0, 'the room drew nothing');
+    assert.ok(finite(pen.points) && inside(pen.points), 'the room drew off the canvas');
+    assert.equal(pen.depth, 0, 'save() without restore()');
+    for (const p of room.props) {
       for (const active of [false, true]) {
-        const { c, lights, parts } = stub(v);
-        for (let f = 0; f < 90; f++) {
-          c.t += c.dt;
-          for (const s of L.slots) b.props[s.kind].tick?.(c, s, active);
-          b.weather?.(c, L);
-        }
-        sane(L, lights, parts, `${b.id} ${cw}x${ch} ${active ? 'active' : 'idle'}`);
-      }
-      for (let i = 0; i < v.size; i++) {
-        if (v.mat[i] !== M.FIRE) continue;
-        const [x, y, z] = [v.xOf(i), v.yOf(i), v.zOf(i)];
-        for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
-          const m = v.get(x + dx, y + dy, z + dz);
-          // Fire beds (campfire coal, a brazier) are meant to smoulder.
-          if (z <= L.floor + 1 && dz === -1) continue;
-          assert.ok(!MATERIALS[m]?.flammable || m === M.COAL, `${b.id} ${cw}x${ch}: flame at ${x},${y},${z} touches ${MATERIALS[m]?.name}`);
+        const pp = recordingPen(width, height);
+        const view = { pen: pp, s, at: (u: number, v: number, z: number) => project(cam, ...toWorld(p, u, v, z)), len: p.len, dep: p.dep, wall: p.wall, island: p.island, t: 2.5, active, seed: p.seed };
+        p.art.draw(view);
+        const tag = `${p.slot?.kind ?? 'decor'}${active ? ' (active)' : ''}`;
+        assert.ok(pp.fills + pp.strokes > 0, `${tag} drew nothing`);
+        assert.ok(finite(pp.points), `${tag}: points not finite`);
+        assert.equal(pp.depth, 0, `${tag}: save() without restore()`);
+        const parts: Particle[] = [];
+        for (let f = 0; f < 30; f++) p.art.emit?.({ ...view, t: f / 10 }, 0.1, (q) => parts.push(q));
+        for (const q of parts) {
+          assert.ok(PARTICLE_KINDS.has(q.kind), `${tag}: particle kind ${q.kind}`);
+          assert.ok([q.x, q.y, q.z, q.vx, q.vy, q.vz, q.life, q.gravity].every(Number.isFinite), `${tag}: particle not finite`);
+          assert.ok(q.x >= -2 && q.y >= -2 && q.x <= p.len + 2 && q.y <= p.dep + 2 && q.z >= 0 && q.z <= p.art.height + 20, `${tag}: particle away from the prop (its own frame)`);
+          assert.ok(q.life > 0 && q.life <= 10 && isRGB(q.color), `${tag}: ${q.kind} life or colour`);
         }
       }
     }
-  });
-
-  test(`biome ${b.id}: the world stays a cave under a minute of simulation`, () => {
-    const L = planLayout(320, 171, b.id);
-    const v = world(b, L);
-    v.commitBase();
-    const T = buildTables(b.colors);
-    const rng = new Rng(5);
-    const { c } = stub(v);
-    const solidBefore = v.mat.reduce((n, m) => n + (solid(m) ? 1 : 0), 0);
-    for (let tick = 0; tick < 36 * 60; tick++) {
-      c.t += 1 / 36;
-      c.dt = 1 / 36;
-      if (tick % 2 === 0) {
-        for (const s of L.slots) b.props[s.kind].tick?.(c, s, true);
-        b.weather?.(c, L);
-      }
-      step(v, T, rng, tick, () => {});
-      heal(v, T, rng, 1500);
-    }
-    const solidAfter = v.mat.reduce((n, m) => n + (solid(m) ? 1 : 0), 0);
-    let fire = 0;
-    for (let i = 0; i < v.size; i++) if (v.mat[i] === M.FIRE) fire++;
-    assert.ok(solidAfter > solidBefore * 0.97, `${b.id}: ${solidBefore - solidAfter} solid voxels lost`);
-    assert.ok(fire < 400, `${b.id}: ${fire} voxels on fire`);
-  });
-
-  test(`biome ${b.id}: a big world generates quickly`, () => {
-    const L = planLayout(1000, 500, b.id);
-    const t0 = performance.now();
-    world(b, L);
-    const ms = performance.now() - t0;
-    assert.ok(ms < 600, `${ms.toFixed(0)} ms`);
   });
 }

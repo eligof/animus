@@ -28,7 +28,46 @@ export function initialState(now = Date.now()): TranscriptState {
   };
 }
 
-type Block = { type?: string; id?: string; name?: string; input?: unknown; text?: string; tool_use_id?: string; is_error?: boolean };
+type Block = { type?: string; id?: string; name?: string; input?: unknown; text?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+
+// How Claude Code words a call the user turned down.
+const REJECTED = "The user doesn't want to proceed with this tool use";
+// And one its permission rules denied: "Permission to use Bash with
+// command … has been denied.", or one of its built-in checks did.
+const DENIED = { start: 'Permission to use ', end: ' has been denied.' };
+const BUILT_IN = 'Permission for this command was denied by a built-in Claude Code';
+// What Claude Code records when the user interrupts (a call, or the turn).
+export const INTERRUPTED = '[Request interrupted';
+// User records Claude Code writes itself, not a prompt: a subagent or
+// background task's notification, shell-mode input and output, a local
+// command's output, reminders.
+export const SYSTEM = /^<(task-notification|local-command-stdout|local-command-stderr|local-command-caveat|system-reminder|bash-input|bash-stdout|bash-stderr)>/;
+// A slash command the user typed, as Claude Code records it: a prompt,
+// though not in the words it was typed.
+export const COMMAND = /^<(command-name|command-message|command-args)>/;
+
+// A tool result's text: its content, or the first text block of it.
+export function resultText(b: { content?: unknown }): string {
+  const c = b.content;
+  if (typeof c === 'string') return c;
+  if (!Array.isArray(c)) return '';
+  const t = (c as Array<{ type?: unknown; text?: unknown }>).find((x) => x?.type === 'text');
+  return typeof t?.text === 'string' ? t.text : '';
+}
+
+// A tool result marked as an error though the tool never failed: the call
+// was refused before it ran, by a PreToolUse hook, the permission rules or
+// the user, or the user interrupted it.
+export function refused(b: { content?: unknown }): boolean {
+  const text = resultText(b);
+  return (
+    (text.startsWith('PreToolUse:') && text.includes('hook error')) ||
+    (text.startsWith(DENIED.start) && text.trimEnd().endsWith(DENIED.end)) ||
+    text.startsWith(BUILT_IN) ||
+    text.startsWith(REJECTED) ||
+    text.startsWith(INTERRUPTED)
+  );
+}
 
 function set(st: TranscriptState, activity: Activity, detail: string, at: number): boolean {
   if (st.activity === activity && st.detail === detail) return false;
@@ -40,7 +79,7 @@ function set(st: TranscriptState, activity: Activity, detail: string, at: number
 
 // A user text record: either the user interrupting, or a new request.
 function prompt(st: TranscriptState, text: string, at: number): boolean {
-  if (text.startsWith('[Request interrupted')) {
+  if (text.startsWith(INTERRUPTED)) {
     st.ended = true;
     st.interrupted = true;
     st.pending.clear();
@@ -96,7 +135,7 @@ export function applyRecord(st: TranscriptState, rec: unknown): boolean {
     if (b?.type !== 'tool_result') continue;
     sawResult = true;
     if (typeof b.tool_use_id === 'string') st.pending.delete(b.tool_use_id);
-    if (b.is_error) {
+    if (b.is_error && !refused(b)) {
       st.errorUntil = at + 3000;
       changed = set(st, 'error', 'tool failed', at) || changed;
     }

@@ -48,17 +48,6 @@ export function renderLines(s: Screen, mode: ColorMode): string {
   return lines.join('\n');
 }
 
-// Terminals known to draw the 2x3 sextant glyphs (U+1FB00..) themselves,
-// pixel-exact; everything else gets half blocks.
-export function detectPixelMode(env: NodeJS.ProcessEnv = process.env): 'half' | 'sextant' {
-  const term = env.TERM ?? '';
-  const prog = env.TERM_PROGRAM ?? '';
-  if (env.ALACRITTY_WINDOW_ID || env.ALACRITTY_SOCKET || env.KITTY_WINDOW_ID || env.WEZTERM_PANE || env.GHOSTTY_RESOURCES_DIR) return 'sextant';
-  if (/^(xterm-kitty|xterm-ghostty|foot|foot-extra|wezterm|alacritty)$/.test(term)) return 'sextant';
-  if (prog === 'WezTerm' || prog === 'ghostty') return 'sextant';
-  return 'half';
-}
-
 const SYNC_ON = '\x1b[?2026h';
 const SYNC_OFF = '\x1b[?2026l';
 

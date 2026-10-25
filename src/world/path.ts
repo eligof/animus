@@ -1,4 +1,4 @@
-// Routing on the cave floor: a coarse walkability grid with A* for when a
+// Routing on the room's floor: a coarse walkability grid with A* for when a
 // straight walk would cut through a prop or a build, and string pulling so
 // characters walk straight lines between the corners that matter.
 
@@ -26,7 +26,7 @@ export class NavGrid {
   private heap: Int32Array;
   private f: Float32Array;
 
-  // Covers [x0, x1) x [y0, y1) in cells `cell` voxels wide. `blocked` rates
+  // Covers [x0, x1) x [y0, y1) in cells `cell` units wide. `blocked` rates
   // each cell centre: true or 2 = shut, 1 = near something (walkable at a
   // cost, so routes keep their distance where they can), else open.
   constructor(x0: number, y0: number, x1: number, y1: number, cell: number, blocked: (x: number, y: number) => boolean | number) {

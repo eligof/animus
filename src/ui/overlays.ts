@@ -5,6 +5,7 @@ import { BOLD } from '../term/screen.ts';
 import type { Theme } from '../themes/types.ts';
 import { ACTIVITIES } from '../agents.ts';
 import { clip } from '../claude/activity.ts';
+import { wrap } from './chat-lines.ts';
 import { activityColor, activityGlyph } from './chrome.ts';
 import { MIN_COLS, MIN_ROWS } from './layout.ts';
 import { spriteFor, traitsFor } from '../world/character.ts';
@@ -37,12 +38,13 @@ function centered(r: Rect, w: number, h: number): Rect {
 
 const HELP: Array<[string, string]> = [
   ['t / T', 'next / previous scene preset'],
-  ['1-9', 'jump to a preset'],
+  ['1-9, 0', 'jump to a preset'],
   ['p', 'preset picker (live preview)'],
   ['tab / shift-tab', 'select agent (← → too)'],
   ['esc', 'clear selection / close'],
+  ['i / c / enter', 'card on / off · cheer · talk to it'],
   ['d', 'toggle the demo crew'],
-  ['r', 'pixels: half blocks / sextants'],
+  ['r', 'scene / agent dashboard'],
   ['l', 'lighting on / off'],
   ['+ / -', 'zoom in / out (z: auto)'],
   ['f', 'fullscreen scene (hide the panels)'],
@@ -51,22 +53,34 @@ const HELP: Array<[string, string]> = [
   ['q / ctrl-c', 'quit'],
 ];
 
-// `images`: the terminal shows images, so r cycles into HD too; without,
-// a line under r says where HD is.
-export function drawHelp(s: Screen, r: Rect, theme: Theme, images = false): void {
+// `images`: the terminal shows images, so r switches to the scene; without,
+// a line in its place says where the scene is. `note`: something the user
+// should know (the crews not being saved), under the keys; on the smallest
+// screen there is no room for it, and the way out says it too.
+export function drawHelp(s: Screen, r: Rect, theme: Theme, images = false, note: string | null = null): void {
   const p = theme.palette;
   const rows = HELP.flatMap(([k, what]): Array<[string, string]> => {
     if (k !== 'r') return [[k, what]];
-    return images ? [[k, `${what} / HD`]] : [[k, what], ['', 'HD needs kitty, Ghostty or WezTerm']];
+    return images ? [[k, what]] : [['', 'the scene needs kitty, Ghostty or WezTerm']];
   });
-  const box = centered(r, 58, rows.length + 9);
+  const W = 58;
+  // Broken after its first colon, where it reads best.
+  const said = note ? wrap(note.replace(': ', ':\n'), W - 4) : [];
+  const box = centered(r, W, rows.length + 9 + (said.length ? said.length + 1 : 0));
   drawBox(s, box, p.border, p.panel, 'HELP');
   const end = box.x + box.w - 1;
   let y = box.y + 2;
   for (const [k, what] of rows) {
     if (y >= box.y + box.h - 1) break;
+    // A note (no key) takes the whole line.
     s.text(box.x + 3, y, k, p.accent, p.panel, BOLD, end);
-    s.text(box.x + 21, y, what, k ? p.panelText : p.dim, p.panel, 0, end);
+    s.text(k ? box.x + 21 : box.x + 3, y, what, k ? p.panelText : p.dim, p.panel, 0, end);
+    y++;
+  }
+  if (said.length) y++;
+  for (const line of said) {
+    if (y >= box.y + box.h - 1) break;
+    s.text(box.x + 3, y, line, p.warn, p.panel, 0, end);
     y++;
   }
   y++;
@@ -123,7 +137,7 @@ export function drawPicker(s: Screen, r: Rect, themes: readonly Theme[], index: 
 }
 
 // Curtain sweep across `r` at `p` (0..1): everything behind the band is
-// dimmed — both pixels of a half-block cell — and the band is drawn on top.
+// dimmed — background and foreground — and the band is drawn on top.
 export function drawWipe(s: Screen, r: Rect, p: number, accent: RGB, backdrop: RGB): void {
   if (p < 0 || p >= 1) return;
   const band = '░▒▓██▓▒░';

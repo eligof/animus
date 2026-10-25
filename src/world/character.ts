@@ -15,12 +15,22 @@ export type Pose =
   | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet';
 // Little pictures that pop up over a character's head.
 export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup';
-// How characters dress in a scene: wizards in the caves, lab coats in the
-// lab, party outfits in the club, hoodies in the den, space suits on the
-// station, everyday clothes in the café.
+// How characters dress in a scene: wizards in the mines and the caverns,
+// lab coats in the lab, party outfits in the club, hoodies in the den,
+// space suits on the station, everyday clothes in the café.
 export type Costume = 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual';
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
+
+// How an agent feels, from its meters (see pet/meters.ts), as its figure
+// shows it: drowsy eyes when its energy is critical, a bandage when its
+// health is, a grin (and a bigger bounce, see FigureFrame.hop) when its
+// mood is high.
+export type Feel = { drowsy: boolean; bandaged: boolean; bouncy: boolean };
+// What its level lets it wear (see pet/crew.ts): a hat from the world's
+// costume set, a badge on the shirt, its outfit in other colours, a soft
+// aura.
+export type Wear = { hat: boolean; badge: boolean; outfit: boolean; aura: boolean };
 
 export type Traits = {
   species: Species;

@@ -38,7 +38,8 @@ export function isWide(ch: string): boolean {
 // characters, medial Hangul jamo) would shift or reorder the cells after
 // them, so drawn text drops them.
 export const INVISIBLE = /[\p{Cf}\p{M}\u1160-\u11ff\ud7b0-\ud7ff\u{e0000}-\u{e0fff}\u2028\u2029]/u;
-const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+// C0 and C1 controls, DEL among them.
+export const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 // The one rule for putting untrusted text into cells: tab becomes a space,
 // control and zero-width characters are dropped ('' ), anything two cells

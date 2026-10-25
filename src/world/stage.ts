@@ -1,63 +1,52 @@
 import type { Activity, AgentInfo } from '../agents.ts';
+import type { Pen } from '../art/types.ts';
 import { clip } from '../claude/activity.ts';
+import { roleOf, unlocks } from '../pet/crew.ts';
+import { feelOf, meters } from '../pet/meters.ts';
 import type { RGB } from '../term/color.ts';
 import { mix, scale } from '../term/color.ts';
 import type { Rect, Screen } from '../term/screen.ts';
 import { BOLD } from '../term/screen.ts';
-import { CLEAR, PixelCanvas } from '../iso/canvas.ts';
-import { Works, defaultStyle } from '../cave/build.ts';
-import type { Construction, Disc } from '../cave/build.ts';
-import { Critter, critterFor } from '../cave/critter.ts';
-import { blitSprite, drawParticles, Glow } from '../cave/glow.ts';
-import { LIMITS, hub, planLayout, slotRect } from '../cave/layout.ts';
-import { contourPatterns } from '../cave/texture.ts';
-import { tagSize } from '../iso/png.ts';
-import type { Detail, Tag } from '../iso/png.ts';
-import { ADVANCE } from '../iso/font.ts';
-import { paintSky } from '../cave/sky.ts';
-import type { Rect as Box } from '../cave/layout.ts';
-import { buildTables, M, MATERIALS } from '../cave/materials.ts';
-import type { Tables } from '../cave/materials.ts';
-import { updateParticles } from '../cave/particles.ts';
-import { Caster } from '../cave/raycast.ts';
-import { explode, heal, step } from '../cave/sim.ts';
-import { depthOf, project } from '../cave/types.ts';
-import type { Biome, Ctx, Facing, Finale, Layout, Particle, Poi, PointLight, Slot, StationKind, View, WizardSprite } from '../cave/types.ts';
-import { Voxels } from '../cave/voxels.ts';
-import { wizardSprite } from '../cave/wizard.ts';
 import { activityColor, activityGlyph } from '../ui/chrome.ts';
+import type { WorldDef } from '../worlds/types.ts';
+import { Works } from './build.ts';
+import type { Construction, Disc } from './build.ts';
 import { poseFor, traitsFor } from './character.ts';
-import type { Pose, Traits } from './character.ts';
-import { Life, SLEEP_AFTER, defaultPois, emoteArt, faceToward, newMind } from './life.ts';
+import type { Feel, Pose, Traits, Wear } from './character.ts';
+import { Critter } from './critter.ts';
+import type { BuildFrame, Camera, FigureFrame, LabelFrame, SceneFrame, Trinket, TrinketFrame } from './frame.ts';
+import { EMOTE, FIGURE_H, HOP, MUG_TOP, figureTop, project } from './frame.ts';
+import { hub, planLayout, slotRect } from './layout.ts';
+import type { Rect as Box } from './layout.ts';
+import { Life, SLEEP_AFTER, faceToward, newMind } from './life.ts';
 import type { Look, Mind } from './life.ts';
+import { smoke, updateParticles } from './particles.ts';
 import { NavGrid, smooth } from './path.ts';
 import { Rng, hashString } from './rng.ts';
+import { NAV_CELL, NAV_PAD, footprint, heightAt, planRoom, toWorld } from './room.ts';
+import type { Room } from './room.ts';
+import type { Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
 
-// How pixels map to terminal cells: 'half' = 1x2 square pixels per cell
-// (upper half block), 'sextant' = 2x3 pixels per cell (2x3 sextant glyphs,
-// pixels about 3:4), three times the resolution where the terminal draws
-// sextants well; 'hd' = the scene as a real image (kitty graphics
-// protocol), each cell as many pixels as it really has, divided by the
-// image's blow-up (see setCell).
-export type PixelMode = 'half' | 'sextant' | 'hd';
-const GRID: Record<'half' | 'sextant', { fx: number; fy: number }> = {
-  half: { fx: 1, fy: 2 },
-  sextant: { fx: 2, fy: 3 },
-};
 // A terminal cell in pixels when the terminal has not said (common sizes).
 const CELL = { w: 10, h: 20 };
+// The room is planned so that, fitted to the scene, a unit is about this
+// many canvas pixels.
+const PX_PER_UNIT = 4;
+const FIT_MARGIN = 4; // units round the room when it is fitted to the scene
+// Zoom steps for + and -, times the fitted scale; never past MAX_S.
+const ZOOMS = [1, 1.5, 2, 3, 4];
+const MAX_S = 24; // canvas pixels per unit at most
+const CLOSE_UP = 2; // the zoom on a selected agent
 
-const WALK = 22; // voxels per second
+const WALK = 22; // units per second
 // Long trips go at up to JOG times a walk, easing back to a walk as the
-// last JOG_OVER voxels come up. A world planned bigger and shown zoomed
-// out (WORLD_SCALE) is crossed that many times faster, so a trip takes
-// about the same time on screen; so is one planned at one voxel per pixel
-// but wider than JOG_ROOM (HD's), easing over as far on screen.
+// last JOG_OVER units come up; rooms wider than JOG_ROOM are crossed that
+// many times faster again, so a trip takes about the same time on screen.
 const JOG = 1.5;
 const JOG_OVER = 20;
 const JOG_ROOM = 128;
-// Strides quicken with the pace on screen, up to this many times a walk's
-// (HD shows 10 frames a second), so a jog doesn't slide the feet.
+// Strides quicken with the pace, up to this many times a walk's, so a jog
+// doesn't slide the feet.
 const GAIT_MAX = 1.6;
 const ENTER_MS = 700;
 const BUBBLE_MS = 1500; // a detail shows in a bubble this long after it changes
@@ -67,17 +56,13 @@ const MAX_BUBBLES = 3;
 // (selection, error, change, finish) move at once and drift back sooner.
 const LABEL_HOLD_MS = 500;
 const LOUD_BACK_MS = 300;
-// In a crowd, counted in label columns and rows (text cells, or in HD the
-// tags' own characters and rows): a quiet label shrinks to its activity
-// glyph when another head is nearer than CROWD, and no more than BAND.max
-// names or bubbles stand within BAND of one another (a 16-column band),
-// the lowest in priority shrinking to its glyph. Quiet labels use the two
-// rows over the head, loud ones three.
+// In a crowd, counted in terminal columns and rows: a quiet label shrinks
+// to its activity glyph when another head is nearer than CROWD, and no
+// more than BAND.max names or bubbles stand within BAND of one another (a
+// 16-column band), the lowest in priority shrinking to its glyph. Quiet
+// labels use the two rows over the head, loud ones three.
 const CROWD = { cols: 9, rows: 4 };
 const BAND = { cols: 8, rows: 4, max: 3 };
-// A finish in the caves showers gold dust that settles.
-const GOLD: Finale = { colors: [[255, 211, 74]], mat: M.GOLD_DUST };
-const rgb = (c: RGB) => (c[0] << 16) | (c[1] << 8) | c[2];
 const ERROR_MS = 5000; // an error stays on show this long, whatever comes next
 const SMOKE_MS = 4000;
 // A new activity sends its agent to another prop only once it has lasted
@@ -85,59 +70,46 @@ const SMOKE_MS = 4000;
 // between the pose changes in place.
 const SETTLE_MS = 3000;
 const DWELL_MS = 9000;
-const SIM_HZ = 36;
-const MARGIN = 6; // world-canvas border around the chunk, in pixels
-// The world is planned for a canvas this many times the scene, then shown
-// zoomed out to fit: more room than one voxel per pixel would allow (the
-// figures stay full size). Not on tiny scenes or in half blocks, where the
-// zoomed-out room is too few pixels to read.
-const WORLD_SCALE = 2;
-const SCALE_MIN = { w: 120, h: 60 };
-// Zoom steps for + and -; the fitted zoom is always one more step.
-const ZOOMS = [1, 0.75, 0.5, 0.33];
 // Where a crowd at one prop stands: (along the wall, further out), in lane
 // steps. A line along the wall (across the screen in front of a prop out
-// on the floor), the middle and then out to either side, the room's front
-// side first; then a row a step further out, in the gaps of the first; then
-// a third. All within 2.5 steps of the prop's spot, so everyone still reads
-// as working there: past these, a crowd overlaps a little.
+// on the floor), the middle and then out to either side; then a row a step
+// further out, in the gaps of the first; then a third. All within 2.5
+// steps of the prop's spot, so everyone still reads as working there: past
+// these, a crowd overlaps a little.
 const LANES: ReadonlyArray<readonly [number, number]> = [[0, 0], [1, 0], [-1, 0], [2, 0], [-2, 0], [0.5, 1], [-0.5, 1], [1.5, 1], [-1.5, 1], [1, 2], [-1, 2]];
-// A lane step on screen: about a figure's width (the sprites are 9-12 px
-// wide). Zoomed out the figures stay full size, so the step in voxels grows
-// as the zoom shrinks (to 1/2 at most).
-const LANE_PX = 12;
+// A lane step: about a figure's width on screen, in units.
+export const LANE = 10;
 // A lane closer than this on screen to someone already at the prop (where
 // clamping to the floor lands two lanes together) is passed over.
-const LANE_APART_PX = 6;
-// Walkers detouring through the hub keep this many voxels to one side of it
+const LANE_APART = 5;
+// Walkers detouring through the hub keep this many units to one side of it
 // (which side hashed from the id), so the traffic forms two lanes.
 const HUB_LANE = 3;
 // Poses done with the back to the viewer, facing the prop.
 const FACES_STATION = new Set<Pose>(['write', 'read', 'search', 'web', 'run', 'think']);
-const EMOTE_LIFT = 17; // emote bottom, pixels above the feet
 const MAX_EMOTES = 3; // shown at once
-// The selected agent's floor ring (13x5, an iso ellipse round the feet).
-const RING = ['....#####....', '..##.....##..', '##.........##', '..##.....##..', '....#####....'];
-const NAV_CELL = 2; // voxels per routing cell
-const NAV_PAD = 2; // routing keeps this far from props and builds
-// A build's ghost: a hologram in a cool complement of the world (cyan in a
-// warm one, amber in a cold one), shaded per face like the voxels it stands
-// for (top, left +y, right +x; see raycast.ts), laid over what is behind it
-// at these shares: the lit and unlit halves of its checker, a bright 1 px
-// outline round its silhouette, and a band sweeping up it.
+// A happy agent's bounce: HOP high (units), a hop a step while walking,
+// one every HOP_IDLE seconds standing about.
+const HOP_WALK = 0.25;
+const HOP_IDLE = 0.5;
+// Desk upgrades by role (picked by a hash of crew and role); how far from
+// its station's corner one stands; how far it keeps from where anyone
+// works or stands (the first of these it can, so a small room's crowded
+// station still gets one, never on such a spot) and from the entrance;
+// how often they are worked out again (seconds) when nothing says so
+// sooner; crew roles whose time at each station is kept, at most.
+const TRINKETS: readonly Trinket[] = ['plant', 'mug', 'trophy'];
+const TRINKET_GAP = 2;
+const TRINKET_CLEAR = [4, 3, 2];
+const TRINKET_DOOR = 4;
+const TRINKETS_EVERY = 0.5;
+const MAX_WORKED = 200;
+// A level-up's ★N! rises this long (seconds), its figure's emotes kept
+// down meanwhile.
+const WORD_S = 3;
+// A build's ghost: a cool complement of the world (cyan in a warm one,
+// amber in a cold one).
 const GHOST_HUE: { warm: RGB; cold: RGB } = { warm: [127, 232, 255], cold: [255, 179, 71] };
-const GHOST_FACE = [1, 200 / 256, 150 / 256];
-const GHOST = 0.5;
-const GHOST_DIM = 0.22;
-const GHOST_EDGE = 0.85;
-const GHOST_SCAN = 0.7;
-const SCAN_S = 2; // seconds a sweep takes
-const SCAN_H = 3; // the band's height, pixels
-
-type Spot = { x: number; y: number };
-type Placed = { sx: number; sy: number; top: number };
-// A figure to draw this frame: sprite, anchor (world pixels), depth.
-type Fig = { sp: WizardSprite; sx: number; sy: number; d: number; shown: boolean; outline: boolean };
 
 export type Actor = {
   info: AgentInfo;
@@ -145,7 +117,6 @@ export type Actor = {
   phase: number;
   x: number;
   y: number;
-  z: number; // standing height, eased toward the ground under the feet; -1 = unknown
   path: Spot[];
   station: Slot | null;
   lane: number;
@@ -156,16 +127,34 @@ export type Actor = {
   gone: boolean;
   fx: number; // seconds since the last activity effect
   order: number;
-  boomed: number; // `since` of the error that last exploded
-  error: { until: number; text: string; x: number; y: number; z: number } | null; // the last error, on show for a while
+  boomed: number; // `since` of the error that last went bang
+  error: { until: number; text: string; x: number; y: number } | null; // the last error, on show for a while
   cheered: number; // `since` of the finish last celebrated
   settledAt: number; // when it last arrived at its prop
   gait: number; // seconds its strides have run ahead of the clock (jogging)
   mind: Mind; // what it is up to between the work (see life.ts)
+  hush: number; // no emote shows over it until then (stage clock: a level-up's word rises)
 };
 
-// Letters drifting up in text cells (z's of a sleeper, a '!' on errors).
+// Letters drifting up as terminal text (z's of a sleeper, a '!' on errors,
+// ★N! on a level-up).
 type Glyph = { x: number; y: number; z: number; vz: number; ch: string; color: RGB; life: number };
+
+// A crew role's key: its crew and role (see pet/crew.ts).
+const roleKey = (a: AgentInfo) => `${a.crew}\n${roleOf(a)}`;
+
+// What a level lets one wear (nothing at ★1), one object a level.
+const wears = new Map<number, Wear | undefined>();
+function wearAt(level: number): Wear | undefined {
+  if (!wears.has(level)) {
+    const u = unlocks(level);
+    wears.set(level, level < 2 ? undefined : { hat: u.hat, badge: u.badge, outfit: u.outfit, aura: u.aura });
+  }
+  return wears.get(level);
+}
+
+// How far a spot is from a rect (0 inside it).
+const off = (p: Spot, r: Box) => Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1));
 
 export function stationKindFor(a: Activity): StationKind | null {
   switch (a) {
@@ -180,78 +169,63 @@ export function stationKindFor(a: Activity): StationKind | null {
   }
 }
 
-// The scene: an isometric chunk of a Noita-style cave, every voxel
-// simulated, with agents as tiny wizards walking to the prop for their
-// current activity — where their work has physical effects — and living
-// a little in between (see life.ts): wandering, chatting, building.
+// The scene's model: an illustrated room with agents as characters walking
+// to the prop for their current activity and living a little in between
+// (see life.ts): wandering, chatting, building. Nothing is drawn here but
+// the labels (terminal text); `frame` hands a renderer everything else.
 export class Stage {
-  private biome: Biome;
+  private world: WorldDef;
   private rect: Rect = { x: 0, y: 0, w: 0, h: 0 };
-  private mode: PixelMode;
   private cell = { ...CELL };
-  // HD surface patterns per screen pixel (valid when detailOn).
-  private detail = new Uint16Array(0);
-  private detailOn = false;
-  // Lighting (grade, glow, bloom); off draws the flat materials.
+  // Lighting (lamp light, glows); off asks the scene for flat colours.
   lit = true;
 
   private L: Layout | null = null;
-  private v: Voxels | null = null;
-  private T: Tables;
-  private caster: Caster | null = null;
-  private glow = new Glow();
-  private view: View = { ox: 0, oy: 0 };
-  private world = new PixelCanvas(0, 0); // the whole chunk, lit
-  private screen = new PixelCanvas(0, 0); // the part shown in the scene rect
-  private albedo = new Int32Array(0);
-  private emit = new Int32Array(0);
-  private depth = new Float32Array(0);
-  // Per pixel, the nearest ghost voxel this frame: its depth and colour.
-  private ghostD = new Float32Array(0);
-  private ghostC = new Int32Array(0);
-  private cam = { x: 0, y: 0, set: false };
-  // Current zoom (eased), and the one asked for with +/- (null = auto: fit
-  // the whole world, or full detail on the selected agent).
+  private plan: Room | null = null;
+  private worldKey = '';
+  // The camera: the view's top-left in screen units (x - y, (x + y) / 2 - z),
+  // eased; the zoom (times the fitted scale, eased) and the one asked for
+  // with +/- (null = auto: fit the room, or a close-up on the selection).
+  private cam = { u: 0, v: 0, set: false };
   private zoom = 1;
   private zoomWant: number | null = null;
-  private k = 1; // world pixels planned per screen pixel
-  private colsAt = new Int32Array(0);
-  private rowsAt = new Int32Array(0);
-  private worldKey = '';
+  private camera: Camera | null = null; // as of the last frame
 
   private cast = new Map<string, Actor>();
   private particles: Particle[] = [];
   private glyphs: Glyph[] = [];
-  private lights: PointLight[] = [];
   private rng = new Rng(1234);
-  private simRng = new Rng(4321);
-  private tick = 0;
-  private simAcc = 0;
   private clock = 0;
   private now = 0;
   private seq = 0;
   private placedLabels: Array<{ x: number; y: number; w: number }> = [];
-  private tags: Tag[] = []; // HD: name tags drawn into the image (see png.ts)
-  // Emotes over heads in the last draw.
+  // Emotes over heads in the last frame.
   emotesShown = 0;
-  // Pixels of build ghosts in the last draw.
-  ghostShown = 0;
   // Each label's row above the head, and since when it has been blocked.
   private rows = new Map<string, { off: number; blocked: number; clear?: number }>();
 
   readonly life: Life;
   private works: Works | null = null;
   private critter: Critter | null = null;
+  // Seconds each crew role (see roleKey) worked at each station this run,
+  // and the desk upgrades as they stand.
+  private worked = new Map<string, Map<StationKind, number>>();
+  private trinkets: TrinketFrame[] = [];
+  // The upgrades are due to be worked out again (the cast, a level or the
+  // room changed), and when they last were.
+  private trinketsDue = true;
+  private trinketsAt = -Infinity;
+  // The steam off mugs draws on its own chance, so whether one stands
+  // shifts nothing else the stage draws.
+  private steam = new Rng(0x57ea);
   private spots: Poi[] = [];
   private nav: NavGrid | null = null;
   private navKey = '';
   private blocks: { discs: Disc[]; rects: Box[] } = { discs: [], rects: [] };
   private blocksAt = -1;
 
-  constructor(biome: Biome, mode: PixelMode = 'half') {
-    this.biome = biome;
-    this.mode = mode;
-    this.T = buildTables(biome.colors);
+  constructor(world: WorldDef) {
+    this.world = world;
     this.life = new Life({
       walk: (a, to) => this.walkOff(a, to),
       standable: (s) => this.standable(s),
@@ -266,99 +240,27 @@ export class Stage {
     });
   }
 
-  get pixels(): PixelMode {
-    return this.mode;
-  }
-
-  setMode(mode: PixelMode): void {
-    this.mode = mode;
-    this.layout(this.rect);
-  }
-
-  // The terminal's cell size in pixels, for HD mode.
-  setCell(w: number, h: number): void {
-    if (w === this.cell.w && h === this.cell.h) return;
+  // The terminal's cell size in pixels (the canvas is the scene's cells at
+  // this size).
+  // Whether the size changed.
+  setCell(w: number, h: number): boolean {
+    if (w === this.cell.w && h === this.cell.h) return false;
     this.cell = { w, h };
-    if (this.mode === 'hd') this.layout(this.rect);
+    this.layout(this.rect);
+    return true;
   }
 
-  // HD mode: how many image pixels each canvas pixel becomes (crisp, whole
-  // numbers: 2 on common screens, 3 on dense ones).
-  hdScale(): number {
-    if (this.cell.h < 12) return 1;
-    // As big as the biggest room still fits the scene: 2 on most screens,
-    // 3 or 4 on large or dense ones.
-    const room = { w: 2 * LIMITS.maxSide + 2 * MARGIN, h: LIMITS.maxSide + LIMITS.maxH + 2 * MARGIN };
-    const fit = Math.min((this.rect.w * this.cell.w) / room.w, (this.rect.h * this.cell.h) / room.h);
-    return Math.max(2, Math.min(4, Math.floor(fit)));
+  get cellSize(): { w: number; h: number } {
+    return { ...this.cell };
   }
 
-  // Canvas pixels per terminal cell.
-  private grid(): { fx: number; fy: number } {
-    if (this.mode !== 'hd') return GRID[this.mode];
-    const k = this.hdScale();
-    return { fx: Math.max(1, Math.floor(this.cell.w / k)), fy: Math.max(1, Math.floor(this.cell.h / k)) };
-  }
-
-  // HD: ambient animation (light flicker, the sky) is held for steps of
-  // 1 / AMBIENT_HZ s; the step of the last draw (null outside HD).
-  private static readonly AMBIENT_HZ = 3;
-  private ambient: number | null = null;
-  private drawnFigs: Fig[] = []; // the characters as last drawn
-
-  // The finished scene in HD mode: the canvas to blow up by `scale` and
-  // show over the scene's cells (left blank by draw), or null.
-  // For streaming it (see HdStream in app.ts), what changes it on purpose
-  // rather than as ambient animation: `hot`, boxes in canvas pixels round
-  // each figure (with its emote and the light it carries), the critter and
-  // every bolt; `view`, the camera (a change moves everything); `ambient`,
-  // the step of ambient time drawn.
-  hdImage(): { canvas: PixelCanvas; scale: number; rect: Rect; cell: { w: number; h: number }; detail: Detail | null; tags: readonly Tag[]; hot: Box[]; view: string; ambient: number | null } | null {
-    if (this.mode !== 'hd' || !this.L || this.rect.w <= 0 || this.rect.h <= 0) return null;
-    const scale = this.hdScale();
-    const detail = this.detailOn && scale > 1 ? { idx: this.detail, pats: contourPatterns(scale) } : null;
-    const z = this.zoom;
-    const zf = z >= 0.999 ? Math.round(z) : z; // screen pixels per world pixel
-    const m = z >= 0.999 ? zf : 1; // per sprite pixel (zoomed out, figures stay full size)
-    const hot: Box[] = [];
-    const around = (x: number, y: number, at: number, half: number, up: number, down: number) => {
-      const [fx, fy] = this.toScreen(...project(this.view, x, y, at));
-      hot.push({ x0: Math.floor(fx - half), y0: Math.floor(fy - up), x1: Math.ceil(fx + half), y1: Math.ceil(fy + down) });
-    };
-    // Each figure as drawn: its sprite with the glow its lit pixels spread
-    // (the light grid's 4 blur passes of a 4 px cell, plus a cell gathering
-    // and one upsampling: 24 px), the pool of the light it carries (its
-    // radius plus a cell), and its emote above. Nothing it changes, by even
-    // one level, lies outside (see glow.ts).
-    const glow = 24;
-    for (const f of this.drawnFigs) {
-      const sp = f.sp;
-      const [fx, fy] = this.toScreen(f.sx, f.sy);
-      const b = { x0: fx + (sp.dx - sp.ax) * m - glow * zf, y0: Math.min(fy + (sp.dy - sp.ay) * m - glow * zf, fy - EMOTE_LIFT - 17), x1: fx + (sp.dx - sp.ax + sp.w) * m + glow * zf, y1: fy + (sp.dy - sp.ay + sp.h) * m + glow * zf };
-      if (sp.light) {
-        const r = (sp.light.radius + 5) * zf;
-        const cx = fx + (sp.light.dx + sp.dx) * zf;
-        const cy = fy + (sp.light.dy + sp.dy) * zf;
-        Object.assign(b, { x0: Math.min(b.x0, cx - r), y0: Math.min(b.y0, cy - r), x1: Math.max(b.x1, cx + r), y1: Math.max(b.y1, cy + r) });
-      }
-      hot.push({ x0: Math.floor(b.x0) - 1, y0: Math.floor(b.y0) - 1, x1: Math.ceil(b.x1) + 1, y1: Math.ceil(b.y1) + 1 });
-    }
-    const cr = this.critter;
-    // The critter while it trots or shows a heart; sitting, it is scenery.
-    if (cr && (cr.moving || cr.heartUntil > this.life.clock)) around(cr.x, cr.y, this.L.floor, Math.max(8 * m, 6 * zf) + 2, Math.max(28, 12 * m), 4 * m + 2);
-    for (const p of this.particles) if (p.target) around(p.x, p.y, p.z, 4 * zf + 2, 4 * zf + 2, 4 * zf + 2);
-    const view = z >= 0.999 ? `${zf},${Math.round(this.cam.x)},${Math.round(this.cam.y)}` : `${z.toFixed(3)},${Math.round(this.cam.x * z * 4)},${Math.round(this.cam.y * z * 4)}`;
-    return { canvas: this.screen, scale, rect: this.rect, cell: this.cell, detail, tags: this.tags, hot, view, ambient: this.ambient };
-  }
-
-  // Cells taken by labels and bubbles in the last draw.
+  // Cells taken by labels and bubbles in the last frame.
   labels(): Array<{ x: number; y: number; w: number }> {
     return this.placedLabels;
   }
 
-  setTheme(biome: Biome): void {
-    this.biome = biome;
-    this.T = buildTables(biome.colors);
+  setTheme(world: WorldDef): void {
+    this.world = world;
     this.worldKey = '';
     this.layout(this.rect);
   }
@@ -367,9 +269,9 @@ export class Stage {
     return this.L?.slots ?? [];
   }
 
-  // The live voxel world (for tests and tools).
-  voxels(): Voxels | null {
-    return this.v;
+  // The furnished room (for renderers, tests and tools).
+  room(): Room | null {
+    return this.plan;
   }
 
   // What characters build, where idle ones like to go, and the critter.
@@ -397,25 +299,40 @@ export class Stage {
     return out;
   }
 
+  // The user cheers an agent on: it throws its arms up, a heart over it.
+  cheer(id: string): void {
+    const a = this.cast.get(id);
+    if (!a) return;
+    this.life.gesture(a, 'cheer', 1.2);
+    this.life.emote(a, 'heart', 2);
+  }
+
+  // Its role reached `level`: a shower of the world's confetti, as a
+  // finish has, ★N! rising over its head (where an emote would be: none
+  // shows over it while the word rises, so nothing hides it), and it
+  // cheers, unless it is hauling a block (it keeps hold of that).
+  levelUp(id: string, level: number): void {
+    const a = this.cast.get(id);
+    if (!a || !this.L) return;
+    this.burst(a);
+    this.glyphs.push({ x: a.x, y: a.y, z: this.top(a) + 3, vz: 2.2, ch: `★${level}!`, color: this.world.palette.warn, life: WORD_S });
+    a.mind.emote = null;
+    a.hush = this.clock + WORD_S;
+    if (!this.life.carrying(a)) this.life.gesture(a, 'cheer', 1.4);
+  }
+
   layout(r: Rect): void {
     this.rect = r;
-    // Nothing to show: keep the world as it is and skip drawing.
+    // Nothing to show: keep the room as it is.
     if (r.w <= 0 || r.h <= 0) return;
-    const g = this.grid();
-    const cw = r.w * g.fx;
-    const ch = r.h * g.fy;
-    this.screen = new PixelCanvas(cw, ch);
-    // HD has pixels to spare: the world is planned at one voxel per pixel.
-    const k = this.mode !== 'sextant' || cw < SCALE_MIN.w || ch < SCALE_MIN.h ? 1 : WORLD_SCALE;
-    this.k = k;
-    const L = planLayout(cw * k, ch * k, this.biome.id);
-    const key = `${this.biome.id}:${L.W}x${L.D}x${L.H}`;
+    const L = planLayout((r.w * this.cell.w) / PX_PER_UNIT, (r.h * this.cell.h) / PX_PER_UNIT, this.world.id);
+    const key = `${this.world.id}:${L.W}x${L.D}x${L.H}`;
     if (key !== this.worldKey) this.build(L, key);
-    else this.L = L;
+    this.trinketsDue = true;
     this.cam.set = false;
+    this.camera = this.aim([], null, false);
     for (const a of this.cast.values()) {
       Object.assign(a, this.clampToFloor(a));
-      a.z = -1;
       a.station = null;
       a.path = [];
       this.life.end(a);
@@ -425,40 +342,21 @@ export class Stage {
     }
   }
 
-  // Generates the biome into a fresh world sized for the layout and casts
-  // every pixel once; plans where life goes on in it.
+  // Furnishes a fresh room for the layout and plans where life goes on in it.
   private build(L: Layout, key: string): void {
     this.worldKey = key;
     this.L = L;
-    const v = new Voxels(L.W, L.D, L.H);
-    this.biome.generate(v, L, new Rng(hashString(this.biome.id)));
-    v.commitBase();
-    this.v = v;
-    const w = L.W + L.D + 2 * MARGIN;
-    const h = Math.ceil((L.W + L.D) / 2) + L.H + 2 * MARGIN;
-    this.view = { ox: L.D + MARGIN, oy: L.H + MARGIN };
-    this.world = new PixelCanvas(w, h);
-    this.albedo = new Int32Array(w * h);
-    this.emit = new Int32Array(w * h);
-    this.depth = new Float32Array(w * h);
-    this.ghostD = new Float32Array(w * h).fill(-Infinity);
-    this.ghostC = new Int32Array(w * h);
-    this.caster = new Caster(v, this.T, w, h, this.view);
-    const b = this.biome.backdrop;
-    // Translucent edges against the void blend over the biome's backdrop.
-    this.caster.backdrop = (b[0] << 16) | (b[1] << 8) | b[2];
-    this.caster.renderAll();
+    const seed = hashString(this.world.id);
+    this.plan = planRoom(this.world, L, seed);
     this.particles = [];
     this.glyphs = [];
-    this.lights = [];
-    const seed = hashString(this.biome.id);
-    this.works = new Works(v, L, this.biome.build ?? defaultStyle(v, L), new Rng(seed ^ 0xb111d));
+    this.works = new Works(L, { colors: this.world.build.colors, shape: this.world.build.shape }, new Rng(seed ^ 0xb111d), this.plan.supply);
     this.blocksAt = -1;
     this.nav = null;
-    this.spots = (this.biome.pois?.(L) ?? defaultPois(L, v)).filter((p) => p.x > L.T && p.y > L.T && p.x < L.W - 1 && p.y < L.D - 1);
+    this.spots = this.plan.pois;
     const home = this.spots.find((p) => p.kind === 'pet');
     const g = Math.max(0, Math.min(1, (L.W - 72) / 98));
-    this.critter = home ? new Critter(critterFor(this.biome.id), home, 6 + 4 * g, seed ^ 0xca7) : null;
+    this.critter = home ? new Critter({ kind: this.world.critter.kind, body: this.world.critter.body }, home, 6 + 4 * g, seed ^ 0xca7) : null;
     this.life.setWorld(this.spots, this.works, this.critter, this.cast.values());
   }
 
@@ -482,10 +380,11 @@ export class Stage {
     return this.blocks;
   }
 
-  // Inside some prop's footprint, a build or a pile (grown by `margin`).
+  // Inside some prop's footprint (a station or decor), a build or a pile
+  // (grown by `margin`).
   private inside(s: Spot, margin: number): boolean {
-    for (const p of this.stations()) {
-      const r = slotRect(p);
+    for (const p of this.plan?.props ?? []) {
+      const r = footprint(p);
       if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
     }
     const o = this.obstacles();
@@ -528,26 +427,17 @@ export class Stage {
     return !this.inside(s, 1.2);
   }
 
-  // Bare floor with headroom, in view: no decor, pool or furniture
-  // underfoot or overhead, nor anything just in front (toward the camera,
-  // along +x +y) tall enough to hide most of whoever stands there. A lane
-  // spot can land anywhere along the wall.
+  // In view: nothing just in front (toward the camera, along +x +y) tall
+  // enough to hide most of whoever stands there. A lane spot can land
+  // anywhere along the wall.
   private level(s: Spot): boolean {
-    const v = this.v;
-    const L = this.L;
-    if (!v || !L) return true;
-    const x = Math.floor(s.x);
-    const y = Math.floor(s.y);
-    const g = v.ground(x, y);
-    if (Math.abs(g - L.floor) > 2) return false;
-    for (let z = g; z < g + 12; z++) if (v.get(x, y, z) !== M.AIR) return false;
-    // Zoomed out a figure stays full size, so it spans more of the world.
-    const z = Math.max(this.fitZoom(), 0.5);
-    for (let dy = 0; dy <= 14; dy++) {
-      for (let dx = dy ? 0 : 1; dx <= 14; dx++) {
+    const room = this.plan;
+    if (!room) return true;
+    for (let dy = 0; dy <= FIGURE_H; dy++) {
+      for (let dx = dy ? 0 : 1; dx <= FIGURE_H; dx++) {
         // Across the middle of the figure, taller than a third of it.
-        if (Math.abs(dx - dy) > 3 / z) continue;
-        if (v.ground(x + dx, y + dy, L.floor + 32) - L.floor > (dx + dy) / 2 + 5 / z) return false;
+        if (Math.abs(dx - dy) > 3) continue;
+        if (heightAt(room, s.x + dx, s.y + dy) > (dx + dy) / 2 + 5) return false;
       }
     }
     return true;
@@ -557,12 +447,11 @@ export class Stage {
     return (this.now - a.info.since) / 1000;
   }
 
-  // Someone stands in voxel (x, y, z).
+  // Someone stands in the unit block at (x, y, z).
   private occupied(x: number, y: number, z: number): boolean {
+    if (z < -1 || z >= FIGURE_H) return false;
     for (const a of this.cast.values()) {
-      if (Math.abs(x + 0.5 - a.x) >= 1.3 || Math.abs(y + 0.5 - a.y) >= 1.3) continue;
-      const az = this.zOf(a);
-      if (z >= az - 1 && z < az + 14) return true;
+      if (Math.abs(x + 0.5 - a.x) < 1.3 && Math.abs(y + 0.5 - a.y) < 1.3) return true;
     }
     return false;
   }
@@ -598,44 +487,43 @@ export class Stage {
     const dest = (o: Actor): Spot => o.path[o.path.length - 1] ?? o;
     const there = others.map(dest);
     const near = [...this.cast.values()].filter((o) => o !== a && o.station && o.station !== st).map(dest);
-    const zoom = Math.max(this.fitZoom(), 0.5);
-    const step = Math.ceil(LANE_PX / zoom);
     // Along the wall; out on the floor, across the screen in front of the
     // prop (along +x -y), a row further out a step down the screen, so no
     // one stands beside or behind it.
-    const spotFor = (k: number): Spot => {
-      const along = LANES[k][0] * step;
-      const out = LANES[k][1] * step;
-      if (st.island) return this.clampToFloor({ x: st.spot.x + along / 2 + out, y: st.spot.y - along / 2 + out });
-      return this.clampToFloor(st.wall === 'right' ? { x: st.spot.x + along, y: st.spot.y + out } : { x: st.spot.x + out, y: st.spot.y + along });
-    };
-    // How far apart two spots are on screen, in pixels.
-    const px = (p: Spot, q: Spot) => Math.hypot(p.x - q.x - (p.y - q.y), (p.x - q.x + p.y - q.y) / 2) * zoom;
-    const gap = (s: Spot, to: Spot[]) => Math.min(Infinity, ...to.map((o) => px(s, o)));
+    const spotFor = (k: number): Spot => this.laneSpot(st, k);
+    const gap = (s: Spot, to: Spot[]) => Math.min(Infinity, ...to.map((o) => onScreen(s, o)));
     // The first free lane on bare floor clear of every prop that keeps a
     // step from everyone round it and off the other props' own spots; then
     // the first a step from the others there and off those spots; then a
-    // step from the others there; then one not on top of them
-    // (LANE_APART_PX: clamping to the floor lands lanes together); then the
-    // one furthest from them, clear if any is. With every lane taken, any.
+    // step from the others there; then one not on top of them (LANE_APART:
+    // clamping to the floor lands lanes together); then the one furthest
+    // from them, clear if any is. With every lane taken, any.
     const free = [...LANES.keys()].filter((k) => !taken.has(k));
     const lanes = (free.length ? free : [...LANES.keys()]).map((k) => ({ k, s: spotFor(k) }));
     // (Clamped to the floor, an island's lane can end up beside it.)
     const before = (s: Spot) => !st.island || s.x + s.y >= st.spot.x + st.spot.y - 1;
     const clear = lanes.filter((l) => !this.inside(l.s, 1.5) && this.level(l.s) && before(l.s));
     const props = this.L.slots.filter((p) => p !== st).map((p) => p.spot);
-    const mates = (l: { k: number; s: Spot }) => gap(l.s, there) >= LANE_PX;
-    const own = (l: { k: number; s: Spot }) => l.k === 0 || gap(l.s, props) >= LANE_PX;
+    const mates = (l: { k: number; s: Spot }) => gap(l.s, there) >= LANE;
+    const own = (l: { k: number; s: Spot }) => l.k === 0 || gap(l.s, props) >= LANE;
     const pick =
-      clear.find((l) => mates(l) && own(l) && gap(l.s, near) >= LANE_PX) ??
+      clear.find((l) => mates(l) && own(l) && gap(l.s, near) >= LANE) ??
       clear.find((l) => mates(l) && own(l)) ??
       clear.find(mates) ??
-      clear.find((l) => gap(l.s, there) >= LANE_APART_PX) ??
+      clear.find((l) => gap(l.s, there) >= LANE_APART) ??
       [...(clear.length ? clear : lanes)].sort((p, q) => gap(q.s, there) - gap(p.s, there))[0];
     a.station = st;
     a.lane = pick.k;
     this.walkTo(a, pick.s);
     if (a.state === 'work') a.state = 'walk';
+  }
+
+  // Where the k-th of a crowd at `st` stands (see LANES and retarget).
+  private laneSpot(st: Slot, k: number): Spot {
+    const along = LANES[k][0] * LANE;
+    const out = LANES[k][1] * LANE;
+    if (st.island) return this.clampToFloor({ x: st.spot.x + along / 2 + out, y: st.spot.y - along / 2 + out });
+    return this.clampToFloor(st.wall === 'right' ? { x: st.spot.x + along, y: st.spot.y + out } : { x: st.spot.x + out, y: st.spot.y + along });
   }
 
   private retargetExit(a: Actor): void {
@@ -687,15 +575,22 @@ export class Stage {
     return false;
   }
 
+  // Round the props on the room's own grid; once builds or piles stand, on
+  // one that has them too (rebuilt when they change).
   private route(from: Spot, to: Spot): Spot[] | null {
     const L = this.L;
-    if (!L) return null;
-    const key = `${this.worldKey}:${this.works?.version ?? 0}`;
-    if (!this.nav || this.navKey !== key) {
-      this.navKey = key;
-      this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => (this.inside({ x, y }, 0.8) ? 2 : this.inside({ x, y }, NAV_PAD) ? 1 : 0));
+    if (!L || !this.plan) return null;
+    const o = this.obstacles();
+    let nav = this.plan.nav;
+    if (o.discs.length || o.rects.length) {
+      const key = `${this.worldKey}:${this.works?.version ?? 0}`;
+      if (!this.nav || this.navKey !== key) {
+        this.navKey = key;
+        this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => (this.inside({ x, y }, 0.8) ? 2 : this.inside({ x, y }, NAV_PAD) ? 1 : 0));
+      }
+      nav = this.nav;
     }
-    const cells = this.nav.find(from, to);
+    const cells = nav.find(from, to);
     if (!cells) return null;
     return smooth(from, [...cells.slice(1, -1), to], (p, q) => !this.clips(p, q));
   }
@@ -715,6 +610,7 @@ export class Stage {
         a.traits = traitsFor(info.id, info.role, info.agentType);
       }
       const prev = a.info;
+      if (prev.level !== info.level || roleKey(prev) !== roleKey(info)) this.trinketsDue = true;
       const changed = prev.activity !== info.activity || prev.detail !== info.detail;
       const kindChanged = stationKindFor(prev.activity) !== stationKindFor(info.activity);
       a.info = info;
@@ -750,7 +646,6 @@ export class Stage {
       phase: hashString(info.id) % 997,
       x: at.x,
       y: at.y,
-      z: -1,
       path: [],
       station: null,
       lane: 0,
@@ -767,8 +662,10 @@ export class Stage {
       settledAt: now,
       gait: 0,
       mind: newMind(info.id, this.life.clock),
+      hush: 0,
     };
     this.cast.set(info.id, a);
+    this.trinketsDue = true;
     this.retarget(a);
     this.sparkle(a, 16, a.traits.color);
     this.life.arrived(a, this.cast.values());
@@ -793,68 +690,155 @@ export class Stage {
       } else if (a.state === 'work') {
         a.state = 'walk';
       }
-      this.settle(a, dt);
       this.effects(a, dt, now);
     }
     this.life.update([...this.cast.values()], dt);
+    this.tally(dt);
     if ((this.works?.version ?? -1) !== this.blocksAt) this.makeWay();
-    for (const [id, a] of this.cast) if (a.gone) this.cast.delete(id);
+    for (const [id, a] of this.cast) {
+      if (!a.gone) continue;
+      this.cast.delete(id);
+      this.trinketsDue = true;
+    }
     for (const g of this.glyphs) {
       g.z += g.vz * dt;
       g.life -= dt;
     }
     this.glyphs = this.glyphs.filter((g) => g.life > 0);
-    this.simulate(dt);
+    this.emit(dt);
+    updateParticles(this.particles, dt, this.L ?? undefined);
   }
 
-  // Eases the standing height toward the ground under the feet. The ground
-  // is looked for at most a step above the current height, so a wizard
-  // never pops onto a mound or a falling grain above their head.
-  private settle(a: Actor, dt: number): void {
-    const v = this.v;
-    if (!v) return;
-    const x = Math.floor(a.x);
-    const y = Math.floor(a.y);
-    const target = v.ground(x, y, a.z < 0 ? v.H - 1 : Math.floor(a.z) + 3);
-    if (a.z < 0) a.z = target;
-    else a.z += Math.max(-40 * dt, Math.min(20 * dt, target - a.z));
+  // Time at work at each station, by crew role, and the desk upgrades it
+  // earns (worked out again when the cast or a level changes, else now and
+  // then: a favourite station shifts slowly); a mug steams.
+  private tally(dt: number): void {
+    for (const a of this.cast.values()) {
+      const k = a.station?.kind;
+      if (a.state !== 'work' || !k || k === 'entrance' || !a.info.crew) continue;
+      const key = roleKey(a.info);
+      let m = this.worked.get(key);
+      if (!m) {
+        if (this.worked.size >= MAX_WORKED) this.worked.delete(this.worked.keys().next().value!);
+        this.worked.set(key, (m = new Map()));
+      }
+      m.set(k, (m.get(k) ?? 0) + dt);
+    }
+    if (this.trinketsDue || this.clock >= this.trinketsAt + TRINKETS_EVERY) {
+      this.trinkets = this.placeTrinkets();
+      this.trinketsDue = false;
+      this.trinketsAt = this.clock;
+    }
+    const r = this.steam;
+    for (const tk of this.trinkets) {
+      if (tk.kind === 'mug' && r.next() < dt / 0.45) this.add({ ...smoke(tk.x, tk.y, MUG_TOP, r, [236, 232, 228], 'steam'), vz: 2.5, life: 1.3 });
+    }
   }
 
-  // Props and weather, then the physics at a fixed rate, healing, and the
-  // free particles.
-  private simulate(dt: number): void {
-    const v = this.v;
+  // The desk upgrades (★5): one for each crew role here at that level, at
+  // the station it worked most this run, a plant, a mug or a trophy by
+  // its role, in the colour of one of its agents.
+  private placeTrinkets(): TrinketFrame[] {
     const L = this.L;
-    if (!v || !L) return;
-    this.lights = [];
-    const c: Ctx = {
-      v,
-      rng: this.simRng,
-      t: this.clock,
-      dt,
-      spawn: (p) => this.add(p),
-      light: (l) => this.lights.push(l),
-    };
-    const actors = [...this.cast.values()];
+    if (!L || this.worked.size === 0) return [];
+    const out: TrinketFrame[] = [];
+    const done = new Set<string>();
+    for (const a of this.actors()) {
+      if (!a.info.crew || !unlocks(a.info.level ?? 1).desk) continue;
+      const key = roleKey(a.info);
+      const m = this.worked.get(key);
+      if (done.has(key) || !m) continue;
+      let best: StationKind | null = null;
+      let most = 0;
+      for (const [k, secs] of m) {
+        if (secs > most) {
+          best = k;
+          most = secs;
+        }
+      }
+      const slot = L.slots.find((s) => s.kind === best);
+      if (!slot) continue;
+      done.add(key);
+      const at = this.trinketSpot(slot, out);
+      if (at) out.push({ id: key, kind: TRINKETS[hashString(key) % TRINKETS.length], ...at, color: a.traits.color });
+    }
+    return out;
+  }
+
+  // Where a desk upgrade stands by `slot`: a step out from one of its
+  // corners, or further along the wall, the nearest such to it. On the
+  // floor clear of every prop, of the entrance and of the upgrades already
+  // placed, nearer this station than any other, and as far as it can be
+  // from where anyone works (a station's spot and the lanes along it) or
+  // likes to stand (see TRINKET_CLEAR); null where there is no such spot.
+  private trinketSpot(slot: Slot, placed: readonly Spot[]): Spot | null {
+    const L = this.L!;
+    const g = TRINKET_GAP;
+    const at = (u: number, v: number): Spot => (slot.wall === 'right' ? { x: slot.x0 + u, y: slot.y0 + v } : { x: slot.x0 + v, y: slot.y0 + u });
+    const spots: Spot[] = [];
+    for (const v of [g, slot.dep + g]) for (const j of [0, 1, 2]) spots.push(at(slot.len + g + 3 * j, v), at(-g - 3 * j, v));
+    const own = slotRect(slot);
+    const others = L.slots.filter((s) => s !== slot);
+    const stands: Spot[] = [...this.spots];
     for (const s of L.slots) {
-      const active = s.kind === 'entrance'
-        ? actors.some((a) => (a.state === 'enter' || a.state === 'leave') && Math.hypot(a.x - s.spot.x, a.y - s.spot.y) < 8)
-        : actors.some((a) => a.station === s && a.state === 'work');
-      this.biome.props[s.kind].tick?.(c, s, active);
+      if (s.kind === 'entrance') stands.push(s.spot);
+      else for (let k = 0; k < 5; k++) stands.push(this.laneSpot(s, k));
     }
-    this.biome.weather?.(c, L);
-    // Finished builds shine from the top.
-    for (const b of this.works?.beacons() ?? []) {
-      const g = MATERIALS[b.mat]?.glow ?? [255, 216, 144];
-      this.lights.push({ x: b.x, y: b.y, z: b.z + 1, color: g, radius: 20, intensity: 0.85 + 0.1 * Math.sin(this.clock * 2.3) });
+    const free = (p: Spot) =>
+      this.standable(p) &&
+      placed.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= 3) &&
+      others.every((s) => off(p, slotRect(s)) > off(p, own) && (s.kind !== 'entrance' || off(p, slotRect(s)) >= TRINKET_DOOR));
+    // Each free spot, nearest the station first, with how close it comes to where anyone stands.
+    const fit = spots
+      .filter(free)
+      .sort((p, q) => off(p, own) - off(q, own))
+      .map((p) => ({ p, clear: Math.min(...stands.map((q) => Math.hypot(q.x - p.x, q.y - p.y))) }));
+    for (const clear of TRINKET_CLEAR) {
+      const f = fit.find((s) => s.clear >= clear);
+      if (f) return f.p;
     }
-    this.simAcc = Math.min(this.simAcc + dt, 3 / SIM_HZ);
-    while (this.simAcc >= 1 / SIM_HZ) {
-      step(v, this.T, this.simRng, this.tick++, (p) => this.add(p));
-      this.simAcc -= 1 / SIM_HZ;
-    }
-    heal(v, this.T, this.simRng, Math.round(1500 * Math.max(1, v.size / 1_734_000)), (x, y, z) => actors.some((a) => Math.abs(x + 0.5 - a.x) < 3 && Math.abs(y + 0.5 - a.y) < 3 && z < a.z + 14));
-    updateParticles(this.particles, v, this.T, dt, this.simRng);
+    return null;
+  }
+
+  // Each prop that gives off bits (steam off a cup, sparks while worked)
+  // spawns them in its own frame (u, v, z); they go into the room's.
+  private emit(dt: number): void {
+    const room = this.plan;
+    const cam = this.camera;
+    if (!room || !cam) return;
+    const active = this.activeProps();
+    room.props.forEach((p, i) => {
+      const art = p.art;
+      if (!art.emit) return;
+      const view = {
+        pen: QUIET_PEN,
+        s: cam.s,
+        at: (u: number, v: number, z: number) => project(cam, ...toWorld(p, u, v, z)),
+        len: p.len,
+        dep: p.dep,
+        wall: p.wall,
+        island: p.island,
+        t: this.clock,
+        active: active[i],
+        seed: p.seed,
+      };
+      art.emit(view, dt, (q) => {
+        const [x, y, z] = toWorld(p, q.x, q.y, q.z);
+        const [vx, vy] = p.wall === 'right' ? [q.vx, q.vy] : [q.vy, q.vx];
+        this.add({ ...q, x, y, z, vx, vy });
+      });
+    });
+  }
+
+  // Per room prop: someone works it (or, at the entrance, comes or goes).
+  private activeProps(): boolean[] {
+    const actors = [...this.cast.values()];
+    return (this.plan?.props ?? []).map((p) => {
+      const s = p.slot;
+      if (!s) return false;
+      if (s.kind === 'entrance') return actors.some((a) => (a.state === 'enter' || a.state === 'leave') && Math.hypot(a.x - s.spot.x, a.y - s.spot.y) < 8);
+      return actors.some((a) => a.station === s && a.state === 'work');
+    });
   }
 
   private move(a: Actor, dt: number): void {
@@ -864,11 +848,10 @@ export class Stage {
       left += Math.hypot(p.x - at.x, p.y - at.y);
       at = p;
     }
-    const big = Math.max(this.k, (this.L?.W ?? 0) / JOG_ROOM);
-    const jog = Math.max(1, Math.min(JOG * big, (left * big) / (JOG_OVER * this.k)));
+    const big = Math.max(1, (this.L?.W ?? 0) / JOG_ROOM);
+    const jog = Math.max(1, Math.min(JOG * big, (left * big) / JOG_OVER));
     let budget = WALK * this.life.pace(a) * jog * dt;
-    // Zoomed out the figures stay full size: a jog is slower beside them.
-    if (a.path.length) a.gait += dt * (Math.max(1, Math.min(GAIT_MAX, jog * Math.min(1, this.zoom))) - 1);
+    if (a.path.length) a.gait += dt * (Math.max(1, Math.min(GAIT_MAX, jog)) - 1);
     while (a.path.length && budget > 1e-9) {
       const wp = a.path[0];
       const dx = wp.x - a.x;
@@ -895,31 +878,21 @@ export class Stage {
     if (this.particles.length < 1500) this.particles.push(p);
   }
 
-  private groundAt(x: number, y: number): number {
-    return this.v ? this.v.ground(Math.floor(x), Math.floor(y)) : 0;
-  }
-
-  // Where an actor's feet are (eased), or the ground below if not yet known.
-  private zOf(a: Actor): number {
-    return a.z >= 0 ? a.z : this.groundAt(a.x, a.y);
-  }
-
-  private sparkle(a: { x: number; y: number }, n: number, color: RGB): void {
-    const z = this.groundAt(a.x, a.y);
+  private sparkle(a: Spot, n: number, color: RGB): void {
     for (let i = 0; i < n; i++) {
       const ang = (i / n) * Math.PI * 2;
-      this.add({ kind: 'spark', x: a.x, y: a.y, z: z + 4 + this.rng.next() * 6, vx: Math.cos(ang) * 6, vy: Math.sin(ang) * 6, vz: 4 + this.rng.next() * 6, life: 0.6 + this.rng.next() * 0.4, color, glow: true, gravity: 10 });
+      this.add({ kind: 'spark', x: a.x, y: a.y, z: 4 + this.rng.next() * 6, vx: Math.cos(ang) * 6, vy: Math.sin(ang) * 6, vz: 4 + this.rng.next() * 6, life: 0.6 + this.rng.next() * 0.4, color, glow: true, gravity: 10 });
     }
   }
 
-  // What an agent's state does to the world beyond its prop: errors blow a
-  // crater, finishing sets off fireworks, delegating casts a bolt at the
+  // What an agent's state does round it: an error goes bang (sparks and a
+  // puff of smoke that keeps smoking), finishing sets off fireworks and a
+  // shower of the world's confetti, delegating casts a bolt at the
   // subagent, long naps drift z's. Those around react (see life.ts).
   private effects(a: Actor, dt: number, now: number): void {
     a.fx += dt;
-    const v = this.v;
     const L = this.L;
-    if (!v || !L) return;
+    if (!L) return;
     const r = this.rng;
     const act = a.info.activity;
     const every = (s: number) => {
@@ -927,52 +900,81 @@ export class Stage {
       a.fx = 0;
       return true;
     };
-    const z = this.zOf(a);
-    const head = z + 12;
-    const pal = this.biome.palette;
+    const head = FIGURE_H - 2;
+    const pal = this.world.palette;
     if (act === 'error' && a.boomed !== a.info.since && a.state !== 'enter') {
       a.boomed = a.info.since;
-      // Toward the middle of the cave, so the crater opens in front of them;
-      // at a prop out on the floor, behind them, away from the prop.
+      // Toward the middle of the room, so the bang is in front of them; at
+      // a prop out on the floor, behind them, away from the prop.
       const isle = a.station?.island ? a.station : null;
       const kx = isle ? (isle.wall === 'left' ? 7 : 0) : Math.sign(L.W * 0.55 - a.x) * 6;
       const ky = isle ? (isle.wall === 'right' ? 7 : 0) : Math.sign(L.D * 0.55 - a.y) * 6;
-      explode(v, this.T, Math.round(a.x + kx), Math.round(a.y + ky), z, 4, this.simRng, (p) => this.add(p));
-      this.life.boom(a.x + kx, a.y + ky, a, this.cast.values());
-      a.error = { until: now + ERROR_MS, text: a.info.detail || 'tool failed', x: a.x + kx, y: a.y + ky, z };
+      const x = a.x + kx;
+      const y = a.y + ky;
+      for (let i = 0; i < 18; i++) {
+        const ang = r.next() * Math.PI * 2;
+        const sp = 5 + r.next() * 9;
+        this.add({ kind: 'spark', x, y, z: 1, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: 6 + r.next() * 10, life: 0.5 + r.next() * 0.5, color: r.pick<RGB>([[255, 214, 120], [255, 128, 48], pal.bad]), glow: true, gravity: 24 });
+      }
+      for (let i = 0; i < 10; i++) this.add(smoke(x + r.range(-2, 2), y + r.range(-2, 2), 1 + r.next() * 3, r, [96, 92, 98]));
+      this.life.boom(x, y, a, this.cast.values());
+      a.error = { until: now + ERROR_MS, text: a.info.detail || 'tool failed', x, y };
     }
-    // A real error is followed at once by the next tool call: the crater
+    // A real error is followed at once by the next tool call: the spot
     // smokes and '!'s keep rising for a while anyway.
     const err = a.error && now < a.error.until ? a.error : null;
     if (err && now < err.until - ERROR_MS + SMOKE_MS && r.next() < dt * 14) {
       const grey = 70 + r.int(0, 40);
-      this.add({ kind: 'spark', x: err.x + r.range(-1.5, 1.5), y: err.y + r.range(-1.5, 1.5), z: err.z + 1, vx: r.range(-0.6, 0.6), vy: r.range(-0.6, 0.6), vz: 5 + r.next() * 3, life: 1.6 + r.next(), color: [grey, grey - 4, grey + 2], glow: false, gravity: -1 });
+      this.add({ ...smoke(err.x + r.range(-1.5, 1.5), err.y + r.range(-1.5, 1.5), 1, r, [grey, grey - 4, grey + 2]), life: 1.6 + r.next() });
     }
-    if ((act === 'error' || err) && r.next() < dt / 0.7) this.glyphs.push({ x: a.x, y: a.y, z: head + 2, vz: 4, ch: '!', color: pal.bad, life: 0.8 });
+    if ((act === 'error' || err) && r.next() < dt / 0.7) this.glyphs.push({ x: a.x, y: a.y, z: head + 4, vz: 4, ch: '!', color: pal.bad, life: 0.8 });
     if (act === 'done' && a.cheered !== a.info.since) {
       a.cheered = a.info.since;
-      const colors = [pal.accent, pal.accent2, pal.good, pal.warn, a.traits.color];
-      for (let i = 0; i < 46; i++) {
-        const ang = r.next() * Math.PI * 2;
-        const sp = 4 + r.next() * 8;
-        this.add({ kind: 'spark', x: a.x, y: a.y, z: head + 4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: 10 + r.next() * 12, life: 0.8 + r.next() * 0.8, color: r.pick(colors), glow: true, gravity: 14 });
-      }
-      const fin = this.biome.finale ?? GOLD;
-      for (let i = 0; i < 10; i++) {
-        this.add({ kind: 'debris', x: a.x + r.range(-2, 2), y: a.y + r.range(-2, 2), z: head + 6, vx: r.range(-4, 4), vy: r.range(-4, 4), vz: 6 + r.next() * 6, life: 4, color: r.pick(fin.colors), glow: fin.glow ?? true, gravity: fin.gravity ?? 24, mat: fin.mat });
-      }
+      this.burst(a);
       this.life.finished(a, this.cast.values());
     }
     if (act === 'delegate' && every(1.2)) {
       const sub = [...this.cast.values()].find((o) => o.info.parentId === a.info.id && o.state !== 'leave');
       if (sub) {
-        const tz = this.zOf(sub) + 8;
-        this.add({ kind: 'bolt', x: a.x, y: a.y, z: head, vx: 0, vy: 0, vz: 6, life: 3, color: a.traits.color, glow: true, gravity: 0, target: { x: sub.x, y: sub.y, z: tz } });
+        this.add({ kind: 'bolt', x: a.x, y: a.y, z: head, vx: 0, vy: 0, vz: 6, life: 3, color: a.traits.color, glow: true, gravity: 0, target: { x: sub.x, y: sub.y, z: FIGURE_H * 0.6 } });
         this.life.cast(a, sub);
       }
     }
     if (act === 'talk' && every(0.5)) this.add({ kind: 'glint', x: a.x + r.range(-2, 2), y: a.y + r.range(-2, 2), z: head + 2, vx: 0, vy: 0, vz: 3, life: 0.5, color: a.traits.color, glow: true, gravity: 0 });
     if (this.life.sleeping(a) && every(1.1)) this.glyphs.push({ x: a.x, y: a.y, z: head + 2, vz: 5, ch: r.pick(['z', 'Z']), color: pal.dim, life: 2 });
+  }
+
+  // Fireworks in the world's colours over `a`, and a shower of its confetti.
+  private burst(a: Actor): void {
+    const r = this.rng;
+    const pal = this.world.palette;
+    const head = FIGURE_H - 2;
+    const colors = [pal.accent, pal.accent2, pal.good, pal.warn, a.traits.color];
+    for (let i = 0; i < 46; i++) {
+      const ang = r.next() * Math.PI * 2;
+      const sp = 4 + r.next() * 8;
+      this.add({ kind: 'spark', x: a.x, y: a.y, z: head + 4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: 10 + r.next() * 12, life: 0.8 + r.next() * 0.8, color: r.pick(colors), glow: true, gravity: 14 });
+    }
+    const fin = this.world.finale.colors;
+    for (let i = 0; i < 14; i++) {
+      this.add({ kind: 'confetti', x: a.x + r.range(-2, 2), y: a.y + r.range(-2, 2), z: head + 6, vx: r.range(-4, 4), vy: r.range(-4, 4), vz: 6 + r.next() * 6, life: 4, color: r.pick(fin), glow: false, gravity: 16 });
+    }
+  }
+
+  // How it feels, from its meters (none without vitals), and what its
+  // level lets it wear (nothing at ★1).
+  private feel(a: Actor, now: number): Feel | undefined {
+    const v = a.info.vitals;
+    return v ? feelOf(meters(v, now)) : undefined;
+  }
+
+  private wear(a: Actor): Wear | undefined {
+    return wearAt(a.info.level ?? 1);
+  }
+
+  // How high it stands (see figureTop), as its frame will say.
+  private top(a: Actor, now = this.now): number {
+    return figureTop({ costume: this.world.costume, wear: this.wear(a), feel: this.feel(a, now), sleeping: this.life.sleeping(a) });
   }
 
   // What an actor shows this frame: its pose, facing and anything it holds.
@@ -994,576 +996,265 @@ export class Stage {
     return { ...look, facing };
   }
 
-  private colorOf(mat: number): RGB {
-    const c = this.T.color[(mat << 3) | 4];
-    return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
-  }
-
-  draw(s: Screen, t: number, now: number, selectedId: string | null): void {
+  // The scene as it stands, for a renderer; null when there is nothing to
+  // show. Moves the camera on (zoom and pan ease from frame to frame) and
+  // places the labels.
+  frame(now: number, selectedId: string | null = null, opts: { card?: boolean } = {}): SceneFrame | null {
     this.placedLabels = [];
     const r = this.rect;
-    const v = this.v;
-    const caster = this.caster;
-    if (!this.L || !v || !caster || r.w <= 0 || r.h <= 0) return;
-    caster.update(v.takeChanges());
-    const { w, h } = this.world;
-    this.albedo.set(caster.albedo);
-    this.emit.set(caster.emit);
-    this.depth.set(caster.depth);
-    const ghost = this.ghosts();
-    const lights = [...this.lights];
+    const L = this.L;
+    const room = this.plan;
+    if (!L || !room || r.w <= 0 || r.h <= 0) return null;
     const actors = [...this.cast.values()].sort((m, n) => m.x + m.y - (n.x + n.y));
-    const sprites = new Map<Actor, Placed>();
-    const figs: Fig[] = [];
-    const costume = this.biome.costume ?? 'wizard';
+    const sel = actors.find((a) => a.info.id === selectedId) ?? null;
+    const cam = this.aim(actors, sel, true);
+    this.camera = cam;
+    const t = this.clock;
+    const c = this.life.clock;
+    const errNow = (a: Actor) => !!a.error && now < a.error.until;
+    // A few emotes at once: the selection's first, then the newest.
+    const emoting = actors
+      .filter((a) => a.mind.emote && a.mind.emote.born <= c && a.state !== 'enter' && a.hush <= t)
+      .sort((m, n) => (m === sel ? -1 : n === sel ? 1 : n.mind.emote!.born - m.mind.emote!.born))
+      .slice(0, MAX_EMOTES);
+    this.emotesShown = emoting.length;
+    const figures: FigureFrame[] = [];
+    // How high each one shown stands (see figureTop): its labels and emote go over that.
+    const tops = new Map<Actor, number>();
     for (const a of actors) {
-      const z = this.zOf(a);
+      // Fading in at the door: shown once the entrance flash is over.
+      if (a.state === 'enter' && now - a.bornAt <= ENTER_MS * 0.5) continue;
       const look = this.lookOf(a, now);
-      const opts = look.item !== undefined ? { costume, item: this.colorOf(look.item) } : { costume };
-      const sp = wizardSprite(a.traits, look.pose, t + a.gait, look.facing, a.phase, opts);
-      const [sx, sy] = project(this.view, a.x, a.y, z);
-      // Fading in at the door: drawn only once the entrance flash is over.
-      const shown = a.state !== 'enter' || now - a.bornAt > ENTER_MS * 0.5;
-      figs.push({ sp, sx, sy, d: depthOf(a.x, a.y, z) + 1, shown, outline: true });
-      sprites.set(a, { sx, sy, top: Math.round(sy) - sp.ay + sp.dy });
-      if (sp.light) {
-        // Offsets are pixels from the anchor (before the sprite's own hop);
-        // a pixel right is half a voxel along +x and -y, a pixel up one z.
-        const l = sp.light;
-        const lx = l.dx + sp.dx;
-        const ly = l.dy + sp.dy;
-        lights.push({ x: a.x + lx / 2, y: a.y - lx / 2, z: z - ly, color: l.color, radius: l.radius, intensity: l.intensity });
+      const fig: FigureFrame = {
+        id: a.info.id,
+        x: a.x,
+        y: a.y,
+        z: 0,
+        traits: a.traits,
+        costume: this.world.costume,
+        pose: look.pose,
+        poseT: t + a.gait,
+        phase: a.phase / 997,
+        facing: look.facing,
+        selected: a === sel,
+        hurt: errNow(a),
+        sleeping: this.life.sleeping(a),
+        walking: a.path.length > 0 && a.state !== 'enter' && !this.life.holding(a),
+      };
+      if (look.item !== undefined) fig.item = this.world.build.colors[look.item] ?? this.world.build.colors[0];
+      const feel = this.feel(a, now);
+      const wear = this.wear(a);
+      if (feel) fig.feel = feel;
+      if (wear) fig.wear = wear;
+      // A happy one bounces: a hop a step walking, now and then standing about.
+      if (feel?.bouncy && !fig.sleeping && (look.pose === 'idle' || look.pose === 'walk')) {
+        const per = look.pose === 'walk' ? HOP_WALK : HOP_IDLE;
+        fig.hop = HOP * Math.abs(Math.sin((Math.PI * (fig.poseT + fig.phase)) / per));
       }
+      const e = a.mind.emote;
+      if (e && emoting.includes(a)) fig.emote = { kind: e.e, t: c - e.born };
+      figures.push(fig);
+      tops.set(a, figureTop(fig));
     }
     const cr = this.critter;
-    let crAt: Placed | null = null;
-    if (cr) {
-      // On the floor (never up on a ledge or a cap overhead).
-      const cz = v.ground(Math.floor(cr.x), Math.floor(cr.y), this.L.floor + 4) + cr.hover(t);
-      const csp = cr.sprite(t);
-      const [cx, cy] = project(this.view, cr.x, cr.y, cz);
-      figs.push({ sp: csp, sx: cx, sy: cy, d: depthOf(cr.x, cr.y, cz) + 1, shown: true, outline: true });
-      crAt = { sx: cx, sy: cy, top: Math.round(cy) - csp.ay };
-    }
-    this.aim(actors, sprites, selectedId);
-    const sel = actors.find((a) => a.info.id === selectedId);
-    const pulse = 0.8 + 0.2 * Math.sin(t * Math.PI * 2);
-    // Zoomed out, figures are drawn full size over the world after it is
-    // scaled (billboards); at full detail, into the world itself, lit.
-    const board = this.zoom < 0.999;
-    // Errors flash a red ring for a while.
-    const hurt = actors.filter((a) => a !== sel && a.error && now < a.error.until);
-    const flash = 0.6 + 0.4 * Math.abs(Math.sin(t * Math.PI * 3));
-    if (!board) {
-      if (sel) this.ringInWorld(sel, pulse);
-      for (const a of hurt) this.ringInWorld(a, flash, this.biome.palette.bad);
-      for (const f of figs) if (f.shown) blitSprite(this.albedo, this.emit, this.depth, w, h, f.sp, f.sx, f.sy, f.d);
-    } else {
-      for (const [a, at] of sprites) {
-        const f = figs[actors.indexOf(a)];
-        at.top = at.sy + (f.sp.dy - f.sp.ay) / this.zoom;
-      }
-      if (crAt) crAt.top = crAt.sy - 6 / this.zoom;
-    }
-    drawParticles(this.albedo, this.emit, this.depth, w, h, this.particles, this.view);
-    // HD holds the light flicker and the sky for an ambient step, so the
-    // streamed image changes there a few times a second, all at once.
-    this.ambient = this.mode === 'hd' ? Math.floor(t * Stage.AMBIENT_HZ) : null;
-    this.glow.compose(this.world, this.albedo, this.emit, this.view, lights, this.biome.grade, this.lit, this.biome.backdrop, this.ambient);
-    this.ghostShown = this.overlayGhosts(ghost, caster.albedo);
-    this.crop();
-    if (this.biome.sky) paintSky(this.screen, this.biome.sky, this.biome.backdrop, this.ambient === null ? t : this.ambient / Stage.AMBIENT_HZ);
-    this.drawnFigs = figs.slice(0, actors.length);
-    if (board) {
-      if (sel) this.ringOnScreen(sel, pulse);
-      for (const a of hurt) this.ringOnScreen(a, flash, this.biome.palette.bad);
-      for (const f of figs) if (f.shown) this.billboard(f);
-    }
-    const bubbles = this.drawEmotes(actors, sprites, crAt, t, selectedId);
-    const g = this.grid();
-    if (this.mode === 'hd') s.punch(r);
-    else if (this.mode === 'sextant') this.screen.blitSextant(s, r, this.biome.backdrop);
-    else this.screen.blit(s, r, this.biome.backdrop);
-    for (const p of this.glyphs) {
-      const [x, y] = this.toScreen(...project(this.view, p.x, p.y, p.z));
-      const cx = r.x + Math.floor(Math.round(x) / g.fx);
-      const cy = r.y + Math.floor(Math.round(y) / g.fy);
-      if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) s.put(cx, cy, p.ch, p.color);
-    }
-    this.drawLabels(s, actors, sprites, bubbles, now, selectedId);
+    const critter = cr
+      ? { kind: cr.look.kind, body: cr.look.body, x: cr.x, y: cr.y, z: cr.hover(t), flip: cr.flip, moving: cr.moving, ...(cr.heartUntil > c && emoting.length < MAX_EMOTES ? { heart: c - (cr.heartUntil - 1.8) } : {}) }
+      : null;
+    const ghost = this.ghostHue();
+    const builds: BuildFrame[] = (this.works?.builds ?? []).map((b) => ({
+      shape: b.shape,
+      blocks: b.built(),
+      pending: b.complete ? [] : b.ghost(),
+      colors: this.world.build.colors,
+      progress: b.count ? Math.min(1, b.placed / b.count) : 1,
+      complete: b.complete,
+      top: b.top,
+      pile: b.complete ? null : b.pile,
+      ghost,
+    }));
+    const f: SceneFrame = {
+      world: this.world,
+      room,
+      t,
+      lit: this.lit,
+      active: this.activeProps(),
+      camera: cam,
+      figures,
+      critter,
+      trinkets: this.trinkets,
+      builds,
+      particles: this.particles,
+      labels: [],
+      marks: [],
+      next: this.reach(actors, sel),
+    };
+    this.place(f, actors, emoting, tops, now, selectedId, opts.card ?? false);
+    return f;
   }
 
-  // Each build under way shows what it will be: the voxels still to lay as
-  // a hologram (see GHOST_HUE), every other voxel lit (a 3D checker), with
-  // a band sweeping up it. Drawn into the frame, never into the world, so
-  // nothing walks, casts or simulates against it. Each pixel shows only the
-  // nearest ghost voxel, so the far side stays hidden behind the near, and
-  // only where it is in front of the world. Returns [pixel, code, rise,
-  // span] runs, flat: the code is the face (0 top, 1 left, 2 right), +4 on
-  // the lit half of the checker; `rise` the pixel's height above the foot
-  // of its build's ghost, `span` that ghost's height (for the band).
-  private ghosts(): number[] {
-    const { w, h } = this.world;
-    const D = this.ghostD;
-    const C = this.ghostC;
-    const out: number[] = [];
-    for (const c of this.works?.builds ?? []) {
-      if (c.complete) continue;
-      const hit: number[] = [];
-      const mark = (x: number, y: number, d: number, code: number) => {
-        if (x < 0 || y < 0 || x >= w || y >= h) return;
-        const i = y * w + x;
-        if (d <= D[i]) return;
-        if (D[i] === -Infinity) hit.push(i);
-        D[i] = d;
-        C[i] = code;
-      };
-      for (const b of c.ghost()) {
-        // The voxel covers a hexagon round the projection of its near
-        // corner: the pixels whose centres fall in it are a 2x2 block (top
-        // face above, the two side faces below) when that point is on a
-        // pixel corner, else the two side faces on its row.
-        const [sx, sy] = project(this.view, b.x, b.y, b.z);
-        const d = depthOf(b.x, b.y, b.z) + 1.5;
-        const on = ((b.x + b.y + b.z) & 1) === 0 ? 4 : 0;
-        const x = Math.round(sx);
-        const y = Math.floor(sy);
-        if (y === sy) {
-          mark(x - 1, y - 1, d, on);
-          mark(x, y - 1, d, on);
-        }
-        mark(x - 1, y, d, on | 1);
-        mark(x, y, d, on | 2);
-      }
-      // With the particles' depth bias.
-      const front = hit.filter((i) => D[i] >= this.depth[i] - 0.5);
-      let top = Infinity;
-      let foot = -Infinity;
-      for (const i of front) {
-        top = Math.min(top, Math.floor(i / w));
-        foot = Math.max(foot, Math.floor(i / w));
-      }
-      for (const i of front) out.push(i, C[i], foot - Math.floor(i / w), foot - top);
-      for (const i of hit) D[i] = -Infinity;
-    }
-    return out;
-  }
-
-  // The ghost's hue: cyan where the world is warm (its ambient light and
-  // backdrop redder than blue), amber where it is cold.
+  // The ghost's hue: cyan where the world is warm (its floor and backdrop
+  // redder than blue), amber where it is cold.
   ghostHue(): RGB {
-    const a = this.biome.grade.ambient;
-    const b = this.biome.backdrop;
+    const a = this.world.palette.floor;
+    const b = this.world.backdrop;
     return a[0] + b[0] > a[2] + b[2] ? GHOST_HUE.warm : GHOST_HUE.cold;
   }
 
-  // Lays the ghost over the lit frame as light of its own that lights
-  // nothing else (a whole blueprint of glow would flood the plaza), except
-  // where a figure or a particle was drawn over the world since: what is
-  // behind it tinted toward the hue, strongly on the lit half of the
-  // checker, faintly on the unlit half, and a little whiter in the band
-  // and on the outline (silhouette pixels with a side off it), so it reads
-  // on any floor. The band rises from the foot to past the top once every
-  // SCAN_S, in HD on the ambient step (so a still room stays still between
-  // steps). Returns the pixels shown.
-  private overlayGhosts(found: number[], bare: Int32Array): number {
-    const data = this.world.data;
-    const w = this.world.w;
-    const b = this.biome.backdrop;
-    const back = (b[0] << 16) | (b[1] << 8) | b[2];
-    const hue = this.ghostHue();
-    const rim = mix(hue, [255, 255, 255], 0.4);
-    const time = this.ambient === null ? this.clock : this.ambient / Stage.AMBIENT_HZ;
-    const phase = (time % SCAN_S) / SCAN_S;
-    const inside = new Set<number>();
-    for (let n = 0; n < found.length; n += 4) inside.add(found[n]);
-    let shown = 0;
-    for (let n = 0; n < found.length; n += 4) {
-      const i = found[n];
-      if (this.albedo[i] !== bare[i]) continue;
-      const code = found[n + 1];
-      const at = phase * (found[n + 3] + SCAN_H + 1);
-      const band = found[n + 2] >= at && found[n + 2] < at + SCAN_H;
-      const p = data[i] === CLEAR ? back : data[i];
-      const edge = !inside.has(i - 1) || !inside.has(i + 1) || !inside.has(i - w) || !inside.has(i + w);
-      const lit = edge || band;
-      const f = lit ? 1 : GHOST_FACE[code & 3];
-      const c = lit ? rim : hue;
-      const k = edge ? GHOST_EDGE : band ? GHOST_SCAN : code & 4 ? GHOST : GHOST_DIM;
-      const keep = 1 - k;
-      data[i] =
-        ((((p >> 16) & 255) * keep + c[0] * f * k) << 16) |
-        ((((p >> 8) & 255) * keep + c[1] * f * k) << 8) |
-        (((p & 255) * keep + c[2] * f * k) | 0);
-      shown++;
-    }
-    return shown;
-  }
-
-  // A figure drawn 1:1 on the scaled screen: a soft shadow at the feet, a
-  // dark outline, hidden where something in the world stands in front.
-  private billboard(f: Fig): void {
-    const S = this.screen;
-    const W = this.world;
-    const z = this.zoom;
-    const sp = f.sp;
-    const [fx, fy] = this.toScreen(f.sx, f.sy);
-    const left = Math.round(fx + sp.dx) - sp.ax;
-    const top = Math.round(fy + sp.dy) - sp.ay;
-    const behind = (x: number, y: number) => {
-      const wx = Math.floor(this.cam.x + (x + 0.5) / z);
-      const wy = Math.floor(this.cam.y + (y + 0.5) / z);
-      if (wx < 0 || wy < 0 || wx >= W.w || wy >= W.h) return false;
-      return f.d < this.depth[wy * W.w + wx] - 0.5;
-    };
-    const dim = (x: number, y: number, k: number) => {
-      if (x < 0 || y < 0 || x >= S.w || y >= S.h) return;
-      const i = y * S.w + x;
-      const c = S.data[i];
-      if (c === CLEAR) return;
-      S.data[i] = ((((c >> 16) & 255) * k) << 16) | ((((c >> 8) & 255) * k) << 8) | ((c & 255) * k);
-    };
-    const cx = Math.round(fx);
-    const cy = Math.round(fy);
-    for (let dy = 0; dy <= 1; dy++) {
-      for (let dx = -3; dx <= 3; dx++) if (!(dy === 1 && Math.abs(dx) === 3) && !behind(cx + dx, cy + dy)) dim(cx + dx, cy + dy, 0.55);
-    }
-    const on = (r: number, c: number) => r >= 0 && c >= 0 && r < sp.h && c < sp.w && (sp.px[r]?.[c] || sp.glow[r]?.[c]);
-    if (f.outline) {
-      for (let r = -1; r <= sp.h; r++) {
-        for (let c = -1; c <= sp.w; c++) {
-          if (on(r, c) || !(on(r - 1, c) || on(r + 1, c) || on(r, c - 1) || on(r, c + 1))) continue;
-          if (!behind(left + c, top + r)) dim(left + c, top + r, 0.25);
-        }
-      }
-    }
-    for (let r = 0; r < sp.h; r++) {
-      const y = top + r;
-      if (y < 0 || y >= S.h) continue;
-      for (let c = 0; c < sp.w; c++) {
-        const x = left + c;
-        if (x < 0 || x >= S.w) continue;
-        const gl = sp.glow[r]?.[c];
-        const p = sp.px[r]?.[c];
-        if ((!gl && !p) || behind(x, y)) continue;
-        S.data[y * S.w + x] = gl ? (gl[0] << 16) | (gl[1] << 8) | gl[2] : (((p![0] * 0.92) | 0) << 16) | (((p![1] * 0.92) | 0) << 8) | ((p![2] * 0.92) | 0);
-      }
-    }
-  }
-
-  // A ring on the floor under an agent (the selection, or an error),
-  // glowing (full detail).
-  private ringInWorld(a: Actor, pulse: number, c: RGB = a.traits.color): void {
-    const { w, h } = this.world;
-    const z = this.zOf(a);
-    const [sx, sy] = project(this.view, a.x, a.y, z);
-    const d = depthOf(a.x, a.y, z) + 1;
-    const v = (((c[0] * pulse) | 0) << 16) | (((c[1] * pulse) | 0) << 8) | ((c[2] * pulse) | 0);
-    RING.forEach((row, ry) => {
-      for (let rx = 0; rx < row.length; rx++) {
-        if (row[rx] !== '#') continue;
-        const x = Math.round(sx) - 6 + rx;
-        const y = Math.round(sy) - 2 + ry;
-        if (x < 0 || y < 0 || x >= w || y >= h) continue;
-        const i = y * w + x;
-        if (d + 2 < this.depth[i] - 0.5) continue;
-        this.albedo[i] = v;
-        this.emit[i] = v;
-      }
-    });
-  }
-
-  // The same ring, drawn over the scaled world.
-  private ringOnScreen(a: Actor, pulse: number, c: RGB = a.traits.color): void {
-    const S = this.screen;
-    const [fx, fy] = this.toScreen(...project(this.view, a.x, a.y, this.zOf(a)));
-    const v = (((c[0] * pulse) | 0) << 16) | (((c[1] * pulse) | 0) << 8) | ((c[2] * pulse) | 0);
-    RING.forEach((row, ry) => {
-      for (let rx = 0; rx < row.length; rx++) {
-        const x = Math.round(fx) - 6 + rx;
-        const y = Math.round(fy) - 2 + ry;
-        if (row[rx] === '#' && x >= 0 && y >= 0 && x < S.w && y < S.h) S.data[y * S.w + x] = v;
-      }
-    });
-  }
-
-  // Little pictures over heads (and over the critter), drawn full size on
-  // the screen like the labels' pictures: not lights, and never more than
-  // a few at once (the selected agent's first, then the newest). Returns
-  // the screen-pixel box each covers, for the labels to keep clear of.
-  private drawEmotes(actors: Actor[], sprites: Map<Actor, Placed>, crAt: Placed | null, t: number, selectedId: string | null): Map<Actor, Box> {
-    const out = new Map<Actor, Box>();
-    const S = this.screen;
-    const c = this.life.clock;
-    const put = (e: Parameters<typeof emoteArt>[0], born: number, sx: number, sy: number, lift: number): Box => {
-      const art = emoteArt(e, t);
-      const [fx, fy] = this.toScreen(sx, sy);
-      const x0 = Math.round(fx) - art.ax;
-      const y0 = Math.round(fy) - lift - art.ay + (c - born < 0.15 ? 1 : 0);
-      for (let r = 0; r < art.h; r++) {
-        for (let k = 0; k < art.w; k++) {
-          const p = art.px[r]?.[k] ?? art.glow[r]?.[k];
-          const x = x0 + k;
-          const y = y0 + r;
-          if (p && x >= 0 && y >= 0 && x < S.w && y < S.h) S.data[y * S.w + x] = (p[0] << 16) | (p[1] << 8) | p[2];
-        }
-      }
-      return { x0, y0, x1: x0 + art.w, y1: y0 + art.h };
-    };
-    const showing = actors
-      .filter((a) => a.mind.emote && a.mind.emote.born <= c && sprites.has(a) && a.state !== 'enter')
-      .sort((m, n) => (m.info.id === selectedId ? -1 : n.info.id === selectedId ? 1 : n.mind.emote!.born - m.mind.emote!.born))
-      .slice(0, MAX_EMOTES);
-    for (const a of showing) {
-      const at = sprites.get(a)!;
-      out.set(a, put(a.mind.emote!.e, a.mind.emote!.born, at.sx, at.sy, EMOTE_LIFT));
-    }
-    const cr = this.critter;
-    if (cr && crAt && cr.heartUntil > c && out.size < MAX_EMOTES) put('heart', cr.heartUntil - 1.8, crAt.sx, crAt.sy, 8);
-    this.emotesShown = out.size;
-    return out;
-  }
-
-  // Zoom: + and - step through ZOOMS (never past fitting the whole world);
+  // Zoom: + and - step through ZOOMS (never past fitting the whole room);
   // `zoomAuto` hands it back to the stage.
   zoomBy(dir: 1 | -1): void {
-    const fit = this.fitZoom();
-    const top = this.mode === 'hd' ? 3 : 1;
-    const levels = [...new Set([...ZOOMS, 2, 3, fit])].filter((z) => z >= fit - 1e-9 && z <= top).sort((m, n) => m - n);
+    const levels = this.levels();
+    this.zoomWant = this.stepZoom(dir) ?? (dir > 0 ? levels[levels.length - 1] : levels[0]);
+  }
+
+  // The zoom steps that keep a unit under MAX_S pixels.
+  private levels(): number[] {
+    const fit = this.fitScale();
+    return ZOOMS.filter((z) => z === 1 || z * fit <= MAX_S);
+  }
+
+  // The zoom one step in or out from the current one (null at either end).
+  private stepZoom(dir: 1 | -1): number | null {
+    const levels = this.levels();
     const at = this.zoomWant ?? this.zoom;
-    const next = dir > 0 ? levels.find((z) => z > at + 1e-6) : [...levels].reverse().find((z) => z < at - 1e-6);
-    this.zoomWant = next ?? (dir > 0 ? levels[levels.length - 1] : levels[0]);
+    return (dir > 0 ? levels.find((z) => z > at + 1e-6) : [...levels].reverse().find((z) => z < at - 1e-6)) ?? null;
   }
 
   zoomAuto(): void {
     this.zoomWant = null;
   }
 
+  // Times the fitted scale (1 = the whole room in view).
   get zoomLevel(): number {
     return this.zoom;
   }
 
-  // The zoom that shows the whole lit world in the scene (at most 1),
-  // snapped down to 1/2 or 1/3 where those fit, so iso edges step evenly.
-  private fitZoom(): number {
-    const W = this.world;
-    const S = this.screen;
-    if (W.w === 0 || W.h === 0) return 1;
-    const fit = Math.min(1, S.w / W.w, S.h / W.h);
-    // A world planned at screen size that only just misses (the smallest
-    // room in a small scene) stays at full detail, the camera following.
-    if (this.k === 1 && fit >= 0.75) return 1;
-    return [1, 1 / 2, 1 / 3].find((z) => z <= fit + 1e-9) ?? fit;
+  // Canvas pixels per unit that fit the whole room in the scene.
+  private fitScale(): number {
+    const L = this.L;
+    if (!L) return PX_PER_UNIT;
+    const cw = this.rect.w * this.cell.w;
+    const ch = this.rect.h * this.cell.h;
+    const m = 2 * FIT_MARGIN;
+    return Math.max(0.5, Math.min(cw / (L.W + L.D + m), ch / ((L.W + L.D) / 2 + L.H + m)));
   }
 
-  // World-canvas pixel → screen-canvas pixel at the current camera.
-  private toScreen(x: number, y: number): [number, number] {
-    // At full detail and magnified the window sits on whole pixels (see crop).
-    if (this.zoom >= 0.999) {
-      const k = Math.round(this.zoom);
-      return [(x - Math.round(this.cam.x)) * k, (y - Math.round(this.cam.y)) * k];
-    }
-    return [(x - this.cam.x) * this.zoom, (y - this.cam.y) * this.zoom];
+  // Sets the zoom (fit, or as asked; a close-up on a selected agent) and
+  // pans the camera: centred where the room fits, otherwise following the
+  // selected agent (or the crowd). The zoom jumps: every scale's pictures
+  // are drawn and sent afresh (see Scene.plate), so a zoom eased through
+  // many scales would send whole pictures for each. The pan eases (it only
+  // moves pictures already sent), except with the zoom: a new zoom cuts
+  // straight to what it frames. Without `ease`, the pan always jumps.
+  private aim(actors: Actor[], sel: Actor | null, ease: boolean): Camera {
+    const want = this.wantZoom(sel, this.zoomWant);
+    const cut = want !== this.zoom;
+    this.zoom = want;
+    const { s, u: tu, v: tv } = this.target(actors, sel, want);
+    if (!this.cam.set || !ease || cut) Object.assign(this.cam, { u: tu, v: tv, set: true });
+    this.cam.u += (tu - this.cam.u) * 0.15;
+    this.cam.v += (tv - this.cam.v) * 0.15;
+    return this.cameraAt(s, this.cam.u, this.cam.v);
   }
 
-  // Eases the zoom (fit, or as asked; full detail on a selected agent) and
-  // pans the camera: centred where the world fits, otherwise following the
-  // selected agent (or the crowd).
-  private aim(actors: Actor[], sprites: Map<Actor, Placed>, selectedId: string | null): void {
-    const W = this.world;
-    const S = this.screen;
-    const sel = actors.find((a) => a.info.id === selectedId);
-    // HD has pixels to spare: a selected agent gets a 2x close-up.
-    const want = this.zoomWant ?? (sel ? (this.mode === 'hd' ? 2 : 1) : this.fitZoom());
-    const z0 = this.cam.set ? this.zoom : want;
-    // Magnified steps are whole numbers and snap; zooming out eases.
-    this.zoom = want > 1 || z0 > 1 || Math.abs(want - z0) < 0.004 ? want : z0 + (want - z0) * 0.2;
-    const z = this.zoom;
-    const vw = S.w / z;
-    const vh = S.h / z;
-    const focus = (len: number, view: number, at: number) => (len <= view ? (len - view) / 2 : Math.max(0, Math.min(len - view, at - view / 2)));
-    let fx = W.w / 2;
-    let fy = W.h / 2;
-    const pts = sel ? [sprites.get(sel)!] : actors.map((a) => sprites.get(a)!);
+  // The zoom for `sel` selected and `asked` (from + and -, or none): the
+  // fit, or a close-up on a selected agent, never past MAX_S.
+  private wantZoom(sel: Actor | null, asked: number | null): number {
+    return Math.min(asked ?? (sel ? CLOSE_UP : 1), Math.max(1, MAX_S / this.fitScale()));
+  }
+
+  // Where the camera settles at `zoom`: the scale, and the view's corner
+  // (u, v in units) centred where the room fits, otherwise on `sel` (or
+  // the crowd), from the feet to the top of the hat (see figureTop; a hop
+  // left out, so a mood does not pan the view).
+  private target(actors: Actor[], sel: Actor | null, zoom: number): { s: number; u: number; v: number } {
+    const L = this.L!;
+    const s = this.fitScale() * zoom;
+    const vw = (this.rect.w * this.cell.w) / s;
+    const vh = (this.rect.h * this.cell.h) / s;
+    const M = FIT_MARGIN;
+    const focus = (lo: number, hi: number, view: number, at: number) => (hi - lo <= view ? lo - (view - (hi - lo)) / 2 : Math.max(lo, Math.min(hi - view, at - view / 2)));
+    const pts = sel ? [sel] : actors;
+    let fu = (L.W - L.D) / 2;
+    let fv = (L.W + L.D) / 4 - L.H / 2;
     if (pts.length) {
-      fx = pts.reduce((sum, p) => sum + p.sx, 0) / pts.length;
-      fy = pts.reduce((sum, p) => sum + p.sy - 8, 0) / pts.length;
+      fu = pts.reduce((n, a) => n + a.x - a.y, 0) / pts.length;
+      fv = pts.reduce((n, a) => n + (a.x + a.y) / 2 - figureTop({ costume: this.world.costume, wear: this.wear(a) }) / 2, 0) / pts.length;
     }
-    const tx = focus(W.w, vw, fx);
-    const ty = focus(W.h, vh, fy);
-    if (!this.cam.set) Object.assign(this.cam, { x: tx, y: ty, set: true });
-    this.cam.x += (tx - this.cam.x) * 0.15;
-    this.cam.y += (ty - this.cam.y) * 0.15;
+    return { s, u: focus(-L.D - M, L.W + M, vw, fu), v: focus(-L.H - M, (L.W + L.D) / 2 + M, vh, fv) };
   }
 
-  // HD at full detail: which surface pattern each screen pixel gets, from
-  // the voxel its ray hit — none where a character, particle or effect was
-  // drawn over the world (its colour no longer matches the raw cast).
-  private surfaces(ox: number, oy: number): void {
-    const W = this.world;
-    const S = this.screen;
-    const caster = this.caster!;
-    if (this.detail.length !== S.w * S.h) this.detail = new Uint16Array(S.w * S.h);
-    this.detail.fill(0);
-    for (let y = 0; y < S.h; y++) {
-      const wy = y + oy;
-      if (wy < 0 || wy >= W.h) continue;
-      for (let x = Math.max(0, -ox); x < Math.min(S.w, W.w - ox); x++) {
-        const wi = wy * W.w + x + ox;
-        const hit = caster.hit[wi];
-        if (hit < 0 || this.albedo[wi] !== caster.albedo[wi]) continue;
-        // Silhouette edges: a neighbour much farther along its ray (or the
-        // void) on that side.
-        const d = caster.depth[wi];
-        const wx = x + ox;
-        const far = (j: number, ok: boolean) => !ok || d - caster.depth[j] > 3;
-        let f = 0;
-        if (far(wi + 1, wx + 1 < W.w)) f |= 1;
-        if (far(wi + W.w, wy + 1 < W.h)) f |= 2;
-        if (far(wi - 1, wx > 0)) f |= 4;
-        if (far(wi - W.w, wy > 0)) f |= 8;
-        this.detail[y * S.w + x] = f;
-      }
-    }
-    this.detailOn = true;
+  private cameraAt(s: number, u: number, v: number): Camera {
+    return { s, ox: -u * s, oy: -v * s, w: this.rect.w * this.cell.w, h: this.rect.h * this.cell.h, cell: { ...this.cell }, cells: { ...this.rect } };
   }
 
-  // Shows the lit world in the screen canvas at the camera. Zoomed out,
-  // every screen pixel stands for the block of world pixels under it.
-  private crop(): void {
-    const W = this.world;
-    const S = this.screen;
-    const z = this.zoom;
-    S.data.fill(CLEAR);
-    this.detailOn = false;
-    if (z > 1.5) {
-      // Magnified (HD close-up): every world pixel becomes a k x k block.
-      const k = Math.round(z);
-      const ox = Math.round(this.cam.x);
-      const oy = Math.round(this.cam.y);
-      for (let y = 0; y < S.h; y++) {
-        const wy = oy + Math.floor(y / k);
-        if (wy < 0 || wy >= W.h) continue;
-        for (let x = 0; x < S.w; x++) {
-          const wx = ox + Math.floor(x / k);
-          if (wx >= 0 && wx < W.w) S.data[y * S.w + x] = W.data[wy * W.w + wx];
-        }
-      }
-      return;
+  // The cameras one keypress away (see SceneFrame.next), most likely
+  // first: Tab to the next agent, + and -, shift-Tab, Esc back to the
+  // whole room; none twice, none where the camera already settles.
+  private reach(actors: Actor[], sel: Actor | null): Camera[] {
+    const order = this.actors();
+    const i = sel ? order.indexOf(sel) : -1;
+    const tab = (d: number) => (order.length ? order[i < 0 ? (d > 0 ? 0 : order.length - 1) : (i + d + order.length) % order.length] : undefined);
+    const zin = this.stepZoom(1);
+    const zout = this.stepZoom(-1);
+    const asks: Array<[Actor | null | undefined, number | null]> = [
+      [tab(1), this.zoomWant],
+      [zin === null ? undefined : sel, zin],
+      [zout === null ? undefined : sel, zout],
+      [tab(-1), this.zoomWant],
+      [null, null],
+    ];
+    const here = this.target(actors, sel, this.zoom);
+    const seen = new Set([`${here.s}|${here.u}|${here.v}`]);
+    const out: Camera[] = [];
+    for (const [who, asked] of asks) {
+      if (who === undefined) continue;
+      const t = this.target(actors, who, this.wantZoom(who, asked));
+      const key = `${t.s}|${t.u}|${t.v}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(this.cameraAt(t.s, t.u, t.v));
     }
-    if (z >= 0.999) {
-      const ox = Math.round(this.cam.x);
-      const oy = Math.round(this.cam.y);
-      for (let y = 0; y < S.h; y++) {
-        const wy = y + oy;
-        if (wy < 0 || wy >= W.h) continue;
-        const x0 = Math.max(0, -ox);
-        const x1 = Math.min(S.w, W.w - ox);
-        if (x1 > x0) S.data.set(W.data.subarray(wy * W.w + x0 + ox, wy * W.w + x1 + ox), y * S.w + x0);
-      }
-      if (this.mode === 'hd') this.surfaces(ox, oy);
-      return;
-    }
-    // Source span [at[i], at[i+1]) of every screen column and row.
-    if (this.colsAt.length !== S.w + 1) this.colsAt = new Int32Array(S.w + 1);
-    if (this.rowsAt.length !== S.h + 1) this.rowsAt = new Int32Array(S.h + 1);
-    const cols = this.colsAt;
-    const rows = this.rowsAt;
-    for (let i = 0; i <= S.w; i++) cols[i] = Math.floor(this.cam.x + i / z);
-    for (let i = 0; i <= S.h; i++) rows[i] = Math.floor(this.cam.y + i / z);
-    const bd = this.biome.backdrop;
-    const src = W.data;
-    for (let y = 0; y < S.h; y++) {
-      const y0 = rows[y];
-      const y1 = Math.max(y0 + 1, rows[y + 1]);
-      for (let x = 0; x < S.w; x++) {
-        const x0 = cols[x];
-        const x1 = Math.max(x0 + 1, cols[x + 1]);
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        let n = 0;
-        let all = 0;
-        for (let sy = y0; sy < y1; sy++) {
-          for (let sx = x0; sx < x1; sx++) {
-            all++;
-            if (sx < 0 || sy < 0 || sx >= W.w || sy >= W.h) continue;
-            const v = src[sy * W.w + sx];
-            if (v === CLEAR) continue;
-            r += (v >> 16) & 255;
-            g += (v >> 8) & 255;
-            b += v & 255;
-            n++;
-          }
-        }
-        if (n === 0) continue;
-        if (n === all) {
-          // Inside the world: the block's own colour nearest its mean, so
-          // small things stay crisp instead of blending into new tones.
-          const mr = r / n;
-          const mg = g / n;
-          const mb = b / n;
-          let best = 0;
-          let bestD = Infinity;
-          for (let sy = y0; sy < y1; sy++) {
-            for (let sx = x0; sx < x1; sx++) {
-              const v = src[sy * W.w + sx];
-              const d = (((v >> 16) & 255) - mr) ** 2 + (((v >> 8) & 255) - mg) ** 2 + ((v & 255) - mb) ** 2;
-              if (d < bestD) {
-                bestD = d;
-                best = v;
-              }
-            }
-          }
-          S.data[y * S.w + x] = best;
-          continue;
-        }
-        // Edges against the void fade into the backdrop instead of haloing.
-        const k = all - n;
-        S.data[y * S.w + x] = ((((r + k * bd[0]) / all) | 0) << 16) | ((((g + k * bd[1]) / all) | 0) << 8) | (((b + k * bd[2]) / all) | 0);
-      }
-    }
+    return out;
   }
 
-  // Labels in text cells, slim: an activity glyph and the name in the
-  // agent's colour over the scene. A one-line bubble ("glyph name · detail")
-  // shows for the selected agent (inverted), for a moment after a change,
-  // and on errors and finishes — a few at most. Nothing overlaps another
-  // label or an emote; a quiet label keeps its row unless blocked for a
-  // while, so they do not jitter, while a loud one moves at once and so
-  // never blinks out. In a crowd, quiet labels shrink to their glyph (see
-  // CROWD and BAND), and names that clip alike are told apart (tagNames).
-  // With a selection, the others' labels dim.
-  // HD draws the same labels as tags in a small pixel font into the image
-  // itself, a few pixels over the head, instead of a line of text cells
-  // four times the agent's size; they grow with the picture: font pixels
-  // the size of world pixels or a little under (x1 at fit, x2 in the x4
-  // close-up, x3 at x6).
-  private drawLabels(s: Screen, actors: Actor[], sprites: Map<Actor, Placed>, emotes: Map<Actor, Box>, now: number, selectedId: string | null): void {
+  // Places the labels in terminal cells over the scene: an activity glyph
+  // and the name in the agent's colour; a one-line bubble ("glyph name ·
+  // detail") for the selected agent, for a moment after a change, and on
+  // errors and finishes — a few at most. Nothing overlaps another label or
+  // an emote; a quiet label keeps its row unless blocked for a while, so
+  // they do not jitter, while a loud one moves at once and so never blinks
+  // out. In a crowd, quiet labels shrink to their glyph (see CROWD and
+  // BAND), and names that clip alike are told apart (tagNames). With a
+  // selection, the others' labels dim. Labels and emotes go over each
+  // one's top (`tops`, see figureTop), clear of its hat. Also places the
+  // drifting '!' and z marks.
+  private place(f: SceneFrame, actors: Actor[], emoting: Actor[], tops: Map<Actor, number>, now: number, selectedId: string | null, card: boolean): void {
     const r = this.rect;
-    const pal = this.biome.palette;
-    const g = this.grid();
-    const hd = this.mode === 'hd';
-    const S = hd ? this.hdScale() : 1;
-    const imgW = this.screen.w * S;
-    const fs = hd ? Math.max(1, Math.floor((S * this.zoom) / 2)) : 1;
-    const tagH = tagSize('', fs).h;
-    // Big tags keep bubbles to a few figures wide.
-    const detailMax = fs >= 2 ? 16 : 22;
-    this.tags = [];
-    // Tags placed so far, and emotes, in image pixels (HD).
-    const boxes: Array<[number, number, number, number]> = [];
-    const emoteBoxes = [...emotes.values()].map((box) => [box.x0 * S, box.y0 * S, box.x1 * S, box.y1 * S]);
-    const hits = (list: number[][], x0: number, y0: number, x1: number, y1: number) => list.some(([a, b, c, d]) => x0 < c + 1 && a < x1 + 1 && y0 < d + 1 && b < y1 + 1);
-    // `overEmotes`: an error's last resort, over a neighbour's emote.
-    const clearPx = (x0: number, y0: number, x1: number, y1: number, overEmotes = false) => y0 >= 0 && !hits(boxes, x0, y0, x1, y1) && (overEmotes || !hits(emoteBoxes, x0, y0, x1, y1));
+    const cam = f.camera;
+    const pal = this.world.palette;
+    const cellOf = (x: number, y: number, z: number): [number, number] => {
+      const [px, py] = project(cam, x, y, z);
+      return [r.x + Math.floor(px / cam.cell.w), r.y + Math.floor(py / cam.cell.h)];
+    };
+    const topOf = (a: Actor) => tops.get(a) ?? this.top(a, now);
     const taken: Array<[number, number, number]> = [];
     // Cells an emote shows in: [row, x0, x1).
     const shown: Array<[number, number, number]> = [];
-    for (const box of emotes.values()) {
-      const c0 = r.x + Math.floor(box.x0 / g.fx);
-      const c1 = r.x + Math.floor((box.x1 - 1e-6) / g.fx) + 1;
-      for (let row = r.y + Math.floor(box.y0 / g.fy); row <= r.y + Math.floor((box.y1 - 1e-6) / g.fy); row++) shown.push([row, c0, c1]);
+    // Each emote's top row, by actor.
+    const emoteTop = new Map<Actor, number>();
+    for (const a of emoting) {
+      const half = EMOTE.size / 2;
+      const lift = topOf(a) + EMOTE.gap;
+      const [px, py0] = project(cam, a.x, a.y, lift + EMOTE.size);
+      const [, py1] = project(cam, a.x, a.y, lift);
+      const x0 = px - half * cam.s;
+      const x1 = px + half * cam.s;
+      const c0 = r.x + Math.floor(x0 / cam.cell.w);
+      const c1 = r.x + Math.floor((x1 - 1e-6) / cam.cell.w) + 1;
+      const row0 = r.y + Math.floor(py0 / cam.cell.h);
+      emoteTop.set(a, row0);
+      for (let row = row0; row <= r.y + Math.floor((py1 - 1e-6) / cam.cell.h); row++) shown.push([row, c0, c1]);
     }
     const free = (y: number, x0: number, x1: number, overEmotes = false) =>
       y >= r.y && y < r.y + r.h && !taken.some(([ty, a, b]) => ty === y && x0 < b + 1 && a < x1 + 1) && (overEmotes || !shown.some(([ty, a, b]) => ty === y && x0 < b && a < x1));
@@ -1576,14 +1267,12 @@ export class Stage {
       if (n.info.id === selectedId) return 1;
       return (erring(n) ? 1 : 0) - (erring(m) ? 1 : 0) || (loud(n) ? 1 : 0) - (loud(m) ? 1 : 0) || n.bubbleUntil - m.bubbleUntil;
     });
-    // Heads, and the names and bubbles placed so far, in label columns and
-    // rows (see CROWD).
-    const perCol = hd ? S / (ADVANCE * fs) : 1 / g.fx;
-    const perRow = hd ? S / (tagH + fs) : 1 / g.fy;
+    // Heads, in terminal columns and rows: the column over the feet, the
+    // row of the top of the head.
     const heads = new Map<Actor, [number, number]>();
-    for (const [a, at] of sprites) {
-      const [x, y] = this.toScreen(Math.round(at.sx), at.top);
-      heads.set(a, [Math.round(x) * perCol, y * perRow]);
+    for (const a of actors) {
+      const [px, py] = project(cam, a.x, a.y, FIGURE_H);
+      heads.set(a, [px / cam.cell.w, py / cam.cell.h]);
     }
     const crowded = (a: Actor) => {
       const [x, y] = heads.get(a)!;
@@ -1602,17 +1291,17 @@ export class Stage {
     let bubbles = 0;
     const seen = new Set<string>();
     for (const a of order) {
-      const at = sprites.get(a);
-      if (!at) continue;
       seen.add(a.info.id);
       const selected = a.info.id === selectedId;
-      const box = emotes.get(a);
-      // Sprites are anchored on the rounded pixel column.
-      const [hx, hy0] = this.toScreen(Math.round(at.sx), at.top);
-      const hy = box ? Math.min(hy0, box.y0) : hy0;
-      const cx = r.x + Math.floor(Math.round(hx) / g.fx);
-      const headRow = r.y + Math.floor(hy / g.fy);
-      if (cx < r.x || cx >= r.x + r.w || headRow <= r.y || headRow > r.y + r.h) continue;
+      if (selected && card) continue; // its card says it all
+      const [cx, hr] = cellOf(a.x, a.y, topOf(a));
+      const [, feet] = cellOf(a.x, a.y, 0);
+      const top = emoteTop.get(a);
+      // With its top out of view over the scene (close up, a hat reaching
+      // past the edge), its label goes on the scene's top row, if that is
+      // clear, rather than nowhere.
+      const headRow = Math.max(r.y + 1, top === undefined ? hr : Math.min(hr, top));
+      if (cx < r.x || cx >= r.x + r.w || feet < r.y || headRow > r.y + r.h) continue;
       const act = erring(a) ? 'error' : a.info.activity;
       const detail = erring(a) ? a.error!.text : a.info.detail;
       const glyph = activityGlyph(act);
@@ -1623,7 +1312,7 @@ export class Stage {
       // (a loud label moves at once), back down once the one under it has
       // been clear a while; quiet labels never above row 2.
       const most = hurry ? 3 : 2;
-      const place = (fits: (k: number) => boolean): [number, typeof memo] => {
+      const pick = (fits: (k: number) => boolean): [number, typeof memo] => {
         const m = { ...memo };
         let off = -1;
         if (m.off <= most && fits(m.off)) {
@@ -1646,35 +1335,31 @@ export class Stage {
         }
         return [off, m];
       };
-      // Where `label` would go: its row, the memo after it, and its box (text
-      // cells, or image pixels in HD). A loud label that fits no row over
-      // the head slides aside, up to half its width, rather than blink out;
-      // an error's, as a last resort, covers a neighbour's emote (never a
-      // label).
+      // Where `label` would go: its row, the memo after it, and its cells. A
+      // loud label that fits no row over the head slides aside, up to half
+      // its width, rather than blink out; an error's, as a last resort,
+      // covers a neighbour's emote (never a label).
       const spot = (label: string) => {
-        const w = hd ? tagSize(label, fs).w : [...label].length;
-        const x0 = hd ? Math.round(hx * S - w / 2) : cx - Math.floor(w / 2);
-        const [lo, hi] = hd ? [0, imgW - w] : [r.x, r.x + r.w - w];
-        const top = (k: number) => (hd ? Math.round(hy * S) - 2 * fs - tagH - (k - 1) * (tagH + fs) : headRow - k);
-        const fits = (x: number, k: number, over: boolean) => (hd ? clearPx(x, top(k), x + w, top(k) + tagH, over) : free(top(k), x, x + w, over));
+        const w = [...label].length;
+        const x0 = cx - Math.floor(w / 2);
+        const fits = (x: number, k: number, over: boolean) => free(headRow - k, x, x + w, over);
         let first: { off: number; m: typeof memo; x: number; y: number; w: number } | null = null;
         for (const over of erring(a) ? [false, true] : [false]) {
           for (const k of hurry ? [0, -1, 1, -2, 2] : [0]) {
-            const x = Math.max(lo, Math.min(hi, x0 + k * Math.ceil(w / 4)));
-            const [off, m] = place((row) => fits(x, row, over));
-            const p = { off, m, x, y: top(off), w };
+            const x = Math.max(r.x, Math.min(r.x + r.w - w, x0 + k * Math.ceil(w / 4)));
+            const [off, m] = pick((row) => fits(x, row, over));
+            const p = { off, m, x, y: headRow - off, w };
             if (off > 0) return p;
             first ??= p;
           }
         }
         return first!;
       };
-      // A placed label's middle, in label columns and rows.
-      const mid = (p: { x: number; y: number; w: number }): [number, number] => (hd ? [(p.x + p.w / 2) / (ADVANCE * fs), p.y / (tagH + fs)] : [p.x + p.w / 2, p.y]);
+      const mid = (p: { x: number; y: number; w: number }): [number, number] => [p.x + p.w / 2, p.y];
       // A bubble, a name tag, or in a crowd (or atop a stack) just the glyph.
       let kind: 'bubble' | 'name' | 'glyph' = hurry && !!detail && (selected || bubbles < MAX_BUBBLES) ? 'bubble' : !hurry && crowded(a) ? 'glyph' : 'name';
-      const textOf = () => (kind === 'bubble' ? ` ${glyph} ${long.get(a)} · ${clip(detail, detailMax)} ` : kind === 'name' ? `${glyph} ${short.get(a)}` : glyph);
-      let p = spot(hd ? textOf().trim() : textOf());
+      const textOf = () => (kind === 'bubble' ? ` ${glyph} ${long.get(a)} · ${clip(detail, 22)} ` : kind === 'name' ? `${glyph} ${short.get(a)}` : glyph);
+      let p = spot(textOf());
       if (kind !== 'glyph' && p.off > 0 && towers(mid(p))) {
         kind = 'glyph';
         p = spot(glyph);
@@ -1682,41 +1367,53 @@ export class Stage {
       this.rows.set(a.info.id, p.m);
       if (p.off < 0) continue;
       if (kind !== 'glyph') named.push(mid(p));
-      const text = textOf();
-      const { x, y, w } = p;
-      const fade = selectedId && !selected ? 0.6 : 1;
-      const ink = activityColor(act, this.biome);
-      const bg = selected ? a.traits.color : mix(pal.panel, act === 'error' ? pal.bad : a.traits.color, 0.22);
-      const col = act === 'error' ? pal.bad : a.traits.color;
       if (kind === 'bubble') bubbles++;
-      if (hd) {
-        boxes.push([x, y, x + w, y + tagH]);
-        const label = text.trim();
-        if (kind === 'bubble') {
-          this.tags.push({ x, y, text: label, color: rgb(scale(selected ? pal.panel : pal.panelText, fade)), bg: rgb(scale(bg, fade)), bgAlpha: 0.85, scale: fs });
-          this.tags.push({ x, y, text: glyph, color: rgb(selected ? pal.panel : scale(ink, fade)), scale: fs });
-        } else {
-          const mark: Tag = { x, y, text: glyph, color: rgb(scale(ink, fade)), shadow: 0, scale: fs };
-          if (kind === 'name') this.tags.push({ x, y, text: label, color: rgb(scale(col, fade)), bg: rgb(pal.panel), bgAlpha: 0.45, shadow: 0, scale: fs });
-          this.tags.push(kind === 'glyph' ? { ...mark, bg: rgb(pal.panel), bgAlpha: 0.45 } : mark);
-        }
-        continue;
-      }
+      const { x, y, w } = p;
       taken.push([y, x, x + w]);
+      const fade = selectedId && !selected ? 0.6 : 1;
+      const ink = scale(activityColor(act, this.world), fade);
+      const col = act === 'error' ? pal.bad : a.traits.color;
+      let label: LabelFrame;
       if (kind === 'bubble') {
-        const fg = selected ? pal.panel : pal.panelText;
-        s.text(x, y, text, scale(fg, fade), scale(bg, fade), selected ? BOLD : 0, r.x + r.w);
-        s.put(x + 1, y, glyph, selected ? pal.panel : scale(ink, fade), undefined, BOLD);
+        const pill = selected ? a.traits.color : mix(pal.panel, act === 'error' ? pal.bad : a.traits.color, 0.22);
+        label = { col: x, row: y, w, kind: act === 'error' ? 'error' : 'bubble', color: scale(pill, fade), alpha: 0.9, text: textOf(), ink: scale(selected ? pal.panel : pal.panelText, fade), bold: selected, mark: { col: x + 1, ch: glyph, ink: selected ? pal.panel : ink } };
+      } else if (kind === 'name') {
+        label = { col: x, row: y, w, kind: 'name', color: pal.panel, alpha: 0.55, text: textOf(), ink: scale(col, fade), bold: true, mark: { col: x, ch: glyph, ink } };
       } else {
-        // Over the scene, on a darkened cell for contrast.
-        for (let k = 0; k < w; k++) s.blendBg(x + k, y, pal.panel, 0.55);
-        s.text(x, y, text, scale(col, fade), undefined, BOLD, r.x + r.w);
-        s.put(x, y, glyph, scale(ink, fade), undefined, BOLD);
+        label = { col: x, row: y, w, kind: 'glyph', color: pal.panel, alpha: 0.55, text: glyph, ink, bold: true };
       }
+      f.labels.push(label);
     }
     for (const id of this.rows.keys()) if (!seen.has(id)) this.rows.delete(id);
     this.placedLabels = taken.map(([y, x0, x1]) => ({ x: x0, y, w: x1 - x0 }));
+    for (const g of this.glyphs) {
+      const [col, row] = cellOf(g.x, g.y, g.z);
+      if (col >= r.x && col < r.x + r.w && row >= r.y && row < r.y + r.h) f.marks.push({ col, row, ch: g.ch, ink: g.color });
+    }
   }
+
+  // The frame's labels and marks as terminal text over the scene's cells.
+  // Their cells keep whatever background they have (the terminal's
+  // default over an image, so the scene's pill shows through).
+  drawLabels(s: Screen, f: SceneFrame): void {
+    const end = f.camera.cells.x + f.camera.cells.w;
+    // (Marks are z, Z, ! or ★N!: one UTF-16 unit a character.)
+    for (const m of f.marks) if (m.ch.length === 1) s.put(m.col, m.row, m.ch, m.ink);
+    for (const l of f.labels) {
+      s.text(l.col, l.row, l.text, l.ink, undefined, l.bold ? BOLD : 0, end);
+      if (l.mark) s.put(l.mark.col, l.row, l.mark.ch, l.mark.ink, undefined, BOLD);
+    }
+    // A word (★3!) goes over the labels, centred on its column, in bold.
+    for (const m of f.marks) {
+      const n = m.ch.length;
+      if (n > 1) s.text(Math.max(f.camera.cells.x, m.col - (n >> 1)), m.row, m.ch, m.ink, undefined, BOLD, end);
+    }
+  }
+}
+
+// How far apart two floor spots are on screen, in units.
+export function onScreen(p: Spot, q: Spot): number {
+  return Math.hypot(p.x - q.x - (p.y - q.y), (p.x - q.x + p.y - q.y) / 2);
 }
 
 // Each actor's name as its tag shows it, clipped to `n` characters. Names
@@ -1748,3 +1445,44 @@ export function tagNames(actors: readonly Actor[], n: number): Map<Actor, string
   }
   return out;
 }
+
+// A pen that draws nothing: what props get to `emit` with (they only
+// spawn particles there).
+const noop = () => {};
+const NO_GRADIENT = { addColorStop: noop };
+const QUIET_PEN: Pen = {
+  width: 0,
+  height: 0,
+  fillStyle: '#000',
+  strokeStyle: '#000',
+  lineWidth: 1,
+  lineJoin: 'round',
+  lineCap: 'round',
+  globalAlpha: 1,
+  globalCompositeOperation: 'source-over',
+  save: noop,
+  restore: noop,
+  translate: noop,
+  scale: noop,
+  rotate: noop,
+  transform: noop,
+  setTransform: noop,
+  beginPath: noop,
+  closePath: noop,
+  moveTo: noop,
+  lineTo: noop,
+  quadraticCurveTo: noop,
+  bezierCurveTo: noop,
+  arc: noop,
+  ellipse: noop,
+  rect: noop,
+  roundRect: noop,
+  fill: noop,
+  stroke: noop,
+  clip: noop,
+  fillRect: noop,
+  clearRect: noop,
+  createLinearGradient: () => NO_GRADIENT,
+  createRadialGradient: () => NO_GRADIENT,
+  drawImage: noop,
+};
