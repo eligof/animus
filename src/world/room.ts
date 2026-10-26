@@ -1,6 +1,6 @@
 import type { PropArt, WorldDef } from '../worlds/types.ts';
 import { supplyFor } from './build.ts';
-import { planDesks } from './desks.ts';
+import { keepOut, planDesks } from './desks.ts';
 import type { Rect } from './layout.ts';
 import { boxCount, buildSites, hub, keepClear, wallGaps, yard } from './layout.ts';
 import { NavGrid } from './path.ts';
@@ -34,6 +34,7 @@ export type Room = {
   L: Layout;
   props: PlacedProp[]; // the stations in slot order, then the decor
   desks: Desk[]; // where workstations go up, pod by pod, each pod's lead's first
+  keepOut: Uint8Array; // floor nobody works on (x + W * y): the way in, the plazas, the yard, the spots idlers like, the stations' fronts
   nav: NavGrid; // routing round the props (builds are the stage's to add)
   pois: Poi[];
   supply: Rect[]; // each build plaza's pile (buildSites order)
@@ -149,7 +150,7 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot)))
     .filter((p) => p.x > L.T && p.y > L.T && p.x < W - 1 && p.y < D - 1 && !inside(p.x, p.y, 1));
   const desks = planDesks(L, [...all, ...supply], height, pois, seed);
-  return { L, props, desks, nav, pois, supply, height };
+  return { L, props, desks, keepOut: keepOut(L, [...all, ...supply], pois), nav, pois, supply, height };
 }
 
 // Somewhere along a wall's free stretches for `art`, against the wall.

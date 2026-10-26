@@ -106,20 +106,14 @@ function inView(p: Spot, tall: (x: number, y: number) => number): boolean {
   return true;
 }
 
-// The places for workstations in room L, furnished with `taken` (every
-// prop's footprint and the supply piles; `height`: how tall the props
-// stand over each floor cell, x + W * y) and its points of interest named:
-// pods placed one at a time, the biggest shape that fits first, each where
-// it is cheapest (away from the pods placed before, near the middle of the
-// front of the floor, in the room's own frame, snug against what is
-// there), up to deskCap. A pod's lead's place is its first.
-export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Array, pois: readonly Poi[], seed: number): Desk[] {
-  const { W, D, T } = L;
+// Marking floor cells (x + W * y) of room L: a rect, every cell any of
+// which lies within r of c, and a way r wide from a to b.
+function marker(L: Layout) {
+  const { W, D } = L;
   const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < D;
   const box = (into: Uint8Array, r: Rect) => {
     for (let y = Math.max(0, r.y0); y < Math.min(D, r.y1); y++) for (let x = Math.max(0, r.x0); x < Math.min(W, r.x1); x++) into[x + W * y] = 1;
   };
-  // Every cell any of which lies within r of c.
   const disc = (into: Uint8Array, c: Spot, r: number) => {
     for (let y = Math.floor(c.y - r) - 1; y <= Math.ceil(c.y + r); y++) {
       for (let x = Math.floor(c.x - r) - 1; x <= Math.ceil(c.x + r); x++) {
@@ -131,34 +125,58 @@ export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Arra
     const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y));
     for (let k = 0; k <= n; k++) disc(into, { x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n }, r);
   };
-  // Where a desk may not stand (`ground`), and where its agent may not
-  // (`floor`): the stations and the floor just in front of them, the
-  // plazas, the yard, the spots idlers like and the way in; desks keep off
-  // the hub and the ways from the door and the idle prop to it too.
-  const ground = new Uint8Array(W * D);
-  const floor = new Uint8Array(W * D);
-  const both = [ground, floor];
-  const h = hub(L);
+  return { box, disc, way };
+}
+
+// The floor of room L nobody works on (x + W * y): the stations and the
+// floor just in front of them (3 units round their spots), the way in (8
+// round its spot and its approach), the plazas, the yard, the props in
+// `taken` and the supply piles, and the spots idlers like (2 round each).
+// Neither a workstation's agent stands there nor one sharing it (see
+// Stage.share). `wide`: a step further off the islands (where a desk may
+// stand, see planDesks).
+export function keepOut(L: Layout, taken: readonly Rect[], pois: readonly Poi[], wide = false): Uint8Array {
+  const { W, D } = L;
+  const { box, disc } = marker(L);
+  const m = new Uint8Array(W * D);
   for (const s of L.slots) {
     const r = slotRect(s);
-    const pad = s.island ? 2 : 1;
-    box(ground, { x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad });
-    box(floor, { x0: r.x0 - 1, y0: r.y0 - 1, x1: r.x1 + 1, y1: r.y1 + 1 });
-    for (const m of both) disc(m, s.spot, 3);
-    if (s.kind === 'entrance' || s.kind === 'idle') way(ground, s.spot, h, WAY);
+    const pad = wide && s.island ? 2 : 1;
+    box(m, { x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad });
+    disc(m, s.spot, 3);
     if (s.kind === 'entrance') {
-      for (const m of both) {
-        box(m, { x0: r.x0 - 2, y0: r.y0 - 2, x1: Math.max(r.x1, s.spot.x) + 6, y1: Math.max(r.y1, s.spot.y) + 6 });
-        disc(m, s.spot, DOOR_CLEAR);
-      }
+      box(m, { x0: r.x0 - 2, y0: r.y0 - 2, x1: Math.max(r.x1, s.spot.x) + 6, y1: Math.max(r.y1, s.spot.y) + 6 });
+      disc(m, s.spot, DOOR_CLEAR);
     }
   }
-  for (const r of taken) for (const m of both) box(m, { x0: r.x0 - 1, y0: r.y0 - 1, x1: r.x1 + 1, y1: r.y1 + 1 });
-  for (const b of buildSites(L)) for (const m of both) disc(m, b, b.r + PLAZA_CLEAR);
+  for (const r of taken) box(m, { x0: r.x0 - 1, y0: r.y0 - 1, x1: r.x1 + 1, y1: r.y1 + 1 });
+  for (const b of buildSites(L)) disc(m, b, b.r + PLAZA_CLEAR);
   const yd = yard(L);
-  for (const m of both) disc(m, yd, yd.r + 1);
+  disc(m, yd, yd.r + 1);
+  for (const p of pois) disc(m, p, POI_CLEAR);
+  return m;
+}
+
+// The places for workstations in room L, furnished with `taken` (every
+// prop's footprint and the supply piles; `height`: how tall the props
+// stand over each floor cell, x + W * y) and its points of interest named:
+// pods placed one at a time, the biggest shape that fits first, each where
+// it is cheapest (away from the pods placed before, near the middle of the
+// front of the floor, in the room's own frame, snug against what is
+// there), up to deskCap. A pod's lead's place is its first.
+export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Array, pois: readonly Poi[], seed: number): Desk[] {
+  const { W, D, T } = L;
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < D;
+  const { box, disc, way } = marker(L);
+  // Where a desk may not stand (`ground`), and where its agent may not
+  // (`floor`, see keepOut); desks keep off the hub and the ways from the
+  // door and the idle prop to it too, and a step further off the islands.
+  const ground = keepOut(L, taken, pois, true);
+  const floor = keepOut(L, taken, pois);
+  const both = [ground, floor];
+  const h = hub(L);
+  for (const s of L.slots) if (s.kind === 'entrance' || s.kind === 'idle') way(ground, s.spot, h, WAY);
   disc(ground, h, 4);
-  for (const p of pois) for (const m of both) disc(m, p, POI_CLEAR);
   // Where a desk may not stand either: in front of a station's front
   // corner, a spot idlers like, a plaza or another desk's agent.
   const cover = new Uint8Array(W * D);

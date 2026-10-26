@@ -6,10 +6,11 @@ import { StressSource } from '../src/demo/stress.ts';
 import { Screen } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
 import { computeLayout } from '../src/ui/layout.ts';
+import { buildSites, yard } from '../src/world/layout.ts';
 import { footprint } from '../src/world/room.ts';
 import { EMPTY_S, POP_S, Stage } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
-import type { Desk, Particle } from '../src/world/types.ts';
+import type { Desk, Particle, Spot } from '../src/world/types.ts';
 import { World } from '../src/world/world.ts';
 import { WORLDS } from '../src/worlds/index.ts';
 import { mines } from '../src/worlds/mines.ts';
@@ -19,13 +20,29 @@ import { budget } from './helpers.ts';
 // each, each turning to something else every few seconds) in every world,
 // in a small, a usual and a big terminal. Each stands at a workstation of
 // its own, or, once every place is taken, at a teammate's side; none
-// stands within about four units of another.
+// stands within about four units of another, and none at work stands in
+// the way in, on a plaza, in the yard, on a spot idlers like or on a
+// station's spot.
 
 const NOW = 1_700_000_000_000;
 const SIZES: Array<[number, number]> = [[80, 24], [150, 46], [200, 60]];
 const APART = 4;
 
 const team = (a: AgentInfo) => (a.role === 'lead' ? a.id : (a.parentId ?? a.id));
+
+// Where `p` is in the way, if it is: in the way in (8 units round its
+// spot), on a plaza, in the yard, on a spot idlers like (2 units) or on a
+// station's spot (3 units).
+function inTheWay(stage: Stage, p: Spot): string | null {
+  const L = stage.room()!.L;
+  const far = (q: Spot) => Math.hypot(p.x - q.x, p.y - q.y);
+  for (const s of L.slots) if (far(s.spot) < (s.kind === 'entrance' ? 8 : 3)) return s.kind === 'entrance' ? 'in the way in' : `on the ${s.kind} station's spot`;
+  for (const b of buildSites(L)) if (far(b) < b.r) return 'on a plaza';
+  const yd = yard(L);
+  if (far(yd) < yd.r) return 'in the yard';
+  for (const q of stage.pois()) if (far(q) < 2) return `on a ${q.kind} spot`;
+  return null;
+}
 
 test('the stress crew: four leads with four subagents each, all at work, each turning to something else every few seconds, the same every run', () => {
   const moves = (src: StressSource) => Array.from({ length: 60 }, (_, i) => src.poll(NOW + i * 500));
@@ -84,6 +101,8 @@ for (const [cols, rows] of SIZES) {
         const mates = up.filter((x) => x.owner && team(actors.find((o) => o.info.id === x.owner)!.info) === team(a.info));
         if (mates.length) assert.ok(mates.includes(at), `${tag(a)} at a stranger's`);
         assert.ok(Math.hypot(a.x - at.desk.spot.x, a.y - at.desk.spot.y) <= 12.5, `${tag(a)} far from the one it shares`);
+        const way = inTheWay(stage, a);
+        assert.ok(!way, `${tag(a)} sharing ${way}`);
       }
       for (let i = 0; i < actors.length; i++) {
         for (let j = i + 1; j < actors.length; j++) {
@@ -94,6 +113,44 @@ for (const [cols, rows] of SIZES) {
     }
   });
 }
+
+test('80x24: forty at work, most of them sharing: none stands in the way in, on a plaza, in the yard, on a spot idlers like or a station\'s', () => {
+  for (const w of WORLDS) {
+    const stage = new Stage(w);
+    stage.layout(computeLayout(80, 24).scene);
+    const src = new StressSource(8, 4, NOW);
+    let now = NOW;
+    for (let i = 0; i < 12 * 20; i++) {
+      now += 50;
+      stage.sync(src.poll(now), now);
+      stage.update(0.05, now);
+    }
+    const actors = stage.actors();
+    for (const a of actors) {
+      const tag = `${w.id}: ${a.info.id} at ${a.x.toFixed(0)},${a.y.toFixed(0)}`;
+      assert.equal(a.state, 'work', `${tag} is ${a.state}`);
+      const way = inTheWay(stage, a);
+      assert.ok(!way, `${tag} ${way}`);
+    }
+  }
+});
+
+test('with every place taken and the room full of sharers, the crew still finishes a build', () => {
+  // Starfall's small room: twenty at work, three leads done (they build).
+  const stage = new Stage(WORLDS.find((w) => w.id === 'starfall')!);
+  stage.layout(computeLayout(80, 24).scene);
+  const src = new StressSource(4, 4, NOW);
+  const done = ['d1', 'd2', 'd3'].map((id): AgentInfo => ({ id, name: id, role: 'lead', project: 'p', activity: 'done', detail: 'done', since: NOW, lastSeen: NOW }));
+  let now = NOW;
+  const built = () => stage.builds().some((b) => b.complete);
+  for (let i = 0; i < 120 * 20 && !built(); i++) {
+    now += 50;
+    stage.sync([...src.poll(now), ...done], now);
+    stage.update(0.05, now);
+  }
+  const b = stage.builds()[0];
+  assert.ok(built(), `the build stalled at ${b?.placed}/${b?.count}`);
+});
 
 // ── a workstation's life ────────────────────────────────────────────────
 

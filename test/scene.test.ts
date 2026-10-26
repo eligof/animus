@@ -89,7 +89,7 @@ const world: WorldDef = {
 };
 
 const place = (art: PropArt, wall: 'left' | 'right', island: boolean, x0: number, y0: number): PlacedProp => ({ art, wall, island, x0, y0, len: art.len, dep: art.dep, seed: 1 });
-const room = (props: PlacedProp[]): Room => ({ L: { W, D, H, T, slots: [] }, props, desks: [], nav: null as unknown as NavGrid, pois: [], supply: [], height: new Float32Array(0) });
+const room = (props: PlacedProp[]): Room => ({ L: { W, D, H, T, slots: [] }, props, desks: [], keepOut: new Uint8Array(0), nav: null as unknown as NavGrid, pois: [], supply: [], height: new Float32Array(0) });
 
 function figure(id: string, x: number, y: number, o: Partial<FigureFrame> = {}): FigureFrame {
   return { id, x, y, z: 0, traits: traitsFor(id, 'lead'), costume: 'casual', pose: 'idle', poseT: 0, phase: 0, facing: { back: false, flip: false }, selected: false, hurt: false, sleeping: false, walking: false, ...o };

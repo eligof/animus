@@ -734,8 +734,8 @@ export class Stage {
   // with the fewest at its side, nearest its lead) on the first of SIDES
   // free there in view, else out of view (see beside); else the same by
   // anyone's; where it shares already, while that still holds; with none
-  // free at all, the first spot by the first. Null when no workstation is
-  // up.
+  // free at all, the workable one furthest from everyone. Null when no
+  // workstation is up.
   private share(a: Actor): { desk: Desk; spot: Spot; lane: number } | null {
     const team = teamOf(a.info);
     const up = [...this.desks.values()].filter((w) => w.owner && w.owner !== a.info.id);
@@ -759,6 +759,19 @@ export class Stage {
         }
       }
     }
+    // None free: the workable spot furthest from everyone, by a
+    // teammate's if there is one there.
+    for (const pool of [mates, others]) {
+      let best: { desk: Desk; k: number; clear: number } | null = null;
+      for (const w of pool) {
+        for (let k = 1; k <= SIDES.length; k++) {
+          if (!this.workable(w.desk, k)) continue;
+          const clear = this.clearance(this.sideSpot(w.desk, k), a);
+          if (!best || clear > best.clear) best = { desk: w.desk, k, clear };
+        }
+      }
+      if (best) return { desk: best.desk, spot: this.sideSpot(best.desk, best.k), lane: best.k };
+    }
     const first = mates[0] ?? others[0];
     return { desk: first.desk, spot: this.sideSpot(first.desk, 1), lane: 1 };
   }
@@ -769,18 +782,33 @@ export class Stage {
     return this.clampToFloor(d.wall === 'right' ? { x: d.spot.x + du, y: d.spot.y + dv } : { x: d.spot.x + dv, y: d.spot.y + du });
   }
 
-  // Whether `a` may stand at the k-th spot beside d: clear of everything,
-  // in view (if `seen`), and WORK_APART from where anyone else stands or
-  // is going.
+  // Whether `a` may stand at the k-th spot beside d: workable (see below), in
+  // view (if `seen`), and WORK_APART from where anyone else stands or is
+  // going.
   private beside(d: Desk, a: Actor, k: number, seen: boolean): boolean {
     const p = this.sideSpot(d, k);
-    if (!this.standable(p) || (seen && !this.level(p))) return false;
+    return this.workable(d, k) && (!seen || this.level(p)) && this.clearance(p, a) >= WORK_APART;
+  }
+
+  // Whether the k-th spot beside d is somewhere to work: clear of
+  // everything, and not on the floor nobody works on (the way in, the
+  // plazas, the yard, the spots idlers like, the stations' fronts: see
+  // Room.keepOut).
+  private workable(d: Desk, k: number): boolean {
+    const p = this.sideSpot(d, k);
+    const L = this.L!;
+    return this.standable(p) && !this.plan!.keepOut[Math.floor(p.x) + L.W * Math.floor(p.y)];
+  }
+
+  // How far from `p` the nearest of the others stands, or is going.
+  private clearance(p: Spot, a: Actor): number {
+    let near = Infinity;
     for (const o of this.cast.values()) {
       if (o === a || o.state === 'leave' || o.gone) continue;
       const at = o.path[o.path.length - 1] ?? o;
-      if (Math.hypot(at.x - p.x, at.y - p.y) < WORK_APART) return false;
+      near = Math.min(near, Math.hypot(at.x - p.x, at.y - p.y));
     }
-    return true;
+    return near;
   }
 
   // A puff of dust and a few sparkles where a workstation pops up or goes.
