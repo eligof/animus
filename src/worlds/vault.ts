@@ -5,6 +5,7 @@ import { DECOR } from './vault/decor.ts';
 import { INK } from './vault/kit.ts';
 import { room, vaultPois } from './vault/room.ts';
 import { STATIONS } from './vault/stations.ts';
+import { WORKSTATION } from './vault/workstation.ts';
 
 // The Vault: deposit boxes, gold under amber lamps and acid in the pit. An
 // old bank vault in outlined cartoon (gunmetal ink): gold and amber against
@@ -43,6 +44,7 @@ export const vault: WorldDef = {
   pois: vaultPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'guard',
   critter: { kind: 'drone', body: hex('#a9b3bf') }, // a security drone
   finale: { colors: [[255, 211, 74]] }, // gold dust
