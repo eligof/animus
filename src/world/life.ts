@@ -52,11 +52,13 @@ const SIP_S = 2;
 // to the right, units down toward the viewer) from it, the first two either
 // side, then in front a little either side, then further out. And where a
 // finished subagent stands to high-five its lead: beside it on screen,
-// about 7 units apart (their raised hands meet between them), within
-// FIVE_WALK seconds; they slap for FIVE_S.
+// about 7 units apart (their raised hands meet between them), else a step
+// nearer or further, higher or lower (every one of them beside it, see
+// beside; with none free, no high-five), within FIVE_WALK seconds; they
+// slap for FIVE_S.
 const FAN: ReadonlyArray<readonly [number, number]> = [[5.5, 0], [-5.5, 0], [3, 3.5], [-3, 3.5], [7.5, -1.5], [-7.5, -1.5]];
 const BESIDE: ReadonlyArray<readonly [number, number]> = [[7, 0], [-7, 0], [7, 1.5], [-7, 1.5], [7, -1.5], [-7, -1.5]];
-const FIVE_GAP = 5; // about how far apart they stand, units (7 on screen)
+const SIDLE: ReadonlyArray<readonly [number, number]> = [5.5, 7, 8.5].flatMap((sx) => [0, 1.5, -1.5, 3, -3].flatMap((sy) => [[sx, sy], [-sx, sy]] as const));
 // Beside each other for a high-five: 3.5 to 7.5 units apart, and 5 or
 // more across the screen (not one behind the other).
 const beside = (a: Spot, b: Spot) => Math.hypot(a.x - b.x, a.y - b.y) >= 3.5 && Math.hypot(a.x - b.x, a.y - b.y) <= 7.5 && Math.abs(a.x - b.x - (a.y - b.y)) >= 5;
@@ -87,7 +89,7 @@ export type Errand =
   // office life (see OFFICE)
   | { kind: 'huddle'; lead: string; arrived: boolean; since: number }
   | { kind: 'coffee'; step: 'go' | 'pour' | 'back'; poi: Poi; from: Spot; until: number; since: number }
-  | { kind: 'five'; lead: string; at: Spot; arrived: boolean; until: number; since: number; clap: number }
+  | { kind: 'five'; lead: string; at: Spot; to: Spot; arrived: boolean; until: number; since: number; clap: number }
   | { kind: 'standup'; crew: string; arrived: boolean; since: number };
 
 // Office life's errands: dropped when it is turned off; a working agent
@@ -762,15 +764,19 @@ export class Life {
         }
         if (!e.arrived) {
           if (c - e.since > FIVE_WALK) this.fived(a);
-          else if (Math.hypot(lead.x - e.at.x, lead.y - e.at.y) > 3) {
-            // the lead moved off: after it
+          else if (Math.hypot(lead.x - e.at.x, lead.y - e.at.y) > 3 || (here && !beside(a, lead) && Math.hypot(a.x - e.to.x, a.y - e.to.y) >= 0.5)) {
+            // the lead moved off, or the way ended somewhere else: beside
+            // it again (no room there now: no high-five)
+            const to = this.fiveSpot(lead, a);
+            if (!to) {
+              this.fived(a);
+              return;
+            }
             e.at = { x: lead.x, y: lead.y };
-            this.host.walk(a, this.fiveSpot(lead, a));
-          } else if (here && !beside(a, lead)) {
-            // the lead moved meanwhile: beside it again
-            e.at = { x: lead.x, y: lead.y };
-            this.host.walk(a, this.fiveSpot(lead, a));
+            e.to = to;
+            this.host.walk(a, to);
           } else if (here) {
+            // at its spot, or beside the lead anyway
             e.arrived = true;
             e.until = c + FIVE_S;
             e.clap = c + FIVE_S * 0.4;
@@ -912,21 +918,27 @@ export class Life {
   }
 
   // A subagent finished and its lead is in the room and awake: it goes to
-  // stand beside the lead for a high-five.
+  // stand beside the lead for a high-five (no room there: the finale goes
+  // off at once).
   private highFive(a: Actor): void {
     const lead = a.info.parentId ? this.byId.get(a.info.parentId) : undefined;
     if (a.info.role === 'lead' || !lead || !present(lead) || !present(a) || this.sleeping(lead) || this.carrying(a)) return;
-    a.mind.errand = { kind: 'five', lead: lead.info.id, at: { x: lead.x, y: lead.y }, arrived: false, until: 0, since: this.clock, clap: 0 };
-    this.host.walk(a, this.fiveSpot(lead, a));
+    const to = this.fiveSpot(lead, a);
+    if (!to) return;
+    a.mind.errand = { kind: 'five', lead: lead.info.id, at: { x: lead.x, y: lead.y }, to, arrived: false, until: 0, since: this.clock, clap: 0 };
+    this.host.walk(a, to);
   }
 
   // Where to stand for a high-five: beside the lead on screen, the nearer
-  // side first, a little up or down if need be, else anywhere near it.
-  private fiveSpot(lead: Actor, a: Actor): Spot {
+  // side first, a little up or down if need be (BESIDE); else a step nearer,
+  // further, higher or lower (SIDLE); null when none of them is free.
+  private fiveSpot(lead: Actor, a: Actor): Spot | null {
     const near = (p: Spot) => Math.hypot(p.x - a.x, p.y - a.y);
-    const sides = BESIDE.map(([sx, sy]) => onScreen(lead, sx, sy));
-    const ok = sides.filter((p) => this.host.standable(p)).sort((p, q) => near(p) - near(q));
-    return ok[0] ?? this.around(lead, FIVE_GAP, Math.atan2(a.y - lead.y, a.x - lead.x));
+    for (const offsets of [BESIDE, SIDLE]) {
+      const ok = offsets.map(([sx, sy]) => onScreen(lead, sx, sy)).filter((p) => this.host.standable(p));
+      if (ok.length) return ok.sort((p, q) => near(p) - near(q))[0];
+    }
+    return null;
   }
 
   // The high-five given (or missed): the finale may go off; one gone from

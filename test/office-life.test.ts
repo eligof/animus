@@ -7,7 +7,8 @@ import type { Errand } from '../src/world/life.ts';
 import { hub } from '../src/world/layout.ts';
 import { Stage } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
-import type { Layout } from '../src/world/types.ts';
+import type { Layout, Spot } from '../src/world/types.ts';
+import { WORLDS } from '../src/worlds/index.ts';
 import { mines } from '../src/worlds/mines.ts';
 import type { WorldDef } from '../src/worlds/types.ts';
 
@@ -63,8 +64,29 @@ const find = (stage: Stage, id: string): Actor | undefined => stage.actors().fin
 const byId = (stage: Stage, id: string): Actor => find(stage, id)!;
 const kindOf = (a: Actor | undefined): Errand['kind'] | undefined => a?.mind.errand?.kind;
 const OFFICE = new Set(['huddle', 'coffee', 'five', 'standup']);
-const gap = (a: Actor, b: Actor) => Math.hypot(a.x - b.x, a.y - b.y);
+const gap = (a: Spot, b: Spot) => Math.hypot(a.x - b.x, a.y - b.y);
 const confetti = (stage: Stage, now: number) => stage.frame(now, null)!.particles.filter((p) => p.kind === 'confetti').length;
+// The floor spot `sx` units right and `sy` units down the screen from `at`
+// (as life.ts places spots round someone).
+const onScreen = (at: Spot, sx: number, sy: number): Spot => ({ x: at.x + sy + sx / 2, y: at.y + sy - sx / 2 });
+const standableIn = (stage: Stage) => (stage as unknown as { standable(s: Spot): boolean }).standable.bind(stage);
+
+// The longest anyone has walked on the spot so far (a path to follow, not
+// held by a gesture, yet not moving), in seconds: call it every frame.
+function treadmill(stage: Stage): () => number {
+  const last = new Map<Actor, Spot & { secs: number }>();
+  let most = 0;
+  return () => {
+    for (const a of stage.actors()) {
+      const was = last.get(a);
+      const stuck = !!was && a.state !== 'enter' && a.path.length > 0 && !stage.life.holding(a) && gap(a, was) < 0.01;
+      const secs = stuck ? was.secs + 0.05 : 0;
+      most = Math.max(most, secs);
+      last.set(a, { x: a.x, y: a.y, secs });
+    }
+    return most;
+  };
+}
 
 // ── the kick-off huddle ─────────────────────────────────────────────────
 
@@ -382,6 +404,98 @@ test('no high-five when the lead is not in the room: the finale goes off at once
     seen += confetti(stage, n);
   });
   assert.ok(seen > 0, 'no finale');
+});
+
+// These desks, in an 80 x 24 terminal, leave no room the usual 7 units
+// either side of whoever works there. A subagent coming from the writing
+// desk was sent to a spot up or down the screen from its lead instead,
+// never counted as beside it, and walked on that spot until it gave up,
+// the finale held all the while.
+test('a lead whose desk leaves no room right beside it still gets its high-five, from a step nearer, further, higher or lower', () => {
+  for (const [id, desk] of [['station', 'think'], ['snowy', 'web'], ['shelter', 'web']] as const) {
+    const stage = newStage(WORLDS.find((w) => w.id === id)!);
+    const lead = agent('L', desk, { role: 'lead' });
+    let done = 0;
+    const crew = () => [lead, agent('s', done ? 'done' : 'write', { parentId: 'L', since: done || NOW })];
+    let now = run(stage, crew, 10);
+    const L = byId(stage, 'L');
+    assert.equal(L.station?.kind, desk);
+    // (BESIDE in life.ts)
+    const standable = standableIn(stage);
+    for (const [sx, sy] of [[7, 0], [-7, 0], [7, 1.5], [-7, 1.5], [7, -1.5], [-7, -1.5]]) assert.ok(!standable(onScreen(L, sx, sy)), `${id}: room beside the ${desk} desk now: find another for this test`);
+    done = now;
+    const stuck = treadmill(stage);
+    let landed = 0;
+    now = run(stage, crew, FIVE_WALK + FIVE_S + 2, now, (n) => {
+      stuck();
+      const s = byId(stage, 's');
+      const e = s.mind.errand;
+      if (e?.kind !== 'five' || !e.arrived || landed) return;
+      landed = n;
+      const [dx, dy] = [s.x - L.x, s.y - L.y];
+      assert.ok(Math.abs(dx - dy) >= 5 && gap(s, L) <= 7.5, `${id}: not beside the lead: ${dx.toFixed(1)}, ${dy.toFixed(1)}`);
+    });
+    assert.ok(landed, `${id}: no high-five`);
+    assert.ok((landed - done) / 1000 < 4, `${id}: the high-five took ${(landed - done) / 1000} s`);
+    assert.ok(stuck() <= 1, `${id}: walked on the spot ${stuck().toFixed(2)} s`);
+  }
+});
+
+test('with no room by its lead at all, no high-five: the finale goes off at once', () => {
+  const stage = newStage();
+  const lead = agent('L', 'write', { role: 'lead' });
+  let done = 0;
+  const crew = () => [lead, agent('s', done ? 'done' : 'read', { parentId: 'L', since: done || NOW })];
+  let now = run(stage, crew, 10);
+  // Walled in: nowhere within 10 units of the lead to stand.
+  const L = byId(stage, 'L');
+  const standable = standableIn(stage);
+  (stage as unknown as { standable(s: Spot): boolean }).standable = (s) => gap(s, L) > 10 && standable(s);
+  done = now;
+  let seen = 0;
+  run(stage, crew, 1.5, now, (n) => {
+    assert.notEqual(kindOf(byId(stage, 's')), 'five');
+    seen += confetti(stage, n);
+  });
+  assert.ok(seen > 0, 'no finale');
+});
+
+// With the demo crew in the smallest terminal, one high-five in about
+// twenty-five never landed (in nine of the worlds): the subagent walked on
+// the spot beside its lead for up to FIVE_WALK, the finale held.
+test('in every world, in the smallest terminal, each high-five lands after a short walk or is skipped, and nobody walks on the spot', () => {
+  for (const world of WORLDS) {
+    const stage = newStage(world);
+    const src = new DemoSource(7, NOW);
+    const stuck = treadmill(stage);
+    // each on its way to a high-five: how long it has walked (not held by
+    // a wave or a cheer)
+    const walked = new Map<string, number>();
+    let landed = 0;
+    run(stage, (n) => src.poll(n), 300, NOW, () => {
+      stuck();
+      for (const a of stage.actors()) {
+        const e = a.mind.errand;
+        const id = a.info.id;
+        if (e?.kind === 'five' && !e.arrived) {
+          walked.set(id, (walked.get(id) ?? 0) + (stage.life.holding(a) ? 0 : 0.05));
+          continue;
+        }
+        if (!walked.has(id)) continue;
+        if (e?.kind === 'five') {
+          assert.ok(walked.get(id)! <= 4, `${world.id}: ${id} walked ${walked.get(id)!.toFixed(2)} s to its high-five`);
+          landed++;
+        } else {
+          // given up: only after a lead that went, or is off to another station
+          const lead = find(stage, a.info.parentId ?? '');
+          assert.ok(!lead || lead.state === 'leave' || lead.path.length > 0, `${world.id}: ${id}'s high-five never landed`);
+        }
+        walked.delete(id);
+      }
+    });
+    assert.ok(stuck() <= 1, `${world.id}: walked on the spot ${stuck().toFixed(2)} s`);
+    assert.ok(landed > 0, `${world.id}: no high-five`);
+  }
 });
 
 test('a subagent gone from the list mid-way gives its high-five, then leaves', () => {
