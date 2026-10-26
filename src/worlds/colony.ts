@@ -5,6 +5,7 @@ import { DECOR } from './colony/decor.ts';
 import { INK } from './colony/kit.ts';
 import { colonyPois, room } from './colony/room.ts';
 import { STATIONS } from './colony/stations.ts';
+import { WORKSTATION } from './colony/workstation.ts';
 
 // Frontier Colony: stone and planks under a big sky, a campfire and a husky,
 // in outlined cartoon (dark earth-brown ink), after the frontier colony
@@ -45,6 +46,7 @@ export const colony: WorldDef = {
   pois: colonyPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'colonist',
   critter: { kind: 'husky', body: hex('#8a929e') }, // a husky
   finale: { colors: [[124, 192, 74], [140, 98, 58], [106, 174, 224]] }, // grass green, wood brown and sky blue confetti
