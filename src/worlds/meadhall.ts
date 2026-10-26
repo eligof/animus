@@ -5,6 +5,7 @@ import { DECOR } from './meadhall/decor.ts';
 import { INK } from './meadhall/kit.ts';
 import { meadhallPois, room } from './meadhall/room.ts';
 import { STATIONS } from './meadhall/stations.ts';
+import { WORKSTATION } from './meadhall/workstation.ts';
 
 // Longhall: a great timber hall at night, carved posts and crimson swags on
 // plank walls over a fieldstone footing, long banners and small lattice
@@ -45,6 +46,7 @@ export const meadhall: WorldDef = {
   pois: meadhallPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'nord',
   critter: { kind: 'fox', body: hex('#d9772e') }, // a fox
   finale: { colors: [[240, 120, 40], [245, 197, 66], [150, 200, 235]] }, // ember, gold and frost-blue confetti
