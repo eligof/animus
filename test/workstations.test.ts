@@ -228,6 +228,35 @@ test('nobody walks through a workstation, and nobody is trapped: one that goes u
   assert.equal(stage.workstations().length, 0, 'workstations left standing');
 });
 
+test('a crowd coming in at once walks round every workstation already up, those that went up after it set off too', () => {
+  // Four leads with four subagents each, all in one poll: each newcomer's
+  // way is planned as it comes in, before the next one's workstation is up.
+  const crew = [0, 1, 2, 3].flatMap((l) => [lead(`L${l}`), ...[0, 1, 2, 3].map((k) => sub(`L${l}S${k}`, `L${l}`, 'read'))]);
+  for (const r of [WIDE, { x: 0, y: 1, w: 200, h: 58 }]) {
+    for (const w of WORLDS) {
+      const stage = staged(r, w);
+      // Whether each was inside a workstation, and which stood, a tick ago.
+      const was = new Map<string, boolean>();
+      let before: Desk[] = [];
+      run(stage, () => crew, 6, NOW, (n) => {
+        for (const a of stage.actors()) {
+          if (a.state === 'enter') continue;
+          const into = before.find((d) => {
+            const f = footprint(d);
+            return a.x > f.x0 + 0.5 && a.x < f.x1 - 0.5 && a.y > f.y0 + 0.5 && a.y < f.y1 - 0.5;
+          });
+          assert.ok(!into || was.get(a.info.id) !== false, `${w.id} ${r.w}x${r.h}: ${a.info.id} walked into workstation ${into?.index} at ${((n - NOW) / 1000).toFixed(2)} s`);
+          was.set(a.info.id, stage.workstations().some((x) => {
+            const f = footprint(x.desk);
+            return a.x > f.x0 && a.x < f.x1 && a.y > f.y0 && a.y < f.y1;
+          }));
+        }
+        before = stage.workstations().map((x) => x.desk);
+      });
+    }
+  }
+});
+
 test('twenty at their workstations: the stage\'s frame and the scene\'s plate stay within budget', () => {
   // The model's share of a frame, as for a busy crew at the stations.
   const { stage } = stressed(WORLDS.find((w) => w.id === 'cafe')!, 200, 60);

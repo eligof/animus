@@ -471,16 +471,17 @@ export class Stage {
   }
 
   // A build, a pile or a workstation appeared (or went): walkers re-plan
-  // round it (one bound for where it now stands stops beside it), and
-  // anyone standing where it now is steps out of the way.
+  // round it (one bound for where it now stands stops beside it), those
+  // still coming in too (a crowd in one poll set off before the last of
+  // their workstations went up), and anyone standing where it now is
+  // steps out of the way.
   private makeWay(): void {
     this.desksSeen = this.desksVer;
     for (const a of this.cast.values()) {
-      if (a.state === 'enter') continue;
       if (a.path.length) {
         const to = a.path[a.path.length - 1];
         this.walkTo(a, this.inside(to, 0.3) ? (this.nearestStandable(to) ?? to) : to);
-      } else if (this.inside(a, 0.3)) {
+      } else if (a.state !== 'enter' && this.inside(a, 0.3)) {
         const out = this.nearestStandable(a);
         if (out) a.path = [out];
       }
