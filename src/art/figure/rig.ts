@@ -63,7 +63,14 @@ export const LOOP: Record<Pose, readonly [number, number]> = {
   search: [1.6, 12], web: [2, 12], delegate: [1.2, 12], talk: [1.2, 12], done: [0.9, 10], error: [0.8, 8],
   sleep: [3.2, 8], sit: [3.2, 8], carry: [1, 6], place: [1.6, 12], cheer: [0.6, 8], wave: [0.6, 6],
   drink: [2.4, 12], stretch: [2.4, 12], chat: [1.6, 16], flinch: [0.4, 4], dance: [0.9, 12], pet: [1.2, 12],
+  highfive: [0.8, 8], sip: [2, 12],
 };
+
+// The poses a carried mug of coffee shows in (see FigureFrame.mug), always
+// in hand B: held before the belly standing about, walking or pondering, on
+// the lap sitting, in the talking hand in a chat. The rest put it down for
+// a moment (a sip has its own).
+export const MUG_POSES: ReadonlySet<Pose> = new Set<Pose>(['idle', 'walk', 'think', 'sit', 'chat']);
 
 const frac = (v: number) => v - Math.floor(v);
 
@@ -79,7 +86,7 @@ export function frameOf(pose: Pose, poseT: number, phase: number): number {
 const poseEyes = new Map<Pose, Eyes[]>();
 export function eyesAt(pose: Pose, i: number): Eyes {
   let e = poseEyes.get(pose);
-  if (!e) poseEyes.set(pose, (e = Array.from({ length: LOOP[pose][1] }, (_, j) => rigFor(pose, j, { back: false, walking: false, walkU: 0, item: false }).face.eyes)));
+  if (!e) poseEyes.set(pose, (e = Array.from({ length: LOOP[pose][1] }, (_, j) => rigFor(pose, j, { back: false, walking: false, walkU: 0, item: false, mug: false }).face.eyes)));
   return e[i];
 }
 
@@ -147,7 +154,7 @@ function walkArms(r: Rig, u: number): void {
   r.arms[1] = arm([REST[1][0] + 0.95 * c, REST[1][1] - 0.35 * Math.max(0, c)], 1);
 }
 
-export type RigCtx = { back: boolean; walking: boolean; walkU: number; item: boolean };
+export type RigCtx = { back: boolean; walking: boolean; walkU: number; item: boolean; mug: boolean };
 
 // The rig for frame i of a pose (see LOOP).
 export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
@@ -450,6 +457,34 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face = { eyes: 'happy', look: [0, 0], mouth: 'smile', brows: 'none', blush: true };
       break;
     }
+    case 'highfive': {
+      // a hand up and out to meet the other's, a slap at the start of the
+      // loop; the other hand out a little
+      const slap = bump(u, 0, 0.3);
+      r.lean = 0.06 + 0.05 * slap;
+      r.arms[1] = arm([4.2 + 0.3 * slap, -6.3 + 0.1 * slap], 1, { fwd: true, high: true, grip: 'open' });
+      r.arms[0] = arm([-2.5, -1.5], 1);
+      r.face = { eyes: 'happy', look: [0, 0], mouth: 'grin', brows: 'none', blush: true };
+      break;
+    }
+    case 'sip': {
+      // both hands round a mug: up to the lips, a slow sip with the eyes
+      // shut, and down again
+      const k = ease(u, 0.15, 0.4) - ease(u, 0.75, 0.95);
+      r.arms[1] = arm([2.2 - 0.45 * k, -2.75 - 2.4 * k], 1, { fwd: true, high: k > 0.5 });
+      r.arms[0] = arm([1.45 - 0.3 * k, -2.35 - 2.3 * k], 1, { fwd: true, high: k > 0.5 });
+      r.tilt = -0.06 * k;
+      r.face.eyes = k > 0.6 ? 'closed' : 'open';
+      r.face.mouth = k > 0.6 ? 'small' : 'smile';
+      r.face.blush = k > 0.6;
+      r.props.push(prop('mug', 1, 0.3, -0.15, -0.4 * k, u));
+      break;
+    }
+  }
+  // A carried mug in hand B (see MUG_POSES).
+  if (c.mug && MUG_POSES.has(pose)) {
+    if (pose === 'idle' || pose === 'walk' || pose === 'think') r.arms[1] = arm([2.15, -2.55], 1, { fwd: true });
+    r.props.push(prop('mug', 1, 0.35, -0.15, 0, u));
   }
   // A ghost bobs in the air (a whole number of bobs a loop).
   r.hover = r.mode === 'stand' ? 0.45 + 0.22 * Math.sin(u * TAU * Math.max(1, Math.round(per / 1.6))) : 0;

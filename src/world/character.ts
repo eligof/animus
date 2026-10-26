@@ -9,12 +9,15 @@ export const SPRITE_H = 4;
 // Work poses follow the agent's activity; the rest are the little life in
 // between: sitting, carrying a block (and placing it on a build), cheering,
 // waving, sipping a drink, stretching, chatting face to face, flinching at a
-// bang, dancing, petting a critter.
+// bang, dancing, petting a critter; and office life's high-five and a sip
+// from a mug held in both hands.
 export type Pose =
   | 'idle' | 'walk' | 'write' | 'read' | 'think' | 'run' | 'search' | 'web' | 'delegate' | 'talk' | 'done' | 'error' | 'sleep'
-  | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet';
-// Little pictures that pop up over a character's head.
-export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup';
+  | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet'
+  | 'highfive' | 'sip';
+// Little pictures that pop up over a character's head (a speech mark: a
+// balloon of dots, no words).
+export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup' | 'speech';
 // How characters dress in a scene: wizards' robes and hats (no world wears
 // them now), lab coats in the lab, party outfits in the club, hoodies in the den,
 // space suits on the station, everyday clothes in the café; a strapped
