@@ -42,7 +42,7 @@ export type WorldOpts = {
   images?: boolean;
   lights?: boolean;
   // Office life (see world/life.ts); on unless said.
-  office?: boolean;
+  officeLife?: boolean;
   // Where the live agents' crews are kept (see pet/store.ts): read at the
   // start, written as they grow. None: they live in memory only.
   crews?: CrewStore;
@@ -131,7 +131,7 @@ export class World {
   // breaks as spaces, so a pasted block is one message; anywhere else it
   // is ignored, so pasted letters never act as keys.
   private pasting = false;
-  private touched = { view: false, lights: false, office: false };
+  private touched = { view: false, lights: false, officeLife: false };
   private images: boolean;
   private shown: View;
   private last: SceneFrame | null = null;
@@ -145,7 +145,7 @@ export class World {
     this.images = o.images ?? false;
     this.shown = o.view ?? (this.images ? 'scene' : 'dashboard');
     this.stage.lit = o.lights ?? true;
-    this.stage.office = o.office ?? true;
+    this.stage.office = o.officeLife ?? true;
     this.live = o.live;
     this.demoOn = o.demo;
     this.account = o.account;
@@ -531,17 +531,17 @@ export class World {
     return this.stage.lit;
   }
 
-  get office(): boolean {
+  get officeLife(): boolean {
     return this.stage.office;
   }
 
   // Display preferences the user changed this session (with r / l / o),
   // the only ones worth saving: an automatic view stays automatic.
-  prefs(): { view?: View; lights?: boolean; office?: boolean } {
-    const out: { view?: View; lights?: boolean; office?: boolean } = {};
+  prefs(): { view?: View; lights?: boolean; officeLife?: boolean } {
+    const out: { view?: View; lights?: boolean; officeLife?: boolean } = {};
     if (this.touched.view) out.view = this.shown;
     if (this.touched.lights) out.lights = this.stage.lit;
-    if (this.touched.office) out.office = this.stage.office;
+    if (this.touched.officeLife) out.officeLife = this.stage.office;
     return out;
   }
 
@@ -667,7 +667,7 @@ export class World {
         return 'prefs';
       case 'o':
         this.stage.office = !this.stage.office;
-        this.touched.office = true;
+        this.touched.officeLife = true;
         return 'prefs';
       case 'space':
         this.paused = !this.paused;

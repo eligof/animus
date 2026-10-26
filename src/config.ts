@@ -4,10 +4,11 @@ import { dirname, join } from 'node:path';
 
 // view: the scene (an image, where the terminal shows images) or the agent
 // dashboard (text); auto picks by the terminal. lights: the scene's
-// lighting; office: office life (huddles, coffee runs, high-fives and
-// stand-ups). Keys from older versions (pixels, hdTipSeen) are ignored.
+// lighting; officeLife: office life (huddles, coffee runs, high-fives and
+// stand-ups; not `office`, the Startup's theme id). Keys from older
+// versions (pixels, hdTipSeen) are ignored.
 export type ViewPref = 'auto' | 'scene' | 'dashboard';
-export type Config = { theme?: string; view?: ViewPref; lights?: boolean; office?: boolean };
+export type Config = { theme?: string; view?: ViewPref; lights?: boolean; officeLife?: boolean };
 
 export function configPath(env: NodeJS.ProcessEnv = process.env): string {
   return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'animus', 'config.json');
@@ -20,7 +21,7 @@ export function loadConfig(path = configPath()): Config {
     if (typeof d?.theme === 'string') cfg.theme = d.theme;
     if (d?.view === 'auto' || d?.view === 'scene' || d?.view === 'dashboard') cfg.view = d.view;
     if (typeof d?.lights === 'boolean') cfg.lights = d.lights;
-    if (typeof d?.office === 'boolean') cfg.office = d.office;
+    if (typeof d?.officeLife === 'boolean') cfg.officeLife = d.officeLife;
     return cfg;
   } catch {
     return {};
