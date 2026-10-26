@@ -3,14 +3,16 @@
 // for docs and art reviews.
 //
 //   node scripts/scene-shot.ts <world> <out.png> [--at 20] [--size 150x46]
-//     [--cell 10x20] [--zoom 0] [--select -1] [--full] [--dark]
+//     [--cell 10x20] [--zoom 0] [--select -1] [--full] [--dark] [--crew 4x4]
 //
 // <world>: a registered world's id, or a world's module file
 // (src/worlds/<id>.ts) to look at one not registered yet.
 // --at: seconds of demo time; --size: the terminal in cells; --cell: a
 // cell in pixels; --zoom: + presses; --select: tab presses + 1 (the n-th
 // agent picked, with its close-up); --full: the scene fills the terminal;
-// --dark: lighting off. Prints the PNG size, the first render's time (the
+// --dark: lighting off; --crew LxS: instead of the demo crew, L leads with
+// S subagents each, all at work, changing tasks every few seconds (see
+// demo/stress.ts). Prints the PNG size, the first render's time (the
 // base painted, the sprites drawn), the next frame's plate (its time and
 // how many pictures it stacks) and the encode time.
 import { existsSync, writeFileSync } from 'node:fs';
@@ -20,6 +22,7 @@ import { parseArgs } from 'node:util';
 import { composite } from '../src/art/plate.ts';
 import { encodeRgb } from '../src/art/png.ts';
 import { Scene } from '../src/art/scene.ts';
+import { StressSource } from '../src/demo/stress.ts';
 import { Screen } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
 import { World } from '../src/world/world.ts';
@@ -55,10 +58,11 @@ export async function loadWorld(arg: string): Promise<WorldDef> {
   return found as WorldDef;
 }
 
-export function shot(o: { world: string | WorldDef; at: number; cols: number; rows: number; cell: { w: number; h: number }; zoom: number; select: number; full: boolean; dark: boolean }): { png: Buffer; pictures: number; ms: { first: number; frame: number; encode: number } } {
+export function shot(o: { world: string | WorldDef; at: number; cols: number; rows: number; cell: { w: number; h: number }; zoom: number; select: number; full: boolean; dark: boolean; crew?: [number, number] }): { png: Buffer; pictures: number; ms: { first: number; frame: number; encode: number } } {
   const theme = typeof o.world === 'string' ? getTheme(o.world) : o.world;
   if (!theme) throw new Error(`unknown world "${o.world}"`);
-  const w = new World({ theme, live: null, demo: true, account: { name: 'you', plan: '' }, rootLabel: '~/.claude', start: DEMO_EPOCH, images: true, view: 'scene', lights: !o.dark });
+  const live = o.crew ? new StressSource(o.crew[0], o.crew[1], DEMO_EPOCH) : null;
+  const w = new World({ theme, live, demo: !live, account: { name: 'you', plan: '' }, rootLabel: '~/.claude', start: DEMO_EPOCH, images: true, view: 'scene', lights: !o.dark });
   w.full = o.full;
   w.setCell(o.cell.w, o.cell.h);
   w.resize(o.cols, o.rows);
@@ -98,11 +102,11 @@ function pair(s: string, name: string): [number, number] {
 if (import.meta.main) {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { at: { type: 'string' }, size: { type: 'string' }, cell: { type: 'string' }, zoom: { type: 'string' }, select: { type: 'string' }, full: { type: 'boolean' }, dark: { type: 'boolean' } },
+    options: { at: { type: 'string' }, size: { type: 'string' }, cell: { type: 'string' }, zoom: { type: 'string' }, select: { type: 'string' }, full: { type: 'boolean' }, dark: { type: 'boolean' }, crew: { type: 'string' } },
   });
   const [world, out] = positionals;
   if (!world || !out) {
-    process.stderr.write('usage: node scripts/scene-shot.ts <world> <out.png> [--at s] [--size 150x46] [--cell 10x20] [--zoom n] [--select n] [--full] [--dark]\n');
+    process.stderr.write('usage: node scripts/scene-shot.ts <world> <out.png> [--at s] [--size 150x46] [--cell 10x20] [--zoom n] [--select n] [--full] [--dark] [--crew LxS]\n');
     process.exit(2);
   }
   const [cols, rows] = pair(values.size ?? '150x46', 'size');
@@ -112,7 +116,8 @@ if (import.meta.main) {
     process.stderr.write(`${e.message}\n`);
     process.exit(2);
   });
-  const { png, pictures, ms } = shot({ world: def, at: Number(values.at ?? 20), cols, rows, cell: { w: cw, h: ch }, zoom: Number(values.zoom ?? 0), select: Number(values.select ?? -1), full: !!values.full, dark: !!values.dark });
+  const crew = values.crew ? pair(values.crew, 'crew') : undefined;
+  const { png, pictures, ms } = shot({ world: def, at: Number(values.at ?? 20), cols, rows, cell: { w: cw, h: ch }, zoom: Number(values.zoom ?? 0), select: Number(values.select ?? -1), full: !!values.full, dark: !!values.dark, crew });
   writeFileSync(out, png);
   process.stdout.write(`${out}: ${(png.length / 1024).toFixed(0)} KB; first render ${ms.first.toFixed(0)} ms, next plate ${ms.frame.toFixed(1)} ms (${pictures} pictures), encode ${ms.encode.toFixed(1)} ms\n`);
 }

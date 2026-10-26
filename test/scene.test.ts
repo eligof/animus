@@ -349,6 +349,14 @@ test('the screenshot script renders the demo crew to a PNG of the scene', async 
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [640, 384]);
 });
 
+test('the screenshot script renders a stress crew instead, if asked: leads and their subagents, all at work', async () => {
+  const { shot } = await import('../scripts/scene-shot.ts');
+  const o = { world: 'cafe', at: 6, cols: 80, rows: 24, cell: { w: 8, h: 16 }, zoom: 0, select: -1, full: true, dark: false };
+  const crew = shot({ ...o, crew: [2, 3] }).png;
+  assert.equal(crew.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.notDeepEqual(crew, shot(o).png);
+});
+
 test('the screenshot script takes a world by its id or by its module file, so a world not registered yet can be looked at', async () => {
   const { loadWorld, shot } = await import('../scripts/scene-shot.ts');
   const cafe = await loadWorld('cafe');
