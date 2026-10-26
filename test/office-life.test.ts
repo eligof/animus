@@ -174,6 +174,50 @@ test('eight newcomers huddle round their lead in every world, each on a spot of 
   }
 });
 
+// A newcomer held up `hold` seconds on its way in, another joining three
+// seconds later held up for good: when the first got to its spot and when
+// its huddle let it go, from when it joined; and whether the huddle began.
+function lateHuddle(hold: number): { there: number; took: number; began: boolean } {
+  const stage = newStage();
+  const lead = agent('L', 'write', { role: 'lead' });
+  const now = run(stage, () => [lead], 6);
+  const t0 = now;
+  const crew = (n: number) => [
+    lead,
+    ...(n > t0 ? [agent('s1', 'think', { parentId: 'L', since: t0 })] : []),
+    ...(n > t0 + 3000 ? [agent('s2', 'think', { parentId: 'L', since: t0 + 3000 })] : []),
+  ];
+  let joined = 0;
+  let held = false;
+  let there = 0;
+  let over = 0;
+  let began = false;
+  run(stage, crew, HUDDLE_GATHER + HUDDLE_S + 8, now, (n) => {
+    const [s1, s2] = [find(stage, 's1'), find(stage, 's2')];
+    if (!joined && kindOf(s1) === 'huddle') joined = n;
+    if (joined && !held && s1!.state !== 'enter') {
+      held = true;
+      if (hold) stage.life.gesture(s1!, 'idle', hold);
+    }
+    if (s2 && kindOf(s2) === 'huddle' && !s2.mind.gestures.length) stage.life.gesture(s2, 'idle', 30);
+    const e = s1?.mind.errand;
+    if (!there && e?.kind === 'huddle' && e.arrived) there = n;
+    if (byId(stage, 'L').mind.emote?.e === 'speech') began = true;
+    if (joined && !over && kindOf(s1) !== 'huddle') over = n;
+  });
+  return { there: (there - joined) / 1000, took: (over - joined) / 1000, began };
+}
+
+// Getting there a second before giving up, it once stood waiting
+// HUDDLE_WAIT more for the other, then the huddle: 17.5 s at most.
+test('a huddle keeps a newcomer HUDDLE_GATHER + HUDDLE_S at most, however late it got there', () => {
+  const walk = lateHuddle(0).there;
+  const late = lateHuddle(HUDDLE_GATHER - 1 - walk);
+  assert.ok(late.there > HUDDLE_GATHER - 2 && late.there < HUDDLE_GATHER, `got there after ${late.there} s`);
+  assert.ok(late.began, 'no huddle');
+  assert.ok(late.took <= HUDDLE_GATHER + HUDDLE_S + 0.1, `kept ${late.took} s`);
+});
+
 test('at most one huddle a lead every 30 seconds', () => {
   const stage = newStage();
   const lead = agent('L', 'write', { role: 'lead' });
@@ -795,7 +839,7 @@ test('the demo crew shows all four within a few minutes, each moment ends in tim
   const first = new Map<string, number>();
   const since = new Map<Actor, { kind: string; at: number }>();
   const most: Record<string, number> = { huddle: HUDDLE_GATHER + HUDDLE_S, coffee: 2 * COFFEE_LEG + COFFEE_POUR, five: FIVE_WALK + FIVE_S, standup: STANDUP_GATHER + STANDUP_S };
-  run(stage, (n) => src.poll(n), 240, NOW, (n) => {
+  const end = run(stage, (n) => src.poll(n), 240, NOW, (n) => {
     for (const a of stage.actors()) {
       const e = a.mind.errand;
       const k = e?.kind ?? '';
@@ -813,6 +857,8 @@ test('the demo crew shows all four within a few minutes, each moment ends in tim
       }
     }
   });
+  // and those still under way at the end
+  for (const [a, was] of since) assert.ok((end - was.at) / 1000 <= most[was.kind] + 1, `${a.info.id}'s ${was.kind} has taken ${(end - was.at) / 1000} s so far`);
   assert.deepEqual([...first.keys()].sort(), ['coffee', 'five', 'huddle', 'standup'], `seen: ${JSON.stringify(Object.fromEntries(first))}`);
   for (const [k, t] of first) assert.ok(t <= 180, `the first ${k} at ${t} s`);
 });
