@@ -365,9 +365,10 @@ labels and chrome without the picture.
 ```sh
 node --test "test/**/*.test.ts"                # all tests
 
-# typecheck (TypeScript is not a runtime dependency; these are CI's versions)
-npm install --no-save --no-package-lock --ignore-scripts typescript@7.0.2 @types/node@26.6.5
-npx --no-install tsc -p tsconfig.json
+# typecheck (TypeScript is not a runtime dependency: devDependencies only,
+# pinned by hash in package-lock.json, the same versions CI uses)
+npm ci --ignore-scripts
+npx tsc -p tsconfig.json
 
 node scripts/scene-shot.ts cafe /tmp/cafe.png  # render a world with the demo crew to PNG
 ```

@@ -54,8 +54,8 @@ jobs:
         with:
           node-version: 26
           package-manager-cache: false
-      - name: Install type checker (not a runtime dependency)
-        run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund typescript@7.0.2 @types/node@26.6.5
+      - name: Install type checker (devDependencies only, pinned by hash in package-lock.json)
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: tsc
         run: npx --no-install tsc -p tsconfig.json
 
