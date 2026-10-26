@@ -26,7 +26,7 @@ const finite = (pts: Array<[number, number]>) => pts.every(([x, y]) => Number.is
 test('registry exposes unique ids', () => {
   const ids = themeIds();
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell', 'dunes', 'meadhall', 'starfall', 'shelter', 'colony']);
+  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell', 'dunes', 'meadhall', 'starfall', 'shelter', 'colony', 'office']);
   assert.equal(getTheme('mines')?.id, 'mines');
   assert.equal(getTheme('nope'), undefined);
 });
