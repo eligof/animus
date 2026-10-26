@@ -205,3 +205,10 @@ test('mines room: the shell draws inside the canvas and it all stays in budget',
   assert.ok(room.props.filter((p) => !p.slot).every((p) => !p.art.animated), 'animated decor');
   assert.ok(room.props.filter((p) => !p.slot).length >= 8, 'a bare floor');
 });
+
+test('The Mines\'s workstation: its own, still whatever the clock', () => {
+  const art = mines.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
