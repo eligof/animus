@@ -10,7 +10,7 @@ import { emoteArt } from './figure/emotes.ts';
 import { plastered } from './figure/head.ts';
 import { lookOf, type Look } from './figure/look.ts';
 import { render, Sketch, type Mat } from './figure/paint.ts';
-import { blinkAt, eyesAt, frameOf, LOOP, rigFor, type Eyes } from './figure/rig.ts';
+import { blinkAt, eyesAt, frameOf, LOOP, MUG_POSES, rigFor, type Eyes } from './figure/rig.ts';
 import { drawTrinket } from './figure/trinkets.ts';
 
 // Characters, the critter, emotes and desk upgrades as outlined cartoon
@@ -154,7 +154,7 @@ const FIG_BOX = { x0: -14, x1: 12, y0: -24, y1: 5 };
 // Poses that keep their own eyes (no blinking or heavy lids over them);
 // the eyes a blink shuts (a robot's cast down are a line already, as shut
 // ones are), and those heavy lids droop over.
-const OWN_EYES = new Set(['done', 'sleep', 'flinch', 'cheer', 'dance', 'pet', 'error', 'wave']);
+const OWN_EYES = new Set(['done', 'sleep', 'flinch', 'cheer', 'dance', 'pet', 'error', 'wave', 'highfive']);
 const BLINKS = new Set<Eyes>(['open', 'up', 'down']);
 const ROBOT_BLINKS = new Set<Eyes>(['open', 'up']);
 const LIDS = new Set<Eyes>(['open', 'up', 'wide', 'down']);
@@ -168,6 +168,8 @@ export function figureSprite(f: FigureFrame, s: number, ink: string): Sprite {
   const i = moving && pose === 'carry' ? 0 : frameOf(pose, f.poseT, f.phase);
   const wi = moving ? frameOf('walk', f.poseT, f.phase) : -1;
   const item = f.item && (pose === 'carry' || pose === 'place') ? hexOf(f.item) : '';
+  // a mug of coffee, in the poses that show one
+  const mug = !!f.mug && MUG_POSES.has(pose);
   const back = f.facing.back && pose !== 'sleep'; // a sleeper rolls over to face us
   const flip = f.facing.flip;
   // Each of these is in the key only where it changes what is drawn (a key
@@ -187,9 +189,9 @@ export function figureSprite(f: FigureFrame, s: number, ink: string): Sprite {
   const bouncy = !!feel?.bouncy && about && !f.sleeping && !hurt;
   const bandaged = !!feel?.bandaged && plastered(look, back, pose === 'carry');
   const fk = `${drowsy ? 1 : 0}${bandaged ? 1 : 0}${bouncy ? 1 : 0}`;
-  const key = `f|${lk}|${pose}|${i}|${wi}|${blink ? 1 : 0}${back ? 1 : 0}${flip ? 1 : 0}${hurt ? 1 : 0}${f.sleeping ? 1 : 0}|${fk}|${item}|${q}|${ink}`;
+  const key = `f|${lk}|${pose}|${i}|${wi}|${blink ? 1 : 0}${back ? 1 : 0}${flip ? 1 : 0}${hurt ? 1 : 0}${f.sleeping ? 1 : 0}${mug ? 1 : 0}|${fk}|${item}|${q}|${ink}`;
   return cached(key, () => {
-    const rig = rigFor(pose, i, { back, walking: moving, walkU: wi / LOOP.walk[1], item: !!item });
+    const rig = rigFor(pose, i, { back, walking: moving, walkU: wi / LOOP.walk[1], item: !!item, mug });
     const face = rig.face;
     if (f.sleeping && pose !== 'sleep') face.eyes = 'closed';
     else if (blink) face.eyes = 'blink';

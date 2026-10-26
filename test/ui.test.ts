@@ -153,6 +153,12 @@ test('help offers r for the scene only where the terminal shows images, and says
   assert.doesNotMatch(kitty.toText(), /pixels|sextant|HD/);
 });
 
+test('help offers o for office life, beside the lighting', () => {
+  const s = new Screen(100, 30);
+  drawHelp(s, { x: 0, y: 1, w: 100, h: 27 }, mines, true);
+  assert.match(s.toText(), /l \/ o +lighting \/ office life on \/ off/);
+});
+
 test('help says when the crews are not being saved, under the keys, from the smallest screen but one up', () => {
   const note = 'crews.json unreadable (EACCES): progress not saved this run';
   for (const [w, h] of [[100, 30], [80, 24]]) {

@@ -301,6 +301,31 @@ test('l turns the lighting off and on', () => {
   assert.equal(w.scene()!.lit, false);
 });
 
+test('o turns office life off and on, saved as a preference; a world can start with it off', () => {
+  const w = demoWorld(true);
+  advance(w, 2);
+  assert.equal(w.officeLife, true);
+  assert.equal(w.handleKey(key('o')), 'prefs');
+  assert.equal(w.officeLife, false);
+  assert.deepEqual(w.prefs(), { officeLife: false });
+  assert.equal(w.handleKey(key('o')), 'prefs');
+  assert.equal(w.officeLife, true);
+  assert.deepEqual(w.prefs(), { officeLife: true });
+  const off = new World({ theme: getTheme('mines')!, live: null, demo: true, account: null, rootLabel: '~/.claude', start: START, images: true, officeLife: false });
+  assert.equal(off.officeLife, false);
+});
+
+// (officeLife, not office: that is the Startup's id, a theme.)
+test('config keeps office life off; anything but true or false is dropped, and so is a bare office key', () => {
+  const p = join(tempDir('animus-cfg3'), 'c.json');
+  saveConfig({ theme: 'office', officeLife: false }, p);
+  assert.deepEqual(loadConfig(p), { theme: 'office', officeLife: false });
+  writeFileSync(p, JSON.stringify({ theme: 'den', officeLife: 'no' }));
+  assert.deepEqual(loadConfig(p), { theme: 'den' });
+  writeFileSync(p, JSON.stringify({ theme: 'den', office: false }));
+  assert.deepEqual(loadConfig(p), { theme: 'den' });
+});
+
 test('only preferences the user changed are saved', () => {
   const w = demoWorld(true);
   assert.deepEqual(w.prefs(), {});
@@ -414,14 +439,17 @@ test('the card floats beside the selected character, not docked', () => {
   w.draw(s, now);
   const f = w.scene()!;
   const g = f.figures.find((x) => x.id === w.selectedId)!;
-  const [px, py] = project(f.camera, g.x, g.y, g.z + FIGURE_H);
-  const [col, row] = cellAt(f.camera, px, py);
+  // The cells the character covers, its hat and all (a level's hat stands
+  // well over its head).
+  const b = figureBox(f.camera, g);
   const lines = s.toText().split('\n');
   const r = lines.findIndex((l) => l.includes('╭'));
   assert.ok(r >= 0);
   const c = lines[r].indexOf('╭');
-  assert.ok(Math.abs(c - col) <= CARD_W + 4, `column ${c} near ${col}`);
-  assert.ok(Math.abs(r - row) <= CARD_H, `row ${r} near ${row}`);
+  // A cell or two from it, on whichever side.
+  const dx = Math.max(0, c - b.x1 - 1, b.x0 - (c + CARD_W));
+  const dy = Math.max(0, r - b.y1 - 1, b.y0 - (r + CARD_H));
+  assert.ok(dx <= 2 && dy <= 2, `the card at column ${c}, row ${r}; the character covers ${JSON.stringify(b)}`);
 });
 
 // Where the pet card is on screen (its top-left cell), or null.

@@ -182,6 +182,35 @@ function icon(sk: Sketch, kind: Emote, key: string): void {
       });
       break;
     }
+    case 'speech': {
+      // a speech balloon, its tail down to the speaker, three dots in it
+      const c = '#f7f5f0';
+      sk.blob((p) => {
+        p.moveTo(-0.1, -1.8);
+        p.lineTo(1.1, -1.8);
+        p.quadraticCurveTo(2.3, -1.8, 2.3, -3.0);
+        p.lineTo(2.3, -3.9);
+        p.quadraticCurveTo(2.3, -5.1, 1.1, -5.1);
+        p.lineTo(-1.1, -5.1);
+        p.quadraticCurveTo(-2.3, -5.1, -2.3, -3.9);
+        p.lineTo(-2.3, -3.0);
+        p.quadraticCurveTo(-2.3, -1.8, -1.15, -1.8);
+        p.quadraticCurveTo(-1.25, -0.9, -1.75, -0.35);
+        p.quadraticCurveTo(-0.6, -0.7, -0.1, -1.8);
+        p.closePath();
+      }, c, { dark: shade(c, -0.14), d: 0.35 });
+      sk.draw((p) => {
+        // the dots light up one after another
+        const i = key.startsWith('b') ? Number(key.slice(1)) : -1;
+        for (let k = 0; k < 3; k++) {
+          p.beginPath();
+          p.arc(-1.15 + 1.15 * k, -3.45, 0.38, 0, TAU);
+          p.fillStyle = i >= 0 && Math.floor(i / 2) % 4 === k ? '#8a7fa8' : '#4a4458';
+          p.fill();
+        }
+      });
+      break;
+    }
   }
 }
 

@@ -5,9 +5,9 @@ import { move, mul, turn, Sketch, type Ctx } from './paint.ts';
 
 // The room's critter, facing +x (the sprite flips for screen-left), its
 // anchor on the floor under its middle: a cat, a rat, a hovering drone, a
-// slime, a fox, a flapping imp, a sand beetle, a fluffy hopper or a husky.
-// Idle loops breathe, swish and blink; moving ones trot, hop, scuttle or
-// buzz.
+// slime, a fox, a flapping imp, a sand beetle, a fluffy hopper, a husky or
+// a corgi. Idle loops breathe, swish and blink; moving ones trot, hop,
+// scuttle or buzz.
 
 const TAU = Math.PI * 2;
 const IDLE: readonly [number, number] = [2.4, 8];
@@ -56,6 +56,9 @@ export function critterArt(c: CritterFrame, t: number): { key: string; draw: () 
           break;
         case 'husky':
           husky(sk, f);
+          break;
+        case 'corgi':
+          corgi(sk, f);
           break;
       }
       return sk;
@@ -569,6 +572,103 @@ function husky(sk: Sketch, f: F): void {
       sk.draw((p) => {
         p.beginPath();
         p.ellipse(1.35, 0.95, 0.24, 0.32, 0.2, 0, TAU);
+        p.fillStyle = '#ff8fa8';
+        p.fill();
+      });
+    }
+  });
+}
+
+// A corgi: a long low loaf on stubby white legs, big upright ears, a white
+// blaze, muzzle, chest and paws, a fluffy white rump with a short tuft of a
+// tail that wags; it trots on the move, pants now and then at rest.
+function corgi(sk: Sketch, f: F): void {
+  const a = f.u * TAU;
+  const step = f.moving ? Math.sin(a) : 0;
+  const bob = f.moving ? -0.16 * Math.abs(Math.cos(a)) : 0.05 * Math.sin(a);
+  const wag = f.moving ? 0.35 * Math.sin(a * 2) : 0.5 * Math.sin(a * 2);
+  const white = mix(f.b, WHITE, 0.88);
+  const whiteD = shade(white, -0.14);
+  // the tuft of a tail, wagging over the rump
+  sk.at(mul(move(-2.75, -1.95 + bob), turn(-0.6 + wag)), () => {
+    sk.blob(ell(-0.35, -0.2, 0.65, 0.42), f.b, { dark: f.bd, d: 0.2 });
+  });
+  const leg = (x: number, ph: number, near: boolean) => {
+    const sw = f.moving ? 0.4 * Math.sin(a + ph) : 0;
+    const lift = f.moving ? Math.max(0, Math.cos(a + ph)) * 0.3 : 0;
+    sk.limb([x, -0.95 + bob, x + sw, -0.32 - lift], 0.7, near ? white : whiteD, { dark: near ? whiteD : null });
+  };
+  leg(1.55, Math.PI, false);
+  leg(-1.75, 0, false);
+  const body = ell(-0.35, -1.6 + bob, 2.6, 1.02);
+  sk.blob(body, f.b, { dark: f.bd, d: 0.45 });
+  sk.draw((p) => {
+    // the white belly, chest and rump
+    p.save();
+    p.beginPath();
+    body(p);
+    p.clip();
+    p.beginPath();
+    p.ellipse(0.1, -0.68 + bob, 2.7, 0.5, 0, 0, TAU);
+    p.ellipse(1.75, -1.4 + bob, 0.75, 0.95, 0, 0, TAU);
+    p.ellipse(-2.75, -1.25 + bob, 0.7, 0.8, 0, 0, TAU);
+    p.fillStyle = white;
+    p.fill();
+    p.restore();
+  });
+  leg(1.25, 0, true);
+  leg(-2.05, Math.PI, true);
+  // the head: big ears up, a white blaze between the eyes and down the
+  // muzzle
+  sk.at(move(2.2 + step * 0.05, -2.7 + bob), () => {
+    for (const [x0, x1] of [[-1.05, -0.2], [0.15, 1.0]] as const) {
+      const tip = -2.45 + 0.1 * Math.sin(a + x0);
+      sk.blob((p) => {
+        p.moveTo(x0, -0.5);
+        p.quadraticCurveTo(x0 - 0.15, tip + 0.6, (x0 + x1) / 2, tip);
+        p.quadraticCurveTo(x1 + 0.15, tip + 0.6, x1, -0.65);
+        p.closePath();
+      }, f.b, { dark: f.bd, d: 0.2 });
+      sk.draw((p) => {
+        p.beginPath();
+        p.moveTo(x0 + 0.22, -0.7);
+        p.quadraticCurveTo(x0 + 0.1, tip + 0.75, (x0 + x1) / 2, tip + 0.45);
+        p.quadraticCurveTo(x1 - 0.05, tip + 0.75, x1 - 0.2, -0.8);
+        p.closePath();
+        p.fillStyle = '#f2b9a6';
+        p.fill();
+      });
+    }
+    const head = ell(0, 0, 1.2, 1.05);
+    sk.blob(head, f.b, { dark: f.bd, d: 0.35 });
+    sk.draw((p) => {
+      p.save();
+      p.beginPath();
+      head(p);
+      p.clip();
+      p.beginPath();
+      p.ellipse(0.4, 0.7, 1.0, 0.6, 0, 0, TAU);
+      p.ellipse(0.2, -0.3, 0.2, 0.75, 0.15, 0, TAU);
+      p.fillStyle = white;
+      p.fill();
+      p.restore();
+    });
+    // the muzzle, a fox's but softer, its nose black
+    sk.blob((p) => {
+      p.moveTo(0.4, -0.05);
+      p.quadraticCurveTo(1.25, -0.1, 1.8, 0.35);
+      p.quadraticCurveTo(1.75, 0.85, 1.1, 0.85);
+      p.quadraticCurveTo(0.55, 0.85, 0.35, 0.6);
+      p.closePath();
+    }, white, { dark: whiteD, d: 0.15, line: 0.6 });
+    sk.blob(circ(1.75, 0.32, 0.23), EYE, { line: 0, sil: false });
+    sk.draw(eyeDot(0.5, -0.15, 0.22, f.blink));
+    sk.draw(eyeDot(-0.3, -0.15, 0.2, f.blink));
+    // panting: the tongue out (on the move, and half the time at rest)
+    if (f.moving || f.i % 4 >= 2) {
+      sk.draw((p) => {
+        p.beginPath();
+        p.ellipse(1.25, 0.95, 0.22, 0.3, 0.2, 0, TAU);
         p.fillStyle = '#ff8fa8';
         p.fill();
       });

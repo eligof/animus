@@ -16,8 +16,8 @@ const extraFile = process.env.ANIMUS_THEME_FILE;
 const EXTRA: Theme[] = extraFile ? [await loadWorld(extraFile)] : [];
 
 const KINDS: SlotKind[] = ['entrance', 'idle', 'read', 'run', 'search', 'think', 'web', 'write'];
-const COSTUMES = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon'];
-const CRITTERS = ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky'];
+const COSTUMES = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon', 'startup'];
+const CRITTERS = ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky', 'corgi'];
 const SHAPES = ['tower', 'house', 'pyramid', 'statue', 'machine'];
 const PARTICLE_KINDS = new Set(['spark', 'ember', 'confetti', 'smoke', 'steam', 'drop', 'glint', 'bolt', 'zzz']);
 const isRGB = (c: unknown) => Array.isArray(c) && c.length === 3 && c.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
@@ -26,7 +26,7 @@ const finite = (pts: Array<[number, number]>) => pts.every(([x, y]) => Number.is
 test('registry exposes unique ids', () => {
   const ids = themeIds();
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell', 'dunes', 'meadhall', 'starfall', 'shelter', 'colony']);
+  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell', 'dunes', 'meadhall', 'starfall', 'shelter', 'colony', 'office']);
   assert.equal(getTheme('mines')?.id, 'mines');
   assert.equal(getTheme('nope'), undefined);
 });

@@ -14,7 +14,8 @@ import { meadhall } from './meadhall.ts';
 import { starfall } from './starfall.ts';
 import { shelter } from './shelter.ts';
 import { colony } from './colony.ts';
+import { office } from './office.ts';
 
 // Every world, in picker order; the first is the default. The digit keys
 // reach the first ten; the rest only `t` / `T` and the picker.
-export const WORLDS: readonly WorldDef[] = [mines, lab, club, den, station, cafe, fungal, snowy, vault, hell, dunes, meadhall, starfall, shelter, colony];
+export const WORLDS: readonly WorldDef[] = [mines, lab, club, den, station, cafe, fungal, snowy, vault, hell, dunes, meadhall, starfall, shelter, colony, office];

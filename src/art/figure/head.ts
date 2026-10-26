@@ -1,7 +1,7 @@
 import type { Pen } from '../types.ts';
 import { alpha, mix, shade } from '../iso.ts';
 import { FUR, FUR_D, GOLD, LEATHER, WHITE, type Look } from './look.ts';
-import { CLOTHES } from './look.ts';
+import { CLOTHES, STARTUP } from './look.ts';
 import { hole, move, mul, turn, type Ctx, type Sketch } from './paint.ts';
 import type { Eyes, Face } from './rig.ts';
 
@@ -1384,7 +1384,87 @@ function prizeHat(sk: Sketch, L: Look, back: boolean): void {
     case 'horns':
       grandHorns(sk, back);
       return;
+    case 'snapback':
+      snapback(sk, L, back, sx);
+      return;
   }
+}
+
+// ★2 at the startup: a snapback worn backwards, a tall structured crown in
+// its colour with a button on top, its flat charcoal brim out over the nape;
+// from the front, the strap's opening over the brow with the hair showing
+// through and the snap strap across it; from behind, the crown's front
+// panel and the flat brim toward us. No logo.
+function snapback(sk: Sketch, L: Look, back: boolean, sx: number): void {
+  const c = L.color;
+  const cd = shade(c, -0.24);
+  const crown = (p: Pen) => {
+    p.moveTo(-3.6, -1.3);
+    p.lineTo(-3.8, -3.55);
+    p.quadraticCurveTo(-3.55, -5.25, sx, -5.3);
+    p.quadraticCurveTo(3.6, -5.25, 3.8, -3.55);
+    p.lineTo(3.6, -1.35);
+    p.quadraticCurveTo(sx, -1.95, -3.6, -1.3);
+    p.closePath();
+  };
+  // the brim out behind the head, flat and stiff (from the front)
+  if (!back) {
+    sk.blob((p) => {
+      p.moveTo(-2.4, -2.05);
+      p.lineTo(-6.15, -2.3);
+      p.quadraticCurveTo(-6.45, -2.05, -6.2, -1.75);
+      p.lineTo(-2.4, -1.4);
+      p.closePath();
+    }, STARTUP.brim, { dark: STARTUP.brimD, d: 0.15 });
+  }
+  sk.blob(crown, c, { dark: cd, d: 0.55 });
+  sk.draw((p, k) => {
+    // the panels' seams from the button down
+    p.save();
+    p.beginPath();
+    crown(p);
+    p.clip();
+    p.strokeStyle = alpha(k.ink, 0.45);
+    p.lineWidth = k.line * 0.7;
+    p.lineCap = 'round';
+    p.beginPath();
+    for (const [x1, c1] of (back ? [[-2.3, -1.6], [2.2, 1.5]] : [[-2.0, -1.5], [2.6, 1.9]]) as Array<[number, number]>) {
+      p.moveTo(sx, -5.25);
+      p.quadraticCurveTo(c1, -4.4, x1, -1.6);
+    }
+    p.stroke();
+    p.restore();
+  });
+  if (back) {
+    // the flat brim toward us, its top seen over the nape
+    sk.blob((p) => {
+      p.moveTo(-3.3, -1.55);
+      p.quadraticCurveTo(sx, -2.05, 3.3, -1.6);
+      p.quadraticCurveTo(3.55, 0.05, sx, 0.4);
+      p.quadraticCurveTo(-3.55, 0.05, -3.3, -1.55);
+      p.closePath();
+    }, STARTUP.brim, { dark: STARTUP.brimD, d: 0.35 });
+  } else {
+    // the strap's opening over the brow, the hair through it, the strap
+    // with its snaps across
+    const gap = (p: Pen) => {
+      p.moveTo(F - 0.95, -1.55);
+      p.quadraticCurveTo(F - 0.9, -2.75, F + 0.05, -2.8);
+      p.quadraticCurveTo(F + 1.0, -2.75, F + 1.05, -1.6);
+      p.closePath();
+    };
+    sk.blob(gap, L.sp === 'human' ? L.hair : L.skin, { line: 0.6, sil: false });
+    sk.blob((p) => p.roundRect(F - 1.1, -2.05, 2.2, 0.5, 0.2), STARTUP.brim, { line: 0.5, sil: false });
+    sk.draw((p) => {
+      p.fillStyle = '#d8dbe2';
+      for (const dx of [-0.55, 0.05, 0.6]) {
+        p.beginPath();
+        p.arc(F + dx, -1.8, 0.11, 0, TAU);
+        p.fill();
+      }
+    });
+  }
+  sk.blob(circ(sx, -5.3, 0.36), STARTUP.brim, { line: 0.5 });
 }
 
 // ★2 for a wizard: a grander hat, taller, with a gold band and stars.
@@ -1457,7 +1537,7 @@ export function star(p: Pen, x: number, y: number, r: number, fill: string): voi
 }
 
 function hoodUp(sk: Sketch, L: Look, back: boolean): void {
-  const c = L.costume === 'hacker' || L.sp === 'ghost' ? L.hat : L.topD;
+  const c = L.costume === 'hacker' || L.costume === 'startup' || L.sp === 'ghost' ? L.hat : L.topD;
   const cd = shade(c, -0.2);
   if (back) {
     sk.blob((p) => {

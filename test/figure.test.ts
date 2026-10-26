@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clearSprites, critterSprite, emoteSprite, figureSprite, spriteCount, spriteStats, trinketSprite, type Sprite } from '../src/art/figure.ts';
 import { CLOAK, COAT, CREAM, FUR, GOLD, IRON, LEATHER, PRIZES, RAG, SHIRT, SLATE, STRIPE, SUIT_TEAL, TROUSERS, lookOf } from '../src/art/figure/look.ts';
-import { CLOTHES } from '../src/art/figure/look.ts';
-import { blinkAt, frameOf, LOOP } from '../src/art/figure/rig.ts';
+import { CLOTHES, STARTUP } from '../src/art/figure/look.ts';
+import { blinkAt, frameOf, LOOP, MUG_POSES } from '../src/art/figure/rig.ts';
 import { traitsFor, type Costume, type Emote, type Feel, type Pose, type Species, type Traits, type Wear } from '../src/world/character.ts';
-import { hexOf, rgbOf } from '../src/art/iso.ts';
+import { hexOf, mix, rgbOf } from '../src/art/iso.ts';
 import { budget } from './helpers.ts';
 import type { CritterFrame, FigureFrame } from '../src/world/frame.ts';
 import { figureTop } from '../src/world/frame.ts';
@@ -13,8 +13,8 @@ import { figureTop } from '../src/world/frame.ts';
 const INK = '#2b2233';
 const POSES = Object.keys(LOOP) as Pose[];
 const SPECIES: Species[] = ['human', 'robot', 'cat', 'alien', 'ghost'];
-const COSTUMES: Costume[] = ['casual', 'wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon'];
-const EMOTES: Emote[] = ['excl', 'question', 'heart', 'note', 'idea', 'sweat', 'zzz', 'anger', 'star', 'cup'];
+const COSTUMES: Costume[] = ['casual', 'wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon', 'startup'];
+const EMOTES: Emote[] = ['excl', 'question', 'heart', 'note', 'idea', 'sweat', 'zzz', 'anger', 'star', 'cup', 'speech'];
 // The game worlds' costumes: the outpost, the longhall, the base, the
 // shelter and the colony.
 const GAME: Costume[] = ['drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist'];
@@ -201,7 +201,7 @@ test('a carried block shows in its colour', () => {
 });
 
 test('critters: every kind idles and moves, flips, and is anchored on the floor', () => {
-  for (const kind of ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky'] as const) {
+  for (const kind of ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky', 'corgi'] as const) {
     const c: CritterFrame = { kind, body: [200, 120, 80], x: 0, y: 0, z: 0, flip: false, moving: false };
     const idle = new Set<string>();
     const move = new Set<string>();
@@ -1106,4 +1106,154 @@ test('★8 puts the setting outfits in other colours: rust overalls, a capelet i
     for (const co of ['forager', 'parka', 'guard'] as Costume[]) saw(co, co === 'forager' ? on(co).hat : on(co).kit);
   }
   for (const co of ['forager', 'parka', 'guard'] as Costume[]) assert.equal(seen.get(co)?.size, 2, `${co}: both of its ★8 colours turn up`);
+});
+
+// ---- the startup --------------------------------------------------------
+
+test("the startup's hat: a snapback worn backwards", () => {
+  assert.equal(PRIZES.startup, 'snapback');
+});
+
+test("the startup's hoodie, jeans and sneakers look unlike every other costume on every species, front and back", () => {
+  for (const sp of SPECIES) {
+    for (const back of [false, true]) {
+      const looks = new Map(COSTUMES.map((co) => [co, hash(figureSprite(fig(who(sp, 1), co, 'idle', { facing: { back, flip: false } }), 6, INK))]));
+      for (const other of COSTUMES) if (other !== 'startup') assert.notEqual(looks.get('startup'), looks.get(other), `${sp}${back ? ' from behind' : ''}: startup looks like ${other}`);
+    }
+  }
+});
+
+test('a startup hoodie is open over a white tee, over jeans and white sneakers, the jeans black at ★8; on a ghost its drawstrings and hood are in its colour', () => {
+  const s = 8;
+  // Square units of a colour from h0 to h1 units over the feet.
+  const area = (spr: Sprite, color: string, h0 = -Infinity, h1 = Infinity) => pixelsAt(spr, s, color).filter(([, h]) => h > h0 && h < h1).length / (s * s);
+  for (const sp of SPECIES) {
+    for (const back of [false, true]) {
+      const tr = who(sp, 1);
+      const what = `${sp}${back ? ' from behind' : ''}`;
+      const at = (wear?: Wear) => figureSprite(fig(tr, 'startup', 'idle', { wear, facing: { back, flip: false } }), s, INK);
+      if (sp === 'ghost') {
+        const trim = lookOf(tr, 'startup').trim;
+        assert.ok(area(at(), trim) >= (back ? 1.5 : 0.3), `${what}: ${area(at(), trim).toFixed(2)} square units of its colour`);
+        continue;
+      }
+      if (!back) assert.ok(area(at(), STARTUP.tee, 2) >= 2, `${what}: ${area(at(), STARTUP.tee, 2).toFixed(2)} square units of tee`);
+      assert.ok(area(at(), STARTUP.sneaker, -Infinity, 2) >= 0.5, `${what}: ${area(at(), STARTUP.sneaker, -Infinity, 2).toFixed(2)} square units of sneaker`);
+      const jeans = area(at(), STARTUP.jeans) + area(at(), STARTUP.jeansD);
+      assert.ok(jeans >= 1.5, `${what}: ${jeans.toFixed(2)} square units of jeans`);
+      const alt = at(WEARS[2][1]);
+      assert.ok(area(alt, STARTUP.black) >= 1.5, `${what}: ${area(alt, STARTUP.black).toFixed(2)} square units of black jeans at ★8`);
+      assert.equal(area(alt, STARTUP.jeans) + area(alt, STARTUP.jeansD), 0, `${what}: blue jeans at ★8`);
+    }
+  }
+});
+
+test('a snapback is worn backwards: from the front its flat brim juts out behind the head, from behind it points at us; the crown is in its colour', () => {
+  const s = 8;
+  for (const sp of SPECIES) {
+    for (const back of [false, true]) {
+      const tr = who(sp, 1);
+      const what = `${sp}${back ? ' from behind' : ''}`;
+      const spr = figureSprite(fig(tr, 'startup', 'idle', { wear: WEARS[0][1], facing: { back, flip: false } }), s, INK);
+      // over the shoulders
+      const brim = pixelsAt(spr, s, STARTUP.brim, STARTUP.brimD).filter(([, h]) => h > 10);
+      const crown = pixelsAt(spr, s, lookOf(tr, 'startup', WEARS[0][1]).color).filter(([, h]) => h > 12);
+      assert.ok(crown.length >= 10 * s * s, `${what}: ${(crown.length / (s * s)).toFixed(2)} square units of crown`);
+      if (back) {
+        assert.ok(brim.length >= 6 * s * s, `${what}: ${(brim.length / (s * s)).toFixed(2)} square units of brim`);
+        assert.ok(leftmost(brim) > -4.5 && rightmost(brim) < 4.5, `${what}: the brim from ${leftmost(brim)} to ${rightmost(brim)}`);
+      } else assert.ok(leftmost(brim) < -5, `${what}: the brim reaches ${leftmost(brim)} behind the head`);
+    }
+  }
+});
+
+test("a corgi: long and low, its coat nearer the floor than a husky's, on short white legs", () => {
+  const s = 8;
+  const body: [number, number, number] = [217, 138, 60];
+  const at = (kind: 'corgi' | 'husky') => critterSprite({ kind, body, x: 0, y: 0, z: 0, flip: false, moving: false }, 0.01, s, INK);
+  const [corgi, husky] = [at('corgi'), at('husky')];
+  const low = (spr: Sprite) => lowest(pixelsAt(spr, s, hexOf(body)));
+  assert.ok(low(corgi) < low(husky) - 0.4, `its coat comes down to ${low(corgi)}, a husky's to ${low(husky)}`);
+  assert.ok(corgi.img.width > 1.3 * corgi.img.height, `${corgi.img.width} x ${corgi.img.height} px`);
+  const paws = pixelsAt(corgi, s, mix(hexOf(body), '#ffffff', 0.88)).filter(([, h]) => h < 1);
+  assert.ok(paws.length >= s, `${paws.length} pixels of white paw`);
+});
+
+// ---- office life: a high-five, a sip, a carried mug -----------------------
+
+const MUG = '#f3ede2'; // a mug's glaze (see props.ts)
+
+test('a high-five: an open hand up and out toward the other, on every species', () => {
+  const s = 8;
+  for (const sp of SPECIES) {
+    const tr = who(sp, 1);
+    for (let i = 0; i < LOOP.highfive[1]; i++) {
+      const spr = figureSprite(fig(tr, 'casual', 'highfive', { poseT: ((i + 0.5) * LOOP.highfive[0]) / LOOP.highfive[1], phase: 0 }), s, INK);
+      const hand = pixelsAt(spr, s, lookOf(tr, 'casual').hand).filter(([x, h]) => x > 3.3 && h > 8.5);
+      assert.ok(hand.length >= s, `${sp} frame ${i}: ${hand.length} pixels of hand up and out`);
+    }
+  }
+});
+
+test('a sip: the mug up at the lips in both hands, the eyes shut, then down again', () => {
+  const s = 8;
+  const [per, n] = LOOP.sip;
+  const at = (i: number) => figureSprite(fig(who('human', 1), 'casual', 'sip', { poseT: ((i + 0.5) * per) / n, phase: 0 }), s, INK);
+  const high = (spr: Sprite) => Math.max(...pixelsAt(spr, s, MUG).map(([, h]) => h));
+  // up by the face half way through, down by the chest at the start
+  assert.ok(high(at(n / 2)) > 9.5, `the mug reaches ${high(at(n / 2))} mid-sip`);
+  assert.ok(high(at(0)) < 8.5, `the mug at ${high(at(0))} before the sip`);
+});
+
+test('a carried mug shows in a free hand standing about, walking, pondering, sitting and chatting, on every species and costume, both ways round', () => {
+  const s = 5;
+  for (const sp of SPECIES) {
+    for (const co of COSTUMES) {
+      for (const pose of MUG_POSES) {
+        for (const back of [false, true]) {
+          const o = { facing: { back, flip: false }, walking: pose === 'walk' };
+          const what = `${sp}/${co}/${pose}${back ? '/back' : ''}`;
+          const plain = figureSprite(fig(who(sp, 1), co, pose, o), s, INK);
+          const mug = figureSprite(fig(who(sp, 1), co, pose, { ...o, mug: true }), s, INK);
+          sane(mug, s, what);
+          assert.notEqual(hash(mug), hash(plain), `${what}: no mug`);
+          assert.ok(pixelsOf(mug, MUG) > 0, `${what}: no mug to be seen`);
+        }
+      }
+    }
+  }
+});
+
+// As for a face state and a blink: a mug gets a sprite of its own exactly
+// where it changes what is drawn.
+test('a carried mug gets a sprite of its own in every frame of every pose where it shows, and nowhere else', () => {
+  const s = 4;
+  const costumes: Record<Species, Costume> = { human: 'startup', robot: 'scientist', cat: 'hacker', alien: 'astronaut', ghost: 'casual' };
+  const wrong: string[] = [];
+  let shows = 0;
+  for (const sp of SPECIES) {
+    for (const back of [false, true]) {
+      for (const pose of POSES) {
+        const [per, n] = LOOP[pose];
+        for (let i = 0; i < n; i++) {
+          const o = { facing: { back, flip: false }, poseT: ((i + 0.5) * per) / n, phase: 0, sleeping: pose === 'sleep' };
+          const what = `${sp}${back ? '/back' : ''}/${pose}/${i}`;
+          clearSprites();
+          const plain = figureSprite(fig(who(sp, 1), costumes[sp], pose, o), s, INK);
+          const m = spriteStats.misses;
+          let mug = figureSprite(fig(who(sp, 1), costumes[sp], pose, { ...o, mug: true }), s, INK);
+          const own = spriteStats.misses > m;
+          if (!own) {
+            clearSprites();
+            mug = figureSprite(fig(who(sp, 1), costumes[sp], pose, { ...o, mug: true }), s, INK);
+          }
+          if (!samePixels(mug, plain) !== own) wrong.push(`${what}: ${own ? 'a key of its own, the same pixels' : 'the plain key, other pixels'}`);
+          else if (own) shows++;
+        }
+      }
+    }
+  }
+  assert.deepEqual(wrong, []);
+  // in every frame of the poses that show one, for every species, both ways round
+  assert.equal(shows, 2 * SPECIES.length * [...MUG_POSES].reduce((k, p) => k + LOOP[p][1], 0));
 });

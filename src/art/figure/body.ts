@@ -4,7 +4,7 @@ import { alpha, mix, path, shade } from '../iso.ts';
 import { drawHead, hairBehind, star } from './head.ts';
 import type { Costume } from '../../world/character.ts';
 import { CLOAK, CLOAK_D, GOLD, IRON, LEATHER, RAG, RAG_D, SLATE, WHITE, type Look } from './look.ts';
-import { CLOTHES } from './look.ts';
+import { CLOTHES, STARTUP } from './look.ts';
 import { apply, move, mul, turn, type Ctx, type Mat, type Sketch } from './paint.ts';
 import { drawProp } from './props.ts';
 import { FORE, HEAD_UP, HIP, NECK, SH, SHIN, THIGH, UPPER, type Prop, type Rig, type V } from './rig.ts';
@@ -118,7 +118,7 @@ export function buildFigure(sk: Sketch, r: Rig, L: Look, v: View): void {
   if (L.badge && !back) add(5.2, () => badge(sk, top));
   if (L.costume === 'astronaut') add(back ? 6 : 0, () => pack(sk, L, top, back));
   if (L.costume === 'astronaut') add(6.9, () => sk.blob((p) => p.ellipse(0.15, top - 0.02, 2.45, 0.72, 0, 0, TAU), '#c3cad6', { dark: '#9aa3b2', d: 0.2 }));
-  if (L.costume === 'hacker' && !L.hoodUp) add(back ? 6 : 0, () => hoodDown(sk, L, top, back));
+  if ((L.costume === 'hacker' || L.costume === 'startup') && !L.hoodUp) add(back ? 6 : 0, () => hoodDown(sk, L, top, back));
   if (L.costume === 'drifter') {
     add(6.9, () => scarf(sk, L, top, back));
     if (!ghost) add(6.95, () => collar(sk, L, top, back));
@@ -248,6 +248,12 @@ function drawLeg(sk: Sketch, L: Look, g: LegRig, back: boolean, sitting: boolean
     });
   }
   settingLeg(sk, L, g, back, w);
+  if (L.costume === 'startup') {
+    // jeans with their hems turned up over the sneakers
+    const h0 = lerp(g.kn, g.ft, 0.74);
+    const h1 = lerp(g.kn, g.ft, 0.88);
+    sk.limb([h0[0], h0[1], h1[0], h1[1]], w + 0.3, shade(L.legs, 0.22), { dark: L.legs, line: 0.6 });
+  }
   const big = L.costume === 'astronaut' ? 1.18 : L.costume === 'raver' ? 1.1 : 1;
   sk.at(mul(move(g.ft[0], g.ft[1]), mul(turn(g.ang), [big, 0, 0, big, 0, 0])), () => {
     const s = shoe(back ? 0.55 : 1.1);
@@ -259,6 +265,11 @@ function drawLeg(sk: Sketch, L: Look, g: LegRig, back: boolean, sitting: boolean
       p.clip();
       p.fillStyle = L.sole;
       p.fillRect(-1, 0.3, 3, 0.5);
+      // a sneaker's heel tab in its colour
+      if (L.costume === 'startup') {
+        p.fillStyle = L.color;
+        p.fillRect(-0.85, -0.45, 0.42, 0.72);
+      }
       p.restore();
     });
   });
@@ -775,6 +786,9 @@ function dress(p: Pen, ink: Color, line: number, px: number, L: Look, top: numbe
       }
       return;
     }
+    case 'startup':
+      startupDress(p, ink, line, L, top, bot, xF, back);
+      return;
     case 'raver':
       if (!back) {
         p.beginPath();
@@ -895,6 +909,90 @@ function print(p: Pen, ink: Color, line: number, px: number, L: Look, top: numbe
       return;
   }
   void px;
+}
+
+// A startup's zip hoodie (clipped to the torso, or a ghost's sheet): a
+// ribbed hem; from the front open over a white tee, a zip tape down each
+// edge, two drawstrings and the slits of its pockets; from behind a seam
+// under the hood. On a sheet only the zip and the drawstrings, in its
+// colour.
+function startupDress(p: Pen, ink: Color, line: number, L: Look, top: number, bot: number, xF: number, back: boolean): void {
+  const stroke = (w = line) => {
+    p.strokeStyle = ink;
+    p.lineWidth = w;
+    p.stroke();
+  };
+  const ghost = L.sp === 'ghost';
+  const strings = (c: Color) => {
+    for (const dx of [-0.42, 0.42]) {
+      p.beginPath();
+      p.moveTo(xF + dx, top + 0.35);
+      p.lineTo(xF + dx * 1.15, top + 2.15);
+      p.strokeStyle = ink;
+      p.lineWidth = 0.3 + line;
+      p.stroke();
+      p.strokeStyle = c;
+      p.lineWidth = 0.3;
+      p.stroke();
+      p.beginPath();
+      p.arc(xF + dx * 1.15, top + 2.3, 0.2, 0, TAU);
+      p.fillStyle = c;
+      p.fill();
+      stroke(line * 0.6);
+    }
+  };
+  if (ghost) {
+    if (back) return;
+    p.beginPath();
+    p.moveTo(xF, top + 0.3);
+    p.lineTo(xF, bot + 1);
+    stroke(line * 0.8);
+    strings(L.trim);
+    return;
+  }
+  // the ribbed hem
+  p.fillStyle = shade(L.top, -0.12);
+  p.fillRect(-4, bot - 0.65, 8, 0.65);
+  p.beginPath();
+  p.moveTo(-4, bot - 0.65);
+  p.lineTo(4, bot - 0.65);
+  stroke(line * 0.8);
+  if (back) {
+    p.beginPath();
+    p.moveTo(xF, top + 2.4);
+    p.lineTo(xF, bot - 0.65);
+    p.strokeStyle = alpha(ink, 0.5);
+    p.lineWidth = line * 0.7;
+    p.stroke();
+    return;
+  }
+  // the tee in the open front, between the zip tapes
+  const gap = (q: Pen) => path(q, [[xF - 0.85, top - 0.4], [xF + 0.85, top - 0.4], [xF + 0.6, bot + 0.5], [xF - 0.55, bot + 0.5]]);
+  p.beginPath();
+  gap(p);
+  p.fillStyle = L.under;
+  p.fill();
+  stroke();
+  p.beginPath();
+  p.moveTo(xF - 0.85, top - 0.4);
+  p.lineTo(xF - 0.55, bot + 0.5);
+  p.moveTo(xF + 0.85, top - 0.4);
+  p.lineTo(xF + 0.6, bot + 0.5);
+  p.strokeStyle = shade(L.top, -0.3);
+  p.lineWidth = 0.22;
+  p.stroke();
+  // the tee's round neck
+  p.beginPath();
+  p.ellipse(xF, top - 0.2, 0.75, 0.5, 0, 0, Math.PI);
+  stroke(line * 0.7);
+  strings(STARTUP.string);
+  // the pockets' slits
+  p.beginPath();
+  p.moveTo(xF - 1.15, -1.9);
+  p.quadraticCurveTo(xF - 1.6, -1.35, xF - 1.45, -0.75);
+  p.moveTo(xF + 1.15, -1.9);
+  p.quadraticCurveTo(xF + 1.65, -1.35, xF + 1.5, -0.75);
+  stroke(line * 0.8);
 }
 
 // A belt round the waist (clipped to the torso) and, from the front, its
@@ -1082,8 +1180,9 @@ function ghostSheet(sk: Sketch, L: Look, top: number, r: Rig, back: boolean, hem
     p.closePath();
   };
   sk.blob(sheet, L.top, { dark: L.topD, d: 0.7 });
-  if (L.costume === 'exosuit' || L.costume === 'jumpsuit' || L.costume === 'colonist') {
-    // a stripe, a chest light, a belt and pouches on the sheet
+  if (L.costume === 'exosuit' || L.costume === 'jumpsuit' || L.costume === 'colonist' || L.costume === 'startup') {
+    // a stripe, a chest light, a belt and pouches, a hoodie's zip and
+    // drawstrings on the sheet
     const xF = back ? -0.35 : 0.65;
     sk.draw((p, k) => {
       p.save();
@@ -1140,6 +1239,9 @@ function pack(sk: Sketch, L: Look, top: number, back: boolean): void {
 }
 
 function hoodDown(sk: Sketch, L: Look, top: number, back: boolean): void {
+  // (a ghost's startup hood is in its colour, over the sheet)
+  const c = L.costume === 'startup' && L.sp === 'ghost' ? L.trim : shade(L.top, -0.08);
+  const cd = L.costume === 'startup' && L.sp === 'ghost' ? L.trimD : L.topD;
   if (back) {
     sk.blob((p) => {
       p.moveTo(-2.0, top + 0.1);
@@ -1147,9 +1249,9 @@ function hoodDown(sk: Sketch, L: Look, top: number, back: boolean): void {
       p.quadraticCurveTo(1.0, top + 2.4, -0.35, top + 2.7);
       p.quadraticCurveTo(-1.7, top + 2.4, -2.0, top + 0.1);
       p.closePath();
-    }, shade(L.top, -0.08), { dark: L.topD, d: 0.4 });
+    }, c, { dark: cd, d: 0.4 });
   } else {
-    sk.blob((p) => p.ellipse(-0.55, top + 0.1, 2.15, 0.95, -0.1, 0, TAU), shade(L.top, -0.08), { dark: L.topD, d: 0.3 });
+    sk.blob((p) => p.ellipse(-0.55, top + 0.1, 2.15, 0.95, -0.1, 0, TAU), c, { dark: cd, d: 0.3 });
   }
 }
 
@@ -1165,6 +1267,7 @@ function tail(sk: Sketch, L: Look, t: number): void {
 // leather; else a shade of the sleeve.
 const CUFF: Partial<Record<Costume, (L: Look) => Color>> = {
   hacker: (L) => shade(L.top, -0.12),
+  startup: (L) => shade(L.top, -0.12),
   astronaut: (L) => L.color,
   nord: (L) => L.accent,
   exosuit: (L) => L.accent,

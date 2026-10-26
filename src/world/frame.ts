@@ -50,6 +50,7 @@ const LEVEL_HAT: Record<Costume, number> = {
   parka: 17.5,
   guard: 17.5,
   demon: 17.75,
+  startup: 18.25,
 };
 
 // Where a character's top is, units over its feet: its hat's, or its
@@ -81,7 +82,8 @@ export type Camera = {
 // how its meters say it feels; `hop` how high a happy bounce lifts it this
 // frame (units; only the figure is drawn higher: its shadow, label and
 // card stay put; while it is happy and awake, figureTop counts the
-// highest hop); `wear` what its level lets it wear.
+// highest hop); `wear` what its level lets it wear; `mug` a mug of coffee
+// carried in a free hand (see MUG_POSES in art/figure/rig.ts).
 export type FigureFrame = {
   id: string;
   x: number;
@@ -102,6 +104,7 @@ export type FigureFrame = {
   feel?: Feel;
   wear?: Wear;
   hop?: number;
+  mug?: boolean;
 };
 
 // The critter: `heart` is how long a heart has shown over it (absent when

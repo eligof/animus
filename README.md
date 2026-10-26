@@ -12,10 +12,11 @@ Every running Claude Code session, and every subagent it starts, walks in
 as a character of its own, dressed for the world it is in. What it does
 follows what its agent is doing right now: editing at the desk, reading at
 the shelf, running commands at the machine. In between they live a little:
-they wander, sit, chat, pet the resident critter, build things together and
-nap. Select one to see its card (context, energy, health, mood), open a chat
-to read its conversation and send it a message, and watch your crew level
-up over weeks of real work.
+they wander, sit, chat, pet the resident critter, build things together,
+huddle, fetch coffee, high-five and hold stand-ups, and nap. Select one to
+see its card (context, energy, health, mood), open a chat to read its
+conversation and send it a message, and watch your crew level up over
+weeks of real work.
 
 ![animus](docs/screenshots/hero.png)
 
@@ -86,7 +87,7 @@ hands it back. `l` turns the lamp light and glows off and on.
 | ![The Vault](docs/screenshots/vault.png)<br>**The Vault** `vault`<br>Deposit boxes, gold under amber lamps and acid in the pit | ![Hell](docs/screenshots/hell.png)<br>**Hell** `hell`<br>Lava lakes, brimstone and the bones of the damned |
 | ![Dust Outpost](docs/screenshots/dunes.png)<br>**Dust Outpost** `dunes`<br>Scrap walls, hide awnings and sand on the wind | ![Longhall](docs/screenshots/meadhall.png)<br>**Longhall** `meadhall`<br>Firelight on carved timber, snow at the high windows, mead on the long table |
 | ![Starfall Base](docs/screenshots/starfall.png)<br>**Starfall Base** `starfall`<br>Two moons over a pink sky, strange flora past the glass | ![Atomic Shelter](docs/screenshots/shelter.png)<br>**Atomic Shelter** `shelter`<br>Riveted steel and a jukebox, deep under the wasteland |
-| ![Frontier Colony](docs/screenshots/colony.png)<br>**Frontier Colony** `colony`<br>Stone and planks under a big sky, a campfire and a husky | |
+| ![Frontier Colony](docs/screenshots/colony.png)<br>**Frontier Colony** `colony`<br>Stone and planks under a big sky, a campfire and a husky | ![The Startup](docs/screenshots/office.png)<br>**The Startup** `office`<br>Exposed brick, standing desks and an espresso machine that never sleeps |
 
 `node bin/animus.js --list-themes` prints them. `t` / `T` step through the
 worlds, `1`–`9` and `0` jump to one of the first ten, `p` opens a picker
@@ -210,7 +211,7 @@ style:
 
 | level | XP | unlocks |
 | --- | --- | --- |
-| ★2 | 100 | a hat: a leather cap with a lamp in the mines, a mortarboard in the lab, a party hat in the club, a cap worn backwards in the den, an antenna on the station, a beanie in the café, a toadstool cap in the caverns, a trapper hat in the snows, a peaked guard's cap in the vault, curled gold horns in hell, a wide straw cone at the outpost, an iron helm in the longhall, a helmet with its visor up at the base, a newsboy cap in the shelter, a cowboy hat in the colony |
+| ★2 | 100 | a hat: a leather cap with a lamp in the mines, a mortarboard in the lab, a party hat in the club, a cap worn backwards in the den, an antenna on the station, a beanie in the café, a toadstool cap in the caverns, a trapper hat in the snows, a peaked guard's cap in the vault, curled gold horns in hell, a wide straw cone at the outpost, an iron helm in the longhall, a helmet with its visor up at the base, a newsboy cap in the shelter, a cowboy hat in the colony, a snapback worn backwards at the startup |
 | ★3 | 250 | a badge on the shirt |
 | ★5 | 1,000 | a desk upgrade (a plant, a steaming mug or a trophy) by its favourite station, the one it has worked at most since animus started |
 | ★8 | 8,000 | its outfit in other colours |
@@ -262,8 +263,8 @@ for what its agent is doing, and the prop comes alive while it is worked
 | delegate | `Agent`/`Task`, `Skill`, `SendMessage`, `Workflow` | casting a bolt at its subagent, who waves back |
 | talk | a reply, a question for you | at the think station, glints round it |
 | error | a failed tool call | a bang: sparks, smoke and `!`; those near flinch; it stays on show for 5 seconds |
-| done | a subagent finished | fireworks and the world's confetti, the crew cheers; it helps build, then leaves |
-| idle | the session waits for you | wandering, sitting, chatting, petting the critter, building; after a while a nap with z's |
+| done | a subagent finished | a high-five with its lead, then fireworks and the world's confetti, the crew cheers; it helps build, then leaves |
+| idle | the session waits for you | wandering, sitting, chatting, petting the critter, building, a coffee, a stand-up with its crew; after a while a nap with z's |
 
 Idle and finished agents fetch blocks and raise a build on the room's
 plazas: a hologram of the goal (a tower, house, pyramid, statue or machine,
@@ -274,13 +275,36 @@ coats in the lab, party clothes in the club, hoodies in the den, space
 suits on the station, everyday clothes in the café, a forager's capelet in
 the caverns, a parka in the snows, a guard's uniform in the vault, a
 devil's robe in hell, a rawhide coat at the outpost, a fur mantle in the
-longhall, an exosuit at the base, a teal jumpsuit in the shelter and a
-duster in the colony. Leads wear a headset. Subagents dress by type:
-reviewers wear glasses, explorers a miner's lamp, planners and architects
-a beret, testers goggles, security agents a hood (from ★2 the world's
-level hat takes the place of the lamp, beret or hood). Species (human,
-robot, cat, alien, ghost), hair and colours come from the agent's id, so
-an agent looks the same every time.
+longhall, an exosuit at the base, a teal jumpsuit in the shelter, a
+duster in the colony and a zip hoodie, jeans and sneakers at the startup
+(where the critter is the office corgi). Leads wear a headset. Subagents
+dress by type: reviewers wear glasses, explorers a miner's lamp, planners
+and architects a beret, testers goggles, security agents a hood (from ★2
+the world's level hat takes the place of the lamp, beret or hood). Species
+(human, robot, cat, alien, ghost), hair and colours come from the agent's
+id, so an agent looks the same every time.
+
+## Office life
+
+![Office life: a kick-off huddle, a coffee run, a high-five and a stand-up](docs/screenshots/office-life.png)
+
+Between tasks the crew keeps a little office life, in every world:
+
+- **Kick-off huddle.** When a lead starts subagents, the newcomers gather
+  round it and nod along under its speech mark for a moment, then go to
+  their stations (at most once a lead every 30 seconds).
+- **Coffee run.** Now and then an idle agent walks to the world's drink
+  spot (or, in a room without one, somewhere warm) and comes back with a
+  mug, sipping from it for a while, at work too.
+- **High-five.** A subagent that finishes walks over to its lead and they
+  high-five (a lead at work turns and raises a hand at its desk); then
+  comes its confetti.
+- **Stand-up.** When three or more of a crew are idle, now and then they
+  gather in a ring and take turns to talk.
+
+It is all for show: nothing is sent or changed, a working agent never
+leaves its station for it, and anyone given work drops it at once. `o`
+turns office life off and on, for pure status, and is remembered.
 
 ## Keys
 
@@ -298,6 +322,7 @@ an agent looks the same every time.
 | `f` | fullscreen scene (hide the header, roster and footer) |
 | `r` | scene / dashboard (remembered) |
 | `l` | lighting on / off (remembered) |
+| `o` | office life on / off (remembered) |
 | `d` | demo crew on / off (mixes with live agents) |
 | `space` | pause |
 | `?` | help |
@@ -322,9 +347,10 @@ Claude Code already keeps on disk:
   for growth.
 
 It writes only its own files: `~/.config/animus/config.json` (world, view,
-lighting) and `~/.config/animus/crews.json` (growth). The one thing it ever
-sends is a chat message you type, to the session you picked, through that
-session's local socket (see [Talking to an agent](#talking-to-an-agent)).
+lighting, office life) and `~/.config/animus/crews.json` (growth). The one
+thing it ever sends is a chat message you type, to the session you picked,
+through that session's local socket (see
+[Talking to an agent](#talking-to-an-agent)).
 
 Text from transcripts (commands, file names, replies) is made safe before
 it is drawn: control characters and escape sequences are dropped and wide

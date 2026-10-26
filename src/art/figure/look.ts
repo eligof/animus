@@ -17,11 +17,13 @@ import { hexOf, mix, rgbOf, shade } from '../iso.ts';
 // an exosuit, a newsboy cap with a jumpsuit and a cowboy hat with a duster;
 // an old-time leather cap with a brass lamp in the mines, a round toadstool
 // cap in the caverns, a trapper hat with fur ear flaps in the snows, a
-// peaked cap in the vault and grand curled horns in hell.
+// peaked cap in the vault and grand curled horns in hell; a snapback worn
+// backwards at the startup.
 export type Prize =
   | 'beanie' | 'mortarboard' | 'party' | 'cap' | 'antenna' | 'grand'
   | 'straw' | 'helm' | 'visor' | 'flatcap' | 'rancher'
-  | 'lampcap' | 'mushroom' | 'trapper' | 'peaked' | 'horns';
+  | 'lampcap' | 'mushroom' | 'trapper' | 'peaked' | 'horns'
+  | 'snapback';
 export const PRIZES: Record<Costume, Prize> = {
   casual: 'beanie',
   scientist: 'mortarboard',
@@ -39,6 +41,7 @@ export const PRIZES: Record<Costume, Prize> = {
   parka: 'trapper',
   guard: 'peaked',
   demon: 'horns',
+  startup: 'snapback',
 };
 // The setting worlds' cloth and trimmings (see dressForSetting): a miner's
 // denim overalls, work shirt, gloves and boots, and the leather and brass
@@ -112,6 +115,23 @@ export const CLOTHES = {
   horn: '#e2b03a',
   hornD: '#a8761e',
   violet: '#7b3fa6',
+} as const;
+// The startup's cloth: a zip hoodie softened toward heather grey over a
+// white tee, its drawstrings, jeans and their turned-up hems (black jeans
+// at ★8), white sneakers on grey soles; a snapback's flat brim and strap.
+export const STARTUP = {
+  heather: '#c3c1bd',
+  tee: '#f8f7f3',
+  string: '#efe9dd',
+  jeans: '#4a6e9e',
+  jeansD: '#38567d',
+  black: '#34363e',
+  blackD: '#26272d',
+  sneaker: '#e8e5de',
+  sneakerD: '#c4bfb5',
+  sole: '#a9afb9',
+  brim: '#2c2f38',
+  brimD: '#1f2128',
 } as const;
 export const GOLD = '#f5c542';
 export const WHITE = '#ffffff';
@@ -398,6 +418,24 @@ export function lookOf(tr: Traits, costume: Costume, wear?: Wear): Look {
       L.sole = '#3a2a1e';
       break;
     }
+    case 'startup': {
+      // a zip hoodie in a heathered shade of its colour, open over a white
+      // tee, jeans and white sneakers; the hood lies down its back (or goes
+      // up, for a hooded agent, in the hoodie's colour), see body.ts
+      const hoodie = mix(shirt, STARTUP.heather, 0.3);
+      L.top = hoodie;
+      L.topD = dk(hoodie);
+      L.under = STARTUP.tee;
+      L.sleeve = 'long';
+      L.legs = STARTUP.jeans;
+      L.legsD = STARTUP.jeansD;
+      L.shoe = STARTUP.sneaker;
+      L.shoeD = STARTUP.sneakerD;
+      L.sole = STARTUP.sole;
+      L.hat = hoodie;
+      L.hatD = dk(hoodie);
+      break;
+    }
     default:
       // tees for most prints; stripes and V-necks come as sweaters
       L.sleeve = tr.pattern === '▓' || tr.pattern === '▼' || tr.pattern === '║' ? 'long' : 'tee';
@@ -449,8 +487,13 @@ export function lookOf(tr: Traits, costume: Costume, wear?: Wear): Look {
         L.legsD = L.topD;
       }
       if (costume === 'wizard') L.hat = shade(L.top, -0.06);
-      if (costume === 'hacker' || costume === 'exosuit') L.hat = L.top;
+      if (costume === 'hacker' || costume === 'exosuit' || costume === 'startup') L.hat = L.top;
       L.hatD = dk(L.hat);
+      // the startup's jeans go black
+      if (costume === 'startup') {
+        L.legs = STARTUP.black;
+        L.legsD = STARTUP.blackD;
+      }
     }
     // the fur turns dark wolf (snow on a dark tunic); a jumpsuit's stripe
     // turns cream on a red or rust suit; the cowboy hat's band takes the

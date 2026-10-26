@@ -9,12 +9,15 @@ export const SPRITE_H = 4;
 // Work poses follow the agent's activity; the rest are the little life in
 // between: sitting, carrying a block (and placing it on a build), cheering,
 // waving, sipping a drink, stretching, chatting face to face, flinching at a
-// bang, dancing, petting a critter.
+// bang, dancing, petting a critter; and office life's high-five and a sip
+// from a mug held in both hands.
 export type Pose =
   | 'idle' | 'walk' | 'write' | 'read' | 'think' | 'run' | 'search' | 'web' | 'delegate' | 'talk' | 'done' | 'error' | 'sleep'
-  | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet';
-// Little pictures that pop up over a character's head.
-export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup';
+  | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet'
+  | 'highfive' | 'sip';
+// Little pictures that pop up over a character's head (a speech mark: a
+// balloon of dots, no words).
+export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup' | 'speech';
 // How characters dress in a scene: wizards' robes and hats (no world wears
 // them now), lab coats in the lab, party outfits in the club, hoodies in the den,
 // space suits on the station, everyday clothes in the café; a strapped
@@ -24,11 +27,13 @@ export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 
 // and dressed for where they are, work
 // overalls in the mines, a forager's capelet in the fungal caverns, a
 // parka in the snowy depths, a guard's uniform in the vault and a devil's
-// robe in hell.
+// robe in hell; and at the startup an open zip hoodie over a tee, jeans and
+// sneakers.
 export type Costume =
   | 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual'
   | 'drifter' | 'nord' | 'exosuit' | 'jumpsuit' | 'colonist'
-  | 'miner' | 'forager' | 'parka' | 'guard' | 'demon';
+  | 'miner' | 'forager' | 'parka' | 'guard' | 'demon'
+  | 'startup';
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
 
