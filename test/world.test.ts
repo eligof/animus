@@ -436,14 +436,17 @@ test('the card floats beside the selected character, not docked', () => {
   w.draw(s, now);
   const f = w.scene()!;
   const g = f.figures.find((x) => x.id === w.selectedId)!;
-  const [px, py] = project(f.camera, g.x, g.y, g.z + FIGURE_H);
-  const [col, row] = cellAt(f.camera, px, py);
+  // The cells the character covers, its hat and all (a level's hat stands
+  // well over its head).
+  const b = figureBox(f.camera, g);
   const lines = s.toText().split('\n');
   const r = lines.findIndex((l) => l.includes('╭'));
   assert.ok(r >= 0);
   const c = lines[r].indexOf('╭');
-  assert.ok(Math.abs(c - col) <= CARD_W + 4, `column ${c} near ${col}`);
-  assert.ok(Math.abs(r - row) <= CARD_H, `row ${r} near ${row}`);
+  // A cell or two from it, on whichever side.
+  const dx = Math.max(0, c - b.x1 - 1, b.x0 - (c + CARD_W));
+  const dy = Math.max(0, r - b.y1 - 1, b.y0 - (r + CARD_H));
+  assert.ok(dx <= 2 && dy <= 2, `the card at column ${c}, row ${r}; the character covers ${JSON.stringify(b)}`);
 });
 
 // Where the pet card is on screen (its top-left cell), or null.

@@ -154,16 +154,48 @@ test('demo subagents have no session title (their name already says it)', () => 
   for (const a of subs) assert.equal(a.vitals!.title, '', a.name);
 });
 
-test('the demo crew moves exactly as it did before vitals existed', () => {
+test('the demo crew moves exactly as pinned', () => {
   const start = 1_700_000_000_000;
   const src = new DemoSource(7, start);
   const moves: unknown[] = [];
   for (let t = start; t <= start + 120_000; t += 250)
     moves.push(src.poll(t).map((a) => ({ id: a.id, name: a.name, role: a.role, parentId: a.parentId, activity: a.activity, detail: a.detail, since: a.since })));
   const hash = createHash('sha256').update(JSON.stringify(moves)).digest('hex');
-  // Pins the crew's moves (computed before vitals existed), so vitals never
-  // draw from the crew's random stream.
-  assert.equal(hash, 'e638d93f25e78af3248a27c7489d7a8db9b637a97e66533111b093ca6fe43aad');
+  // Pins the crew's moves, so vitals and conversations never draw from the
+  // crew's random stream. Repinned for office life: subagents spin up for
+  // six to nine seconds (time for a kick-off huddle round their lead) and
+  // on every other wait of its lead the team waits too (time for a
+  // stand-up).
+  assert.equal(hash, 'b23c3a0c12eb3e957dd4cf77ac3f0b09d68788bcb132be3c6980b3207fc41238');
+});
+
+test('demo subagents spin up for six to nine seconds before their first task', () => {
+  const frames = simulate(new DemoSource(7, START), 400);
+  const born = new Map<string, number>();
+  const first = new Map<string, AgentInfo>();
+  for (const a of frames.flat()) {
+    if (a.role !== 'sub') continue;
+    if (!born.has(a.id)) born.set(a.id, a.since);
+    if (!first.has(a.id) && a.detail !== 'spinning up') first.set(a.id, a);
+  }
+  let n = 0;
+  for (const [id, a] of first) {
+    if (a.activity === 'idle') continue; // its team was waiting first (see below)
+    const secs = (a.since - born.get(id)!) / 1000;
+    assert.ok(secs >= 6 && secs <= 9, `${id} spun up for ${secs} s`);
+    n++;
+  }
+  assert.ok(n >= 5, `${n} subagents started`);
+});
+
+test('on every other wait of a lead its team waits with it: three or more of a crew idle at once', () => {
+  const frames = simulate(new DemoSource(7, START), 400);
+  const idle = (list: AgentInfo[], crew: string) => list.filter((a) => a.crew === crew && a.activity === 'idle');
+  for (const crew of ['demo:animus', 'demo:webshop']) {
+    assert.ok(frames.some((list) => idle(list, crew).length >= 3), `${crew}: never three waiting`);
+    // only while its lead waits
+    for (const list of frames) if (idle(list, crew).some((a) => a.role === 'sub')) assert.ok(idle(list, crew).some((a) => a.role === 'lead'), `${crew}: a subagent waits alone`);
+  }
 });
 
 test('each demo agent has a believable conversation', () => {

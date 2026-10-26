@@ -71,15 +71,15 @@ const MAX_CHAT = 200;
 
 // The demo's crews start some way along (XP by crew and role), so the demo
 // shows what growth looks like: atlas's lead is at ★10 with every unlock,
-// its crew at levels from ★1 to ★8, and nova's lead is ten XP short of
+// its crew at levels from ★1 to ★8, and nova's lead is fifteen XP short of
 // ★4, which its first finished turn brings within a minute (with the
 // world's seed, 7).
 export const DEMO_XP: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   'demo:animus': { lead: 33_000, 'code-reviewer': 8_400, 'docs-writer': 2_100, Explore: 1_150, Plan: 520, 'test-runner': 260, 'security-reviewer': 130, 'general-purpose': 40 },
-  'demo:webshop': { lead: 490, 'security-reviewer': 4_100, 'test-runner': 1_020, Explore: 260, 'general-purpose': 150, 'code-reviewer': 96, 'docs-writer': 30, Plan: 0 },
+  'demo:webshop': { lead: 485, 'security-reviewer': 4_100, 'test-runner': 1_020, Explore: 260, 'general-purpose': 150, 'code-reviewer': 96, 'docs-writer': 30, Plan: 0 },
 };
 
-type Sim = { info: AgentInfo; next: number; endsAt: number; doneUntil: number; nextSpawn: number; idleAt: number; subType?: number; vitals: Vitals; chat: Bubble[] };
+type Sim = { info: AgentInfo; next: number; endsAt: number; doneUntil: number; nextSpawn: number; idleAt: number; subType?: number; vitals: Vitals; chat: Bubble[]; waits: number };
 
 // A scripted, deterministic crew so the stage can be shown without live data.
 export class DemoSource implements AgentSource {
@@ -134,6 +134,7 @@ export class DemoSource implements AgentSource {
       idleAt: now + this.rng.range(15000, 45000), // the first wait comes early
       vitals: this.born(true, now),
       chat: [],
+      waits: 0,
     });
     const sim = this.sims[this.sims.length - 1];
     this.say(sim, 'user', sim.vitals.title, now);
@@ -159,7 +160,7 @@ export class DemoSource implements AgentSource {
         lastSeen: now,
         crew: parent.info.crew,
       },
-      next: now + this.rng.range(1500, 3500),
+      next: now + this.rng.range(6000, 9000), // spinning up: time for a kick-off huddle round its lead
       endsAt: now + this.rng.range(20000, 60000),
       doneUntil: Infinity,
       nextSpawn: Infinity,
@@ -167,6 +168,7 @@ export class DemoSource implements AgentSource {
       subType: ti,
       vitals: this.born(false, now),
       chat: [],
+      waits: 0,
     });
     const sim = this.sims[this.sims.length - 1];
     this.say(sim, 'user', `${sim.info.name}: ${this.crng.pick(TASKS)}`, now);
@@ -274,6 +276,18 @@ export class DemoSource implements AgentSource {
           continue;
         }
         if (s.info.activity === 'done') continue;
+        // On every other wait of its lead (the first, the third, …) the team
+        // waits with it, and goes on when the lead does: a crew waiting
+        // together, time for a stand-up.
+        const lead = this.sims.find((p) => p.info.id === s.info.parentId);
+        if (lead?.info.activity === 'idle' && lead.waits % 2 === 1) {
+          if (s.info.activity !== 'idle') {
+            this.change(s, 'idle', now);
+            s.info.detail = `waiting for ${lead.info.name}`;
+          }
+          continue;
+        }
+        if (s.info.activity === 'idle') s.next = Math.min(s.next, now);
       } else if (now >= s.nextSpawn) {
         this.spawn(s, now);
         s.nextSpawn = now + this.rng.range(8000, 20000);
@@ -282,6 +296,7 @@ export class DemoSource implements AgentSource {
       // Leads wait for "you" every minute or two, long enough to wander,
       // chat and help build.
       if (now >= s.idleAt) {
+        s.waits++; // (its team waits with it on odd ones, see above)
         this.change(s, 'idle', now);
         s.next = now + this.rng.range(25000, 45000);
         s.idleAt = now + this.rng.range(60000, 120000);

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
+import { DemoSource } from '../src/demo/source.ts';
 import { COFFEE_LEG, COFFEE_POUR, FIVE_S, FIVE_WALK, HUDDLE_EVERY, HUDDLE_GATHER, HUDDLE_S, STANDUP_EVERY, STANDUP_GATHER, STANDUP_S } from '../src/world/life.ts';
 import type { Errand } from '../src/world/life.ts';
 import { hub } from '../src/world/layout.ts';
@@ -490,4 +491,32 @@ test('off, office life ends every moment at once, starts none and puts the mugs 
     if (ids.some((id) => kindOf(byId(stage, id)) === 'standup')) back = true;
   });
   assert.ok(back, 'on again, no stand-up');
+});
+
+test('the demo crew shows all four within a few minutes, each moment ends in time, and nobody at work is taken from it', () => {
+  const stage = newStage(mines, { x: 0, y: 1, w: 150, h: 44 });
+  const src = new DemoSource(7, NOW);
+  const first = new Map<string, number>();
+  const since = new Map<Actor, { kind: string; at: number }>();
+  const most: Record<string, number> = { huddle: HUDDLE_GATHER + HUDDLE_S, coffee: 2 * COFFEE_LEG + COFFEE_POUR, five: FIVE_WALK + FIVE_S, standup: STANDUP_GATHER + STANDUP_S };
+  run(stage, (n) => src.poll(n), 240, NOW, (n) => {
+    for (const a of stage.actors()) {
+      const e = a.mind.errand;
+      const k = e?.kind ?? '';
+      const on = (e?.kind === 'coffee' && e.step === 'pour') || ((k === 'huddle' || k === 'five' || k === 'standup') && (e as { arrived: boolean }).arrived);
+      if (on && !first.has(k)) first.set(k, (n - NOW) / 1000);
+      // Work first: only a newcomer still spinning up (a huddle) is on an
+      // office moment while its agent works.
+      const busy = a.info.activity !== 'idle' && a.info.activity !== 'done' && a.info.activity !== 'error';
+      if (busy && OFFICE.has(k)) assert.ok(k === 'huddle' && a.info.activity === 'think', `${a.info.id} at work (${a.info.activity}) on a ${k}`);
+      const was = since.get(a);
+      if (OFFICE.has(k) && was?.kind !== k) since.set(a, { kind: k, at: n });
+      else if (!OFFICE.has(k) && was) {
+        since.delete(a);
+        assert.ok((n - was.at) / 1000 <= most[was.kind] + 1, `${a.info.id}'s ${was.kind} took ${(n - was.at) / 1000} s`);
+      }
+    }
+  });
+  assert.deepEqual([...first.keys()].sort(), ['coffee', 'five', 'huddle', 'standup'], `seen: ${JSON.stringify(Object.fromEntries(first))}`);
+  for (const [k, t] of first) assert.ok(t <= 180, `the first ${k} at ${t} s`);
 });
