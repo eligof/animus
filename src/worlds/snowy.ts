@@ -4,6 +4,7 @@ import { DECOR } from './snowy/decor.ts';
 import { INK } from './snowy/kit.ts';
 import { room, snowyPois } from './snowy/room.ts';
 import { STATIONS } from './snowy/stations.ts';
+import { WORKSTATION } from './snowy/workstation.ts';
 import type { WorldDef } from './types.ts';
 
 // Snowy Depths: frozen falls, drifted snow and a pond iced over. A cavern in
@@ -43,6 +44,7 @@ export const snowy: WorldDef = {
   pois: snowyPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'parka',
   critter: { kind: 'fox', body: hex('#eef3f8') }, // a snow fox
   finale: { colors: [[255, 211, 74]] }, // gold dust
