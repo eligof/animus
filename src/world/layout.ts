@@ -288,7 +288,7 @@ function crossed(L: Layout, keep: Uint8Array, s: Slot): number {
 // A slot's floor footprint; x1, y1 exclusive.
 export type Rect = { x0: number; y0: number; x1: number; y1: number };
 
-export function slotRect(s: Slot): Rect {
+export function slotRect(s: Pick<Slot, 'wall' | 'x0' | 'y0' | 'len' | 'dep'>): Rect {
   return s.wall === 'right'
     ? { x0: s.x0, y0: s.y0, x1: s.x0 + s.len, y1: s.y0 + s.dep }
     : { x0: s.x0, y0: s.y0, x1: s.x0 + s.dep, y1: s.y0 + s.len };
@@ -382,4 +382,14 @@ export function keepClear(L: Layout): Uint8Array {
     for (let k = 0; k <= n; k++) mark(a.x + ((h.x - a.x) * k) / n, a.y + ((h.y - a.y) * k) / n, 2);
   }
   return keep;
+}
+// How many of `mask`'s cells (x + W * y) a box covers, one look a box
+// (sums over every box from the corner).
+export function boxCount(mask: Uint8Array, W: number, D: number): (r: Rect) => number {
+  const W1 = W + 1;
+  const sum = new Int32Array(W1 * (D + 1));
+  for (let y = 0; y < D; y++) {
+    for (let x = 0; x < W; x++) sum[x + 1 + W1 * (y + 1)] = mask[x + W * y] + sum[x + W1 * (y + 1)] + sum[x + 1 + W1 * y] - sum[x + W1 * y];
+  }
+  return (r) => sum[r.x1 + W1 * r.y1] - sum[r.x0 + W1 * r.y1] - sum[r.x1 + W1 * r.y0] + sum[r.x0 + W1 * r.y0];
 }

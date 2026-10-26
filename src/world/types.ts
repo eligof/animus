@@ -58,6 +58,24 @@ export type Slot = {
   spot: Spot;
 };
 
+// A workstation's place (see desks.ts): built facing `wall`'s way out on
+// the floor, as an island is (its front and its agent toward the viewer),
+// its agent at `spot`. `pod` is the team pod it belongs to, `lead` whether
+// it is the pod's lead's place, `index` its number in the room.
+export type Desk = {
+  kind: 'desk';
+  wall: 'left' | 'right';
+  island: true;
+  x0: number;
+  y0: number;
+  len: number;
+  dep: number;
+  spot: Spot;
+  pod: number;
+  lead: boolean;
+  index: number;
+};
+
 // The room planned for a scene: the floor W x D, wall height H, wall
 // thickness T, and the station slots.
 export type Layout = {
