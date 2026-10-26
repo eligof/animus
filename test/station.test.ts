@@ -191,3 +191,10 @@ test('station room: the shell draws inside the canvas, the planet turns, and it 
   const over = budget('the overlay a frame', (i) => station.room.overlay!(view(i / 6)), 3, { calls: 20 });
   t.diagnostic(`overlay ${over.toFixed(2)} ms a frame, ${area.x1 - area.x0} x ${area.y1 - area.y0} px`);
 });
+
+test('Orbital Station\'s workstation: its own, still whatever the clock', () => {
+  const art = station.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
