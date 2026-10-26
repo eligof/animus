@@ -5,6 +5,7 @@ import { DECOR } from './lab/decor.ts';
 import { INK } from './lab/kit.ts';
 import { labPois, room } from './lab/room.ts';
 import { STATIONS } from './lab/stations.ts';
+import { WORKSTATION } from './lab/workstation.ts';
 
 // Mad Science Lab: bubbling flasks, a tesla coil and a very busy chalkboard.
 // A tiled laboratory on a stormy night in outlined cartoon (deep teal ink):
@@ -42,6 +43,7 @@ export const lab: WorldDef = {
   pois: labPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'scientist',
   critter: { kind: 'rat', body: hex('#eeeae4') }, // a lab rat
   finale: { colors: [[214, 255, 240], [150, 240, 214], [200, 230, 255]] }, // foam
