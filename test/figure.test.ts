@@ -5,7 +5,7 @@ import { CLOAK, COAT, CREAM, FUR, GOLD, IRON, LEATHER, PRIZES, RAG, SHIRT, SLATE
 import { CLOTHES, STARTUP } from '../src/art/figure/look.ts';
 import { blinkAt, frameOf, LOOP } from '../src/art/figure/rig.ts';
 import { traitsFor, type Costume, type Emote, type Feel, type Pose, type Species, type Traits, type Wear } from '../src/world/character.ts';
-import { hexOf, rgbOf } from '../src/art/iso.ts';
+import { hexOf, mix, rgbOf } from '../src/art/iso.ts';
 import { budget } from './helpers.ts';
 import type { CritterFrame, FigureFrame } from '../src/world/frame.ts';
 import { figureTop } from '../src/world/frame.ts';
@@ -201,7 +201,7 @@ test('a carried block shows in its colour', () => {
 });
 
 test('critters: every kind idles and moves, flips, and is anchored on the floor', () => {
-  for (const kind of ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky'] as const) {
+  for (const kind of ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky', 'corgi'] as const) {
     const c: CritterFrame = { kind, body: [200, 120, 80], x: 0, y: 0, z: 0, flip: false, moving: false };
     const idle = new Set<string>();
     const move = new Set<string>();
@@ -1165,4 +1165,16 @@ test('a snapback is worn backwards: from the front its flat brim juts out behind
       } else assert.ok(leftmost(brim) < -5, `${what}: the brim reaches ${leftmost(brim)} behind the head`);
     }
   }
+});
+
+test("a corgi: long and low, its coat nearer the floor than a husky's, on short white legs", () => {
+  const s = 8;
+  const body: [number, number, number] = [217, 138, 60];
+  const at = (kind: 'corgi' | 'husky') => critterSprite({ kind, body, x: 0, y: 0, z: 0, flip: false, moving: false }, 0.01, s, INK);
+  const [corgi, husky] = [at('corgi'), at('husky')];
+  const low = (spr: Sprite) => lowest(pixelsAt(spr, s, hexOf(body)));
+  assert.ok(low(corgi) < low(husky) - 0.4, `its coat comes down to ${low(corgi)}, a husky's to ${low(husky)}`);
+  assert.ok(corgi.img.width > 1.3 * corgi.img.height, `${corgi.img.width} x ${corgi.img.height} px`);
+  const paws = pixelsAt(corgi, s, mix(hexOf(body), '#ffffff', 0.88)).filter(([, h]) => h < 1);
+  assert.ok(paws.length >= s, `${paws.length} pixels of white paw`);
 });
