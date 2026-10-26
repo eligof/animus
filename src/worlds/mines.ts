@@ -43,7 +43,7 @@ export const mines: WorldDef = {
   pois: minesPois,
   stations: STATIONS,
   decor: DECOR,
-  costume: 'wizard',
+  costume: 'miner',
   critter: { kind: 'rat', body: hex('#8a7462') }, // a mine rat
   finale: { colors: [[255, 211, 74]] }, // gold dust
   build: { colors: [hex('#7a5230'), hex('#7d4a3a'), hex('#5b4a3c'), hex('#fff2c8')], shape: 'tower' }, // wood, brick and rock, crowned by a lamp

@@ -9,7 +9,7 @@ import type { Spot } from './types.ts';
 
 export type CritterLook = { kind: CritterKind; body: RGB };
 
-const SPEED: Record<CritterKind, number> = { cat: 5, rat: 6, drone: 4, slime: 2.4, fox: 6, imp: 3.5 };
+const SPEED: Record<CritterKind, number> = { cat: 5, rat: 6, drone: 4, slime: 2.4, fox: 6, imp: 3.5, beetle: 3, hopper: 4.5, husky: 6.5 };
 
 export class Critter {
   readonly look: CritterLook;

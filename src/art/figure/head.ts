@@ -1,6 +1,7 @@
 import type { Pen } from '../types.ts';
 import { alpha, mix, shade } from '../iso.ts';
-import { GOLD, WHITE, type Look } from './look.ts';
+import { FUR, FUR_D, GOLD, LEATHER, WHITE, type Look } from './look.ts';
+import { CLOTHES } from './look.ts';
 import { hole, move, mul, turn, type Ctx, type Sketch } from './paint.ts';
 import type { Eyes, Face } from './rig.ts';
 
@@ -21,6 +22,7 @@ const TONGUE = '#ff8f8f';
 const BLUSH = '#ff7d9a';
 const DARK_METAL = '#3d4452';
 const VISOR = '#1c2230';
+const LIGHT = '#8ff8ff'; // the lights in an exosuit helmet's side discs
 
 const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => (p: Pen) => p.ellipse(cx, cy, rx, ry, rot, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
@@ -592,6 +594,13 @@ function hairDownBack(sk: Sketch, L: Look): void {
 
 const hooded = (L: Look) => L.hoodUp && L.costume !== 'astronaut' && L.acc !== 'lamp' && L.acc !== 'beret';
 
+// The game and setting worlds' hats (★2; a devil's horns are no hat) are
+// worn down over the head: a bun, a quiff and a cat's ears go under them
+// (unless the hat is off, a block carried on the head), so nothing pokes
+// out through a cone or a helm.
+const TUCKS: ReadonlySet<string> = new Set(['straw', 'helm', 'visor', 'flatcap', 'rancher', 'lampcap', 'mushroom', 'trapper', 'peaked']);
+const tucked = (L: Look, o: HeadOpts) => L.prize !== null && TUCKS.has(L.prize) && !o.carry;
+
 function wizardHat(L: Look) {
   return !hooded(L) && L.costume === 'wizard' && L.acc !== 'lamp' && L.acc !== 'beret';
 }
@@ -609,7 +618,7 @@ export function drawHead(sk: Sketch, L: Look, face: Face, o: HeadOpts): void {
   if (loose && back) hairBackSides(sk, L);
   if (L.sp === 'robot') robotAntenna(sk, L, o);
   if (L.sp === 'alien') alienAntennae(sk, L, o);
-  if (L.sp === 'cat' && !hood) catEars(sk, L, back);
+  if (L.sp === 'cat' && !hood && !tucked(L, o)) catEars(sk, L, back);
   if (human && !hood) {
     const ex = back ? 2.95 : -2.95;
     sk.blob(ell(ex, 0.65, 0.62, 0.78), L.skin, { dark: L.skinD, d: 0.25 });
@@ -648,10 +657,11 @@ export function drawHead(sk: Sketch, L: Look, face: Face, o: HeadOpts): void {
     if (L.sp === 'cat' && L.style % 2 === 1) catStripes(sk, L, back);
     if (L.sp === 'alien' && L.style % 2 === 1) alienSpots(sk, L, back);
   }
+  if (L.costume === 'miner' && !back && L.sp !== 'robot' && L.sp !== 'ghost') soot(sk);
 
   // hair (a bun or a quiff won't fit in a space helmet)
   if (human && !hood) {
-    const tall = L.costume !== 'astronaut';
+    const tall = L.costume !== 'astronaut' && !tucked(L, o);
     if (back) {
       const low = L.style === 1 ? 3.0 : L.style === 2 ? 3.2 : 2.45;
       if (L.style === 4 && tall) sk.blob(circ(-0.5, -3.85, 1.3), L.hair, { dark: L.hairD, d: 0.45 });
@@ -668,6 +678,7 @@ export function drawHead(sk: Sketch, L: Look, face: Face, o: HeadOpts): void {
       hairShine(sk, L, false);
     }
   }
+  if (human && !hood && L.costume === 'nord') braids(sk, L, back);
   if (!human && !hood && L.costume !== 'astronaut') headShine(sk, L, back);
   if (L.sp === 'ghost' && L.style % 3 === 0 && !back) {
     // a little curl on top
@@ -677,15 +688,18 @@ export function drawHead(sk: Sketch, L: Look, face: Face, o: HeadOpts): void {
   // a plaster, under whatever goes on the head
   if (o.bandaged && plastered(L, back, o.carry)) plaster(sk, back);
 
-  // a headset goes on under a hat, anything else over it
+  // a headset goes on under a hat, anything else over it; a helmet's shell
+  // or a helm's cheek plates cover the ears, so its cup goes on over those
   if (L.acc === 'headset' && (wizardHat(L) || L.prize)) {
     accessory(sk, L, o, face);
     headwear(sk, L, o);
+    if ((L.prize === 'visor' || L.prize === 'helm') && !o.carry) earCup(sk, L, back);
   } else {
     headwear(sk, L, o);
     accessory(sk, L, o, face);
   }
 
+  if (L.costume === 'demon' && (L.prize !== 'horns' || o.carry) && L.acc !== 'lamp') nubs(sk, L, back);
   if (L.costume === 'astronaut') helmet(sk, L, back);
   if (L.prize === 'antenna' && !o.carry) antenna(sk, L, back);
 }
@@ -713,6 +727,34 @@ function plaster(sk: Sketch, back: boolean): void {
       p.fill();
     }
   });
+}
+
+// A nord's two braids, tied at the ends in its trim: over the shoulders
+// from the front, down the back from behind.
+function braids(sk: Sketch, L: Look, back: boolean): void {
+  const ends: ReadonlyArray<readonly [number, number, number, number]> = back
+    ? [[-1.95, 1.7, -2.15, 5.4], [1.65, 1.7, 1.85, 5.4]]
+    : [[-3.0, 0.8, -3.2, 5.0], [3.15, 1.6, 3.35, 5.0]];
+  for (const [x0, y0, x1, y1] of ends) {
+    sk.limb([x0, y0, (x0 + x1) / 2 + 0.12, (y0 + y1) / 2, x1, y1], 0.9, L.hair, { dark: L.hairD });
+    sk.draw((p, c) => {
+      if (c.px < 4) return;
+      // the plait
+      p.strokeStyle = alpha(c.ink, 0.45);
+      p.lineWidth = c.line * 0.7;
+      p.lineCap = 'round';
+      p.beginPath();
+      for (let k = 1; k < 6; k++) {
+        const t = k / 6.5;
+        const x = x0 + (x1 - x0) * t;
+        const y = y0 + (y1 - y0) * t;
+        p.moveTo(x - 0.35, y - 0.12);
+        p.lineTo(x + 0.3, y + 0.2);
+      }
+      p.stroke();
+    });
+    sk.blob(circ(x1, y1 - 0.35, 0.42), L.trim, { dark: L.trimD, d: 0.12, line: 0.5 });
+  }
 }
 
 function hairShine(sk: Sketch, L: Look, back: boolean): void {
@@ -1075,6 +1117,273 @@ function prizeHat(sk: Sketch, L: Look, back: boolean): void {
       sk.blob(circ(sx, -4.3, 0.36), shade(c, -0.15), { line: 0.5 });
       return;
     }
+    case 'straw': {
+      // a low, wide cone of straw sat at the brow, its weave in rings, a
+      // cord under the chin (from the front)
+      const straw = '#d9b25e';
+      const strawD = '#a9843d';
+      const cx = sx + 0.1;
+      const cy = -1.95;
+      const rx = 5.4;
+      const ry = 0.85;
+      const ax = sx + 0.25;
+      const ay = -5.3;
+      const cone = (p: Pen) => {
+        p.moveTo(ax - 0.25, ay + 0.12);
+        p.quadraticCurveTo(ax, ay - 0.08, ax + 0.25, ay + 0.12);
+        p.lineTo(cx + rx, cy);
+        p.ellipse(cx, cy, rx, ry, 0, 0, Math.PI);
+        p.closePath();
+      };
+      sk.blob(cone, straw, { dark: strawD, d: 0.55 });
+      sk.draw((p, k) => {
+        // the weave: rings round the cone, and its bound rim
+        p.save();
+        p.beginPath();
+        cone(p);
+        p.clip();
+        p.strokeStyle = '#8c6a2e';
+        p.lineWidth = k.line * 0.8;
+        for (const t of [0.36, 0.66, 0.93]) {
+          p.beginPath();
+          p.ellipse(ax + (cx - ax) * t, ay + (cy - ay) * t, rx * t, ry * t, 0, 0.04, Math.PI - 0.04);
+          p.stroke();
+        }
+        p.restore();
+      });
+      if (!back) {
+        sk.draw((p, k) => {
+          p.beginPath();
+          p.moveTo(-3.0, -1.3);
+          p.quadraticCurveTo(-2.75, 2.3, F, 3.02);
+          p.quadraticCurveTo(3.0, 2.4, 3.15, -1.3);
+          p.strokeStyle = '#3a2a1e';
+          p.lineWidth = lw(k, 0.85);
+          p.lineCap = 'round';
+          p.stroke();
+        });
+      }
+      return;
+    }
+    case 'helm': {
+      // a rounded iron cap with a raised ridge from front to back, a
+      // riveted band, a fur rim at the brow, two short cheek plates and (in
+      // front) a nose bar; no horns, no grille
+      const iron = '#8e908c';
+      const ironD = '#66696a';
+      const plate = (x0: number, x1: number) => (p: Pen) => {
+        const m = (x0 + x1) / 2;
+        p.moveTo(x0, -1.3);
+        p.lineTo(x1, -1.3);
+        p.quadraticCurveTo(x1 + 0.05, 0.2, m + (x1 - m) * 0.3, 0.8);
+        p.quadraticCurveTo(x0 - 0.05, 0.4, x0, -1.3);
+        p.closePath();
+      };
+      for (const [x0, x1] of back ? [[-3.75, -2.75], [2.75, 3.75]] : [[-3.75, -2.6], [2.65, 3.7]]) sk.blob(plate(x0, x1), iron, { dark: ironD, d: 0.25 });
+      const dome = (p: Pen) => {
+        p.moveTo(-3.75, -1.4);
+        p.quadraticCurveTo(-3.95, -4.65, sx, -4.75);
+        p.quadraticCurveTo(3.95, -4.65, 3.8, -1.4);
+        p.quadraticCurveTo(sx, -1.9, -3.75, -1.4);
+        p.closePath();
+      };
+      sk.blob(dome, iron, { dark: ironD, d: 0.6 });
+      // the ridge, raised, from the brow over the crown (or the nape)
+      const rx = back ? -0.25 : F + 0.05;
+      sk.limb([rx, -2.0, (rx + sx) / 2 + (back ? -0.2 : 0.3), -4.0, sx, -4.78], 0.5, shade(iron, 0.14), { dark: iron });
+      const band = (p: Pen) => p.roundRect(-3.95, -2.3, 7.9, 0.85, 0.35);
+      sk.blob(band, shade(iron, -0.08), { dark: ironD, d: 0.2 });
+      sk.draw((p) => {
+        p.fillStyle = '#c9c8c0';
+        for (let x = -3.15; x <= 3.3; x += 1.05) {
+          if (Math.abs(x - rx) < 0.45) continue;
+          p.beginPath();
+          p.arc(x, -1.87, 0.16, 0, TAU);
+          p.fill();
+        }
+      });
+      // the fur rim, tufted along its lower edge
+      sk.blob((p) => {
+        p.moveTo(-3.85, -1.6);
+        p.quadraticCurveTo(sx, -1.95, 3.9, -1.6);
+        p.lineTo(3.85, -1.0);
+        bumpy(p, sx, -1.45, 3.85, 0.55, 0, Math.PI, 7, 0.28);
+        p.closePath();
+      }, FUR, { dark: FUR_D, d: 0.2 });
+      if (!back) sk.blob((p) => p.roundRect(F - 0.26, -2.1, 0.52, 3.15, 0.24), iron, { dark: ironD, d: 0.12 });
+      return;
+    }
+    case 'visor': {
+      // a round helmet in the suit's colour, open at the face, its rim a
+      // shade darker, its visor flipped up over the brow (dark glass, one
+      // streak of light), a disc in its second colour at each side with a
+      // light in it; no crest, no antenna
+      const suit = L.hat;
+      const suitD = L.hatD;
+      const disc = (x: number, y: number, rx: number, ry: number) => {
+        sk.blob(ell(x, y, rx, ry), L.accent, { dark: L.accentD, d: 0.12 });
+        sk.blob(ell(x, y, rx * 0.42, ry * 0.42), LIGHT, { line: 0.4, sil: false });
+      };
+      if (back) {
+        sk.blob((p) => {
+          p.moveTo(-3.75, 1.5);
+          p.quadraticCurveTo(-4.3, -4.8, -0.1, -5.0);
+          p.quadraticCurveTo(4.2, -4.8, 3.75, 1.5);
+          p.quadraticCurveTo(0.0, 2.2, -3.75, 1.5);
+          p.closePath();
+        }, suit, { dark: suitD, d: 0.7 });
+        sk.blob((p) => p.roundRect(-3.9, 0.15, 7.8, 0.7, 0.3), shade(suit, -0.14), { dark: suitD, d: 0.15 });
+        for (const x of [-3.75, 3.75]) disc(x, -0.6, 0.5, 0.85);
+        return;
+      }
+      sk.blob((p) => {
+        p.moveTo(-3.85, 1.6);
+        p.quadraticCurveTo(-4.4, -4.75, 0.1, -5.0);
+        p.quadraticCurveTo(4.35, -4.75, 4.0, -0.35);
+        p.quadraticCurveTo(F + 0.6, -2.05, -1.55, -1.15);
+        p.quadraticCurveTo(-2.45, 0.2, -2.2, 1.85);
+        p.quadraticCurveTo(-3.05, 2.15, -3.85, 1.6);
+        p.closePath();
+      }, suit, { dark: suitD, d: 0.6 });
+      // the rim round the face
+      sk.draw((p, k) => {
+        p.beginPath();
+        p.moveTo(3.85, -0.5);
+        p.quadraticCurveTo(F + 0.6, -1.85, -1.4, -1.0);
+        p.quadraticCurveTo(-2.25, 0.2, -2.05, 1.7);
+        p.lineCap = 'round';
+        p.strokeStyle = k.ink;
+        p.lineWidth = 0.42 + k.line;
+        p.stroke();
+        p.strokeStyle = shade(suit, -0.16);
+        p.lineWidth = 0.42;
+        p.stroke();
+      });
+      // the visor, flipped up over the brow: dark glass, one streak
+      sk.blob(ell(F + 0.2, -2.65, 3.0, 0.92, -0.04), '#1e2a4a', { line: 0.6 });
+      sk.draw((p) => {
+        p.beginPath();
+        p.moveTo(F - 1.75, -2.9);
+        p.lineTo(F - 0.35, -3.1);
+        p.lineCap = 'round';
+        p.strokeStyle = alpha(WHITE, 0.85);
+        p.lineWidth = 0.24;
+        p.stroke();
+      });
+      // (a headset's cup goes over the near ear instead, see drawHead)
+      if (L.acc !== 'headset') disc(-3.45, 0.55, 0.78, 0.82);
+      disc(3.88, -0.45, 0.42, 0.75);
+      return;
+    }
+    case 'flatcap': {
+      // a newsboy cap of rust tweed: a soft crown of panels puffed out
+      // over a short stiff peak, a button on top
+      const tweed = '#8a5a3c';
+      const tweedD = '#6a4430';
+      if (!back) sk.blob(ell(F + 1.8, -1.5, 1.95, 0.52, 0.14), shade(tweed, -0.2), { dark: tweedD, d: 0.15 });
+      const crown = (p: Pen) => {
+        if (back) {
+          p.moveTo(-3.7, -1.3);
+          p.quadraticCurveTo(-4.4, -4.65, sx, -4.9);
+          p.quadraticCurveTo(4.4, -4.65, 3.7, -1.3);
+          p.quadraticCurveTo(sx, -1.85, -3.7, -1.3);
+        } else {
+          p.moveTo(-3.6, -1.35);
+          p.quadraticCurveTo(-4.45, -4.15, -1.5, -4.75);
+          p.quadraticCurveTo(1.6, -5.25, 3.7, -3.75);
+          p.quadraticCurveTo(4.75, -2.75, 3.95, -2.1);
+          p.quadraticCurveTo(sx, -1.9, -3.6, -1.35);
+        }
+        p.closePath();
+      };
+      sk.blob(crown, tweed, { dark: tweedD, d: 0.55 });
+      const bx = back ? sx : -0.2;
+      sk.draw((p, k) => {
+        // its panels' seams, and the band round it
+        p.save();
+        p.beginPath();
+        crown(p);
+        p.clip();
+        p.strokeStyle = alpha(k.ink, 0.4);
+        p.lineWidth = k.line * 0.7;
+        p.lineCap = 'round';
+        p.beginPath();
+        for (const [x1, c1] of (back ? [[-2.6, -2.0], [sx, sx], [2.7, 2.1]] : [[-2.7, -2.3], [0.6, 0.2], [3.4, 2.4]]) as Array<[number, number]>) {
+          p.moveTo(bx, -4.75);
+          p.quadraticCurveTo(c1, -3.6, x1, -2.1);
+        }
+        p.stroke();
+        p.fillStyle = alpha(tweedD, 0.85);
+        p.fillRect(-4.5, back ? -1.95 : -1.95, 9, 1.0);
+        p.restore();
+      });
+      sk.blob(circ(bx, -4.82, 0.32), LEATHER, { line: 0.5 });
+      return;
+    }
+    case 'rancher': {
+      // a cowboy hat of tan felt: the brim curled up at the sides, a creased
+      // crown with two lobes on top, a band (dark; the trim at ★8)
+      const felt = '#c49a63';
+      const feltD = '#9c7646';
+      const brim = (p: Pen) => {
+        p.moveTo(-5.25, -3.2);
+        p.quadraticCurveTo(-4.4, -2.45, sx, -2.6);
+        p.quadraticCurveTo(4.5, -2.45, 5.35, -3.2);
+        p.quadraticCurveTo(5.0, -1.55, sx, -1.45);
+        p.quadraticCurveTo(-4.9, -1.55, -5.25, -3.2);
+        p.closePath();
+      };
+      sk.blob(brim, shade(felt, -0.05), { dark: feltD, d: 0.3 });
+      const crown = (p: Pen) => {
+        p.moveTo(-2.45, -2.4);
+        p.lineTo(-2.3, -4.4);
+        p.quadraticCurveTo(-1.35, -5.3, sx - 0.15, -4.6);
+        p.quadraticCurveTo(sx + 1.05, -5.3, 2.4, -4.4);
+        p.lineTo(2.6, -2.4);
+        p.quadraticCurveTo(sx, -1.95, -2.45, -2.4);
+        p.closePath();
+      };
+      sk.blob(crown, felt, { dark: feltD, d: 0.5 });
+      sk.draw((p, k) => {
+        p.save();
+        p.beginPath();
+        crown(p);
+        p.clip();
+        p.fillStyle = L.accent;
+        p.fillRect(-3.0, -3.15, 6.0, 0.8);
+        p.beginPath();
+        p.moveTo(-3.0, -3.15);
+        p.lineTo(3.0, -3.15);
+        p.strokeStyle = k.ink;
+        p.lineWidth = k.line * 0.7;
+        p.stroke();
+        p.restore();
+        // the crease down the crown
+        p.beginPath();
+        p.moveTo(sx - 0.15, -4.55);
+        p.quadraticCurveTo(sx + 0.05, -4.0, sx - 0.05, -3.4);
+        p.strokeStyle = k.ink;
+        p.lineWidth = k.line * 0.8;
+        p.lineCap = 'round';
+        p.stroke();
+      });
+      return;
+    }
+    case 'lampcap':
+      lampCap(sk, L, back, sx);
+      return;
+    case 'mushroom':
+      toadstool(sk, L, back, sx);
+      return;
+    case 'trapper':
+      trapperHat(sk, L, back, sx);
+      return;
+    case 'peaked':
+      peakedCap(sk, L, back, sx);
+      return;
+    case 'horns':
+      grandHorns(sk, back);
+      return;
   }
 }
 
@@ -1218,6 +1527,14 @@ function goggles(sk: Sketch, back: boolean): void {
   }
 }
 
+// A headset's ear cup with its light in its colour: on the near ear from
+// in front, the far one from behind.
+function earCup(sk: Sketch, L: Look, back: boolean): void {
+  const ex = back ? 3.3 : -3.35;
+  sk.blob((p) => p.roundRect(ex - 0.6, -0.55, 1.2, 1.75, 0.5), '#3c3a48', { line: 0.6 });
+  sk.blob(circ(ex, 0.32, 0.38), L.color, { line: 0.4, sil: false });
+}
+
 function accessory(sk: Sketch, L: Look, o: HeadOpts, f: Face): void {
   const back = o.back;
   switch (L.acc) {
@@ -1233,9 +1550,7 @@ function accessory(sk: Sketch, L: Look, o: HeadOpts, f: Face): void {
         p.lineWidth = 0.48;
         p.stroke();
       });
-      const ex = back ? 3.3 : -3.35;
-      sk.blob((p) => p.roundRect(ex - 0.6, -0.55, 1.2, 1.75, 0.5), '#3c3a48', { line: 0.6 });
-      sk.blob(circ(ex, 0.32, 0.38), L.color, { line: 0.4, sil: false });
+      earCup(sk, L, back);
       if (!back) {
         sk.limb([-3.2, 0.9, -2.6, 2.3, F - 0.75, 2.45], 0.22, '#3c3a48', { line: 0.5 });
         sk.blob(circ(F - 0.65, 2.42, 0.32), '#3c3a48', { line: 0.5 });
@@ -1358,4 +1673,403 @@ function helmet(sk: Sketch, L: Look, back: boolean): void {
     },
   );
   void L;
+}
+
+// ---- the setting worlds' headwear ---------------------------------------
+
+// A little soot on a miner's near cheek.
+function soot(sk: Sketch): void {
+  sk.draw((p) => {
+    p.fillStyle = alpha('#3a302c', 0.3);
+    p.beginPath();
+    p.ellipse(F - 2.2, 1.1, 0.62, 0.3, -0.25, 0, TAU);
+    p.fill();
+    p.beginPath();
+    p.ellipse(F - 1.7, 1.48, 0.3, 0.15, -0.25, 0, TAU);
+    p.fill();
+  });
+}
+
+// ★2 in the mines: an old-time miner's soft leather cap, its short peak
+// over the brow, and on its front a brass lamp: a little can on a bracket,
+// a round reflector dish and a small flame before it, glowing. From
+// behind, the rim of the dish shows over the crown.
+function lampCap(sk: Sketch, L: Look, back: boolean, sx: number): void {
+  const { leather, leatherD, brass, reflector, flame, glow } = CLOTHES;
+  const brassD = shade(brass, -0.28);
+  const lx = back ? sx - 0.3 : F + 0.3; // the lamp's centre line
+  const dy = -4.4; // the dish's centre
+  const halo = (r: number, a: number) =>
+    sk.draw((p) => {
+      const g = p.createRadialGradient(lx, dy, 0.2, lx, dy, r);
+      g.addColorStop(0, alpha(glow, a));
+      g.addColorStop(1, alpha(glow, 0));
+      p.beginPath();
+      p.arc(lx, dy, r, 0, TAU);
+      p.fillStyle = g;
+      p.fill();
+    });
+  if (back) {
+    halo(1.9, 0.45);
+    sk.blob(circ(lx, dy, 1.0), brass, { dark: brassD, d: 0.14 });
+  }
+  const crown = (p: Pen) => {
+    p.moveTo(-3.6, -1.2);
+    p.quadraticCurveTo(-3.9, -4.4, sx, -4.5);
+    p.quadraticCurveTo(3.9, -4.4, 3.65, -1.2);
+    p.quadraticCurveTo(sx, -1.9, -3.6, -1.2);
+    p.closePath();
+  };
+  sk.blob(crown, leather, { dark: leatherD, d: 0.5 });
+  sk.draw((p, k) => {
+    // a band round the brow, a seam over the soft crown
+    p.save();
+    p.beginPath();
+    crown(p);
+    p.clip();
+    const band = (q: Pen) => {
+      q.moveTo(-4, -2.1);
+      q.quadraticCurveTo(sx, back ? -2.6 : -2.75, 4, -2.1);
+    };
+    p.beginPath();
+    band(p);
+    p.lineTo(4, -1);
+    p.lineTo(-4, -1);
+    p.closePath();
+    p.fillStyle = leatherD;
+    p.fill();
+    p.beginPath();
+    band(p);
+    p.strokeStyle = k.ink;
+    p.lineWidth = k.line * 0.8;
+    p.stroke();
+    p.beginPath();
+    p.moveTo(sx + (back ? -0.15 : 0.25), -4.45);
+    p.quadraticCurveTo(sx + (back ? -0.5 : 0.75), -3.6, sx + (back ? -0.45 : 0.7), -2.7);
+    p.lineWidth = k.line * 0.7;
+    p.stroke();
+    p.restore();
+  });
+  if (back) return;
+  // the peak, out over the brow toward the face
+  sk.blob(ell(F + 2.1, -1.4, 1.9, 0.5, 0.12), leather, { dark: leatherD, d: 0.18 });
+  // the lamp: its glow, the bracket on the crown, the dish, the can and
+  // its flame
+  halo(2.4, 0.6);
+  sk.blob((p) => p.roundRect(lx - 0.34, -3.05, 0.68, 0.9, 0.18), brass, { dark: brassD, d: 0.12 });
+  sk.blob((p) => p.roundRect(lx - 0.45, -3.6, 0.9, 0.7, 0.22), brass, { dark: brassD, d: 0.12 });
+  sk.blob(circ(lx, dy, 1.05), brass, { dark: brassD, d: 0.14 });
+  sk.blob(circ(lx, dy, 0.7), reflector, { dark: shade(reflector, -0.12), d: 0.12, line: 0.45, sil: false });
+  // the flame, out of the dish's centre
+  const tongue = (y0: number, h: number, w: number) => (p: Pen) => {
+    p.moveTo(lx, y0 - h);
+    p.quadraticCurveTo(lx + w, y0 - h * 0.3, lx, y0);
+    p.quadraticCurveTo(lx - w, y0 - h * 0.3, lx, y0 - h);
+    p.closePath();
+  };
+  sk.blob(tongue(-3.92, 1.3, 0.95), flame, { line: 0.45, sil: false });
+  sk.draw((p) => {
+    p.beginPath();
+    tongue(-4.02, 0.5, 0.26)(p);
+    p.fillStyle = glow;
+    p.fill();
+  });
+}
+
+// ★2 in the caverns: a toadstool's cap, a wide round dome (no point, no
+// droop) spotted in cream, its gills showing under the front edge.
+function toadstool(sk: Sketch, L: Look, back: boolean, sx: number): void {
+  const cap = L.hat;
+  const capD = L.hatD;
+  const cx = back ? sx : sx + 0.1;
+  if (!back) {
+    // the gills, under the rim
+    const gills = (p: Pen) => {
+      p.moveTo(cx - 3.75, -1.45);
+      p.quadraticCurveTo(cx, 0.05, cx + 3.75, -1.45);
+      p.lineTo(cx + 3.75, -1.8);
+      p.lineTo(cx - 3.75, -1.8);
+      p.closePath();
+    };
+    sk.blob(gills, CLOTHES.gills);
+    sk.draw((p, k) => {
+      if (k.px < 5) return;
+      p.save();
+      p.beginPath();
+      gills(p);
+      p.clip();
+      p.strokeStyle = alpha(k.ink, 0.35);
+      p.lineWidth = k.line * 0.6;
+      p.beginPath();
+      for (let x = -2.8; x <= 3.0; x += 0.8) {
+        p.moveTo(cx + x * 0.92, -1.2);
+        p.lineTo(cx + x, -0.6);
+      }
+      p.stroke();
+      p.restore();
+    });
+  }
+  const dome = (p: Pen) => {
+    p.moveTo(cx - 4.2, -1.3);
+    p.bezierCurveTo(cx - 4.5, -4.65, cx - 2.35, -5.5, cx, -5.5);
+    p.bezierCurveTo(cx + 2.35, -5.5, cx + 4.5, -4.65, cx + 4.2, -1.3);
+    p.quadraticCurveTo(cx, back ? -1.95 : -1.1, cx - 4.2, -1.3);
+    p.closePath();
+  };
+  sk.blob(dome, cap, { dark: capD, d: 0.6 });
+  sk.draw((p, k) => {
+    p.save();
+    p.beginPath();
+    dome(p);
+    p.clip();
+    // the spots, flat on the dome
+    const m = back ? -1 : 1;
+    const spots: ReadonlyArray<readonly [number, number, number, number]> = [
+      [-2.6, -3.15, 0.62, 0.46], [-0.4, -4.6, 0.56, 0.36], [1.55, -3.55, 0.74, 0.54],
+      [3.3, -2.3, 0.44, 0.4], [-1.15, -2.2, 0.42, 0.33], [0.75, -1.85, 0.3, 0.24],
+    ];
+    for (const [x, y, rx, ry] of spots) {
+      p.beginPath();
+      p.ellipse(cx + m * x, y, rx, ry, m * x * 0.08, 0, TAU);
+      p.fillStyle = CLOTHES.spots;
+      p.fill();
+      p.strokeStyle = k.ink;
+      p.lineWidth = k.line * 0.55;
+      p.stroke();
+    }
+    // a gloss toward the light
+    if (k.px >= 5) {
+      p.beginPath();
+      p.ellipse(cx - 0.2, -2.9, 3.35, 2.25, 0, Math.PI * 1.1, Math.PI * 1.32);
+      p.strokeStyle = alpha(WHITE, 0.55);
+      p.lineWidth = 0.32;
+      p.lineCap = 'round';
+      p.stroke();
+    }
+    p.restore();
+  });
+}
+
+// ★2 in the snows: a trapper hat: a rounded crown, its fur front flap
+// turned up (a fur band all round, from behind), two fur ear flaps hanging
+// to the jaw with little ties. No pom-pom.
+function trapperHat(sk: Sketch, L: Look, back: boolean, sx: number): void {
+  const crown = CLOTHES.trapper;
+  const crownD = shade(crown, -0.26);
+  const fur = CLOTHES.snowFur;
+  const furD = CLOTHES.snowFurD;
+  // the ear flaps and their ties
+  for (const x of back ? [-3.5, 3.45] : [-3.4, 3.6]) {
+    sk.blob((p) => {
+      p.moveTo(x - 0.82, -2.1);
+      p.lineTo(x + 0.78, -2.1);
+      p.quadraticCurveTo(x + 0.82, 1.15, x + 0.5, 1.7);
+      p.quadraticCurveTo(x, 2.2, x - 0.5, 1.7);
+      p.quadraticCurveTo(x - 0.86, 1.15, x - 0.82, -2.1);
+      p.closePath();
+    }, fur, { dark: furD, d: 0.3 });
+    sk.draw((p, k) => {
+      if (k.px < 4) return;
+      p.strokeStyle = k.ink;
+      p.lineWidth = k.line * 0.7;
+      p.lineCap = 'round';
+      p.beginPath();
+      p.moveTo(x, 1.95);
+      p.quadraticCurveTo(x + 0.18, 2.3, x + 0.02, 2.65);
+      p.stroke();
+      p.beginPath();
+      p.arc(x + 0.02, 2.7, 0.12, 0, TAU);
+      p.fillStyle = k.ink;
+      p.fill();
+    });
+  }
+  const dome = (p: Pen) => {
+    p.moveTo(-3.6, -1.6);
+    p.quadraticCurveTo(-3.95, -5.25, sx, -5.25);
+    p.quadraticCurveTo(4.05, -5.25, 3.7, -1.6);
+    p.quadraticCurveTo(sx, -2.2, -3.6, -1.6);
+    p.closePath();
+  };
+  sk.blob(dome, crown, { dark: crownD, d: 0.55 });
+  sk.draw((p, k) => {
+    // the crown's seam
+    p.beginPath();
+    p.moveTo(sx + (back ? -0.1 : 0.2), -5.1);
+    p.quadraticCurveTo(sx + (back ? -0.35 : 0.55), -4.2, sx + (back ? -0.3 : 0.5), -3.4);
+    p.strokeStyle = k.ink;
+    p.lineWidth = k.line * 0.7;
+    p.lineCap = 'round';
+    p.stroke();
+  });
+  // the fur flap turned up over the brow (the back flap, from behind)
+  // its top edge in tufts, rising to `top` over the middle
+  const top = back ? -3.15 : -3.6;
+  const edge = (u: number) => -2.55 + (top + 2.55) * Math.sin(Math.PI * u);
+  const flap = (p: Pen) => {
+    p.moveTo(-3.85, -1.0);
+    p.lineTo(-3.8, -2.55);
+    const n = 6;
+    const x0 = -3.8;
+    const x1 = 3.95;
+    for (let j = 0; j < n; j++) {
+      const ua = (j + 0.5) / n;
+      const ub = (j + 1) / n;
+      p.quadraticCurveTo(x0 + (x1 - x0) * ua, edge(ua) - 0.32, x0 + (x1 - x0) * ub, edge(ub));
+    }
+    p.lineTo(3.95, -1.2);
+    p.quadraticCurveTo(sx, back ? -0.7 : -0.6, -3.85, -1.0);
+    p.closePath();
+  };
+  sk.blob(flap, fur, { dark: furD, d: 0.3 });
+  sk.draw((p, k) => {
+    if (k.px < 5) return;
+    // the fur's lie
+    p.save();
+    p.beginPath();
+    flap(p);
+    p.clip();
+    p.strokeStyle = alpha(k.ink, 0.22);
+    p.lineWidth = k.line * 0.6;
+    p.lineCap = 'round';
+    p.beginPath();
+    for (let x = -3.1; x <= 3.4; x += 0.85) {
+      p.moveTo(x, -1.25);
+      p.lineTo(x + 0.15, -1.85);
+    }
+    p.stroke();
+    p.restore();
+  });
+  // (a headset's cup goes over the ear flap)
+  if (L.acc === 'headset') earCup(sk, L, back);
+}
+
+// ★2 in the vault: a peaked cap: a flat crown wider than its dark band, a
+// glossy black peak, a gold cord across the front and a small plain brass
+// oval (no emblem, no words) over it.
+function peakedCap(sk: Sketch, L: Look, back: boolean, sx: number): void {
+  const c = L.hat;
+  const cd = L.hatD;
+  const cx = back ? sx : sx + 0.15;
+  const band = (p: Pen) => p.roundRect(-3.5, -2.65, 7.1, 1.35, 0.4);
+  sk.blob(band, CLOTHES.capBand, { dark: shade(CLOTHES.capBand, -0.25), d: 0.2 });
+  const crown = (p: Pen) => {
+    p.moveTo(-3.4, -2.35);
+    p.lineTo(cx - 4.3, -3.95);
+    p.ellipse(cx, -4.0, 4.4, 1.05, 0, Math.PI, Math.PI * 2);
+    p.lineTo(3.55, -2.35);
+    p.closePath();
+  };
+  sk.blob(crown, c, { dark: cd, d: 0.4 });
+  sk.draw((p, k) => {
+    // the front edge of the flat top
+    p.beginPath();
+    p.ellipse(cx, -4.0, 4.4, 1.05, 0, Math.PI * 0.05, Math.PI * 0.95);
+    p.strokeStyle = k.ink;
+    p.lineWidth = k.line * 0.8;
+    p.stroke();
+    if (back) return;
+    // the gold cord across the band's front
+    p.beginPath();
+    p.moveTo(-2.9, -2.2);
+    p.quadraticCurveTo(F, -2.0, 3.2, -2.25);
+    p.lineCap = 'round';
+    p.lineWidth = 0.24 + k.line;
+    p.stroke();
+    p.strokeStyle = CLOTHES.goldCord;
+    p.lineWidth = 0.24;
+    p.stroke();
+  });
+  if (back) return;
+  sk.blob(ell(F + 0.2, -3.2, 0.5, 0.36), CLOTHES.oval, { dark: shade(CLOTHES.oval, -0.22), d: 0.1, line: 0.5 });
+  // the peak, glossy, out over the brow
+  const peak = ell(F + 1.2, -1.3, 2.95, 0.66, 0.08);
+  sk.blob(peak, CLOTHES.peak, { dark: '#0d0e14', d: 0.15 });
+  sk.draw((p) => {
+    p.beginPath();
+    p.ellipse(F + 0.9, -1.48, 2.0, 0.26, 0.08, Math.PI * 1.05, Math.PI * 1.75);
+    p.strokeStyle = alpha(WHITE, 0.7);
+    p.lineWidth = 0.18;
+    p.lineCap = 'round';
+    p.stroke();
+  });
+}
+
+// A ram's horn from its root on the head: up, out over a curl round
+// (cx, cy) and down, narrowing to its tip (s: -1 the screen-left horn, +1
+// the right). Its outline, and points across it for the ridges.
+function ramHorn(cx: number, cy: number, root: readonly [number, number], s: number): { shape: (p: Pen) => void; ridges: Array<[number, number, number, number]> } {
+  const ky = 1.25; // the curl a little taller than wide
+  const r0 = Math.hypot(root[0] - cx, (root[1] - cy) / ky);
+  const a0 = Math.atan2((root[1] - cy) / ky, root[0] - cx);
+  const T = 5.4;
+  const n = 30;
+  const at = (t: number): [number, number] => {
+    const r = r0 * (1 - 0.6 * t);
+    const a = a0 + s * t * T;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a) * ky];
+  };
+  const left: Array<[number, number]> = [];
+  const right: Array<[number, number]> = [];
+  const ridges: Array<[number, number, number, number]> = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const [x, y] = at(t);
+    const [x1, y1] = at(Math.min(1, t + 0.01));
+    const [x0, y0] = at(Math.max(0, t - 0.01));
+    const tl = Math.hypot(x1 - x0, y1 - y0) || 1;
+    const nx = -(y1 - y0) / tl;
+    const ny = (x1 - x0) / tl;
+    const w = (1.15 - 0.8 * t) / 2;
+    left.push([x + nx * w, y + ny * w]);
+    right.push([x - nx * w, y - ny * w]);
+    if (i % 3 === 1 && t < 0.9) ridges.push([x + nx * w * 0.85, y + ny * w * 0.85, x - nx * w * 0.85, y - ny * w * 0.85]);
+  }
+  const shape = (p: Pen) => {
+    p.moveTo(left[0][0], left[0][1]);
+    for (const [x, y] of left.slice(1)) p.lineTo(x, y);
+    for (const [x, y] of right.reverse()) p.lineTo(x, y);
+    right.reverse();
+    p.closePath();
+  };
+  return { shape, ridges };
+}
+
+// ★2 in hell: grand gold ram's horns in place of the nubs, rising off the
+// crown and curling back and down beside the head.
+function grandHorns(sk: Sketch, back: boolean): void {
+  const x0 = back ? -0.15 : 0.25;
+  for (const s of [-1, 1]) {
+    const { shape, ridges } = ramHorn(x0 + s * 3.2, -2.6, [x0 + s * 1.35, -3.15], s);
+    sk.blob(shape, CLOTHES.horn, { dark: CLOTHES.hornD, d: 0.2 });
+    sk.draw((p, k) => {
+      if (k.px < 4) return;
+      p.strokeStyle = alpha(k.ink, 0.45);
+      p.lineWidth = k.line * 0.6;
+      p.lineCap = 'round';
+      p.beginPath();
+      for (const [ax, ay, bx, by] of ridges) {
+        p.moveTo(ax, ay);
+        p.lineTo(bx, by);
+      }
+      p.stroke();
+    });
+  }
+}
+
+// A devil's little bone horns: a cone either side of the crown, curving a
+// little outward (between a cat's ears, beside an alien's antennae).
+function nubs(sk: Sketch, L: Look, back: boolean): void {
+  const x0 = back ? -0.15 : 0.25;
+  const [dx, ry] = L.sp === 'cat' ? [0.55, -2.75] : L.sp === 'alien' ? [1.95, -2.75] : [1.55, -2.8];
+  for (const s of [-1, 1]) {
+    const bx = x0 + s * dx;
+    const tip: [number, number] = [bx + s * 0.42, ry - 1.12];
+    const horn = (p: Pen) => {
+      p.moveTo(bx - 0.38, ry + 0.1);
+      p.quadraticCurveTo(bx - 0.3 + s * 0.05, ry - 0.7, tip[0], tip[1]);
+      p.quadraticCurveTo(bx + 0.42 + s * 0.12, ry - 0.55, bx + 0.38, ry + 0.1);
+      p.closePath();
+    };
+    sk.blob(horn, CLOTHES.bone, { dark: CLOTHES.boneD, d: 0.14 });
+  }
 }

@@ -29,8 +29,9 @@ export const ISLANDS: readonly SlotKind[] = ['run', 'web', 'think'];
 
 // Room size clamps (units): the minimum still fits every prop (the stage
 // pans a camera when the canvas is smaller); the maximum keeps the room
-// lively on huge terminals.
-export const LIMITS = { minSide: 72, maxSide: 256, minH: 34, maxH: 72 } as const;
+// lively on huge terminals (a 200-column one reaches it), where a bigger
+// floor would only spread the stations and decor thin.
+export const LIMITS = { minSide: 72, maxSide: 160, minH: 34, maxH: 72 } as const;
 
 const MARGIN = 6; // units kept free around the room
 const STAND = 4; // units between a prop's front and its agent's spot
@@ -381,84 +382,4 @@ export function keepClear(L: Layout): Uint8Array {
     for (let k = 0; k <= n; k++) mark(a.x + ((h.x - a.x) * k) / n, a.y + ((h.y - a.y) * k) / n, 2);
   }
   return keep;
-}
-
-// An elliptical patch of floor centred on (x, y) with radii (rx, ry).
-export type Site = { x: number; y: number; rx: number; ry: number };
-
-// Places one patch per requested radius pair (floor decor, a rug, a pool)
-// on open floor in front of the work area: clear of `keepClear` cells by
-// `gap` units, off the walls and the front cuts, apart from each other.
-// Radii shrink when nothing fits; a pair that never fits is dropped.
-// `keep` stands in for the kept cells (a mask of the same shape).
-export function openSites(L: Layout, rng: Rng, radii: ReadonlyArray<readonly [number, number]>, gap = 3, keep: Uint8Array = keepClear(L)): Site[] {
-  const { W, D, T } = L;
-  // Chebyshev distance from every floor cell to the nearest kept cell.
-  const dist = new Int32Array(W * D).fill(-1);
-  const queue: number[] = [];
-  for (let i = 0; i < W * D; i++) {
-    if (keep[i] || i % W < T || i < W * T) {
-      dist[i] = 0;
-      queue.push(i);
-    }
-  }
-  for (let q = 0; q < queue.length; q++) {
-    const i = queue[q];
-    const x = i % W;
-    const y = (i - x) / W;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= W || ny >= D) continue;
-        const j = nx + W * ny;
-        if (dist[j] < 0) {
-          dist[j] = dist[i] + 1;
-          queue.push(j);
-        }
-      }
-    }
-  }
-  // Agents walk inside the hull of their spots; prefer the floor beyond it.
-  const reach = Math.max(...L.slots.map((s) => s.spot.x + s.spot.y));
-  const out: Site[] = [];
-  for (const [rx0, ry0] of radii) {
-    for (let shrink = 0; shrink < 4; shrink++) {
-      const rx = Math.max(2, rx0 - shrink);
-      const ry = Math.max(2, ry0 - shrink);
-      const r = Math.max(rx, ry);
-      const ok: Array<[number, number]> = [];
-      const front: Array<[number, number]> = [];
-      for (let y = T + r + 2; y < D - r - 3; y++) {
-        for (let x = T + r + 2; x < W - r - 3; x++) {
-          if (dist[x + W * y] < r + gap) continue;
-          if (out.some((o) => Math.hypot(o.x - x, o.y - y) < Math.max(o.rx, o.ry) + r + 4)) continue;
-          ok.push([x, y]);
-          if (x + y >= reach + r + 4) front.push([x, y]);
-        }
-      }
-      const pool = front.length ? front : ok;
-      if (!pool.length) continue;
-      // Near the middle of the free floor, give or take.
-      let mx = 0;
-      let my = 0;
-      for (const [x, y] of pool) {
-        mx += x / pool.length;
-        my += y / pool.length;
-      }
-      const spread = Math.max(4, Math.sqrt(pool.length) / 3);
-      let best = pool[0];
-      let cost = Infinity;
-      for (const p of pool) {
-        const c = Math.hypot(p[0] - mx, p[1] - my) + rng.range(0, spread);
-        if (c < cost) {
-          cost = c;
-          best = p;
-        }
-      }
-      out.push({ x: best[0], y: best[1], rx, ry });
-      break;
-    }
-  }
-  return out;
 }

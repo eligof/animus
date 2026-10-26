@@ -39,7 +39,7 @@ export const fungal: WorldDef = {
   pois: fungalPois,
   stations: STATIONS,
   decor: DECOR,
-  costume: 'wizard',
+  costume: 'forager',
   critter: { kind: 'slime', body: hex('#4fd8a8') }, // a glowing slime
   finale: { colors: [[255, 211, 74]] }, // gold dust
   build: { colors: [hex('#d8d0b8'), hex('#8a44a0'), hex('#4fd8a8')], shape: 'house' }, // bone and purple obsidian, crowned by glowing fungus

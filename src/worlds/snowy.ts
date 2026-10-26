@@ -43,7 +43,7 @@ export const snowy: WorldDef = {
   pois: snowyPois,
   stations: STATIONS,
   decor: DECOR,
-  costume: 'wizard',
+  costume: 'parka',
   critter: { kind: 'fox', body: hex('#eef3f8') }, // a snow fox
   finale: { colors: [[255, 211, 74]] }, // gold dust
   build: { colors: [hex('#c9d7e8'), hex('#74b6e6'), hex('#fff2c8')], shape: 'pyramid' }, // packed snow and ice, crowned by a lamp

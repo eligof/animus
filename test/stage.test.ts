@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LANE, Stage, onScreen, stationKindFor } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
-import { slotRect } from '../src/world/layout.ts';
+import { LIMITS, planLayout, slotRect } from '../src/world/layout.ts';
+import { computeLayout } from '../src/ui/layout.ts';
 import { THEMES } from '../src/themes/index.ts';
 import { footprint, heightAt, toWorld } from '../src/world/room.ts';
 import type { Layout, Slot } from '../src/world/types.ts';
@@ -227,14 +228,15 @@ test('a big room is crossed at a jog, and the strides keep up', () => {
   const stage = newStage({ x: 0, y: 1, w: 260, h: 80 });
   run(stage, [agent('j', 'write')], 0.05);
   const priv = stage as unknown as { L: Layout; move(a: unknown, dt: number): void };
-  assert.equal(priv.L.W, 256);
+  assert.equal(priv.L.W, LIMITS.maxSide);
   const a = stage.actors()[0];
   Object.assign(a, { x: priv.L.T + 10, y: priv.L.T + 10, path: [{ x: priv.L.W - 20, y: priv.L.D - 20 }], gait: 0 });
   priv.move(a, 0.1);
   const went = Math.hypot(a.x - priv.L.T - 10, a.y - priv.L.T - 10);
-  // A walk is 22 units a second: a long trip in a room twice JOG_ROOM wide
-  // goes at three times that.
-  assert.ok(went > 0.1 * 22 * 2.9, `${went.toFixed(2)} units in 0.1 s`);
+  // A walk is 22 units a second: a long trip goes at a jog, 1.5 times
+  // that, and faster again in a room wider than JOG_ROOM (128 units).
+  const pace = 1.5 * (priv.L.W / 128);
+  assert.ok(went > 0.1 * 22 * pace * 0.97, `${went.toFixed(2)} units in 0.1 s`);
   assert.ok(a.gait > 0, 'the strides did not quicken');
 });
 
@@ -364,14 +366,40 @@ test('every figure stands on the floor where the camera says, inside the canvas 
   assert.ok(f.camera.s >= 3 && f.camera.s <= 5.5, `${f.camera.s.toFixed(2)} px a unit`);
 });
 
-test('the cell size sets the canvas, and the room is planned for it', () => {
+test('the cell size sets the canvas; the room stays as it is, refitted', () => {
   const stage = newStage(WIDE);
   const a = stage.frame(NOW)!;
   stage.setCell(8, 16);
   const b = stage.frame(NOW)!;
   assert.deepEqual([b.camera.w, b.camera.h, b.camera.cell.w, b.camera.cell.h], [WIDE.w * 8, WIDE.h * 16, 8, 16]);
-  assert.ok(b.room.L.W < a.room.L.W, 'smaller cells, same room');
+  assert.deepEqual(b.room.L, a.room.L, 'smaller cells, another room');
+  assert.ok(b.camera.s < a.camera.s, 'smaller cells, the room not refitted');
   assert.deepEqual(stage.cellSize, { w: 8, h: 16 });
+});
+
+test('the room is planned from the terminal\'s cells, not its pixels: a HiDPI screen shows the same room, sharper', () => {
+  const scene = computeLayout(150, 46).scene;
+  const staged = (cell: { w: number; h: number }, r = scene) => {
+    const stage = new Stage(mines);
+    stage.setCell(cell.w, cell.h);
+    stage.layout(r);
+    return stage;
+  };
+  const lo = staged({ w: 10, h: 20 });
+  const hi = staged({ w: 19, h: 42 });
+  // A 10 x 20 cell at 4 canvas pixels a unit.
+  const want = planLayout((scene.w * 10) / 4, (scene.h * 20) / 4, 'mines');
+  assert.deepEqual([layoutOf(lo).W, layoutOf(lo).D, layoutOf(lo).H], [want.W, want.D, want.H]);
+  assert.deepEqual(layoutOf(hi), layoutOf(lo), 'a 2x screen gets another room');
+  // The fit maps the room to the real pixels: about twice as many a unit.
+  const s = (st: Stage) => st.frame(NOW)!.camera.s;
+  assert.ok(s(hi) > 1.8 * s(lo), `${s(hi).toFixed(2)} vs ${s(lo).toFixed(2)} px a unit`);
+  // A huge terminal's room stays lively.
+  for (const cell of [{ w: 10, h: 20 }, { w: 19, h: 42 }]) {
+    const big = layoutOf(staged(cell, computeLayout(300, 90).scene));
+    assert.ok(big.W <= 160 && big.D <= 160, `${big.W} x ${big.D} units for 300 x 90 cells of ${cell.w} x ${cell.h}`);
+    assert.equal(big.W, LIMITS.maxSide);
+  }
 });
 
 test('zoom steps in and out, never past fitting the room, and the selection gets a close-up', () => {
@@ -755,7 +783,7 @@ test("a level-up showers the world's confetti and pops ★N! over the agent, who
     const bits = particlesOf(stage).filter((p) => p.kind === 'confetti');
     assert.ok(bits.length > 5 && bits.every((p) => w.finale.colors.some((c) => c.join() === p.color.join())), `${w.id}: confetti in the world's colours`);
     const { s, f } = text(stage, now);
-    const mark = f.marks.find((m) => m.ch === '★3!');
+    const mark = f.labels.find((l) => l.text === '★3!');
     assert.ok(mark, 'the mark');
     assert.deepEqual(mark.ink, w.palette.warn);
     assert.ok(s.toText().split('\n')[mark.row].includes('★3!'), 'drawn as text');
@@ -765,10 +793,76 @@ test("a level-up showers the world's confetti and pops ★N! over the agent, who
     assert.equal(stage.lookOf(a, now).pose, 'cheer');
     // It rises and is gone in a few seconds.
     now = run(stage, crew, 3.5, now);
-    assert.ok(!stage.frame(now)!.marks.some((m) => m.ch === '★3!'));
+    assert.ok(!stage.frame(now)!.labels.some((l) => l.text === '★3!'));
   }
   // Nobody by that id: nothing happens.
   newStage().levelUp('nobody', 2);
+});
+
+test("a level-up's ★N! rises on a dark pill of its own, over any label it passes, in the word's ink, inside the scene", () => {
+  for (const w of [mines, THEMES.find((t) => t.id === 'cafe')!]) {
+    const stage = newStage(RECT, w);
+    const crew = [agent('a', 'idle', { crew: '/p', level: 3 }), agent('b', 'read'), agent('c', 'write')];
+    let now = run(stage, crew, 4);
+    stage.levelUp('a', 3);
+    let rising = 0;
+    let through = 0;
+    const rows = new Set<number>();
+    for (let i = 0; i < 50; i++) {
+      now = run(stage, crew, 0.05, now);
+      const { s, f } = text(stage, now);
+      const k = f.labels.findIndex((l) => l.text === '★3!');
+      if (k < 0) continue;
+      rising++;
+      const word = f.labels[k];
+      rows.add(word.row);
+      // A pill in the world's panel colour, near opaque, just under the word.
+      assert.deepEqual(word.color, w.palette.panel, `${w.id}: the pill's colour`);
+      assert.ok(word.alpha >= 0.85, `${w.id}: alpha ${word.alpha}`);
+      assert.equal(word.w, 3);
+      assert.ok(word.bold);
+      assert.deepEqual(word.ink, w.palette.warn);
+      const r = f.camera.cells;
+      assert.ok(word.col >= r.x && word.col + word.w <= r.x + r.w && word.row >= r.y && word.row < r.y + r.h, `${w.id}: outside the scene`);
+      // Over every label that shares its cells: those come before it (so
+      // the scene lays its pill over theirs, and its text goes on last).
+      const overlaps = (l: (typeof f.labels)[number]) => l.row === word.row && l.col < word.col + word.w && word.col < l.col + l.w;
+      assert.ok(f.labels.slice(k + 1).every((l) => !overlaps(l)), `${w.id}: a label over the word`);
+      if (f.labels.slice(0, k).some(overlaps)) through++;
+      // Its cells hold the word, in its ink.
+      [...'★3!'].forEach((ch, j) => {
+        assert.equal(s.ch[word.row * s.width + word.col + j], ch, `${w.id}: cell ${j}`);
+        assert.deepEqual(s.fgAt(word.col + j, word.row), w.palette.warn, `${w.id}: ink of cell ${j}`);
+      });
+      // It is not drawn again as a bare mark.
+      assert.ok(!f.marks.some((m) => m.ch.includes('★')));
+    }
+    assert.ok(rising > 30, `${w.id}: ${rising} frames of the word`);
+    assert.ok(rows.size > 1, `${w.id}: it never rose`);
+    assert.ok(through > 0, `${w.id}: it never passed through a label`);
+  }
+});
+
+test("a level-up's word by the scene's edge stays inside it, pill and all", () => {
+  const stage = newStage();
+  const crew = [agent('a', 'idle', { crew: '/p', level: 3 })];
+  const now = run(stage, crew, 3);
+  for (let i = 0; i < 40; i++) stage.frame(now); // the camera settled
+  for (const [edge, level] of [['left', 12], ['right', 13]] as const) {
+    stage.levelUp('a', level);
+    const g = (stage as unknown as { glyphs: Array<{ x: number; y: number }> }).glyphs.at(-1)!;
+    // Moved along the screen (its row kept) to the scene's first or last column.
+    const cam = stage.frame(now)!.camera;
+    const px = edge === 'left' ? cam.cell.w / 2 : cam.w - cam.cell.w / 2;
+    const u = (px - cam.ox) / cam.s;
+    const sum = g.x + g.y;
+    [g.x, g.y] = [(sum + u) / 2, (sum - u) / 2];
+    const f = stage.frame(now)!;
+    const word = f.labels.find((l) => l.text === `★${level}!`);
+    assert.ok(word, `${edge}: the word`);
+    assert.ok(word.col >= RECT.x && word.col + word.w <= RECT.x + RECT.w, `${edge}: cols ${word.col}..${word.col + word.w}`);
+    assert.equal(word.col, edge === 'left' ? RECT.x : RECT.x + RECT.w - word.w, `${edge}: against the edge`);
+  }
 });
 
 test('figures show how their meters say they feel, and what their level lets them wear', () => {
@@ -1049,7 +1143,7 @@ test("while its ★N! rises a figure shows no emote, not even one a neighbour's 
   for (let i = 0; i < 50; i++) {
     now = run(stage, done, 0.05, now);
     const f = stage.frame(now)!;
-    if (!f.marks.some((m) => m.ch === '★3!')) continue;
+    if (!f.labels.some((l) => l.text === '★3!')) continue;
     rising++;
     assert.equal(f.figures.find((g) => g.id === 'a')!.emote, undefined, `frame ${i}: an emote over the ★3!`);
     if (a.mind.emote && a.mind.emote.born <= stage.life.clock) hushed++;
@@ -1076,7 +1170,7 @@ test('a level-up bursts over one hauling a block, who keeps carrying it rather t
   for (let i = 0; i < 28 && carrying(); i++) {
     now = run(stage, crew, 0.05, now);
     const f = stage.frame(now)!;
-    word ||= f.marks.some((m) => m.ch === '★3!');
+    word ||= f.labels.some((l) => l.text === '★3!');
     if (carrying()) assert.equal(f.figures[0].pose, 'carry', `frame ${i}`);
   }
   assert.ok(word, 'the word');

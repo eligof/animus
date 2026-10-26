@@ -55,7 +55,12 @@ and is remembered; a remembered scene is ignored in a terminal that cannot
 show it.
 
 The scene is outlined cartoon art in 2:1 isometric, drawn at your
-terminal's cell size in pixels. Names, speech bubbles, the card and the
+terminal's cell size in pixels. The room is sized from the terminal's
+columns and rows, not its pixels, so a HiDPI screen shows the same room,
+only sharper, and on a very large terminal it stops growing instead of
+turning big and empty. The furniture between the stations stands along the
+back walls, in the corners and beside the stations, never loose at the
+front of the room. Names, speech bubbles, the card and the
 chat are terminal text over the picture, so they stay crisp at any zoom.
 The picture goes out as a stack of sprites: each is sent once and the
 terminal keeps it, so a frame only moves what changed. It runs at 30 frames
@@ -72,10 +77,13 @@ hands it back. `l` turns the lamp light and glows off and on.
 | ![Orbital Station](docs/screenshots/station.png)<br>**Orbital Station** `station`<br>A cosy deck in orbit, a planet turning past the glass | ![Cozy Café](docs/screenshots/cafe.png)<br>**Cozy Café** `cafe`<br>Rain on the windows, espresso and a cat by the fire |
 | ![Fungal Caverns](docs/screenshots/fungal.png)<br>**Fungal Caverns** `fungal`<br>Giant mushrooms, glowing spores and a pit of toxic sludge | ![Snowy Depths](docs/screenshots/snowy.png)<br>**Snowy Depths** `snowy`<br>Frozen falls, drifted snow and a pond iced over |
 | ![The Vault](docs/screenshots/vault.png)<br>**The Vault** `vault`<br>Deposit boxes, gold under amber lamps and acid in the pit | ![Hell](docs/screenshots/hell.png)<br>**Hell** `hell`<br>Lava lakes, brimstone and the bones of the damned |
+| ![Dust Outpost](docs/screenshots/dunes.png)<br>**Dust Outpost** `dunes`<br>Scrap walls, hide awnings and sand on the wind | ![Longhall](docs/screenshots/meadhall.png)<br>**Longhall** `meadhall`<br>Firelight on carved timber, snow at the high windows, mead on the long table |
+| ![Starfall Base](docs/screenshots/starfall.png)<br>**Starfall Base** `starfall`<br>Two moons over a pink sky, strange flora past the glass | ![Atomic Shelter](docs/screenshots/shelter.png)<br>**Atomic Shelter** `shelter`<br>Riveted steel and a jukebox, deep under the wasteland |
+| ![Frontier Colony](docs/screenshots/colony.png)<br>**Frontier Colony** `colony`<br>Stone and planks under a big sky, a campfire and a husky | |
 
 `node bin/animus.js --list-themes` prints them. `t` / `T` step through the
-worlds, `1`–`9` and `0` jump to one, `p` opens a picker with a live preview.
-The last world you picked is remembered.
+worlds, `1`–`9` and `0` jump to one of the first ten, `p` opens a picker
+with a live preview. The last world you picked is remembered.
 
 ## The agent card
 
@@ -195,7 +203,7 @@ style:
 
 | level | XP | unlocks |
 | --- | --- | --- |
-| ★2 | 100 | a hat: a beanie in the café, a mortarboard in the lab, a party hat in the club, a cap in the den, an antenna on the station, a grand wizard's hat everywhere else |
+| ★2 | 100 | a hat: a leather cap with a lamp in the mines, a mortarboard in the lab, a party hat in the club, a cap worn backwards in the den, an antenna on the station, a beanie in the café, a toadstool cap in the caverns, a trapper hat in the snows, a peaked guard's cap in the vault, curled gold horns in hell, a wide straw cone at the outpost, an iron helm in the longhall, a helmet with its visor up at the base, a newsboy cap in the shelter, a cowboy hat in the colony |
 | ★3 | 250 | a badge on the shirt |
 | ★5 | 1,000 | a desk upgrade (a plant, a steaming mug or a trophy) by its favourite station, the one it has worked at most since animus started |
 | ★8 | 8,000 | its outfit in other colours |
@@ -254,18 +262,25 @@ Idle and finished agents fetch blocks and raise a build on the room's
 plazas: a hologram of the goal (a tower, house, pyramid, statue or machine,
 by world) fills in block by block, and the crew cheers every quarter.
 
-Leads wear a headset. Subagents dress by type: reviewers wear glasses,
-explorers a miner's lamp, planners and architects a beret, testers goggles,
-security agents a hood (from ★2 the level's hat takes the place of the
-lamp, beret or hood). Species (human, robot, cat, alien, ghost), hair and
-colours come from the agent's id, so an agent looks the same every time.
+Each world dresses its crew for its setting: overalls in the mines, lab
+coats in the lab, party clothes in the club, hoodies in the den, space
+suits on the station, everyday clothes in the café, a forager's capelet in
+the caverns, a parka in the snows, a guard's uniform in the vault, a
+devil's robe in hell, a rawhide coat at the outpost, a fur mantle in the
+longhall, an exosuit at the base, a teal jumpsuit in the shelter and a
+duster in the colony. Leads wear a headset. Subagents dress by type:
+reviewers wear glasses, explorers a miner's lamp, planners and architects
+a beret, testers goggles, security agents a hood (from ★2 the world's
+level hat takes the place of the lamp, beret or hood). Species (human,
+robot, cat, alien, ghost), hair and colours come from the agent's id, so
+an agent looks the same every time.
 
 ## Keys
 
 | key | action |
 | --- | --- |
 | `t` / `T` | next / previous world |
-| `1`–`9`, `0` | jump to a world (`0` is the tenth) |
+| `1`–`9`, `0` | jump to one of the first ten worlds (`0` is the tenth) |
 | `p` | world picker with live preview (`↑` `↓` browse, `enter` keep, `esc` go back) |
 | `tab` / `shift-tab`, `←` `→` | select the next / previous agent (the scene zooms in and follows it) |
 | `i` | the selected agent's card on / off |
@@ -350,11 +365,13 @@ npx --no-install tsc -p tsconfig.json
 node scripts/scene-shot.ts cafe /tmp/cafe.png  # render a world with the demo crew to PNG
 ```
 
-`scripts/scene-shot.ts <world> <out.png>` takes `--at <s>` (demo time,
-default 20), `--size 150x46` (terminal cells), `--cell 10x20` (cell
-pixels), `--zoom <n>` (`+` presses), `--select <n>` (the n-th agent
-picked, from 0), `--full` and `--dark` (lighting off). It renders only the
-picture; labels, card and chat are terminal text.
+`scripts/scene-shot.ts <world> <out.png>` renders a world by its id, or by
+its module file (`src/worlds/<id>.ts`) to look at one not registered yet.
+It takes `--at <s>` (demo time, default 20), `--size 150x46` (terminal
+cells), `--cell 10x20` (cell pixels), `--zoom <n>` (`+` presses),
+`--select <n>` (the n-th agent picked, from 0), `--full` and `--dark`
+(lighting off). It renders only the picture; labels, card and chat are
+terminal text.
 `scripts/sarif-gate.ts` fails CI on any CodeQL finding.
 
 Layout:

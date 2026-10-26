@@ -39,7 +39,7 @@ export const hell: WorldDef = {
   pois: hellPois,
   stations: STATIONS,
   decor: DECOR,
-  costume: 'wizard',
+  costume: 'demon',
   critter: { kind: 'imp', body: hex('#d2402a') }, // an imp
   finale: { colors: [[255, 211, 74]] }, // gold dust
   build: { colors: [hex('#241c2e'), hex('#4c2622'), hex('#d8d0b8'), hex('#e2b03a')], shape: 'statue' }, // obsidian, scorched rock and bone, crowned with gold

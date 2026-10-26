@@ -23,14 +23,15 @@ import type { Look, Mind } from './life.ts';
 import { smoke, updateParticles } from './particles.ts';
 import { NavGrid, smooth } from './path.ts';
 import { Rng, hashString } from './rng.ts';
-import { NAV_CELL, NAV_PAD, footprint, heightAt, planRoom, toWorld } from './room.ts';
+import { NAV_CELL, NAV_PAD, deskSpots, footprint, heightAt, planRoom, toWorld } from './room.ts';
 import type { Room } from './room.ts';
 import type { Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
 
-// A terminal cell in pixels when the terminal has not said (common sizes).
+// A terminal cell in pixels when the terminal has not said (common sizes);
+// also the nominal cell rooms are planned for (see layout).
 const CELL = { w: 10, h: 20 };
-// The room is planned so that, fitted to the scene, a unit is about this
-// many canvas pixels.
+// The room is planned so that, fitted to a scene of nominal cells, a unit
+// is about this many canvas pixels.
 const PX_PER_UNIT = 4;
 const FIT_MARGIN = 4; // units round the room when it is fitted to the scene
 // Zoom steps for + and -, times the fitted scale; never past MAX_S.
@@ -92,21 +93,21 @@ const MAX_EMOTES = 3; // shown at once
 // one every HOP_IDLE seconds standing about.
 const HOP_WALK = 0.25;
 const HOP_IDLE = 0.5;
-// Desk upgrades by role (picked by a hash of crew and role); how far from
-// its station's corner one stands; how far it keeps from where anyone
-// works or stands (the first of these it can, so a small room's crowded
-// station still gets one, never on such a spot) and from the entrance;
-// how often they are worked out again (seconds) when nothing says so
-// sooner; crew roles whose time at each station is kept, at most.
+// Desk upgrades by role (picked by a hash of crew and role); how far it
+// keeps from where anyone works or stands (the first of these it can, so
+// a small room's crowded station still gets one, never on such a spot)
+// and from the entrance; how often they are worked out again (seconds)
+// when nothing says so sooner; crew roles whose time at each station is
+// kept, at most. Where one may stand by its station: see deskSpots.
 const TRINKETS: readonly Trinket[] = ['plant', 'mug', 'trophy'];
-const TRINKET_GAP = 2;
 const TRINKET_CLEAR = [4, 3, 2];
 const TRINKET_DOOR = 4;
 const TRINKETS_EVERY = 0.5;
 const MAX_WORKED = 200;
 // A level-up's ★N! rises this long (seconds), its figure's emotes kept
-// down meanwhile.
+// down meanwhile; how opaque its pill is.
 const WORD_S = 3;
+const WORD_PILL = 0.9;
 // A build's ghost: a cool complement of the world (cyan in a warm one,
 // amber in a cold one).
 const GHOST_HUE: { warm: RGB; cold: RGB } = { warm: [127, 232, 255], cold: [255, 179, 71] };
@@ -137,7 +138,7 @@ export type Actor = {
 };
 
 // Letters drifting up as terminal text (z's of a sleeper, a '!' on errors,
-// ★N! on a level-up).
+// ★N! on a level-up, on a pill: see wordOf).
 type Glyph = { x: number; y: number; z: number; vz: number; ch: string; color: RGB; life: number };
 
 // A crew role's key: its crew and role (see pet/crew.ts).
@@ -241,8 +242,8 @@ export class Stage {
   }
 
   // The terminal's cell size in pixels (the canvas is the scene's cells at
-  // this size).
-  // Whether the size changed.
+  // this size): the room stays as it is (see layout), refitted to the
+  // canvas. Whether the size changed.
   setCell(w: number, h: number): boolean {
     if (w === this.cell.w && h === this.cell.h) return false;
     this.cell = { w, h };
@@ -325,7 +326,12 @@ export class Stage {
     this.rect = r;
     // Nothing to show: keep the room as it is.
     if (r.w <= 0 || r.h <= 0) return;
-    const L = planLayout((r.w * this.cell.w) / PX_PER_UNIT, (r.h * this.cell.h) / PX_PER_UNIT, this.world.id);
+    // The room goes by the terminal's size in cells, not its pixels: it is
+    // planned for nominal cells (CELL), so a HiDPI screen (cells of 19 x 42
+    // pixels, say) shows the same room as a 10 x 20 one, just sharper; the
+    // fit (fitScale) maps it to the real pixels. Planned from the pixels,
+    // a 2x screen got a room twice the size, too big and empty.
+    const L = planLayout((r.w * CELL.w) / PX_PER_UNIT, (r.h * CELL.h) / PX_PER_UNIT, this.world.id);
     const key = `${this.world.id}:${L.W}x${L.D}x${L.H}`;
     if (key !== this.worldKey) this.build(L, key);
     this.trinketsDue = true;
@@ -773,10 +779,7 @@ export class Stage {
   // likes to stand (see TRINKET_CLEAR); null where there is no such spot.
   private trinketSpot(slot: Slot, placed: readonly Spot[]): Spot | null {
     const L = this.L!;
-    const g = TRINKET_GAP;
-    const at = (u: number, v: number): Spot => (slot.wall === 'right' ? { x: slot.x0 + u, y: slot.y0 + v } : { x: slot.x0 + v, y: slot.y0 + u });
-    const spots: Spot[] = [];
-    for (const v of [g, slot.dep + g]) for (const j of [0, 1, 2]) spots.push(at(slot.len + g + 3 * j, v), at(-g - 3 * j, v));
+    const spots = deskSpots(slot);
     const own = slotRect(slot);
     const others = L.slots.filter((s) => s !== slot);
     const stands: Spot[] = [...this.spots];
@@ -1228,7 +1231,8 @@ export class Stage {
   // BAND), and names that clip alike are told apart (tagNames). With a
   // selection, the others' labels dim. Labels and emotes go over each
   // one's top (`tops`, see figureTop), clear of its hat. Also places the
-  // drifting '!' and z marks.
+  // drifting '!' and z marks, and a level-up's rising word on a dark pill
+  // of its own, over the labels (see wordOf).
   private place(f: SceneFrame, actors: Actor[], emoting: Actor[], tops: Map<Actor, number>, now: number, selectedId: string | null, card: boolean): void {
     const r = this.rect;
     const cam = f.camera;
@@ -1388,25 +1392,36 @@ export class Stage {
     this.placedLabels = taken.map(([y, x0, x1]) => ({ x: x0, y, w: x1 - x0 }));
     for (const g of this.glyphs) {
       const [col, row] = cellOf(g.x, g.y, g.z);
-      if (col >= r.x && col < r.x + r.w && row >= r.y && row < r.y + r.h) f.marks.push({ col, row, ch: g.ch, ink: g.color });
+      if (col < r.x || col >= r.x + r.w || row < r.y || row >= r.y + r.h) continue;
+      if (g.ch.length > 1) f.labels.push(this.wordOf(g.ch, col, row, g.color));
+      else f.marks.push({ col, row, ch: g.ch, ink: g.color });
     }
+  }
+
+  // A level-up's ★N! as a label: centred on its column (kept inside the
+  // scene), in bold in its ink, on a near-opaque pill in the world's panel
+  // colour, so it reads over a light wall as over a dark one. It rises a
+  // whole row at a time (it is terminal text), and its pill's sprite goes
+  // by its size and colours, not its place, so rising makes no new one.
+  // (One UTF-16 unit a character: ★ is.)
+  private wordOf(ch: string, col: number, row: number, ink: RGB): LabelFrame {
+    const r = this.rect;
+    const w = ch.length;
+    const x = Math.max(r.x, Math.min(r.x + r.w - w, col - (w >> 1)));
+    return { col: x, row, w, kind: 'word', color: this.world.palette.panel, alpha: WORD_PILL, text: ch, ink, bold: true };
   }
 
   // The frame's labels and marks as terminal text over the scene's cells.
   // Their cells keep whatever background they have (the terminal's
-  // default over an image, so the scene's pill shows through).
+  // default over an image, so the scene's pill shows through). Marks (z, Z
+  // or !) go under the labels; a level-up's word, the last label, over
+  // the rest.
   drawLabels(s: Screen, f: SceneFrame): void {
     const end = f.camera.cells.x + f.camera.cells.w;
-    // (Marks are z, Z, ! or ★N!: one UTF-16 unit a character.)
-    for (const m of f.marks) if (m.ch.length === 1) s.put(m.col, m.row, m.ch, m.ink);
+    for (const m of f.marks) s.put(m.col, m.row, m.ch, m.ink);
     for (const l of f.labels) {
       s.text(l.col, l.row, l.text, l.ink, undefined, l.bold ? BOLD : 0, end);
       if (l.mark) s.put(l.mark.col, l.row, l.mark.ch, l.mark.ink, undefined, BOLD);
-    }
-    // A word (★3!) goes over the labels, centred on its column, in bold.
-    for (const m of f.marks) {
-      const n = m.ch.length;
-      if (n > 1) s.text(Math.max(f.camera.cells.x, m.col - (n >> 1)), m.row, m.ch, m.ink, undefined, BOLD, end);
     }
   }
 }

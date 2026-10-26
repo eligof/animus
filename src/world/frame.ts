@@ -33,7 +33,24 @@ export const HOP = 0.9;
 // walking or at work; a ghost floats): a wizard's own, and the one a level
 // brings (★2) in each costume (see art/figure/look.ts).
 const WIZARD_HAT = 19.25;
-const LEVEL_HAT: Record<Costume, number> = { casual: 18.25, scientist: 17.5, raver: 21.75, hacker: 17.5, astronaut: 20.75, wizard: 20.75 };
+const LEVEL_HAT: Record<Costume, number> = {
+  casual: 18.25,
+  scientist: 17.5,
+  raver: 21.75,
+  hacker: 17.5,
+  astronaut: 20.75,
+  wizard: 20.75,
+  drifter: 17.75,
+  nord: 17.5,
+  exosuit: 17.5,
+  jumpsuit: 17.5,
+  colonist: 17.5,
+  miner: 18.5,
+  forager: 17.75,
+  parka: 17.5,
+  guard: 17.5,
+  demon: 17.75,
+};
 
 // Where a character's top is, units over its feet: its hat's, or its
 // head's, and as high again as a hop lifts it while it is happy enough to
@@ -111,8 +128,9 @@ export type BuildFrame = {
 // it takes, where the scene draws a soft rounded pill in `color` at
 // `alpha` behind the terminal text (`text` in `ink`, its activity glyph
 // `mark` recoloured). 'glyph' is a lone activity glyph, 'error' a bubble
-// for an error on show.
-export type LabelFrame = { col: number; row: number; w: number; kind: 'name' | 'bubble' | 'error' | 'glyph'; color: RGB; alpha: number; text: string; ink: RGB; bold: boolean; mark?: { col: number; ch: string; ink: RGB } };
+// for an error on show, 'word' a level-up's rising ★N! (last, so it goes
+// over any label it rises through, its pill and its text).
+export type LabelFrame = { col: number; row: number; w: number; kind: 'name' | 'bubble' | 'error' | 'glyph' | 'word'; color: RGB; alpha: number; text: string; ink: RGB; bold: boolean; mark?: { col: number; ch: string; ink: RGB } };
 
 // A desk upgrade (★5; see Stage.trinkets): a plant, a steaming mug or a
 // trophy standing on the floor by its owner's favourite station, in its

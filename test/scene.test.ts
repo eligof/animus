@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative } from 'node:path';
 import { clearSprites, spriteStats } from '../src/art/figure.ts';
 import { Scene } from '../src/art/scene.ts';
 import { buildSprite } from '../src/art/scene/build.ts';
@@ -13,7 +16,7 @@ import { Screen } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
 import type { Block } from '../src/world/build.ts';
 import { traitsFor } from '../src/world/character.ts';
-import type { FigureFrame, LabelFrame, SceneFrame } from '../src/world/frame.ts';
+import type { CritterFrame, FigureFrame, LabelFrame, SceneFrame } from '../src/world/frame.ts';
 import { cellBox } from '../src/world/frame.ts';
 import type { NavGrid } from '../src/world/path.ts';
 import type { PlacedProp, Room } from '../src/world/room.ts';
@@ -307,6 +310,23 @@ test('a label pill lies under its cells', () => {
   assert.equal(changes(bare, pic.data, pic.width, { x0: b.x1 + 8, y0: b.y0, x1: b.x1 + 60, y1: b.y1 }), 0);
 });
 
+test("a level-up's word lays its dark pill over a label's it rises through, and keeps its sprite as it rises", () => {
+  const r = room([]);
+  const f = frame(r);
+  const name: LabelFrame = { col: 30, row: 6, w: 8, kind: 'name', color: [240, 40, 200], alpha: 0.9, text: '✎ atlas ', ink: [255, 255, 255], bold: true };
+  const word = (row: number): LabelFrame => ({ col: 32, row, w: 3, kind: 'word', color: [18, 12, 8], alpha: 0.9, text: '★3!', ink: [255, 177, 59], bold: true });
+  const pic = new Scene().render({ ...f, labels: [name, word(6)] }).bitmap;
+  const b = cellBox(f.camera, 32, 6, 3);
+  const mid = px(pic, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+  assert.ok(mid.every((v) => v < 60), `the word's pill on top: ${mid}`);
+  // Risen a row: the same pill sprite, placed a cell higher.
+  const scene = new Scene();
+  const at = (row: number) => scene.plate({ ...f, labels: [name, word(row)] }).layers.find((l) => l.id === 'pill:1')!;
+  const [p, q] = [at(6), at(5)];
+  assert.equal(q.pic.key, p.pic.key);
+  assert.deepEqual([q.x - p.x, p.y - q.y], [0, f.camera.cell.h]);
+});
+
 test("the world's ambient tint is multiplied over the scene, not over the label pills", () => {
   const r = room([]);
   const label: LabelFrame = { col: 30, row: 6, w: 8, kind: 'name', color: [240, 240, 240], alpha: 1, text: 'x', ink: [0, 0, 0], bold: false };
@@ -327,6 +347,73 @@ test('the screenshot script renders the demo crew to a PNG of the scene', async 
   const { png } = shot({ world: 'cafe', at: 3, cols: 80, rows: 24, cell: { w: 8, h: 16 }, zoom: 0, select: -1, full: true, dark: false });
   assert.equal(png.subarray(1, 4).toString('ascii'), 'PNG');
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [640, 384]);
+});
+
+test('the screenshot script takes a world by its id or by its module file, so a world not registered yet can be looked at', async () => {
+  const { loadWorld, shot } = await import('../scripts/scene-shot.ts');
+  const cafe = await loadWorld('cafe');
+  assert.equal(cafe.id, 'cafe');
+  assert.equal(await loadWorld('src/worlds/cafe.ts'), cafe);
+  await assert.rejects(loadWorld('nope'), /unknown world "nope"/);
+  await assert.rejects(loadWorld('src/worlds/types.ts'), /exports no world/);
+  const { png } = shot({ world: { ...cafe, id: 'unlisted' }, at: 1, cols: 80, rows: 24, cell: { w: 8, h: 16 }, zoom: 0, select: -1, full: true, dark: false });
+  assert.equal(png.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [640, 384]);
+});
+
+test('the screenshot script says what is wrong with a world module: no file, no world, or which of its id, stations and room it lacks', async () => {
+  const { loadWorld } = await import('../scripts/scene-shot.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'animus-worlds-'));
+  try {
+    const put = (name: string, src: string) => {
+      writeFileSync(join(dir, name), src);
+      // a path relative to the current directory, as typed
+      return relative(process.cwd(), join(dir, name));
+    };
+    await assert.rejects(loadWorld('src/worlds/nowhere.ts'), (e: Error) => e.message.startsWith('no world module at ') && e.message.endsWith(join(process.cwd(), 'src/worlds/nowhere.ts')));
+    await assert.rejects(loadWorld(put('none.ts', 'export const n = 1;\n')), /none\.ts exports no world/);
+    await assert.rejects(loadWorld(put('bare.ts', "export default { id: 'bare' };\n")), /bare\.ts: its world has no stations, room$/);
+    await assert.rejects(loadWorld(put('half.ts', 'export const half = { stations: {}, room: {} };\n')), /half\.ts: its world has no id, room$/);
+    const ok = put('ok.ts', "export const ok = { id: 'ok', stations: {}, room: { draw() {} } };\n");
+    assert.equal((await loadWorld(ok)).id, 'ok');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A cheer's heart shows over the critter, clear of it: over a hopper mid-
+// hop too, whose feelers' glow reaches past 7 units.
+test('a heart over the critter shows above it, whatever kind it is, in every frame, on the move or not', () => {
+  const r = room([]);
+  const scene = new Scene();
+  const at = (t: number, c: CritterFrame | null) => copy(scene.render(frame(r, { t, critter: c })).bitmap);
+  const width = frame(r).camera.w;
+  // The rows a change between two pictures spans.
+  const rows = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
+    let [y0, y1] = [Infinity, -1];
+    for (let o = 0; o < a.length; o += 4) {
+      if (a[o] === b[o] && a[o + 1] === b[o + 1] && a[o + 2] === b[o + 2]) continue;
+      const y = Math.floor(o / 4 / width);
+      [y0, y1] = [Math.min(y0, y), Math.max(y1, y)];
+    }
+    return [y0, y1];
+  };
+  const bare = at(0, null);
+  for (const kind of ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky'] as const) {
+    // every frame of its loops: eight idling, four on the move
+    for (const [moving, per, n] of [[false, 2.4, 8], [true, 0.4, 4]] as const) {
+      for (let i = 0; i < n; i++) {
+        const t = ((i + 0.5) * per) / n;
+        const cr: CritterFrame = { kind, body: [150, 200, 120], x: 30, y: 30, z: 0, flip: false, moving };
+        const plain = at(t, cr);
+        const [top] = rows(bare, plain);
+        // the heart at the bottom of its bob: their soft edges may share a
+        // row, no more
+        const [, bottom] = rows(plain, at(t, { ...cr, heart: 1.54 }));
+        assert.ok(bottom <= top, `${kind}${moving ? ' on the move' : ''} at ${t.toFixed(2)} s: the heart down to row ${bottom}, the critter up to ${top}`);
+      }
+    }
+  }
 });
 
 test('the selected figure stands in a ring of its colour, the hurt in a pulsing red one', () => {

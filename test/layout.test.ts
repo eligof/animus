@@ -35,7 +35,8 @@ test('bigger canvases get bigger rooms, up to the cap', () => {
   for (let i = 1; i < sides.length; i++) assert.ok(sides[i] >= sides[i - 1], sides.join(' '));
   const huge = planLayout(1000, 500);
   assert.equal(huge.W, LIMITS.maxSide);
-  assert.equal(huge.H, LIMITS.maxH);
+  assert.ok(huge.H <= LIMITS.maxH, `${huge.H} units tall`);
+  assert.equal(huge.H, planLayout(4000, 2000).H);
 });
 
 // Every world's layout, and the one for no world in particular.

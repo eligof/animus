@@ -5,8 +5,9 @@ import { move, mul, turn, Sketch, type Ctx } from './paint.ts';
 
 // The room's critter, facing +x (the sprite flips for screen-left), its
 // anchor on the floor under its middle: a cat, a rat, a hovering drone, a
-// slime, a fox or a flapping imp. Idle loops breathe, swish and blink;
-// moving ones trot, hop or buzz.
+// slime, a fox, a flapping imp, a sand beetle, a fluffy hopper or a husky.
+// Idle loops breathe, swish and blink; moving ones trot, hop, scuttle or
+// buzz.
 
 const TAU = Math.PI * 2;
 const IDLE: readonly [number, number] = [2.4, 8];
@@ -46,6 +47,15 @@ export function critterArt(c: CritterFrame, t: number): { key: string; draw: () 
           break;
         case 'imp':
           imp(sk, f);
+          break;
+        case 'beetle':
+          beetle(sk, f);
+          break;
+        case 'hopper':
+          hopper(sk, f);
+          break;
+        case 'husky':
+          husky(sk, f);
           break;
       }
       return sk;
@@ -335,5 +345,233 @@ function imp(sk: Sketch, f: F): void {
     p.lineWidth = Math.max(c.line, 1 / c.px);
     p.lineCap = 'round';
     p.stroke();
+  });
+}
+
+// A round sand beetle: a domed shell split down the back, a little head
+// with feelers poking out in front, six stubby legs that scuttle in threes.
+function beetle(sk: Sketch, f: F): void {
+  const a = f.u * TAU;
+  const bob = f.moving ? -0.08 * Math.abs(Math.sin(a)) : 0;
+  const breathe = f.moving ? 0 : 0.06 * Math.sin(a);
+  const tw = f.moving ? 0 : 0.18 * Math.sin(a * 2);
+  const leg = (x: number, ph: number, near: boolean) => {
+    const sw = f.moving ? 0.35 * Math.sin(a + ph) : 0;
+    const lift = f.moving ? Math.max(0, Math.cos(a + ph)) * 0.2 : 0;
+    sk.limb([x, -0.75 + bob, x + 0.25 + sw, -0.15 - lift], 0.34, near ? f.bd : shade(f.bd, -0.15), { line: 0.6 });
+  };
+  for (const [x, ph] of [[-1.0, Math.PI], [0.3, 0], [1.5, Math.PI]] as const) leg(x, ph, false);
+  const top = -3.05 - breathe + bob;
+  const shell = (p: Pen) => {
+    p.moveTo(-2.3, -0.55 + bob);
+    p.quadraticCurveTo(-2.45, top + 0.05, -0.05, top);
+    p.quadraticCurveTo(2.3, top + 0.05, 2.2, -0.55 + bob);
+    p.quadraticCurveTo(0, -0.2 + bob, -2.3, -0.55 + bob);
+    p.closePath();
+  };
+  sk.blob(shell, f.b, { dark: f.bd, d: 0.5 });
+  sk.draw((p, c) => {
+    // the split down its back, a few spots and a gloss
+    p.save();
+    p.beginPath();
+    shell(p);
+    p.clip();
+    p.strokeStyle = c.ink;
+    p.lineWidth = c.line;
+    p.lineCap = 'round';
+    p.beginPath();
+    p.moveTo(0.3, top + 0.05);
+    p.quadraticCurveTo(0.6, -1.7 + bob, 0.45, -0.3 + bob);
+    p.stroke();
+    p.fillStyle = shade(f.b, -0.3);
+    for (const [x, y] of [[-1.3, -1.5], [-0.55, -2.35], [1.35, -1.8]] as const) {
+      p.beginPath();
+      p.arc(x, y + bob, 0.24, 0, TAU);
+      p.fill();
+    }
+    p.restore();
+    p.beginPath();
+    p.ellipse(-0.95, top + 0.7, 0.75, 0.3, -0.35, 0, TAU);
+    p.fillStyle = alpha(WHITE, 0.55);
+    p.fill();
+  });
+  // the head and its feelers, in front of the shell
+  sk.at(move(2.3, -1.05 + bob), () => {
+    sk.limb([0.3, -0.4, 0.85, -1.05 + tw, 1.35, -1.2 + tw], 0.17, f.bd, { line: 0.5 });
+    sk.limb([0.0, -0.5, 0.4, -1.3 - tw, 0.8, -1.55 - tw], 0.17, f.bd, { line: 0.5 });
+    sk.blob(ell(0.15, 0, 0.82, 0.68), shade(f.b, -0.35), { dark: shade(f.b, -0.5), d: 0.15 });
+    sk.draw(eyeDot(0.5, -0.12, 0.2, f.blink));
+  });
+  for (const [x, ph] of [[-1.4, 0], [-0.1, Math.PI], [1.1, 0]] as const) leg(x, ph, true);
+}
+
+// A fur ball's outline: tufts round an ellipse.
+function fluff(p: Pen, cx: number, cy: number, rx: number, ry: number, n: number, amp: number): void {
+  p.moveTo(cx + rx, cy);
+  for (let j = 1; j <= n; j++) {
+    const t = (j / n) * TAU;
+    const m = ((j - 0.5) / n) * TAU;
+    p.quadraticCurveTo(cx + (rx + amp) * Math.cos(m), cy + (ry + amp) * Math.sin(m), cx + rx * Math.cos(t), cy + ry * Math.sin(t));
+  }
+  p.closePath();
+}
+
+const GLOW = '#fff3a0';
+
+// A small fluffy alien that gets about in hops: a round tuft of fur that
+// squashes and stretches, big eyes, two feelers with glowing tips, tiny
+// feet.
+function hopper(sk: Sketch, f: F): void {
+  const a = f.u * TAU;
+  const hop = f.moving ? Math.max(0, Math.sin(a)) * 1.4 : 0;
+  const k = f.moving ? 0.18 * Math.cos(a) : 0.05 * Math.sin(a);
+  const w = 1.75 * (1 + k * 0.5);
+  const h = 1.6 * (1 - k * 0.6);
+  const cy = -h - 0.3 - hop;
+  for (const x of [-0.7, 0.75]) sk.blob(ell(x, -0.2 - hop * 0.6, 0.45, 0.25), f.bd, { line: 0.6 });
+  const sway = f.moving ? -0.3 * Math.cos(a) : 0.2 * Math.sin(a * 2);
+  for (const [x, s] of [[-0.35, -1], [0.75, 1]] as const) {
+    const tx = x + s * 0.5 + sway;
+    const ty = cy - h - 1.35;
+    sk.limb([x, cy - h * 0.7, x + s * 0.2 + sway * 0.5, cy - h - 0.55, tx, ty], 0.18, f.bd, { line: 0.5 });
+    sk.draw((p) => {
+      const g = p.createRadialGradient(tx, ty, 0.1, tx, ty, 0.95);
+      g.addColorStop(0, alpha(GLOW, 0.6));
+      g.addColorStop(1, alpha(GLOW, 0));
+      p.beginPath();
+      p.arc(tx, ty, 0.95, 0, TAU);
+      p.fillStyle = g;
+      p.fill();
+    });
+    sk.blob(circ(tx, ty, 0.3), GLOW, { line: 0.5 });
+  }
+  sk.blob((p) => fluff(p, 0.1, cy, w, h, 12, 0.32), f.b, { dark: f.bd, d: 0.45 });
+  sk.draw((p, c) => {
+    eyeDot(0.6, cy - 0.15, 0.38, f.blink)(p, c);
+    eyeDot(-0.3, cy - 0.15, 0.34, f.blink)(p, c);
+    p.beginPath();
+    p.moveTo(0.05, cy + 0.55);
+    p.quadraticCurveTo(0.2, cy + 0.75, 0.4, cy + 0.55);
+    p.strokeStyle = c.ink;
+    p.lineWidth = Math.max(c.line, 1 / c.px);
+    p.lineCap = 'round';
+    p.stroke();
+    p.fillStyle = alpha('#ff8fb0', 0.45);
+    for (const x of [-0.85, 1.15]) {
+      p.beginPath();
+      p.ellipse(x, cy + 0.35, 0.3, 0.18, 0, 0, TAU);
+      p.fill();
+    }
+  });
+}
+
+// A husky: its colour over the back, white on its mask, chest, belly and
+// legs, pricked ears, a longer muzzle and its tail curled up over its back
+// (it wags; it pants at rest now and then).
+function husky(sk: Sketch, f: F): void {
+  const a = f.u * TAU;
+  const step = f.moving ? Math.sin(a) : 0;
+  const bob = f.moving ? -0.2 * Math.abs(Math.cos(a)) : 0.06 * Math.sin(a);
+  const wag = f.moving ? 0.2 * Math.sin(a * 2) : 0.35 * Math.sin(a * 2);
+  const white = mix(f.b, WHITE, 0.85);
+  const whiteD = shade(white, -0.14);
+  // the tail, curled over the back
+  sk.at(mul(move(-2.05, -2.55 + bob), turn(wag)), () => {
+    const tail = (p: Pen) => {
+      p.moveTo(0.15, 0.3);
+      p.quadraticCurveTo(-1.45, -0.15, -1.25, -1.5);
+      p.quadraticCurveTo(-0.85, -2.45, 0.55, -1.95);
+      p.quadraticCurveTo(-0.25, -1.4, 0.45, -0.45);
+      p.closePath();
+    };
+    sk.blob(tail, f.b, { dark: f.bd, d: 0.35 });
+    sk.draw((p) => {
+      p.save();
+      p.beginPath();
+      tail(p);
+      p.clip();
+      p.beginPath();
+      p.arc(0.45, -1.95, 0.6, 0, TAU);
+      p.fillStyle = white;
+      p.fill();
+      p.restore();
+    });
+  });
+  const leg = (x: number, ph: number, near: boolean) => {
+    const sw = f.moving ? 0.5 * Math.sin(a + ph) : 0;
+    const lift = f.moving ? Math.max(0, Math.cos(a + ph)) * 0.4 : 0;
+    sk.limb([x, -1.55 + bob, x + sw, -0.35 - lift], 0.66, near ? white : whiteD, { dark: near ? whiteD : null });
+  };
+  leg(1.3, Math.PI, false);
+  leg(-1.6, 0, false);
+  const body = ell(-0.3, -2.05 + bob, 2.15, 1.18);
+  sk.blob(body, f.b, { dark: f.bd, d: 0.45 });
+  sk.draw((p) => {
+    // the white belly and chest
+    p.save();
+    p.beginPath();
+    body(p);
+    p.clip();
+    p.beginPath();
+    p.ellipse(0.2, -1.05 + bob, 2.3, 0.62, 0, 0, TAU);
+    p.ellipse(1.55, -1.9 + bob, 0.7, 1.0, 0, 0, TAU);
+    p.fillStyle = white;
+    p.fill();
+    p.restore();
+  });
+  leg(1.05, 0, true);
+  leg(-1.9, Math.PI, true);
+  // the head
+  sk.at(move(1.95 + step * 0.05, -3.25 + bob), () => {
+    for (const [x0, x1] of [[-0.95, -0.2], [0.2, 0.95]] as const) {
+      sk.blob((p) => {
+        p.moveTo(x0, -0.55);
+        p.lineTo((x0 + x1) / 2, -2.05);
+        p.lineTo(x1, -0.7);
+        p.closePath();
+      }, f.b, { dark: f.bd, d: 0.2 });
+      sk.draw((p) => {
+        p.beginPath();
+        p.moveTo(x0 + 0.25, -0.75);
+        p.lineTo((x0 + x1) / 2, -1.6);
+        p.lineTo(x1 - 0.2, -0.85);
+        p.closePath();
+        p.fillStyle = white;
+        p.fill();
+      });
+    }
+    const head = ell(0, 0, 1.22, 1.08);
+    sk.blob(head, f.b, { dark: f.bd, d: 0.35 });
+    sk.draw((p) => {
+      // the mask: white round the eyes and down the face
+      p.save();
+      p.beginPath();
+      head(p);
+      p.clip();
+      p.beginPath();
+      p.ellipse(0.35, 0.45, 1.05, 0.8, 0, 0, TAU);
+      p.ellipse(0.05, -0.55, 0.22, 0.35, 0, 0, TAU);
+      p.fillStyle = white;
+      p.fill();
+      p.restore();
+    });
+    sk.blob((p) => {
+      p.moveTo(0.45, -0.05);
+      p.quadraticCurveTo(1.3, -0.15, 1.95, 0.3);
+      p.quadraticCurveTo(1.9, 0.85, 1.2, 0.85);
+      p.quadraticCurveTo(0.6, 0.9, 0.35, 0.65);
+      p.closePath();
+    }, white, { dark: whiteD, d: 0.15, line: 0.6 });
+    sk.blob(circ(1.9, 0.3, 0.24), EYE, { line: 0, sil: false });
+    sk.draw(eyeDot(0.5, -0.12, 0.22, f.blink));
+    sk.draw(eyeDot(-0.3, -0.12, 0.2, f.blink));
+    if (f.moving || f.i % 4 < 2) {
+      sk.draw((p) => {
+        p.beginPath();
+        p.ellipse(1.35, 0.95, 0.24, 0.32, 0.2, 0, TAU);
+        p.fillStyle = '#ff8fa8';
+        p.fill();
+      });
+    }
   });
 }

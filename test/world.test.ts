@@ -59,11 +59,18 @@ test('t / T / digits switch themes', () => {
   assert.equal(w.theme.id, ids[1 % ids.length]);
   w.handleKey(key('T'));
   assert.equal(w.theme.id, ids[0]);
-  w.handleKey(key(THEMES.length === 10 ? '0' : String(THEMES.length)));
-  assert.equal(w.theme.id, ids[THEMES.length - 1]);
-  // A digit past the last preset does nothing (0 is the tenth).
+  // The digits reach the first ten (0 is the tenth); worlds past them
+  // only t / T and the picker.
+  const last = Math.min(THEMES.length, 10);
+  w.handleKey(key(last === 10 ? '0' : String(last)));
+  assert.equal(w.theme.id, ids[last - 1]);
+  // A digit past the last preset does nothing.
   const beyond = THEMES.length < 9 ? String(THEMES.length + 1) : THEMES.length < 10 ? '0' : null;
   if (beyond) assert.equal(w.handleKey(key(beyond)), null);
+  // T from the first goes round to the last.
+  w.handleKey(key('1'));
+  w.handleKey(key('T'));
+  assert.equal(w.theme.id, ids[ids.length - 1]);
 });
 
 test('picker previews live and closes', () => {

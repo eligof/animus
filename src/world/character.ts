@@ -15,10 +15,20 @@ export type Pose =
   | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet';
 // Little pictures that pop up over a character's head.
 export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup';
-// How characters dress in a scene: wizards in the mines and the caverns,
-// lab coats in the lab, party outfits in the club, hoodies in the den,
-// space suits on the station, everyday clothes in the café.
-export type Costume = 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual';
+// How characters dress in a scene: wizards' robes and hats (no world wears
+// them now), lab coats in the lab, party outfits in the club, hoodies in the den,
+// space suits on the station, everyday clothes in the café; a strapped
+// rawhide coat at the dust outpost, fur and iron in the longhall, a one-piece
+// exosuit with a chest plate at the starfall base, a teal jumpsuit with an
+// orange placket in the shelter and an open duster in the frontier colony;
+// and dressed for where they are, work
+// overalls in the mines, a forager's capelet in the fungal caverns, a
+// parka in the snowy depths, a guard's uniform in the vault and a devil's
+// robe in hell.
+export type Costume =
+  | 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual'
+  | 'drifter' | 'nord' | 'exosuit' | 'jumpsuit' | 'colonist'
+  | 'miner' | 'forager' | 'parka' | 'guard' | 'demon';
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
 

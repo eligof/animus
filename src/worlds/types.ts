@@ -72,7 +72,7 @@ export type RoomArt = {
   overlay?(v: RoomView): void;
 };
 
-export type CritterKind = 'cat' | 'rat' | 'drone' | 'slime' | 'fox' | 'imp';
+export type CritterKind = 'cat' | 'rat' | 'drone' | 'slime' | 'fox' | 'imp' | 'beetle' | 'hopper' | 'husky';
 export type BuildShape = 'tower' | 'house' | 'pyramid' | 'statue' | 'machine';
 
 export type WorldDef = {

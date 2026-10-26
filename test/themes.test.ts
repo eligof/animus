@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { loadWorld } from '../scripts/scene-shot.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { Theme } from '../src/themes/types.ts';
 import { PROP_SIZE, planLayout } from '../src/world/layout.ts';
@@ -12,19 +11,13 @@ import { recordingPen } from './helpers.ts';
 
 // Contract every world must meet. ANIMUS_THEME_FILE=src/worlds/x.ts also
 // checks a world module that is not registered yet (its default export, or
-// the first exported object with `stations`).
-async function loadTheme(file: string): Promise<Theme> {
-  const mod = await import(pathToFileURL(resolve(file)).href);
-  const found = mod.default ?? Object.values(mod).find((v) => v && typeof v === 'object' && 'stations' in (v as object));
-  if (!found) throw new Error(`${file} exports no world`);
-  return found as Theme;
-}
+// the first exported object with `stations`: see loadWorld).
 const extraFile = process.env.ANIMUS_THEME_FILE;
-const EXTRA: Theme[] = extraFile ? [await loadTheme(extraFile)] : [];
+const EXTRA: Theme[] = extraFile ? [await loadWorld(extraFile)] : [];
 
 const KINDS: SlotKind[] = ['entrance', 'idle', 'read', 'run', 'search', 'think', 'web', 'write'];
-const COSTUMES = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual'];
-const CRITTERS = ['cat', 'rat', 'drone', 'slime', 'fox', 'imp'];
+const COSTUMES = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon'];
+const CRITTERS = ['cat', 'rat', 'drone', 'slime', 'fox', 'imp', 'beetle', 'hopper', 'husky'];
 const SHAPES = ['tower', 'house', 'pyramid', 'statue', 'machine'];
 const PARTICLE_KINDS = new Set(['spark', 'ember', 'confetti', 'smoke', 'steam', 'drop', 'glint', 'bolt', 'zzz']);
 const isRGB = (c: unknown) => Array.isArray(c) && c.length === 3 && c.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
@@ -33,9 +26,16 @@ const finite = (pts: Array<[number, number]>) => pts.every(([x, y]) => Number.is
 test('registry exposes unique ids', () => {
   const ids = themeIds();
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell']);
+  assert.deepEqual(ids, ['mines', 'lab', 'club', 'den', 'station', 'cafe', 'fungal', 'snowy', 'vault', 'hell', 'dunes', 'meadhall', 'starfall', 'shelter', 'colony']);
   assert.equal(getTheme('mines')?.id, 'mines');
   assert.equal(getTheme('nope'), undefined);
+});
+
+test('the mines, the caverns, the snows, the vault and hell dress for where they are', () => {
+  assert.deepEqual(
+    ['mines', 'fungal', 'snowy', 'vault', 'hell'].map((id) => getTheme(id)?.costume),
+    ['miner', 'forager', 'parka', 'guard', 'demon'],
+  );
 });
 
 for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === e.id))]) {

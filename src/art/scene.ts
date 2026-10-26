@@ -46,7 +46,7 @@ import { hashString } from '../world/rng.ts';
 import type { PlacedProp } from '../world/room.ts';
 import { footprint, toWorld } from '../world/room.ts';
 import type { Particle } from '../world/types.ts';
-import type { RoomView, WorldDef } from '../worlds/types.ts';
+import type { CritterKind, RoomView, WorldDef } from '../worlds/types.ts';
 import { Canvas } from './canvas.ts';
 import { critterSprite, emoteSprite, figureSprite, spriteStats, trinketSprite } from './figure.ts';
 import { hexOf, ink as inkFrom, inkWidth } from './iso.ts';
@@ -80,8 +80,11 @@ const PROP_PAD = 10;
 // taller, grown by this many units round (overhangs).
 const BODY_UP = 2;
 const BODY_SLACK = 0.4;
-// A heart over the critter shows this many units above its back.
+// A heart over the critter shows this many units above its feet: clear of
+// its back, or of a hopper's feelers (their glow reaches past 7 mid-hop).
 const CRITTER_TOP = 6;
+const CRITTER_TALL: Partial<Record<CritterKind, number>> = { hopper: 7.5 };
+const critterTop = (kind: CritterKind) => CRITTER_TALL[kind] ?? CRITTER_TOP;
 // Scales whose sprites are kept.
 const LAYERS = 6;
 // A base tile's side, px: a tile paints in about 10 ms, a unit of warming.
@@ -324,7 +327,7 @@ export class Scene {
     const cr = f.critter;
     if (cr && cr.heart !== undefined) {
       const sp = emoteSprite('heart', cr.heart, s, ink);
-      const [x, y] = P(cr.x, cr.y, cr.z + CRITTER_TOP);
+      const [x, y] = P(cr.x, cr.y, cr.z + critterTop(cr.kind));
       put('emote:critter', picOf(sp.img, t), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
     if (f.world.room.overlay) for (const { id, v } of this.overlayPics(f, l, t, OX, OY, w, h)) put(id, v.pic, OX + v.x, OY + v.y, true);
@@ -409,7 +412,7 @@ export class Scene {
     const cr = f.critter;
     if (cr && cr.heart !== undefined) {
       const sp = emoteSprite('heart', cr.heart, s, ink);
-      const [x, y] = P(cr.x, cr.y, cr.z + CRITTER_TOP);
+      const [x, y] = P(cr.x, cr.y, cr.z + critterTop(cr.kind));
       c.drawImage(sp.img, Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
     if (f.world.room.overlay) {

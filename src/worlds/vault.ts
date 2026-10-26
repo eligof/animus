@@ -43,7 +43,7 @@ export const vault: WorldDef = {
   pois: vaultPois,
   stations: STATIONS,
   decor: DECOR,
-  costume: 'wizard',
+  costume: 'guard',
   critter: { kind: 'drone', body: hex('#a9b3bf') }, // a security drone
   finale: { colors: [[255, 211, 74]] }, // gold dust
   build: { colors: [hex('#6f7884'), hex('#1e2023'), hex('#ffb84a')], shape: 'machine' }, // steel and black iron, crowned by an amber light

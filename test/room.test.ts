@@ -5,6 +5,8 @@ import type { Rect } from '../src/world/layout.ts';
 import { footprint, heightAt, planRoom, toWorld } from '../src/world/room.ts';
 import type { PlacedProp } from '../src/world/room.ts';
 import { THEMES } from '../src/themes/index.ts';
+import { Stage } from '../src/world/stage.ts';
+import { computeLayout } from '../src/ui/layout.ts';
 import { mines } from '../src/worlds/mines.ts';
 import { stubProp } from '../src/worlds/stub.ts';
 import type { WorldDef } from '../src/worlds/types.ts';
@@ -81,6 +83,57 @@ test('decor goes where the world asks: along the walls or out on the floor', () 
   }
   // Pieces get seeds of their own.
   assert.equal(new Set(room.props.map((p) => p.seed)).size, room.props.length);
+});
+
+// Terminals from small to big, in cells, and the room a stage furnishes
+// for each one's scene.
+const TERMS: Array<[number, number]> = [[80, 24], [100, 30], [150, 46], [200, 60]];
+const staged = (world: WorldDef, cols: number, rows: number) => {
+  const stage = new Stage(world);
+  stage.layout(computeLayout(cols, rows).scene);
+  return stage.room()!;
+};
+// Units between two footprints (0 if they touch).
+const gap = (a: Rect, b: Rect) => Math.hypot(Math.max(0, b.x0 - a.x1, a.x0 - b.x1), Math.max(0, b.y0 - a.y1, a.y0 - b.y1));
+
+test('floor decor stands by the back walls and beside the props, never loose in the front of the room', (t) => {
+  // The front band: the floor nearest the viewer, past this much of W + D
+  // down the room; "by" a wall or a prop: within NEAR units of it.
+  const BAND = 2 / 3;
+  const NEAR = 4;
+  const report: string[] = [];
+  for (const [cols, rows] of TERMS) {
+    const line: string[] = [];
+    for (const world of THEMES) {
+      const room = staged(world, cols, rows);
+      const L = room.L;
+      const tag = `${world.id} ${cols}x${rows} (${L.W} units)`;
+      const floor = decorOf(room.props).filter((p) => p.island);
+      for (const p of floor) {
+        const r = footprint(p);
+        const at = `${tag}: a ${p.art.len}x${p.art.dep} piece at ${r.x0},${r.y0}`;
+        assert.ok(r.x1 + r.y1 <= BAND * (L.W + L.D), `${at} stands in the front of the room`);
+        const byWall = Math.min(r.x0, r.y0) - L.T <= NEAR;
+        const byProp = room.props.some((q) => q !== p && gap(r, footprint(q)) <= NEAR);
+        assert.ok(byWall || byProp, `${at} stands loose, by no wall or prop`);
+      }
+      const asked = (world.decor ?? []).filter((d) => d.place === 'floor').reduce((n, d) => n + d.count, 0);
+      if (asked) line.push(`${world.id} ${floor.length}/${asked}`);
+      // Most of it still finds floor: a few pieces in the smallest rooms,
+      // three in four from a 150 x 46 terminal up.
+      const want = cols >= 150 ? Math.ceil(asked * 0.75) : Math.min(asked, 3);
+      assert.ok(floor.length >= want, `${tag}: only ${floor.length} of ${asked} pieces of floor decor placed`);
+    }
+    report.push(`${cols}x${rows}: ${line.join(', ')}`);
+  }
+  t.diagnostic(`floor decor placed of asked:\n${report.join('\n')}`);
+});
+
+test('floor decor is placed the same every time', () => {
+  for (const world of THEMES) {
+    const plan = () => JSON.stringify(staged(world, 150, 46).props.map((p) => [p.wall, p.island, p.x0, p.y0, p.seed]));
+    assert.equal(plan(), plan(), world.id);
+  }
 });
 
 test('tall floor decor stays out of the view of the crowds and the plazas', () => {
