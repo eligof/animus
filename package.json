@@ -14,5 +14,13 @@
     "demo": "node bin/animus.js --demo",
     "test": "node --test \"test/**/*.test.ts\""
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eligof/animus.git"
+  },
+  "homepage": "https://github.com/eligof/animus#readme",
+  "bugs": {
+    "url": "https://github.com/eligof/animus/issues"
+  }
 }
