@@ -301,6 +301,28 @@ test('l turns the lighting off and on', () => {
   assert.equal(w.scene()!.lit, false);
 });
 
+test('o turns office life off and on, saved as a preference; a world can start with it off', () => {
+  const w = demoWorld(true);
+  advance(w, 2);
+  assert.equal(w.office, true);
+  assert.equal(w.handleKey(key('o')), 'prefs');
+  assert.equal(w.office, false);
+  assert.deepEqual(w.prefs(), { office: false });
+  assert.equal(w.handleKey(key('o')), 'prefs');
+  assert.equal(w.office, true);
+  assert.deepEqual(w.prefs(), { office: true });
+  const off = new World({ theme: getTheme('mines')!, live: null, demo: true, account: null, rootLabel: '~/.claude', start: START, images: true, office: false });
+  assert.equal(off.office, false);
+});
+
+test('config keeps office life off; anything but true or false is dropped', () => {
+  const p = join(tempDir('animus-cfg3'), 'c.json');
+  saveConfig({ theme: 'den', office: false }, p);
+  assert.deepEqual(loadConfig(p), { theme: 'den', office: false });
+  writeFileSync(p, JSON.stringify({ theme: 'den', office: 'no' }));
+  assert.deepEqual(loadConfig(p), { theme: 'den' });
+});
+
 test('only preferences the user changed are saved', () => {
   const w = demoWorld(true);
   assert.deepEqual(w.prefs(), {});
