@@ -5,6 +5,7 @@ import { DECOR } from './den/decor.ts';
 import { INK } from './den/kit.ts';
 import { denPois, room } from './den/room.ts';
 import { STATIONS } from './den/stations.ts';
+import { WORKSTATION } from './den/workstation.ts';
 
 // Hacker's Den: green rain on the walls, servers humming, pizza going cold.
 
@@ -39,6 +40,7 @@ export const den: WorldDef = {
   pois: denPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'hacker',
   critter: { kind: 'cat', body: hex('#2b2b33') }, // a black cat
   finale: { colors: [[90, 255, 130], [40, 200, 90], [200, 255, 210]] }, // green bits

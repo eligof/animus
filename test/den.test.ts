@@ -193,3 +193,10 @@ test('den room: the shell draws inside the canvas, the rain moves, and it all st
   assert.ok((area.x1 - area.x0) * (area.y1 - area.y0) < 1500 * 920 * 0.05, 'the overlay is not sparse');
   budget('the overlay a frame', (i) => den.room.overlay!(view(i / 12)), 3, { calls: 20 });
 });
+
+test('Hacker\'s Den\'s workstation: its own, still whatever the clock', () => {
+  const art = den.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
