@@ -11,8 +11,11 @@ import type { Facing, Particle, Poi, Spot } from './types.ts';
 // they like (a seat, a drink, a view, the dance floor, the fire, the
 // critter), chat with each other, pet the critter and help build; workers
 // stretch, sip and look round now and then; everyone waves, flinches at a
-// bang and cheers a finish. Every choice comes from the character's own
-// seeded Rng, so a scene plays out the same way every time.
+// bang and cheers a finish. And office life (the o key turns it off): a
+// kick-off huddle round a lead that has just started subagents, coffee
+// runs, a high-five when a subagent finishes, a stand-up when a crew waits.
+// Every choice comes from the character's own seeded Rng, so a scene plays
+// out the same way every time.
 
 export type { Spot };
 
@@ -24,6 +27,52 @@ const REACT_R = 40; // how far a bang or a cheer carries, units
 const CHEER_R = 70; // everyone this near a build cheers it finished, and each quarter of the way
 const CHAT_GAP = 5; // units between two chatting characters
 const CHAT_EMOTES: readonly Emote[] = ['note', 'heart', 'idea', 'question'];
+// Office life. A huddle: subagents a lead starts within HUDDLE_JOIN seconds
+// of the first gather round it (at most one a lead every HUDDLE_EVERY),
+// HUDDLE_R units out; it starts once they are all there (or HUDDLE_WAIT
+// after the first got there) and lasts HUDDLE_S; anyone not there within
+// HUDDLE_GATHER gives up.
+const HUDDLE_JOIN = 4;
+export const HUDDLE_EVERY = 30;
+const HUDDLE_R = 4.5;
+const HUDDLE_WAIT = 3;
+export const HUDDLE_S = 2.5;
+export const HUDDLE_GATHER = 12;
+// A coffee run now and then (one an agent every COFFEE_EVERY seconds at
+// most): there, COFFEE_POUR seconds at the machine, back; then a mug in
+// hand for MUG seconds, a sip every SIP seconds. Each leg gives up after
+// COFFEE_LEG seconds.
+export const COFFEE_EVERY = 150;
+export const COFFEE_POUR = 2.5;
+export const COFFEE_LEG = 25;
+const MUG: readonly [number, number] = [45, 75];
+const SIP: readonly [number, number] = [6, 12];
+const SIP_S = 2;
+// Where the newcomers of a huddle stand round their lead, on screen: (units
+// to the right, units down toward the viewer) from it, the first two either
+// side, then in front a little either side, then further out. And where a
+// finished subagent stands to high-five its lead: beside it on screen,
+// about 7 units apart (their raised hands meet between them), within
+// FIVE_WALK seconds; they slap for FIVE_S.
+const FAN: ReadonlyArray<readonly [number, number]> = [[5.5, 0], [-5.5, 0], [3, 3.5], [-3, 3.5], [7.5, -1.5], [-7.5, -1.5]];
+const BESIDE: ReadonlyArray<readonly [number, number]> = [[7, 0], [-7, 0], [7, 1.5], [-7, 1.5], [7, -1.5], [-7, -1.5]];
+const FIVE_GAP = 5; // about how far apart they stand, units (7 on screen)
+// Beside each other for a high-five: 3.5 to 7.5 units apart, and 5 or
+// more across the screen (not one behind the other).
+const beside = (a: Spot, b: Spot) => Math.hypot(a.x - b.x, a.y - b.y) >= 3.5 && Math.hypot(a.x - b.x, a.y - b.y) <= 7.5 && Math.abs(a.x - b.x - (a.y - b.y)) >= 5;
+export const FIVE_WALK = 10;
+export const FIVE_S = 1.3;
+// A stand-up: STANDUP_N or more idle agents of a crew, at most once every
+// STANDUP_EVERY seconds a crew (at most STANDUP_MAX of them), gather in a
+// ring on open floor (STANDUP_GATHER seconds to get there) and take turns
+// talking, STANDUP_TURN seconds each, for STANDUP_S.
+const STANDUP_N = 3;
+const STANDUP_MAX = 6;
+export const STANDUP_EVERY = 180;
+export const STANDUP_GATHER = 15;
+export const STANDUP_S = 8;
+const STANDUP_TURN = 2;
+const TAU = Math.PI * 2;
 
 // A short pose over whatever else is going on: a wave, a cheer, a flinch,
 // a stretch. `hold` stops a walker for its length.
@@ -34,7 +83,23 @@ export type Errand =
   | { kind: 'chat'; with: string; arrived: boolean; until: number; since: number; beat: number; turn: number }
   | { kind: 'pet'; arrived: boolean; until: number; since: number }
   | { kind: 'haul'; site: Construction; step: 'fetch' | 'pick' | 'carry' | 'place'; until: number; item: number; trips: number; since: number }
-  | { kind: 'nap'; wake: number }; // clock time it next gets up for a moment
+  | { kind: 'nap'; wake: number } // clock time it next gets up for a moment
+  // office life (see OFFICE)
+  | { kind: 'huddle'; lead: string; arrived: boolean; since: number }
+  | { kind: 'coffee'; step: 'go' | 'pour' | 'back'; poi: Poi; from: Spot; until: number; since: number }
+  | { kind: 'five'; lead: string; at: Spot; arrived: boolean; until: number; since: number; clap: number }
+  | { kind: 'standup'; crew: string; arrived: boolean; since: number };
+
+// Office life's errands: dropped when it is turned off; a working agent
+// that ends one goes straight back to its station.
+const OFFICE: ReadonlySet<Errand['kind']> = new Set(['huddle', 'coffee', 'five', 'standup']);
+// A lead's kick-off huddle: when it opened, where the lead stands (or is
+// heading), who is in it and where each stands, when the first got there,
+// when it ends (0: not started). A crew's stand-up: who is in it, the
+// middle of its ring, when it began and when it ends (0: still gathering),
+// when the next turn to talk comes and whose it is.
+type Huddle = { opened: number; at: Spot; members: string[]; spots: Spot[]; firstHere: number; until: number };
+type Standup = { members: string[]; centre: Spot; since: number; until: number; beat: number; turn: number };
 
 export type Mind = {
   rng: Rng;
@@ -50,6 +115,9 @@ export type Mind = {
   greeted: number; // last answered a lead's bolt
   up: number; // a sleeper is up and about until this clock time (see rise)
   exit: number; // gone from the list: leave by this clock time once the block is down (0 = staying)
+  mug: number; // carries a mug of coffee until this clock time (0: none)
+  sip: number; // its next sip from it
+  coffee: number; // when it last went for one
 };
 
 export function newMind(id: string, clock: number): Mind {
@@ -68,12 +136,16 @@ export function newMind(id: string, clock: number): Mind {
     greeted: -Infinity,
     up: 0,
     exit: 0,
+    mug: 0,
+    sip: 0,
+    coffee: -Infinity,
   };
 }
 
-// What a character looks like right now: its pose, what it faces, and the
-// colour (an index into the world's build colours) of a block it holds.
-export type Look = { pose: Pose; face?: Spot; item?: number };
+// What a character looks like right now: its pose, what it faces, the
+// colour (an index into the world's build colours) of a block it holds, and
+// whether it carries a mug of coffee.
+export type Look = { pose: Pose; face?: Spot; item?: number; mug?: boolean };
 
 // What life needs from the stage.
 export type LifeHost = {
@@ -84,6 +156,8 @@ export type LifeHost = {
   idleFor(a: Actor): number; // seconds in the current activity
   spawn(p: Particle): void;
   occupied(x: number, y: number, z: number): boolean; // someone stands in this unit block
+  back(a: Actor): void; // straight back to the station for its activity (an idle one is free to roam)
+  yard(): Spot | null; // open floor in front of the hub, where a stand-up gathers
 };
 
 export function faceToward(a: Spot, f: Spot, fallback: Facing): Facing {
@@ -94,6 +168,8 @@ export function faceToward(a: Spot, f: Spot, fallback: Facing): Facing {
 }
 
 const working = (a: Actor) => a.info.activity !== 'idle' && a.info.activity !== 'done' && a.info.activity !== 'error';
+// In the room: not coming in, not on the way out, not gone.
+const present = (a: Actor) => !a.gone && a.state !== 'enter' && a.state !== 'leave';
 
 export class Life {
   clock = 0;
@@ -105,6 +181,15 @@ export class Life {
   private byId = new Map<string, Actor>();
   private met = new Map<string, number>(); // pair of ids → when they last passed
   private pruned = 0;
+  // Office life: on (see setOffice), the huddles by lead and the stand-ups
+  // by crew under way, when each lead and crew last had one, and when the
+  // crews were last looked over for a stand-up.
+  office = true;
+  private huddles = new Map<string, Huddle>();
+  private lastHuddle = new Map<string, number>();
+  private standups = new Map<string, Standup>();
+  private lastStandup = new Map<string, number>();
+  private polled = -Infinity;
 
   constructor(host: LifeHost, seed = 0x11fe) {
     this.host = host;
@@ -123,6 +208,21 @@ export class Life {
       a.mind.gestures = [];
       a.mind.think = this.clock + 0.5;
     }
+    this.huddles.clear();
+    this.standups.clear();
+  }
+
+  // Office life on or off; off, every moment of it ends at once and the
+  // mugs go.
+  setOffice(on: boolean): void {
+    this.office = on;
+    if (on) return;
+    for (const a of this.byId.values()) {
+      if (a.mind.errand && OFFICE.has(a.mind.errand.kind)) this.end(a);
+      a.mind.mug = 0;
+    }
+    this.huddles.clear();
+    this.standups.clear();
   }
 
   // ── events from the stage ─────────────────────────────────────────────
@@ -139,16 +239,21 @@ export class Life {
       }
     }
     a.mind.think = Math.max(a.mind.think, c + 1);
+    if (this.office) this.kickOff(a);
   }
 
-  // The activity changed: whatever they were up to is dropped.
+  // The activity changed: whatever they were up to is dropped (a working
+  // agent leaves an office moment for its station at once, see end). A
+  // subagent that finished goes to high-five its lead first.
   changed(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
     m.exit = 0;
     this.end(a);
-    if (a.info.activity === 'done') m.think = c + 1.6; // celebrate before anything else
-    else if (a.info.activity === 'idle') m.think = c + m.rng.range(2.5, 3.5); // a short wait is no reason to wander off
+    if (a.info.activity === 'done') {
+      m.think = c + 1.6; // celebrate before anything else
+      if (this.office) this.highFive(a);
+    } else if (a.info.activity === 'idle') m.think = c + m.rng.range(2.5, 3.5); // a short wait is no reason to wander off
     else m.micro = Math.max(m.micro, c + m.rng.range(6, 14));
   }
 
@@ -195,7 +300,8 @@ export class Life {
   }
 
   // The agent is gone from the list. A finished agent on its way with a
-  // block lays it first, then goes (true: not yet).
+  // block lays it first, and one on its way to a high-five gives it, then
+  // goes (true: not yet).
   vanish(a: Actor): boolean {
     const e = a.mind.errand;
     if (a.info.activity === 'done' && e?.kind === 'haul') {
@@ -203,7 +309,23 @@ export class Life {
       if (!a.mind.exit) a.mind.exit = this.clock + 20;
       return true;
     }
+    if (e?.kind === 'five') {
+      if (!a.mind.exit) a.mind.exit = this.clock + FIVE_WALK + FIVE_S;
+      return true;
+    }
     return false;
+  }
+
+  // On its way to a high-five or giving one: the finale waits (see
+  // Stage.effects).
+  fiving(a: Actor): boolean {
+    return a.mind.errand?.kind === 'five';
+  }
+
+  // In a kick-off huddle: a subagent spinning up, its station waits (see
+  // Stage.moving).
+  huddled(a: Actor): boolean {
+    return a.mind.errand?.kind === 'huddle';
   }
 
   // Drops whatever errand `a` is on (and frees whoever or whatever it involved).
@@ -222,6 +344,9 @@ export class Life {
       if (this.critter?.claimedBy === a.info.id) this.critter.claimedBy = null;
     } else if (e.kind === 'haul' && (e.step === 'carry' || e.step === 'place')) {
       e.site.carriers = Math.max(0, e.site.carriers - 1);
+    } else if (OFFICE.has(e.kind) && working(a) && a.state !== 'leave' && !a.gone) {
+      // work comes first: straight to its station
+      this.host.back(a);
     }
   }
 
@@ -249,6 +374,11 @@ export class Life {
       else if (act === 'done') this.done(a);
       else if (act !== 'error') this.work(a);
       if (m.errand) this.pursue(a);
+      if (m.mug) this.sipping(a);
+    }
+    if (this.office) {
+      this.huddling();
+      this.standing();
     }
     this.mingle(actors);
     const cr = this.critter;
@@ -274,6 +404,7 @@ export class Life {
         return;
       }
       this.end(a);
+      m.mug = 0;
       m.errand = { kind: 'nap', wake: this.clock + m.rng.range(60, 90) };
       this.host.nap(a);
       return;
@@ -283,7 +414,7 @@ export class Life {
       m.errand = null;
       m.think = this.clock + m.rng.range(0.5, 1.5);
     }
-    if (!m.errand && this.clock >= m.think && !this.held(a)) this.choose(a);
+    if (!m.errand && this.clock >= m.think && !this.held(a) && !this.awaited(a)) this.choose(a);
   }
 
   // A sleeper gets up for a few seconds: a stretch, then a drink, a look
@@ -372,6 +503,10 @@ export class Life {
     if (site) opts.push(['haul', this.haulers(site) ? 2.5 : 6]);
     const cr = this.critter;
     if (cr && !cr.claimedBy) opts.push(['pet', 1.5]);
+    // A coffee run: likeliest early in a wait (the kettle goes on when the
+    // work stops), at most one every COFFEE_EVERY seconds.
+    const brew = this.office && !m.mug && c - m.coffee >= COFFEE_EVERY ? this.brew(a) : null;
+    if (brew) opts.push(['coffee', this.host.idleFor(a) < 20 ? 8 : 3]);
     opts.push(['stretch', 0.6]);
     switch (m.rng.weighted(opts)) {
       case 'visit': {
@@ -393,6 +528,11 @@ export class Life {
         this.host.walk(a, this.petSpot(cr!, a));
         break;
       }
+      case 'coffee':
+        m.coffee = c;
+        m.errand = { kind: 'coffee', step: 'go', poi: brew!, from: { x: a.x, y: a.y }, until: 0, since: c };
+        this.host.walk(a, brew!);
+        break;
       default:
         this.gesture(a, 'stretch', 1.6);
         m.think = c + 1.6 + m.rng.range(0.5, 1.5);
@@ -423,13 +563,13 @@ export class Life {
   }
 
   // The nearest other idle character free for a chat (not a sleeper, nor
-  // one up for a moment only).
+  // one up for a moment only, nor a lead about to be high-fived).
   private mateFor(a: Actor): Actor | null {
     let best: Actor | null = null;
     let bd = Infinity;
     for (const b of this.byId.values()) {
       if (b === a || b.info.activity !== 'idle' || b.state === 'enter' || b.state === 'leave' || b.mind.exit) continue;
-      if (this.host.idleFor(b) >= SLEEP_AFTER || this.held(b)) continue;
+      if (this.host.idleFor(b) >= SLEEP_AFTER || this.held(b) || this.awaited(b)) continue;
       const e = b.mind.errand;
       if (e && e.kind !== 'visit') continue;
       const d = Math.hypot(b.x - a.x, b.y - a.y);
@@ -583,7 +723,298 @@ export class Life {
       case 'haul':
         this.carry(a, e);
         return;
+      case 'huddle': {
+        const lead = this.byId.get(e.lead);
+        const h = this.huddles.get(e.lead);
+        if (!lead || !h || !present(lead) || (h.until && c >= h.until)) {
+          this.end(a);
+          return;
+        }
+        if (!e.arrived) {
+          if (here) {
+            e.arrived = true;
+            if (!h.firstHere) h.firstHere = c;
+          } else if (c - e.since > HUDDLE_GATHER) this.end(a);
+        }
+        return;
+      }
+      case 'coffee':
+        if (e.step === 'go') {
+          if (here) {
+            e.step = 'pour';
+            e.until = c + COFFEE_POUR;
+            this.emote(a, 'cup', 1.6, COFFEE_POUR - 1.6);
+          } else if (c - e.since > COFFEE_LEG) this.end(a);
+        } else if (e.step === 'pour') {
+          if (c < e.until) return;
+          m.mug = c + m.rng.range(...MUG);
+          m.sip = c + m.rng.range(2, 4);
+          e.step = 'back';
+          e.since = c;
+          this.host.walk(a, e.from);
+        } else if (here || c - e.since > COFFEE_LEG) this.end(a);
+        return;
+      case 'five': {
+        const lead = this.byId.get(e.lead);
+        if (!lead || !present(lead)) {
+          this.fived(a);
+          return;
+        }
+        if (!e.arrived) {
+          if (c - e.since > FIVE_WALK) this.fived(a);
+          else if (Math.hypot(lead.x - e.at.x, lead.y - e.at.y) > 3) {
+            // the lead moved off: after it
+            e.at = { x: lead.x, y: lead.y };
+            this.host.walk(a, this.fiveSpot(lead, a));
+          } else if (here && !beside(a, lead)) {
+            // the lead moved meanwhile: beside it again
+            e.at = { x: lead.x, y: lead.y };
+            this.host.walk(a, this.fiveSpot(lead, a));
+          } else if (here) {
+            e.arrived = true;
+            e.until = c + FIVE_S;
+            e.clap = c + FIVE_S * 0.4;
+            this.gesture(a, 'highfive', FIVE_S, { face: lead });
+            // a working lead turns and raises a hand where it is
+            this.gesture(lead, 'highfive', FIVE_S, { face: a, hold: !working(lead) });
+          }
+          return;
+        }
+        if (e.clap && c >= e.clap) {
+          e.clap = 0;
+          this.stars({ x: (a.x + lead.x) / 2, y: (a.y + lead.y) / 2 });
+        }
+        if (c >= e.until) this.fived(a);
+        return;
+      }
+      case 'standup': {
+        if (!this.standups.has(e.crew)) this.end(a);
+        else if (!e.arrived && here) e.arrived = true;
+        else if (!e.arrived && c - e.since > STANDUP_GATHER + STANDUP_S) this.end(a);
+        return;
+      }
       default:
+    }
+  }
+
+  // ── office life ───────────────────────────────────────────────────────
+  // A subagent walked in: if its lead is in the room and awake and the
+  // subagent's first task is not running yet (it is spinning up, thinking),
+  // it joins the lead's kick-off huddle, the one opened a few seconds ago or
+  // a new one (at most one a lead every HUDDLE_EVERY seconds).
+  private kickOff(a: Actor): void {
+    const id = a.info.parentId;
+    if (a.info.role === 'lead' || !id || a.info.activity !== 'think') return;
+    const lead = this.byId.get(id);
+    if (!lead || !present(lead) || this.sleeping(lead)) return;
+    const c = this.clock;
+    let h = this.huddles.get(id);
+    if (h && (h.until || c - h.opened > HUDDLE_JOIN)) return;
+    if (!h) {
+      if (c - (this.lastHuddle.get(id) ?? -Infinity) < HUDDLE_EVERY) return;
+      const at = lead.path[lead.path.length - 1] ?? lead;
+      h = { opened: c, at: { x: at.x, y: at.y }, members: [], spots: [], firstHere: 0, until: 0 };
+      this.huddles.set(id, h);
+      this.lastHuddle.set(id, c);
+    }
+    h.members.push(a.info.id);
+    a.mind.errand = { kind: 'huddle', lead: id, arrived: false, since: c };
+    this.host.walk(a, this.huddleSpot(h, a));
+  }
+
+  // Round the lead, fanned out on screen (see FAN), each on a spot of its
+  // own.
+  private huddleSpot(h: Huddle, a: Actor): Spot {
+    const free = FAN.map(([sx, sy]) => onScreen(h.at, sx, sy)).filter((p) => this.host.standable(p) && h.spots.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > 2));
+    const spot = free[0] ?? this.around(h.at, HUDDLE_R, Math.atan2(a.y - h.at.y, a.x - h.at.x) + h.spots.length * 0.8);
+    h.spots.push(spot);
+    return spot;
+  }
+
+  // Each huddle starts once its members are all there (or HUDDLE_WAIT after
+  // the first got there): they stand round the lead, nodding along, a
+  // speech mark over it, an idle lead talking to them; HUDDLE_S later each
+  // goes to its station. Members gone or given work drop out; with none
+  // left it is over.
+  private huddling(): void {
+    const c = this.clock;
+    for (const [id, h] of this.huddles) {
+      h.members = h.members.filter((m) => this.byId.get(m)?.mind.errand?.kind === 'huddle');
+      const lead = this.byId.get(id);
+      if (!h.members.length || !lead) {
+        this.huddles.delete(id);
+        continue;
+      }
+      // The lead is off to another station: they follow it there; once it
+      // has started, it is over.
+      const dest = lead.path[lead.path.length - 1] ?? lead;
+      if (Math.hypot(dest.x - h.at.x, dest.y - h.at.y) > 3) {
+        if (h.until) {
+          h.until = c;
+          continue;
+        }
+        h.at = { x: dest.x, y: dest.y };
+        h.spots = [];
+        h.firstHere = 0;
+        for (const m of h.members) {
+          const o = this.byId.get(m)!;
+          const e = o.mind.errand;
+          if (e?.kind === 'huddle') e.arrived = false;
+          this.host.walk(o, this.huddleSpot(h, o));
+        }
+        continue;
+      }
+      if (h.until || !h.firstHere) continue;
+      const all = h.members.every((m) => {
+        const e = this.byId.get(m)!.mind.errand;
+        return e?.kind === 'huddle' && e.arrived;
+      });
+      if (!all && c - h.firstHere < HUDDLE_WAIT) continue;
+      h.until = c + HUDDLE_S;
+      this.emote(lead, 'speech', HUDDLE_S);
+      if (!working(lead)) {
+        const group = h.members.map((m) => this.byId.get(m)!);
+        const mid = { x: group.reduce((n, o) => n + o.x, 0) / group.length, y: group.reduce((n, o) => n + o.y, 0) / group.length };
+        this.gesture(lead, 'talk', HUDDLE_S, { face: mid });
+      }
+    }
+  }
+
+  // A drink spot nearby nobody is at or heading for, for a coffee run (the
+  // world's espresso counter, bar or mess bench); in a room with none open,
+  // a warm one (by the hearth, the stove or the fire, where every world
+  // keeps a kettle on).
+  private brew(a: Actor): Poi | null {
+    const open = this.openPois(a);
+    const pots = open.filter((p) => p.kind === 'drink');
+    const warm = open.filter((p) => p.kind === 'warm');
+    return pots.length ? this.pickPoi(a, pots) : warm.length ? this.pickPoi(a, warm) : null;
+  }
+
+  // Carrying a mug: a sip now and then (standing about, or at work: a
+  // worker sips where it is), until it is finished.
+  private sipping(a: Actor): void {
+    const m = a.mind;
+    const c = this.clock;
+    if (!this.office || c >= m.mug || this.sleeping(a)) {
+      m.mug = 0;
+      return;
+    }
+    if (c < m.sip || a.path.length || m.gestures.length || this.carrying(a)) return;
+    const busy = working(a);
+    if (busy && a.state !== 'work') return;
+    m.sip = c + m.rng.range(...SIP);
+    this.gesture(a, 'sip', SIP_S, { hold: !busy });
+  }
+
+  // A subagent finished and its lead is in the room and awake: it goes to
+  // stand beside the lead for a high-five.
+  private highFive(a: Actor): void {
+    const lead = a.info.parentId ? this.byId.get(a.info.parentId) : undefined;
+    if (a.info.role === 'lead' || !lead || !present(lead) || !present(a) || this.sleeping(lead) || this.carrying(a)) return;
+    a.mind.errand = { kind: 'five', lead: lead.info.id, at: { x: lead.x, y: lead.y }, arrived: false, until: 0, since: this.clock, clap: 0 };
+    this.host.walk(a, this.fiveSpot(lead, a));
+  }
+
+  // Where to stand for a high-five: beside the lead on screen, the nearer
+  // side first, a little up or down if need be, else anywhere near it.
+  private fiveSpot(lead: Actor, a: Actor): Spot {
+    const near = (p: Spot) => Math.hypot(p.x - a.x, p.y - a.y);
+    const sides = BESIDE.map(([sx, sy]) => onScreen(lead, sx, sy));
+    const ok = sides.filter((p) => this.host.standable(p)).sort((p, q) => near(p) - near(q));
+    return ok[0] ?? this.around(lead, FIVE_GAP, Math.atan2(a.y - lead.y, a.x - lead.x));
+  }
+
+  // The high-five given (or missed): the finale may go off; one gone from
+  // the list meanwhile leaves now.
+  private fived(a: Actor): void {
+    this.end(a);
+    if (a.mind.exit) {
+      a.mind.exit = 0;
+      this.host.leave(a);
+    }
+  }
+
+  // A small burst of stars where two hands meet.
+  private stars(at: Spot): void {
+    const r = this.rng;
+    const colors: RGB[] = [hex('#ffd34a'), hex('#fff1b8'), hex('#ffb84a')];
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * TAU + r.range(-0.2, 0.2);
+      const sp = r.range(2.5, 4.5);
+      this.host.spawn({ kind: 'spark', x: at.x, y: at.y, z: 10.5, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: r.range(1, 4), life: r.range(0.45, 0.75), color: r.pick(colors), glow: true, gravity: 6 });
+    }
+  }
+
+  // Someone a finished subagent is on its way to high-five: it holds still
+  // (no new wanderings) until it has been.
+  private awaited(lead: Actor): boolean {
+    for (const o of this.byId.values()) {
+      const e = o.mind.errand;
+      if (e?.kind === 'five' && e.lead === lead.info.id) return true;
+    }
+    return false;
+  }
+
+  // Free for a stand-up: idle, awake, in the room, not leaving, not hauling
+  // a block, not about to be high-fived (a coffee run can wait).
+  private waiting(a: Actor): boolean {
+    const e = a.mind.errand;
+    if (a.info.activity !== 'idle' || !present(a) || a.mind.exit || this.sleeping(a) || this.carrying(a) || this.awaited(a)) return false;
+    return !e || e.kind === 'visit' || e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul' || e.kind === 'coffee';
+  }
+
+  // Stand-ups: a crew with STANDUP_N or more agents waiting gathers in a
+  // ring in the yard (one at a time; at most once every STANDUP_EVERY
+  // seconds a crew); once
+  // all are there (or STANDUP_GATHER has passed) they take turns talking for
+  // STANDUP_S, then scatter. Anyone given work leaves at once (see end); a
+  // ring of fewer than two breaks up.
+  private standing(): void {
+    const c = this.clock;
+    for (const [crew, st] of this.standups) {
+      st.members = st.members.filter((id) => this.byId.get(id)?.mind.errand?.kind === 'standup');
+      if (st.members.length < 2 || (st.until && c >= st.until)) {
+        this.standups.delete(crew);
+        for (const id of st.members) this.end(this.byId.get(id)!);
+        continue;
+      }
+      if (!st.until) {
+        const all = st.members.every((id) => {
+          const e = this.byId.get(id)!.mind.errand;
+          return e?.kind === 'standup' && e.arrived;
+        });
+        if (all || c - st.since > STANDUP_GATHER) {
+          st.until = c + STANDUP_S;
+          st.beat = c;
+        }
+        continue;
+      }
+      if (c >= st.beat) {
+        const who = this.byId.get(st.members[st.turn++ % st.members.length])!;
+        st.beat = c + STANDUP_TURN;
+        this.gesture(who, 'talk', STANDUP_TURN - 0.2, { face: st.centre });
+        this.emote(who, 'speech', STANDUP_TURN - 0.2);
+      }
+    }
+    // A crew that is waiting, now and then.
+    if (this.standups.size || c - this.polled < 1) return;
+    this.polled = c;
+    const crews = new Map<string, Actor[]>();
+    for (const a of this.byId.values()) if (a.info.crew && this.waiting(a)) crews.set(a.info.crew, [...(crews.get(a.info.crew) ?? []), a]);
+    for (const [crew, group] of crews) {
+      if (group.length < STANDUP_N || this.standups.has(crew) || c - (this.lastStandup.get(crew) ?? -Infinity) < STANDUP_EVERY) continue;
+      const centre = this.host.yard();
+      if (!centre) continue;
+      this.lastStandup.set(crew, c);
+      const ring = group.slice(0, STANDUP_MAX);
+      const r = 5 + 1.2 * ring.length;
+      this.standups.set(crew, { members: ring.map((a) => a.info.id), centre, since: c, until: 0, beat: 0, turn: 0 });
+      ring.forEach((a, k) => {
+        this.end(a);
+        a.mind.errand = { kind: 'standup', crew, arrived: false, since: c };
+        this.host.walk(a, this.around(centre, r, (k / ring.length) * TAU + 0.4));
+      });
     }
   }
 
@@ -793,7 +1224,8 @@ export class Life {
     const e = a.mind.errand;
     if (!e || e.kind === 'visit' || e.kind === 'haul') return true;
     if (e.kind === 'nap') return false;
-    return !e.arrived; // on the way to a chat or the critter
+    if (e.kind === 'coffee') return e.step !== 'pour';
+    return !e.arrived; // on the way to a chat, the critter or an office moment
   }
 
   private sociable(a: Actor): boolean {
@@ -819,6 +1251,9 @@ export class Life {
     if (!e) return 1;
     if (e.kind === 'haul') return a.info.activity === 'done' ? 1 : HAUL;
     if (e.kind === 'nap') return 0.8;
+    // to a huddle or a high-five with purpose, to a stand-up briskly
+    if (e.kind === 'huddle' || e.kind === 'five') return 1;
+    if (e.kind === 'standup') return HAUL;
     return WANDER;
   }
 
@@ -838,6 +1273,12 @@ export class Life {
   }
 
   look(a: Actor, walking: boolean, base: Pose): Look {
+    const out = this.looks(a, walking, base);
+    if (this.office && a.mind.mug > this.clock) out.mug = true;
+    return out;
+  }
+
+  private looks(a: Actor, walking: boolean, base: Pose): Look {
     const c = this.clock;
     const g = a.mind.gestures.find((q) => q.at <= c && c < q.until);
     if (g) return g.face ? { pose: g.pose, face: g.face } : { pose: g.pose };
@@ -859,9 +1300,29 @@ export class Life {
       return b ? { pose: 'chat', face: { x: b.x, y: b.y } } : { pose: 'chat' };
     }
     if (e?.kind === 'pet' && e.arrived && this.critter) return { pose: 'pet', face: { x: this.critter.x, y: this.critter.y } };
+    if (e?.kind === 'huddle' && e.arrived) {
+      // round the lead, nodding along
+      const lead = this.byId.get(e.lead);
+      return lead ? { pose: 'chat', face: { x: lead.x, y: lead.y } } : { pose: 'chat' };
+    }
+    if (e?.kind === 'coffee' && e.step === 'pour') return { pose: 'idle', face: e.poi.face ?? e.poi };
+    if (e?.kind === 'standup' && e.arrived) {
+      const st = this.standups.get(e.crew);
+      return st ? { pose: 'idle', face: st.centre } : { pose: 'idle' };
+    }
+    if (e?.kind === 'five' && e.arrived) {
+      const lead = this.byId.get(e.lead);
+      return lead ? { pose: 'idle', face: { x: lead.x, y: lead.y } } : { pose: 'idle' };
+    }
     // Only sleepers lie down: anyone awake, however long the wait, stands.
     return { pose: base === 'sleep' && !this.sleeping(a) ? 'idle' : base };
   }
+}
+
+// The floor spot `sx` units right and `sy` units down the screen from `at`
+// (see the projection in worlds/types.ts).
+function onScreen(at: Spot, sx: number, sy: number): Spot {
+  return { x: at.x + sy + sx / 2, y: at.y + sy - sx / 2 };
 }
 
 function poseAt(kind: Poi['kind'], rng: Rng): Pose {

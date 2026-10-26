@@ -16,7 +16,7 @@ import type { Feel, Pose, Traits, Wear } from './character.ts';
 import { Critter } from './critter.ts';
 import type { BuildFrame, Camera, FigureFrame, LabelFrame, SceneFrame, Trinket, TrinketFrame } from './frame.ts';
 import { EMOTE, FIGURE_H, HOP, MUG_TOP, figureTop, project } from './frame.ts';
-import { hub, planLayout, slotRect } from './layout.ts';
+import { hub, planLayout, slotRect, yard } from './layout.ts';
 import type { Rect as Box } from './layout.ts';
 import { Life, SLEEP_AFTER, faceToward, newMind } from './life.ts';
 import type { Look, Mind } from './life.ts';
@@ -238,7 +238,19 @@ export class Stage {
       idleFor: (a) => this.idleFor(a),
       spawn: (p) => this.add(p),
       occupied: (x, y, z) => this.occupied(x, y, z),
+      back: (a) => this.retarget(a),
+      yard: () => (this.L ? yard(this.L) : null),
     });
+  }
+
+  // Office life (huddles, coffee runs, high-fives, stand-ups; see life.ts)
+  // on or off.
+  get office(): boolean {
+    return this.life.office;
+  }
+
+  set office(on: boolean) {
+    this.life.setOffice(on);
   }
 
   // The terminal's cell size in pixels (the canvas is the scene's cells at
@@ -465,7 +477,7 @@ export class Stage {
   // Due at another prop: the activity wants a different one, has lasted a
   // moment, and the agent has worked at its current one a while.
   private moving(a: Actor, now: number): boolean {
-    if (a.state === 'leave' || !this.L) return false;
+    if (a.state === 'leave' || !this.L || this.life.huddled(a)) return false;
     const kind = stationKindFor(a.info.activity);
     if (!kind || kind === 'idle' || a.station?.kind === kind) return false;
     if (now - a.info.since < SETTLE_MS) return false;
@@ -931,7 +943,8 @@ export class Stage {
       this.add({ ...smoke(err.x + r.range(-1.5, 1.5), err.y + r.range(-1.5, 1.5), 1, r, [grey, grey - 4, grey + 2]), life: 1.6 + r.next() });
     }
     if ((act === 'error' || err) && r.next() < dt / 0.7) this.glyphs.push({ x: a.x, y: a.y, z: head + 4, vz: 4, ch: '!', color: pal.bad, life: 0.8 });
-    if (act === 'done' && a.cheered !== a.info.since) {
+    // (after a high-five, if it is giving one: see life.ts)
+    if (act === 'done' && a.cheered !== a.info.since && !this.life.fiving(a)) {
       a.cheered = a.info.since;
       this.burst(a);
       this.life.finished(a, this.cast.values());
@@ -1045,6 +1058,7 @@ export class Stage {
         walking: a.path.length > 0 && a.state !== 'enter' && !this.life.holding(a),
       };
       if (look.item !== undefined) fig.item = this.world.build.colors[look.item] ?? this.world.build.colors[0];
+      if (look.mug) fig.mug = true;
       const feel = this.feel(a, now);
       const wear = this.wear(a);
       if (feel) fig.feel = feel;
