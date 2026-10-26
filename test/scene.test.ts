@@ -564,6 +564,17 @@ test('a plate of the café at 1500 x 920 with 9 figures and 80 bits fits the bud
 });
 
 
+test('a workstation is a picture of its own in the plate, under a figure working at it; none before it grows', () => {
+  const r = room([]);
+  const d = { id: 0, wall: 'right' as const, x0: 30, y0: 30, len: 7, dep: 3, screen: 'write' as const, grow: 1, seed: 0 };
+  const g = figure('w', 32, 35, { pose: 'write', facing: { back: true, flip: false } });
+  const ids = new Scene().plate(frame(r, { desks: [d], figures: [g] })).layers.map((l) => l.id);
+  assert.ok(ids.includes('desk:0'), 'no picture of the workstation');
+  assert.ok(ids.indexOf('desk:0') < ids.indexOf('fig:w'), 'the figure is under its workstation');
+  const none = new Scene().plate(frame(r, { desks: [{ ...d, grow: 0 }] })).layers;
+  assert.ok(!none.some((l) => l.id.startsWith('desk:')), 'a workstation not yet grown');
+});
+
 test('a desk upgrade stands on the floor, in front of a prop or hidden behind it like a figure', () => {
   const isle = place(flat(10, 6, 8, '#00ff00'), 'right', true, 30, 30);
   const r = room([isle]);

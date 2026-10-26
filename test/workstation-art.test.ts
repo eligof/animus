@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
+import { POP_STEPS, deskSprite, deskStats } from '../src/art/scene/desk.ts';
 import { drawScreen } from '../src/art/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
 import type { Screen } from '../src/world/frame.ts';
@@ -44,6 +45,30 @@ test('the activity layer draws each activity its own way, inside the screen', ()
       }
     }
   }
+});
+
+test('a workstation sprite is drawn once for what it shows and kept: the same key, the same pixels', () => {
+  const cafe = getTheme('cafe')!;
+  const ink = '#2f1d18';
+  const d = { wall: 'right' as const, screen: 'write' as Screen, grow: 1, seed: 1 };
+  const m = deskStats.misses;
+  const a = deskSprite(cafe, d, 4, ink);
+  assert.equal(deskStats.misses, m + 1);
+  assert.equal(deskSprite(cafe, { ...d }, 4, ink), a, 'drawn again');
+  assert.equal(deskStats.misses, m + 1);
+  // What it shows makes another picture: its screen, its frame, its scale
+  // (and its look, where the world draws more than one).
+  const others = [{ ...d, screen: 'run' as Screen }, { ...d, wall: 'left' as const }].map((o) => deskSprite(cafe, o, 4, ink));
+  others.push(deskSprite(cafe, d, 8, ink));
+  for (const o of others) assert.notEqual(hash(o.img), hash(a.img));
+  // Popping up: a picture a step, growing out of the floor and a little
+  // past its size; all of them alike for every workstation.
+  const steps = Array.from({ length: POP_STEPS }, (_, k) => deskSprite(cafe, { ...d, grow: (k + 1) / POP_STEPS }, 4, ink));
+  assert.equal(steps[POP_STEPS - 1], a);
+  assert.ok(steps[0].img.height < a.img.height, 'the first step is not smaller');
+  assert.ok(Math.max(...steps.map((p) => p.img.height)) > a.img.height, 'it does not grow past its size');
+  assert.equal(new Set(steps).size, POP_STEPS);
+  assert.equal(deskSprite(cafe, { ...d, grow: 0.21 }, 4, ink), steps[0], 'a step between steps');
 });
 
 test('the plain workstation, for a world with none of its own, takes the world\'s colours', () => {
