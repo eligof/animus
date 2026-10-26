@@ -1,12 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadWorld } from '../scripts/scene-shot.ts';
+import { Canvas } from '../src/art/canvas.ts';
+import { frame, project as iso } from '../src/art/iso.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { Theme } from '../src/themes/types.ts';
 import { PROP_SIZE, planLayout } from '../src/world/layout.ts';
 import { planRoom, toWorld } from '../src/world/room.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
+import { DESK, DESK_SPOT } from '../src/world/desks.ts';
 import { project } from '../src/world/frame.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import { recordingPen } from './helpers.ts';
 
 // Contract every world must meet. ANIMUS_THEME_FILE=src/worlds/x.ts also
@@ -95,6 +99,48 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
           assert.ok([q.x, q.y, q.z, q.vx, q.vy, q.vz, q.life, q.gravity].every(Number.isFinite), `${tag}: particle not finite`);
           assert.ok(q.x >= -2 && q.y >= -2 && q.x <= p.len + 2 && q.y <= p.dep + 2 && q.z >= 0 && q.z <= p.art.height + 20, `${tag}: particle away from the prop (its own frame)`);
           assert.ok(q.life > 0 && q.life <= 10 && isRGB(q.color), `${tag}: ${q.kind} life or colour`);
+        }
+      }
+    }
+  });
+  test(`world ${w.id}: its workstation fits its place, draws inside it in both frames at both scales, and names a screen on its body`, () => {
+    const art = workstationOf(w);
+    assert.deepEqual([art.len, art.dep], [DESK.len, DESK.dep], 'footprint');
+    assert.ok(art.height > 0 && art.height <= DESK.height, `${art.height} tall`);
+    assert.ok(!art.animated && !art.emit, 'a workstation is a still sprite: no animation, no bits');
+    // The screen: a parallelogram upright on its body, right of where the
+    // agent stands, a fair size; the desk upgrade's spot on its top.
+    const [a, b, c, d] = art.screen;
+    for (const p of art.screen) assert.ok(p[0] >= 0 && p[0] <= DESK.len && p[1] >= 0 && p[1] <= DESK.dep && p[2] >= 0 && p[2] <= art.height, `screen corner ${p} off its body`);
+    for (let k = 0; k < 3; k++) assert.ok(Math.abs(c[k] - (b[k] + d[k] - a[k])) < 1e-6, 'the screen is not a parallelogram');
+    assert.ok(d[2] - a[2] >= 1.5 && Math.abs(b[2] - a[2]) < 1e-6, 'the screen is not upright');
+    assert.ok(b[0] - a[0] >= 1.5 && Math.min(a[0], d[0]) >= DESK_SPOT.u + 0.5, 'the screen is not to the right of the agent');
+    const [tu, tv, tz] = art.top;
+    assert.ok(tu >= 0.5 && tu <= DESK.len - 0.5 && tv >= 0.5 && tv <= DESK.dep - 0.5 && tz >= 2 && tz <= art.height, `the upgrade's spot ${art.top} is not on its top`);
+    for (const s of [4, 16]) {
+      for (const wall of ['right', 'left'] as const) {
+        for (const seed of [0, 1, 2]) {
+          for (const active of [false, true]) {
+            const pad = 6 * s;
+            const at0 = frame(iso(0, 0, s), wall, 0, 0);
+            let box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+            for (const u of [0, art.len]) for (const v of [0, art.dep]) for (const z of [0, art.height]) {
+              const [x, y] = at0(u, v, z);
+              box = { x0: Math.min(box.x0, x), y0: Math.min(box.y0, y), x1: Math.max(box.x1, x), y1: Math.max(box.y1, y) };
+            }
+            const cv = new Canvas(Math.ceil(box.x1 - box.x0 + 2 * pad), Math.ceil(box.y1 - box.y0 + 2 * pad));
+            const at = frame(iso(pad - box.x0, pad - box.y0, s), wall, 0, 0);
+            art.draw({ pen: cv, s, at, len: art.len, dep: art.dep, wall, island: true, t: 3, active, seed });
+            // Everything at least faintly opaque lies inside its box, a
+            // half unit of ink allowed.
+            const slack = s / 2;
+            for (let y = 0; y < cv.height; y++) {
+              for (let x = 0; x < cv.width; x++) {
+                if (cv.data[(y * cv.width + x) * 4 + 3] < 16) continue;
+                assert.ok(x >= pad - slack && x <= cv.width - pad + slack && y >= pad - slack && y <= cv.height - pad + slack, `s ${s} ${wall} seed ${seed}${active ? ' (on)' : ''}: painted at ${x},${y}, outside its box`);
+              }
+            }
+          }
         }
       }
     }

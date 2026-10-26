@@ -50,6 +50,21 @@ export type PropArt = {
   emit?(v: PropView, dt: number, spawn: (p: Particle) => void): void;
 };
 
+// A point, and a quad (four corners going round, the first at its bottom
+// left as the viewer sees it), in a prop's frame (u, v, z).
+export type P3 = readonly [number, number, number];
+export type Quad = readonly [P3, P3, P3, P3];
+
+// A world's workstation (see world/desks.ts): a prop DESK.len x DESK.dep
+// that stands at most DESK.height tall and is never animated (it is drawn
+// once a scale, frame, look and screen, and kept; see art/scene/desk.ts).
+// Its agent stands at DESK_SPOT, in front. It names where its screen is
+// (`screen`, upright on its body, to the right of where its agent stands:
+// the shared activity layer draws on it, see art/screen.ts) and where a
+// desk upgrade stands on it (`top`, on its top surface). `v.active` is true
+// while its screen is on; `v.seed` is 0, 1 or 2: the world's few looks of it.
+export type WorkstationArt = PropArt & { screen: Quad; top: P3 };
+
 // What the room shell draws with: the floor and the two back walls.
 // `W` x `D` is the floor (units), `H` the wall height, `T` the wall
 // thickness.
@@ -88,6 +103,9 @@ export type WorldDef = {
   // Extra furniture scattered by the room planner along the walls or on
   // the open floor, clear of the stations and walkways.
   decor?: ReadonlyArray<{ art: PropArt; count: number; place: 'wall' | 'floor' }>;
+  // Each agent's own workstation (a plain desk with a screen in the
+  // world's colours when it has none: see worlds/workstation.ts).
+  workstation?: WorkstationArt;
   // A colour multiplied over the finished scene (0 = none, 1 = full).
   ambient?: { tint: RGB; strength: number };
   costume: Costume;
