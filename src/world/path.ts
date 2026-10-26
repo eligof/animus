@@ -66,6 +66,23 @@ export class NavGrid {
     return this.open[this.cellOf(s)] !== SHUT;
   }
 
+  // Rates again the cells whose centres lie in [x0, x1) x [y0, y1) (as the
+  // constructor does), when something there came or went.
+  rerate(x0: number, y0: number, x1: number, y1: number, blocked: (x: number, y: number) => boolean | number): void {
+    const c0 = Math.max(0, Math.floor((x0 - this.x0) / this.cell - 0.5));
+    const c1 = Math.min(this.cols - 1, Math.ceil((x1 - this.x0) / this.cell - 0.5));
+    const r0 = Math.max(0, Math.floor((y0 - this.y0) / this.cell - 0.5));
+    const r1 = Math.min(this.rows - 1, Math.ceil((y1 - this.y0) / this.cell - 0.5));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const [x, y] = this.centre(c, r);
+        if (x < x0 || x >= x1 || y < y0 || y >= y1) continue;
+        const b = blocked(x, y);
+        this.open[r * this.cols + c] = b === true || b === SHUT ? SHUT : b === NEAR ? NEAR : OPEN;
+      }
+    }
+  }
+
   // Cell centres from the start's cell to the goal's, or null when the goal
   // cannot be reached. The start and goal are allowed even when shut
   // (characters may stand close to a prop), and so is any shut cell next to

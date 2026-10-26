@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AgentInfo } from '../src/agents.ts';
+import type { Activity, AgentInfo } from '../src/agents.ts';
 import { StressSource } from '../src/demo/stress.ts';
 import { computeLayout } from '../src/ui/layout.ts';
-import { Stage } from '../src/world/stage.ts';
+import { footprint } from '../src/world/room.ts';
+import { EMPTY_S, POP_S, Stage } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
-import type { Spot } from '../src/world/types.ts';
+import type { Desk, Particle, Spot } from '../src/world/types.ts';
 import { WORLDS } from '../src/worlds/index.ts';
+import { mines } from '../src/worlds/mines.ts';
 
 // The stress test: twenty agents at work (four leads with four subagents
 // each, each turning to something else every few seconds) in every world,
@@ -94,3 +96,117 @@ for (const [cols, rows] of SIZES) {
     }
   });
 }
+
+// ── a workstation's life ────────────────────────────────────────────────
+
+const WIDE = { x: 0, y: 1, w: 150, h: 44 };
+const SMALL = { x: 0, y: 1, w: 80, h: 21 };
+const lead = (id: string, activity: Activity = 'write', extra: Partial<AgentInfo> = {}): AgentInfo => ({ id, name: id, role: 'lead', project: 'p', activity, detail: `${activity} detail`, since: NOW, lastSeen: NOW, ...extra });
+const sub = (id: string, parentId: string, activity: Activity = 'write'): AgentInfo => ({ ...lead(id, activity), role: 'sub', parentId });
+
+function run(stage: Stage, crew: (now: number) => AgentInfo[], seconds: number, start = NOW, each?: (now: number) => void): number {
+  let now = start;
+  for (let i = 0; i < seconds * 20; i++) {
+    now += 50;
+    stage.sync(crew(now), now);
+    stage.update(0.05, now);
+    each?.(now);
+  }
+  return now;
+}
+
+function staged(r = WIDE, w = mines): Stage {
+  const stage = new Stage(w);
+  stage.layout(r);
+  return stage;
+}
+
+const particlesOf = (stage: Stage) => (stage as unknown as { particles: Particle[] }).particles;
+// Bits of `kind` within 6 units of a desk's middle.
+const near = (stage: Stage, d: Desk, kind: string) => {
+  const r = footprint(d);
+  return particlesOf(stage).filter((p) => p.kind === kind && Math.hypot(p.x - (r.x0 + r.x1) / 2, p.y - (r.y0 + r.y1) / 2) < 6).length;
+};
+
+test('a workstation pops up as its agent comes in, growing out of the floor with a puff and a sparkle in half a second', () => {
+  const stage = staged();
+  stage.sync([lead('a')], NOW);
+  const [w] = stage.workstations();
+  assert.equal(w.owner, 'a');
+  assert.ok(near(stage, w.desk, 'smoke') >= 4 && near(stage, w.desk, 'glint') >= 4, 'no puff and sparkle');
+  const grow: number[] = [];
+  run(stage, () => [lead('a')], 0.7, NOW, (n) => grow.push(stage.frame(n)!.desks![0].grow));
+  for (let k = 1; k < grow.length; k++) assert.ok(grow[k] >= grow[k - 1], `shrank at ${k}`);
+  assert.ok(grow[0] > 0 && grow[0] < 0.25, `${grow[0]} grown at first`);
+  assert.ok(grow[POP_S * 20 - 2] < 1, 'up too soon');
+  assert.equal(grow[POP_S * 20], 1, 'not up in half a second');
+});
+
+test('left empty, a workstation stands a few seconds, then shrinks away with a puff; its place is free for the next to come', () => {
+  const stage = staged();
+  let now = run(stage, () => [lead('a')], 10);
+  const [w] = stage.workstations();
+  const place = w.desk;
+  const t0 = now;
+  const seen: Array<[number, number | null, string | null, number]> = [];
+  let puffed = 0;
+  now = run(stage, () => [], EMPTY_S + POP_S + 1, now, (n) => {
+    const d = stage.frame(n)!.desks!.find((x) => x.id === place.index);
+    const t = (n - t0) / 1000;
+    seen.push([t, d ? d.grow : null, d ? d.screen : null, stage.workstations().length]);
+    if (t > EMPTY_S && t < EMPTY_S + 0.2) puffed = Math.max(puffed, near(stage, place, 'smoke'));
+  });
+  for (const [t, grow, screen, up] of seen) {
+    if (t > 0.1 && t < EMPTY_S - 0.1) assert.deepEqual([grow, screen, up], [1, 'off', 1], `at ${t.toFixed(2)} s`);
+    if (t > EMPTY_S + 0.15 && t < EMPTY_S + POP_S - 0.1) assert.ok(grow !== null && grow > 0 && grow < 1, `at ${t.toFixed(2)} s: grown ${grow}`);
+    if (t > EMPTY_S + POP_S + 0.15) assert.equal(up, 0, `at ${t.toFixed(2)} s: still there`);
+  }
+  assert.ok(puffed >= 4, 'no puff as it went');
+  // The next lead to come takes the place.
+  run(stage, () => [lead('b')], 1, now);
+  assert.equal(stage.workstations()[0].desk, place);
+  assert.equal(stage.workstations()[0].owner, 'b');
+});
+
+test('one back within those few seconds takes its own again, as it stands', () => {
+  const stage = staged();
+  let now = run(stage, () => [lead('a')], 10);
+  const [w] = stage.workstations();
+  now = run(stage, () => [], 2, now);
+  assert.equal(w.owner, null);
+  run(stage, () => [lead('a')], 1, now);
+  assert.deepEqual(stage.workstations().map((x) => [x, x.owner]), [[w, 'a']]);
+  assert.equal(stage.frame(now)!.desks![0].grow, 1, 'it popped up again');
+});
+
+test('nobody walks through a workstation, and nobody is trapped: one that goes up where someone stands sends them out of its way', () => {
+  // A crowd coming and going, waiting and at work, in a mid-sized room.
+  const stage = staged({ x: 0, y: 1, w: 120, h: 33 }, WORLDS.find((w) => w.id === 'cafe')!);
+  const ids = Array.from({ length: 22 }, (_, i) => `a${i}`);
+  const crew = (n: number) =>
+    ids.flatMap((id, i) => {
+      const t = (n - NOW) / 1000;
+      // each comes at its own time and goes a while later; some wait, some work
+      if (t < i * 1.5 || t > 40 + (i % 5) * 6) return [];
+      return [lead(id, Math.floor(t / 7 + i) % 3 === 0 ? 'idle' : 'write', { since: NOW + Math.floor(t / 7) * 7000 })];
+    });
+  const stuck = new Map<string, number>();
+  let most = 0;
+  let checked = 0;
+  run(stage, crew, 70, NOW, () => {
+    const up = stage.workstations().map((w) => footprint(w.desk));
+    most = Math.max(most, stage.actors().length);
+    for (const a of stage.actors()) {
+      if (a.state === 'enter') continue;
+      const inside = up.find((r) => a.x > r.x0 + 0.25 && a.x < r.x1 - 0.25 && a.y > r.y0 + 0.25 && a.y < r.y1 - 0.25);
+      // Inside one only while stepping out of it.
+      const t = inside ? (stuck.get(a.info.id) ?? 0) + 0.05 : 0;
+      stuck.set(a.info.id, t);
+      assert.ok(t < 1, `${a.info.id} inside a workstation for ${t.toFixed(2)} s, at ${a.x.toFixed(1)},${a.y.toFixed(1)}`);
+      if (inside) assert.ok(a.path.length > 0, `${a.info.id} stands inside a workstation`);
+      checked++;
+    }
+  });
+  assert.ok(most >= 15 && checked > 10_000, `${most} at most, ${checked} looks`);
+  assert.equal(stage.workstations().length, 0, 'workstations left standing');
+});

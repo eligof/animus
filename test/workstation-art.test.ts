@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
+import { Scene } from '../src/art/scene.ts';
 import { POP_STEPS, deskSprite, deskStats } from '../src/art/scene/desk.ts';
 import { drawScreen } from '../src/art/screen.ts';
+import { StressSource } from '../src/demo/stress.ts';
+import { Screen as Term } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
 import type { Screen } from '../src/world/frame.ts';
+import { World } from '../src/world/world.ts';
 import type { Quad } from '../src/worlds/types.ts';
 import { plainWorkstation } from '../src/worlds/workstation.ts';
 
@@ -69,6 +73,25 @@ test('a workstation sprite is drawn once for what it shows and kept: the same ke
   assert.ok(Math.max(...steps.map((p) => p.img.height)) > a.img.height, 'it does not grow past its size');
   assert.equal(new Set(steps).size, POP_STEPS);
   assert.equal(deskSprite(cafe, { ...d, grow: 0.21 }, 4, ink), steps[0], 'a step between steps');
+});
+
+test('in the plate a standing workstation keeps its picture from frame to frame, and gets another when its screen changes', () => {
+  const start = Date.UTC(2026, 9, 22, 21, 30, 0);
+  const w = new World({ theme: getTheme('mines')!, live: new StressSource(2, 2, start), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start, images: true });
+  w.resize(150, 46);
+  let t = start;
+  for (let i = 0; i < 10 * 18; i++) w.tick((t = start + i * (1000 / 18)));
+  w.draw(new Term(150, 46), t);
+  const f = w.scene()!;
+  assert.equal(f.desks!.length, 6);
+  const scene = new Scene();
+  const keys = (fr: typeof f) => new Map(scene.plate(fr).layers.filter((l) => l.id.startsWith('desk:')).map((l) => [l.id, l.pic.key]));
+  const first = keys(f);
+  assert.equal(first.size, 6);
+  assert.deepEqual(keys({ ...f, t: f.t + 0.5 }), first, 'a picture changed with nothing to change it');
+  const d = f.desks![0];
+  const next = keys({ ...f, desks: f.desks!.map((x) => (x === d ? { ...x, screen: x.screen === 'web' ? 'read' : 'web' } : x)) });
+  for (const [id, key] of first) assert.equal(next.get(id) === key, id !== `desk:${d.id}`, id);
 });
 
 test('the plain workstation, for a world with none of its own, takes the world\'s colours', () => {

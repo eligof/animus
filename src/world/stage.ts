@@ -9,12 +9,13 @@ import type { Rect, Screen } from '../term/screen.ts';
 import { BOLD } from '../term/screen.ts';
 import { activityColor, activityGlyph } from '../ui/chrome.ts';
 import type { WorldDef } from '../worlds/types.ts';
+import { workstationOf } from '../worlds/workstation.ts';
 import { Works } from './build.ts';
 import type { Construction, Disc } from './build.ts';
 import { poseFor, traitsFor } from './character.ts';
 import type { Feel, Pose, Traits, Wear } from './character.ts';
 import { Critter } from './critter.ts';
-import type { BuildFrame, Camera, FigureFrame, LabelFrame, SceneFrame, Trinket, TrinketFrame } from './frame.ts';
+import type { BuildFrame, Camera, DeskFrame, FigureFrame, LabelFrame, SceneFrame, Screen as DeskScreen, Trinket, TrinketFrame } from './frame.ts';
 import { EMOTE, FIGURE_H, HOP, MUG_TOP, figureTop, project } from './frame.ts';
 import { hub, planLayout, slotRect, yard } from './layout.ts';
 import type { Rect as Box } from './layout.ts';
@@ -25,7 +26,7 @@ import { NavGrid, smooth } from './path.ts';
 import { Rng, hashString } from './rng.ts';
 import { NAV_CELL, NAV_PAD, deskSpots, footprint, heightAt, planRoom, toWorld } from './room.ts';
 import type { Room } from './room.ts';
-import type { Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
+import type { Desk, Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
 
 // A terminal cell in pixels when the terminal has not said (common sizes);
 // also the nominal cell rooms are planned for (see layout).
@@ -71,6 +72,10 @@ const SMOKE_MS = 4000;
 // between the pose changes in place.
 const SETTLE_MS = 3000;
 const DWELL_MS = 9000;
+// A workstation grows out of the floor, or shrinks back into it, this long
+// (seconds); one left empty stands this long before it goes.
+export const POP_S = 0.5;
+export const EMPTY_S = 4;
 // Where a crowd at one prop stands: (along the wall, further out), in lane
 // steps. A line along the wall (across the screen in front of a prop out
 // on the floor), the middle and then out to either side; then a row a step
@@ -144,6 +149,33 @@ type Glyph = { x: number; y: number; z: number; vz: number; ch: string; color: R
 // A crew role's key: its crew and role (see pet/crew.ts).
 const roleKey = (a: AgentInfo) => `${a.crew}\n${roleOf(a)}`;
 
+// The team an agent is in: its lead's id (its own for a lead, or for one
+// whose lead is not known).
+const teamOf = (a: AgentInfo) => (a.role === 'lead' ? a.id : (a.parentId ?? a.id));
+
+// A workstation up on a desk (see desks.ts): whose it is (null once left
+// empty), who had it last, when it went up and when it was left (stage
+// clock; Infinity while it is someone's).
+export type Workstation = { desk: Desk; owner: string | null; was: string; born: number; left: number };
+
+// What a workstation's screen shows for its agent's activity.
+export function screenFor(a: Activity): DeskScreen {
+  switch (a) {
+    case 'write':
+    case 'read':
+    case 'search':
+    case 'run':
+    case 'web':
+    case 'think':
+      return a;
+    case 'talk':
+    case 'delegate':
+      return 'talk';
+    default:
+      return 'off';
+  }
+}
+
 // What a level lets one wear (nothing at ★1), one object a level.
 const wears = new Map<number, Wear | undefined>();
 function wearAt(level: number): Wear | undefined {
@@ -208,6 +240,11 @@ export class Stage {
   readonly life: Life;
   private works: Works | null = null;
   private critter: Critter | null = null;
+  // The workstations up, by desk index, and a count that moves on whenever
+  // one goes up or down (walkers re-plan round it).
+  private desks = new Map<number, Workstation>();
+  private desksVer = 0;
+  private desksSeen = 0;
   // Seconds each crew role (see roleKey) worked at each station this run,
   // and the desk upgrades as they stand.
   private worked = new Map<string, Map<StationKind, number>>();
@@ -282,6 +319,11 @@ export class Stage {
     return this.L?.slots ?? [];
   }
 
+  // The workstations up, in desk order.
+  workstations(): Workstation[] {
+    return [...this.desks.values()].sort((a, b) => a.desk.index - b.desk.index);
+  }
+
   // The furnished room (for renderers, tests and tools).
   room(): Room | null {
     return this.plan;
@@ -345,7 +387,12 @@ export class Stage {
     // a 2x screen got a room twice the size, too big and empty.
     const L = planLayout((r.w * CELL.w) / PX_PER_UNIT, (r.h * CELL.h) / PX_PER_UNIT, this.world.id);
     const key = `${this.world.id}:${L.W}x${L.D}x${L.H}`;
-    if (key !== this.worldKey) this.build(L, key);
+    if (key !== this.worldKey) {
+      this.build(L, key);
+      // A new room: everyone's workstation is up in it already, in order
+      // of arrival.
+      for (const a of [...this.cast.values()].sort((p, q) => p.order - q.order)) if (a.state !== 'leave') this.claim(a, true);
+    }
     this.trinketsDue = true;
     this.cam.set = false;
     this.camera = this.aim([], null, false);
@@ -371,6 +418,8 @@ export class Stage {
     this.works = new Works(L, { colors: this.world.build.colors, shape: this.world.build.shape }, new Rng(seed ^ 0xb111d), this.plan.supply);
     this.blocksAt = -1;
     this.nav = null;
+    this.desks.clear();
+    this.desksVer++;
     this.spots = this.plan.pois;
     const home = this.spots.find((p) => p.kind === 'pet');
     const g = Math.max(0, Math.min(1, (L.W - 72) / 98));
@@ -398,11 +447,15 @@ export class Stage {
     return this.blocks;
   }
 
-  // Inside some prop's footprint (a station or decor), a build or a pile
-  // (grown by `margin`).
+  // Inside some prop's footprint (a station or decor), a workstation, a
+  // build or a pile (grown by `margin`).
   private inside(s: Spot, margin: number): boolean {
     for (const p of this.plan?.props ?? []) {
       const r = footprint(p);
+      if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
+    }
+    for (const w of this.desks.values()) {
+      const r = slotRect(w.desk);
       if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
     }
     const o = this.obstacles();
@@ -411,14 +464,16 @@ export class Stage {
     return false;
   }
 
-  // A build or pile appeared (or went): walkers re-plan round it, and anyone
-  // standing where it now is steps out of the way.
+  // A build, a pile or a workstation appeared (or went): walkers re-plan
+  // round it (one bound for where it now stands stops beside it), and
+  // anyone standing where it now is steps out of the way.
   private makeWay(): void {
+    this.desksSeen = this.desksVer;
     for (const a of this.cast.values()) {
       if (a.state === 'enter') continue;
       if (a.path.length) {
         const to = a.path[a.path.length - 1];
-        this.walkTo(a, to);
+        this.walkTo(a, this.inside(to, 0.3) ? (this.nearestStandable(to) ?? to) : to);
       } else if (this.inside(a, 0.3)) {
         const out = this.nearestStandable(a);
         if (out) a.path = [out];
@@ -455,10 +510,20 @@ export class Stage {
       for (let dx = dy ? 0 : 1; dx <= FIGURE_H; dx++) {
         // Across the middle of the figure, taller than a third of it.
         if (Math.abs(dx - dy) > 3) continue;
-        if (heightAt(room, s.x + dx, s.y + dy) > (dx + dy) / 2 + 5) return false;
+        if (this.tall(s.x + dx, s.y + dy) > (dx + dy) / 2 + 5) return false;
       }
     }
     return true;
+  }
+
+  // How tall what stands over (x, y) is: a prop, or a workstation.
+  private tall(x: number, y: number): number {
+    let h = heightAt(this.plan!, x, y);
+    for (const w of this.desks.values()) {
+      const r = slotRect(w.desk);
+      if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) h = Math.max(h, workstationOf(this.world).height);
+    }
+    return h;
   }
 
   private idleFor(a: Actor): number {
@@ -536,6 +601,118 @@ export class Stage {
     if (a.state === 'work') a.state = 'walk';
   }
 
+  // ── workstations ──────────────────────────────────────────────────────
+  // Whether desk d is free to take: no workstation on it, or one left
+  // empty that has not begun to go.
+  private open(d: Desk): boolean {
+    const w = this.desks.get(d.index);
+    return !w || (w.owner === null && this.clock - w.left < EMPTY_S);
+  }
+
+  private ownDesk(a: Actor): Workstation | null {
+    for (const w of this.desks.values()) if (w.owner === a.info.id) return w;
+    return null;
+  }
+
+  // A place for a's workstation (see claim): the one it left a moment ago
+  // if it is still there; for a lead (or a subagent whose lead is not in
+  // the room), the lead's place of a pod nobody is in, else of any pod,
+  // else the free place nearest the way in; for a subagent, the place in
+  // its lead's pod nearest its lead's, else the free place nearest its
+  // lead's (sparing the lead's places of pods nobody is in); null when
+  // every place is taken.
+  private placeFor(a: Actor): Desk | null {
+    const all = this.plan?.desks ?? [];
+    const free = all.filter((d) => this.open(d));
+    if (!free.length) return null;
+    const back = free.find((d) => this.desks.get(d.index)?.was === a.info.id);
+    if (back) return back;
+    const empty = (pod: number) => all.every((d) => d.pod !== pod || this.open(d));
+    const by = (p: Spot) => (x: Desk, y: Desk) => Math.hypot(x.spot.x - p.x, x.spot.y - p.y) - Math.hypot(y.spot.x - p.x, y.spot.y - p.y);
+    const door = this.door()?.spot ?? { x: 0, y: 0 };
+    const lead = this.cast.get(teamOf(a.info));
+    if (!lead || lead === a) return free.find((d) => d.lead && empty(d.pod)) ?? free.find((d) => d.lead) ?? [...free].sort(by(door))[0];
+    const home = this.ownDesk(lead)?.desk;
+    const from: Spot = home?.spot ?? lead;
+    const pod = home ? free.filter((d) => d.pod === home.pod) : [];
+    if (pod.length) return [...pod].sort(by(from))[0];
+    const spare = free.filter((d) => !(d.lead && empty(d.pod)));
+    return [...(spare.length ? spare : free)].sort(by(from))[0];
+  }
+
+  // Puts up a workstation for `a` on a free place, if it has none and there
+  // is one: it pops up out of the floor with a puff (at once if `quick`).
+  // Its own, or null.
+  private claim(a: Actor, quick = false): Workstation | null {
+    const had = this.ownDesk(a);
+    if (had || !this.plan) return had;
+    const d = this.placeFor(a);
+    if (!d) return null;
+    let w = this.desks.get(d.index);
+    if (!w) {
+      w = { desk: d, owner: null, was: '', born: quick ? -Infinity : this.clock, left: Infinity };
+      this.desks.set(d.index, w);
+      this.deskMoved(d);
+      if (!quick) this.poof(d);
+    }
+    w.owner = a.info.id;
+    w.left = Infinity;
+    this.trinketsDue = true;
+    return w;
+  }
+
+  // A workstation went up or down: routes round it again (only its cells).
+  private deskMoved(d: Desk): void {
+    this.desksVer++;
+    const r = slotRect(d);
+    const pad = NAV_PAD + NAV_CELL;
+    this.nav?.rerate(r.x0 - pad, r.y0 - pad, r.x1 + pad, r.y1 + pad, (x, y) => this.rate(x, y));
+  }
+
+  // Workstations follow their agents: one whose agent is leaving or gone
+  // is left empty; one left empty for EMPTY_S shrinks away with a puff and
+  // is gone POP_S later. Those without one of their own then take a place
+  // come free.
+  private upkeep(dt: number): void {
+    let freed = false;
+    for (const [i, w] of this.desks) {
+      if (w.owner) {
+        const o = this.cast.get(w.owner);
+        if (o && o.state !== 'leave' && !o.gone) continue;
+        w.was = w.owner;
+        w.owner = null;
+        w.left = this.clock;
+        this.trinketsDue = true;
+        freed = true;
+        continue;
+      }
+      const t = this.clock - w.left;
+      if (t >= EMPTY_S && t - dt < EMPTY_S) this.poof(w.desk);
+      if (t >= EMPTY_S + POP_S) {
+        this.desks.delete(i);
+        this.deskMoved(w.desk);
+        freed = true;
+      }
+    }
+    if (!freed) return;
+    for (const a of [...this.cast.values()].sort((p, q) => p.order - q.order)) if (a.state !== 'leave' && !a.gone) this.claim(a);
+  }
+
+  // A puff of dust and a few sparkles where a workstation pops up or goes.
+  private poof(d: Desk): void {
+    const r = slotRect(d);
+    const cx = (r.x0 + r.x1) / 2;
+    const cy = (r.y0 + r.y1) / 2;
+    const rng = this.rng;
+    for (let i = 0; i < 8; i++) {
+      this.add({ ...smoke(cx + rng.range(-3, 3), cy + rng.range(-1.5, 1.5), 0.5 + rng.next(), rng, [214, 206, 196]), life: 0.6 + rng.next() * 0.4 });
+    }
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2;
+      this.add({ kind: 'glint', x: cx + Math.cos(ang) * 2, y: cy + Math.sin(ang) * 2, z: 3 + rng.next() * 4, vx: Math.cos(ang) * 3, vy: Math.sin(ang) * 3, vz: 3 + rng.next() * 3, life: 0.5 + rng.next() * 0.3, color: [255, 241, 184], glow: true, gravity: 0 });
+    }
+  }
+
   // Where the k-th of a crowd at `st` stands (see LANES and retarget).
   private laneSpot(st: Slot, k: number): Spot {
     const along = LANES[k][0] * LANE;
@@ -593,29 +770,34 @@ export class Stage {
     return false;
   }
 
-  // Round the props on the room's own grid; once builds or piles stand, on
-  // one that has them too (rebuilt when they change).
+  // Round the props, the workstations, the builds and the piles, on a grid
+  // of the room's floor built afresh when the builds change and re-rated
+  // round a workstation as it goes up or down (see deskMoved).
   private route(from: Spot, to: Spot): Spot[] | null {
     const L = this.L;
     if (!L || !this.plan) return null;
-    const o = this.obstacles();
-    let nav = this.plan.nav;
-    if (o.discs.length || o.rects.length) {
-      const key = `${this.worldKey}:${this.works?.version ?? 0}`;
-      if (!this.nav || this.navKey !== key) {
-        this.navKey = key;
-        this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => (this.inside({ x, y }, 0.8) ? 2 : this.inside({ x, y }, NAV_PAD) ? 1 : 0));
-      }
-      nav = this.nav;
+    this.obstacles();
+    const key = `${this.worldKey}:${this.works?.version ?? 0}`;
+    if (!this.nav || this.navKey !== key) {
+      this.navKey = key;
+      this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => this.rate(x, y));
     }
-    const cells = nav.find(from, to);
+    const cells = this.nav.find(from, to);
     if (!cells) return null;
     return smooth(from, [...cells.slice(1, -1), to], (p, q) => !this.clips(p, q));
+  }
+
+  // A routing cell's rating (see NavGrid): inside something, near it, or open.
+  private rate(x: number, y: number): number {
+    return this.inside({ x, y }, 0.8) ? 2 : this.inside({ x, y }, NAV_PAD) ? 1 : 0;
   }
 
   sync(agents: AgentInfo[], now: number): void {
     this.now = now;
     const ids = new Set<string>();
+    // Newcomers in order of arrival, leads before their subagents (a lead's
+    // workstation goes up first, its team's round it).
+    for (const info of agents) if (!this.cast.has(info.id) && info.role === 'lead') this.spawn(info, now);
     for (const info of agents) {
       ids.add(info.id);
       const a = this.cast.get(info.id);
@@ -635,8 +817,11 @@ export class Stage {
       a.mind.exit = 0;
       if (changed) a.bubbleUntil = now + BUBBLE_MS;
       if (a.state === 'leave') {
+        // Back after all: its workstation again (the one it left, if it
+        // still stands).
         a.state = 'walk';
         this.life.end(a);
+        this.claim(a);
         this.retarget(a);
         continue;
       }
@@ -684,6 +869,7 @@ export class Stage {
     };
     this.cast.set(info.id, a);
     this.trinketsDue = true;
+    this.claim(a);
     this.retarget(a);
     this.sparkle(a, 16, a.traits.color);
     this.life.arrived(a, this.cast.values());
@@ -711,8 +897,9 @@ export class Stage {
       this.effects(a, dt, now);
     }
     this.life.update([...this.cast.values()], dt);
+    this.upkeep(dt);
     this.tally(dt);
-    if ((this.works?.version ?? -1) !== this.blocksAt) this.makeWay();
+    if ((this.works?.version ?? -1) !== this.blocksAt || this.desksVer !== this.desksSeen) this.makeWay();
     for (const [id, a] of this.cast) {
       if (!a.gone) continue;
       this.cast.delete(id);
@@ -1099,6 +1286,7 @@ export class Stage {
       figures,
       critter,
       trinkets: this.trinkets,
+      desks: this.workstations().map((w) => this.deskFrame(w)),
       builds,
       particles: this.particles,
       labels: [],
@@ -1107,6 +1295,17 @@ export class Stage {
     };
     this.place(f, actors, emoting, tops, now, selectedId, opts.card ?? false);
     return f;
+  }
+
+  // A workstation as the frame shows it: its screen (its agent's activity,
+  // dim once left) and how far it has grown out of the floor (popping up,
+  // or shrinking away once left empty a while).
+  private deskFrame(w: Workstation): DeskFrame {
+    const d = w.desk;
+    const o = w.owner ? this.cast.get(w.owner) : undefined;
+    const gone = this.clock - w.left - EMPTY_S;
+    const grow = gone > 0 ? Math.max(0, 1 - gone / POP_S) : Math.min(1, (this.clock - w.born) / POP_S);
+    return { id: d.index, wall: d.wall, x0: d.x0, y0: d.y0, len: d.len, dep: d.dep, screen: o ? screenFor(o.info.activity) : 'off', grow, seed: d.index % 3 };
   }
 
   // The ghost's hue: cyan where the world is warm (its floor and backdrop
