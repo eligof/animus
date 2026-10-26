@@ -70,6 +70,11 @@ const confetti = (stage: Stage, now: number) => stage.frame(now, null)!.particle
 // (as life.ts places spots round someone).
 const onScreen = (at: Spot, sx: number, sy: number): Spot => ({ x: at.x + sy + sx / 2, y: at.y + sy - sx / 2 });
 const standableIn = (stage: Stage) => (stage as unknown as { standable(s: Spot): boolean }).standable.bind(stage);
+// Talking right now (a stand-up's turn, a lead to its huddle); and none of
+// office life's poses or its speech mark showing.
+const talking = (stage: Stage, a: Actor) => a.mind.gestures.some((g) => g.pose === 'talk' && g.at <= stage.life.clock && stage.life.clock < g.until);
+const OFFICE_POSES = new Set(['talk', 'sip', 'highfive']);
+const quiet = (stage: Stage, a: Actor, now: number) => !OFFICE_POSES.has(stage.lookOf(a, now).pose) && !a.mind.gestures.some((g) => OFFICE_POSES.has(g.pose)) && a.mind.emote?.e !== 'speech';
 
 // The longest anyone has walked on the spot so far (a path to follow, not
 // held by a gesture, yet not moving), in seconds: call it every frame.
@@ -220,6 +225,29 @@ test('a newcomer given its first task mid-huddle leaves for its station at once'
     }
   });
   assert.ok(checked, 'never joined the huddle');
+});
+
+// It went on talking (held still, its speech mark up) for up to the
+// whole huddle.
+test('a lead talking to its huddle stops at once when it is given work, or office life is turned off', () => {
+  for (const how of ['work', 'off'] as const) {
+    const stage = newStage();
+    let work = 0;
+    let t0 = 0;
+    const crew = (n: number) => [
+      work ? agent('L', 'write', { role: 'lead', since: work }) : awake('L', n, { role: 'lead' }),
+      ...(t0 && n > t0 ? ['s1', 's2'].map((id) => agent(id, 'think', { parentId: 'L', since: t0 })) : []),
+    ];
+    let now = run(stage, crew, 6);
+    t0 = now;
+    const L = byId(stage, 'L');
+    for (let i = 0; i < HUDDLE_GATHER * 20 && !talking(stage, L); i++) now = run(stage, crew, 0.05, now);
+    assert.ok(talking(stage, L) && L.mind.emote?.e === 'speech', `${how}: the lead never talked to its huddle`);
+    if (how === 'off') stage.office = false;
+    else work = now + 50; // the next sync brings its work
+    now = run(stage, crew, 0.05, now);
+    assert.ok(quiet(stage, L, now), `${how}: the lead goes on talking`);
+  }
 });
 
 // ── coffee runs ─────────────────────────────────────────────────────────
@@ -684,25 +712,36 @@ test('no stand-up for two waiting, nor for three of different crews or of none',
   }
 });
 
-test('anyone given work leaves a stand-up at once; down to one, it breaks up', () => {
+// The talker given work went on talking (held still, its speech mark up)
+// for most of its turn.
+test('anyone given work leaves a stand-up at once, a talker its talk and speech mark too; down to one, it breaks up', () => {
   const stage = newStage();
   const ids = ['a1', 'a2', 'a3'];
   const work = new Map<string, number>();
   const crew = (n: number) => ids.map((id) => (work.has(id) ? agent(id, 'write', { crew: 'c', since: work.get(id)! }) : awake(id, n, { crew: 'c' })));
   let step = 0;
+  let talker = '';
   run(stage, crew, STANDUP_GATHER + STANDUP_S, NOW, (n) => {
     const on = ids.filter((id) => kindOf(byId(stage, id)) === 'standup');
-    if (step === 0 && on.length === 3 && on.every((id) => (byId(stage, id).mind.errand as { arrived: boolean }).arrived)) {
-      work.set('a1', n + 50);
+    if (step === 0) {
+      talker = on.find((id) => talking(stage, byId(stage, id))) ?? '';
+      if (!talker) return;
+      assert.equal(byId(stage, talker).mind.emote?.e, 'speech', 'a talker with no speech mark');
+      work.set(talker, n + 50);
       step = 1;
-    } else if (step === 1 && work.get('a1')! <= n) {
-      assert.notEqual(kindOf(byId(stage, 'a1')), 'standup', 'a1 stayed');
-      assert.equal(byId(stage, 'a1').station?.kind, 'write', 'a1 is not on its way to work');
-      assert.deepEqual(on.filter((id) => id !== 'a1'), ['a2', 'a3'], 'the other two carry on');
-      work.set('a2', n + 50);
+    } else if (step === 1 && work.get(talker)! <= n) {
+      const a = byId(stage, talker);
+      assert.notEqual(kindOf(a), 'standup', `${talker} stayed`);
+      assert.equal(a.station?.kind, 'write', `${talker} is not on its way to work`);
+      assert.ok(quiet(stage, a, n), `${talker} goes on talking`);
+      const rest = ids.filter((id) => id !== talker);
+      assert.deepEqual(on, rest, 'the other two carry on');
+      work.set(rest[0], n + 50);
       step = 2;
-    } else if (step === 2 && work.get('a2')! <= n) {
-      assert.equal(kindOf(byId(stage, 'a3')), undefined, 'a ring of one goes on');
+    } else if (step === 2 && [...work.values()].every((t) => t <= n)) {
+      const last = byId(stage, ids.find((id) => !work.has(id))!);
+      assert.equal(kindOf(last), undefined, 'a ring of one goes on');
+      assert.ok(quiet(stage, last, n), 'the last one goes on talking');
       step = 3;
     }
   });
@@ -711,20 +750,35 @@ test('anyone given work leaves a stand-up at once; down to one, it breaks up', (
 
 // ── all of it ───────────────────────────────────────────────────────────
 
-test('off, office life ends every moment at once, starts none and puts the mugs down', () => {
+// Turned off mid-turn, the talker went on talking under its speech mark,
+// and a sip under way went on.
+test('off, office life ends every moment at once, its poses and speech marks with it, starts none and puts the mugs down', () => {
   const stage = newStage();
   const ids = ['a1', 'a2', 'a3'];
   const crew = (n: number) => ids.map((id) => awake(id, n, { crew: 'c' }));
-  let now = run(stage, crew, 3);
-  assert.ok(ids.some((id) => kindOf(byId(stage, id)) === 'standup'), 'no stand-up to end');
+  // a stand-up under way, someone talking
+  let now = NOW;
+  let talker: Actor | undefined;
+  for (let i = 0; i < (STANDUP_GATHER + STANDUP_S) * 20 && !talker; i++) {
+    now = run(stage, crew, 0.05, now);
+    talker = ids.map((id) => byId(stage, id)).find((a) => talking(stage, a));
+  }
+  assert.ok(talker, 'no stand-up talking to end');
+  assert.equal(talker.mind.emote?.e, 'speech');
   for (const id of ids) byId(stage, id).mind.mug = stage.life.clock + 30;
+  // and a sip, and a high-five, under way
+  const [sipper, fiver] = ids.map((id) => byId(stage, id)).filter((a) => a !== talker);
+  stage.life.gesture(sipper, 'sip', 2);
+  stage.life.gesture(fiver, 'highfive', 1.3);
   stage.office = false;
   assert.equal(stage.office, false);
+  for (const id of ids) assert.ok(quiet(stage, byId(stage, id), now), `${id} goes on with office life`);
   now = run(stage, crew, 240, now, (n) => {
     for (const id of ids) {
       const a = byId(stage, id);
       assert.ok(!OFFICE.has(kindOf(a) ?? ''), `${id} on a ${kindOf(a)}`);
       assert.ok(!stage.lookOf(a, n).mug, `${id} has a mug`);
+      assert.ok(quiet(stage, a, n), `${id} in an office pose`);
     }
   });
   stage.office = true;

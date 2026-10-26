@@ -217,13 +217,14 @@ export class Life {
     this.standups.clear();
   }
 
-  // Office life on or off; off, every moment of it ends at once and the
-  // mugs go.
+  // Office life on or off; off, every moment of it ends at once (its poses
+  // and speech marks with it) and the mugs go.
   setOffice(on: boolean): void {
     this.office = on;
     if (on) return;
     for (const a of this.byId.values()) {
       if (a.mind.errand && OFFICE.has(a.mind.errand.kind)) this.end(a);
+      this.hush(a);
       a.mind.mug = 0;
     }
     this.huddles.clear();
@@ -248,15 +249,15 @@ export class Life {
   }
 
   // The activity changed: whatever they were up to is dropped (a working
-  // agent leaves an office moment for its station at once, see end; an
-  // error shows at once). A subagent that finished goes to high-five its
-  // lead first.
+  // agent leaves an office moment for its station at once, see end; work or
+  // an error shows at once, no talking or sipping over it). A subagent that
+  // finished goes to high-five its lead first.
   changed(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
     m.exit = 0;
     this.end(a);
-    if (a.info.activity === 'error') this.hush(a);
+    if (a.info.activity !== 'idle' && a.info.activity !== 'done') this.hush(a);
     if (a.info.activity === 'done') {
       m.think = c + 1.6; // celebrate before anything else
       if (this.office) this.highFive(a);
@@ -351,9 +352,10 @@ export class Life {
       if (this.critter?.claimedBy === a.info.id) this.critter.claimedBy = null;
     } else if (e.kind === 'haul' && (e.step === 'carry' || e.step === 'place')) {
       e.site.carriers = Math.max(0, e.site.carriers - 1);
-    } else if (OFFICE.has(e.kind) && working(a) && a.state !== 'leave' && !a.gone) {
-      // work comes first: straight to its station
-      this.host.back(a);
+    } else if (OFFICE.has(e.kind)) {
+      // its poses go with it; work comes first: straight to its station
+      this.hush(a);
+      if (working(a) && a.state !== 'leave' && !a.gone) this.host.back(a);
     }
   }
 
@@ -853,13 +855,14 @@ export class Life {
   // the first got there): they stand round the lead, nodding along, a
   // speech mark over it, an idle lead talking to them; HUDDLE_S later each
   // goes to its station. Members gone or given work drop out; with none
-  // left it is over.
+  // left it is over (and the lead stops talking).
   private huddling(): void {
     const c = this.clock;
     for (const [id, h] of this.huddles) {
       h.members = h.members.filter((m) => this.byId.get(m)?.mind.errand?.kind === 'huddle');
       const lead = this.byId.get(id);
       if (!h.members.length || !lead) {
+        if (lead && h.until > c) this.hush(lead);
         this.huddles.delete(id);
         continue;
       }
