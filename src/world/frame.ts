@@ -50,6 +50,7 @@ const LEVEL_HAT: Record<Costume, number> = {
   parka: 17.5,
   guard: 17.5,
   demon: 17.75,
+  startup: 18.25,
 };
 
 // Where a character's top is, units over its feet: its hat's, or its

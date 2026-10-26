@@ -24,11 +24,13 @@ export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 
 // and dressed for where they are, work
 // overalls in the mines, a forager's capelet in the fungal caverns, a
 // parka in the snowy depths, a guard's uniform in the vault and a devil's
-// robe in hell.
+// robe in hell; and at the startup an open zip hoodie over a tee, jeans and
+// sneakers.
 export type Costume =
   | 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual'
   | 'drifter' | 'nord' | 'exosuit' | 'jumpsuit' | 'colonist'
-  | 'miner' | 'forager' | 'parka' | 'guard' | 'demon';
+  | 'miner' | 'forager' | 'parka' | 'guard' | 'demon'
+  | 'startup';
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
 
