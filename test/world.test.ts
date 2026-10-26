@@ -641,11 +641,15 @@ test('the chat stands in for the selected agent\'s label, as the card does', () 
   w.handleKey(key('\t'));
   w.handleKey(key('i')); // the card off: its label is back
   const s = new Screen(120, 36);
+  // (Its label, not the count of them: the room the chat frees may show a
+  // neighbour's.)
+  const name = (w as unknown as { stage: Stage }).stage.actors().find((a) => a.info.id === w.selectedId)!.info.name;
+  const labelled = () => w.scene()!.labels.some((l) => l.text.includes(` ${name}`));
   w.draw(s, now);
-  const all = w.scene()!.labels.length;
+  assert.ok(labelled(), 'no label before the chat');
   w.handleKey(key('\r'));
   w.draw(s, now);
-  assert.ok(w.scene()!.labels.length < all);
+  assert.ok(!labelled(), 'its label shows with the chat open');
 });
 
 // A live source of one lead that keeps a conversation (none with

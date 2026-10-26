@@ -30,10 +30,11 @@ const CHAT_EMOTES: readonly Emote[] = ['note', 'heart', 'idea', 'question'];
 const APART = 3; // units between two standing in a ring or round a lead, at least (see around)
 // Office life. A huddle: subagents a lead starts within HUDDLE_JOIN seconds
 // of the first gather round it (at most one a lead every HUDDLE_EVERY),
-// HUDDLE_R units out; it starts once they are all there (or HUDDLE_WAIT
-// after the first got there, HUDDLE_GATHER at most after one there set
-// out) and lasts HUDDLE_S; anyone not there within HUDDLE_GATHER gives up.
-// So none is in one longer than HUDDLE_GATHER + HUDDLE_S.
+// HUDDLE_R units out; it starts once they are all there and no more can
+// join (or HUDDLE_WAIT after the first got there, HUDDLE_GATHER at most
+// after one there set out) and lasts HUDDLE_S; anyone not there within
+// HUDDLE_GATHER gives up. So none is in one longer than HUDDLE_GATHER +
+// HUDDLE_S.
 const HUDDLE_JOIN = 4;
 export const HUDDLE_EVERY = 30;
 const HUDDLE_R = 4.5;
@@ -852,8 +853,9 @@ export class Life {
     return spot;
   }
 
-  // Each huddle starts once its members are all there (or HUDDLE_WAIT after
-  // the first got there, HUDDLE_GATHER at most after one there set out):
+  // Each huddle starts once its members are all there and no more can join
+  // (or HUDDLE_WAIT after the first got there, HUDDLE_GATHER at most after
+  // one there set out):
   // they stand round the lead, nodding along, a
   // speech mark over it, an idle lead talking to them; HUDDLE_S later each
   // goes to its station. Members gone or given work drop out; with none
@@ -891,7 +893,7 @@ export class Life {
       const errands = h.members.map((m) => this.byId.get(m)!.mind.errand as Extract<Errand, { kind: 'huddle' }>);
       // (one there that set out HUDDLE_GATHER ago waits no longer)
       const due = errands.some((e) => e.arrived && c - e.since >= HUDDLE_GATHER);
-      if (!errands.every((e) => e.arrived) && !due && c - h.firstHere < HUDDLE_WAIT) continue;
+      if ((!errands.every((e) => e.arrived) || c - h.opened <= HUDDLE_JOIN) && !due && c - h.firstHere < HUDDLE_WAIT) continue;
       h.until = c + HUDDLE_S;
       this.emote(lead, 'speech', HUDDLE_S);
       if (!working(lead)) {

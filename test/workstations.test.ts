@@ -1,14 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
+import { Scene } from '../src/art/scene.ts';
 import { StressSource } from '../src/demo/stress.ts';
+import { Screen } from '../src/term/screen.ts';
+import { getTheme } from '../src/themes/index.ts';
 import { computeLayout } from '../src/ui/layout.ts';
 import { footprint } from '../src/world/room.ts';
 import { EMPTY_S, POP_S, Stage } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
-import type { Desk, Particle, Spot } from '../src/world/types.ts';
+import type { Desk, Particle } from '../src/world/types.ts';
+import { World } from '../src/world/world.ts';
 import { WORLDS } from '../src/worlds/index.ts';
 import { mines } from '../src/worlds/mines.ts';
+import { budget } from './helpers.ts';
 
 // The stress test: twenty agents at work (four leads with four subagents
 // each, each turning to something else every few seconds) in every world,
@@ -21,13 +26,6 @@ const SIZES: Array<[number, number]> = [[80, 24], [150, 46], [200, 60]];
 const APART = 4;
 
 const team = (a: AgentInfo) => (a.role === 'lead' ? a.id : (a.parentId ?? a.id));
-
-// What the stage says of its workstations and of the places planned for
-// them (see Stage.workstations and Room.desks): none, before there were
-// any. (Written first, against the stage as it was.)
-type Up = { desk: { spot: Spot }; owner: string | null };
-const upOf = (stage: Stage): Up[] => (stage as unknown as { workstations?(): Up[] }).workstations?.() ?? [];
-const placesOf = (stage: Stage): number => (stage.room() as unknown as { desks?: unknown[] }).desks?.length ?? 0;
 
 test('the stress crew: four leads with four subagents each, all at work, each turning to something else every few seconds, the same every run', () => {
   const moves = (src: StressSource) => Array.from({ length: 60 }, (_, i) => src.poll(NOW + i * 500));
@@ -65,8 +63,8 @@ for (const [cols, rows] of SIZES) {
   test(`${cols}x${rows}: twenty at work, each at a workstation of its own or at a teammate's side, none on top of another`, () => {
     for (const w of WORLDS) {
       const { stage } = stressed(w, cols, rows);
-      const places = placesOf(stage);
-      const up = upOf(stage);
+      const places = stage.room()!.desks.length;
+      const up = stage.workstations();
       const actors = stage.actors();
       const tag = (a: Actor) => `${w.id} ${cols}x${rows}: ${a.info.id}`;
       assert.equal(actors.length, 20, w.id);
@@ -179,6 +177,25 @@ test('one back within those few seconds takes its own again, as it stands', () =
   assert.equal(stage.frame(now)!.desks![0].grow, 1, 'it popped up again');
 });
 
+test('one sharing a workstation moves to a place of its own when one comes free', () => {
+  const stage = staged(SMALL);
+  const places = stage.room()!.desks.length;
+  const subs = Array.from({ length: places }, (_, i) => `s${i}`);
+  let gone = '';
+  const crew = () => [lead('L'), ...subs.filter((id) => id !== gone).map((id) => sub(id, 'L'))];
+  let now = run(stage, crew, 15);
+  const owns = (id: string) => stage.workstations().some((w) => w.owner === id);
+  const sharer = subs.find((id) => !owns(id))!;
+  assert.ok(sharer, 'nobody shares');
+  gone = subs.find((id) => owns(id))!;
+  now = run(stage, crew, 10, now);
+  assert.ok(owns(sharer), `${sharer} has none of its own`);
+  const a = stage.actors().find((x) => x.info.id === sharer)!;
+  const own = stage.workstations().find((w) => w.owner === sharer)!;
+  assert.equal(a.station, own.desk);
+  assert.ok(Math.hypot(a.x - own.desk.spot.x, a.y - own.desk.spot.y) < 0.01, 'not at it');
+});
+
 test('nobody walks through a workstation, and nobody is trapped: one that goes up where someone stands sends them out of its way', () => {
   // A crowd coming and going, waiting and at work, in a mid-sized room.
   const stage = staged({ x: 0, y: 1, w: 120, h: 33 }, WORLDS.find((w) => w.id === 'cafe')!);
@@ -209,4 +226,36 @@ test('nobody walks through a workstation, and nobody is trapped: one that goes u
   });
   assert.ok(most >= 15 && checked > 10_000, `${most} at most, ${checked} looks`);
   assert.equal(stage.workstations().length, 0, 'workstations left standing');
+});
+
+test('twenty at their workstations: the stage\'s frame and the scene\'s plate stay within budget', () => {
+  // The model's share of a frame, as for a busy crew at the stations.
+  const { stage } = stressed(WORLDS.find((w) => w.id === 'cafe')!, 200, 60);
+  let now = NOW + 12_000;
+  const src = new StressSource(4, 4, NOW);
+  budget(
+    'the stage with twenty',
+    () => {
+      now += 55;
+      stage.sync(src.poll(now), now);
+      stage.update(0.055, now);
+      stage.frame(now);
+    },
+    10,
+    { runs: 5, calls: 20 },
+  );
+  // The plate: twenty figures, as many workstations, labels; the
+  // workstations' sprites drawn once, then placed.
+  const start = Date.UTC(2026, 9, 22, 21, 30, 0);
+  const w = new World({ theme: getTheme('cafe')!, live: new StressSource(4, 4, start), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start, images: true });
+  w.full = true;
+  w.resize(150, 46);
+  let t = start;
+  for (let i = 0; i < 15 * 18; i++) w.tick((t = start + i * (1000 / 18)));
+  w.draw(new Screen(150, 46), t);
+  const f = w.scene()!;
+  assert.equal(f.desks!.length, 20);
+  const scene = new Scene();
+  scene.plate(f);
+  budget('a plate of twenty at their workstations', (k) => scene.plate({ ...f, t: f.t + k / 30 }), 16, { runs: 5, calls: 1 });
 });

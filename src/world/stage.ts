@@ -67,21 +67,37 @@ const CROWD = { cols: 9, rows: 4 };
 const BAND = { cols: 8, rows: 4, max: 3 };
 const ERROR_MS = 5000; // an error stays on show this long, whatever comes next
 const SMOKE_MS = 4000;
-// A new activity sends its agent to another prop only once it has lasted
-// this long, and never before the agent has worked at its prop a while; in
-// between the pose changes in place.
+// A working activity sends a roaming agent to its workstation only once it
+// has lasted this long; in between the pose changes in place.
 const SETTLE_MS = 3000;
-const DWELL_MS = 9000;
 // A workstation grows out of the floor, or shrinks back into it, this long
 // (seconds); one left empty stands this long before it goes.
 export const POP_S = 0.5;
 export const EMPTY_S = 4;
-// Where a crowd at one prop stands: (along the wall, further out), in lane
-// steps. A line along the wall (across the screen in front of a prop out
-// on the floor), the middle and then out to either side; then a row a step
-// further out, in the gaps of the first; then a third. All within 2.5
-// steps of the prop's spot, so everyone still reads as working there: past
-// these, a crowd overlaps a little.
+// Where one sharing a workstation stands (every place taken): (along it,
+// out from it) off its owner's spot, in units, the first free one; a step
+// past either end (halfway to the next desk of a row), then half a step
+// further out, in front of the gaps, then further out again; all those
+// taken, on rings round it further out, the front half first. Free: on
+// the floor, in view and WORK_APART from where anyone else stands or is
+// going (see share).
+const RING = (r: number, from: number, to: number) =>
+  Array.from({ length: 9 }, (_, i) => {
+    const a = from + ((to - from) * i) / 8;
+    return [Math.round(r * Math.cos(a) * 10) / 10, Math.round(r * Math.sin(a) * 10) / 10] as const;
+  });
+const SIDES: ReadonlyArray<readonly [number, number]> = [
+  [5, 0], [-5, 0], [2.5, 4], [-2.5, 4], [7.5, 4], [-7.5, 4], [0, 8], [5, 8], [-5, 8],
+  ...[6, 8, 10, 12].flatMap((r) => RING(r, 0, Math.PI)),
+  ...[8, 10, 12].flatMap((r) => RING(r, Math.PI, 2 * Math.PI).slice(1, -1)),
+];
+export const WORK_APART = 4;
+// Where a crowd at one prop stands (those asleep at the idle prop): (along
+// the wall, further out), in lane steps. A line along the wall (across the
+// screen in front of a prop out on the floor), the middle and then out to
+// either side; then a row a step further out, in the gaps of the first;
+// then a third. All within 2.5 steps of the prop's spot, so everyone still
+// reads as there: past these, a crowd overlaps a little.
 const LANES: ReadonlyArray<readonly [number, number]> = [[0, 0], [1, 0], [-1, 0], [2, 0], [-2, 0], [0.5, 1], [-0.5, 1], [1.5, 1], [-1.5, 1], [1, 2], [-1, 2]];
 // A lane step: about a figure's width on screen, in units.
 export const LANE = 10;
@@ -117,8 +133,8 @@ export type Actor = {
   x: number;
   y: number;
   path: Spot[];
-  station: Slot | null;
-  lane: number;
+  station: Slot | Desk | null; // where it works: a station of the room's (asleep at the idle prop), or a workstation
+  lane: number; // which spot there (see LANES; at a workstation, 0 its own, k the k-th of SIDES)
   state: 'enter' | 'walk' | 'work' | 'leave';
   facing: Facing;
   bornAt: number;
@@ -129,7 +145,6 @@ export type Actor = {
   boomed: number; // `since` of the error that last went bang
   error: { until: number; text: string; x: number; y: number } | null; // the last error, on show for a while
   cheered: number; // `since` of the finish last celebrated
-  settledAt: number; // when it last arrived at its prop
   gait: number; // seconds its strides have run ahead of the clock (jogging)
   mind: Mind; // what it is up to between the work (see life.ts)
   hush: number; // no emote shows over it until then (stage clock: a level-up's word rises)
@@ -192,10 +207,13 @@ export function stationKindFor(a: Activity): StationKind | null {
   }
 }
 
-// The scene's model: an illustrated room with agents as characters walking
-// to the prop for their current activity and living a little in between
-// (see life.ts): wandering, chatting, building. Nothing is drawn here but
-// the labels (terminal text); `frame` hands a renderer everything else.
+// The scene's model: an illustrated room with agents as characters, each
+// with a workstation of its own that pops up when it walks in (on a place
+// the room planned, see desks.ts; at a teammate's side when every place is
+// taken), where it does all its work, living a little in between (see
+// life.ts): wandering, chatting, building, napping at the idle prop.
+// Nothing is drawn here but the labels (terminal text); `frame` hands a
+// renderer everything else.
 export class Stage {
   private world: WorldDef;
   private rect: Rect = { x: 0, y: 0, w: 0, h: 0 };
@@ -527,20 +545,25 @@ export class Stage {
     return false;
   }
 
-  // Due at another prop: the activity wants a different one, has lasted a
-  // moment, and the agent has worked at its current one a while.
+  // Due at its workstation: at work a moment (the activity has lasted),
+  // and not at a workstation (its own, or a teammate's) nor on its way.
   private moving(a: Actor, now: number): boolean {
     if (a.state === 'leave' || !this.L || this.life.huddled(a)) return false;
     const kind = stationKindFor(a.info.activity);
-    if (!kind || kind === 'idle' || a.station?.kind === kind) return false;
-    if (now - a.info.since < SETTLE_MS) return false;
-    return !a.station || a.state !== 'work' || now - a.settledAt >= DWELL_MS;
+    if (!kind || kind === 'idle' || a.station?.kind === 'desk') return false;
+    return now - a.info.since >= SETTLE_MS;
   }
 
+  // Where the activity takes it: at work, to its workstation; waiting,
+  // free to roam, or once asleep to the idle prop.
   private retarget(a: Actor): void {
     const kind = stationKindFor(a.info.activity);
     if (!kind || !this.L) return;
-    if (kind === 'idle' && this.idleFor(a) < SLEEP_AFTER) {
+    if (kind !== 'idle') {
+      this.toDesk(a);
+      return;
+    }
+    if (this.idleFor(a) < SLEEP_AFTER) {
       // Awake and waiting: free to roam (life.ts decides where).
       if (a.station) {
         a.station = null;
@@ -660,7 +683,8 @@ export class Stage {
   // Workstations follow their agents: one whose agent is leaving or gone
   // is left empty; one left empty for EMPTY_S shrinks away with a puff and
   // is gone POP_S later. Those without one of their own then take a place
-  // come free.
+  // come free (a sharer walks over to its own); those sharing one whose
+  // agent left find another.
   private upkeep(dt: number): void {
     let freed = false;
     for (const [i, w] of this.desks) {
@@ -683,7 +707,79 @@ export class Stage {
       }
     }
     if (!freed) return;
-    for (const a of [...this.cast.values()].sort((p, q) => p.order - q.order)) if (a.state !== 'leave' && !a.gone) this.claim(a);
+    for (const a of [...this.cast.values()].sort((p, q) => p.order - q.order)) {
+      if (a.state === 'leave' || a.gone) continue;
+      const own = this.ownDesk(a) ?? this.claim(a);
+      const at = a.station?.kind === 'desk' ? this.desks.get(a.station.index) : undefined;
+      // working elsewhere than its own, or at one nobody has now
+      if (a.station?.kind === 'desk' && (own ? a.station !== own.desk : !at?.owner)) this.retarget(a);
+    }
+  }
+
+  // To its workstation: its own (put up now if a place is free), else at a
+  // teammate's side (see share).
+  private toDesk(a: Actor): void {
+    const own = this.ownDesk(a) ?? this.claim(a);
+    const to = own ? { desk: own.desk, spot: own.desk.spot, lane: 0 } : this.share(a);
+    if (!to) return;
+    if (a.station === to.desk && a.lane === to.lane && (a.path.length || a.state === 'work')) return;
+    a.station = to.desk;
+    a.lane = to.lane;
+    this.walkTo(a, to.spot);
+    if (a.state === 'work') a.state = 'walk';
+  }
+
+  // Where `a` stands sharing a workstation: beside a teammate's (the one
+  // with the fewest at its side, nearest its lead) on the first of SIDES
+  // free there in view, else out of view (see beside); else the same by
+  // anyone's; where it shares already, while that still holds; with none
+  // free at all, the first spot by the first. Null when no workstation is
+  // up.
+  private share(a: Actor): { desk: Desk; spot: Spot; lane: number } | null {
+    const team = teamOf(a.info);
+    const up = [...this.desks.values()].filter((w) => w.owner && w.owner !== a.info.id);
+    if (!up.length) return null;
+    const teamAt = (w: Workstation) => {
+      const o = this.cast.get(w.owner!);
+      return o ? teamOf(o.info) : w.owner;
+    };
+    const sharers = (w: Workstation) => [...this.cast.values()].filter((o) => o !== a && o.station === w.desk && o.lane > 0).length;
+    const lead = this.cast.get(team) ?? a;
+    const far = (w: Workstation) => Math.hypot(w.desk.spot.x - lead.x, w.desk.spot.y - lead.y);
+    const by = (p: Workstation, q: Workstation) => sharers(p) - sharers(q) || far(p) - far(q);
+    const mates = up.filter((w) => teamAt(w) === team).sort(by);
+    const others = up.filter((w) => teamAt(w) !== team).sort(by);
+    const now = a.station?.kind === 'desk' ? up.find((w) => w.desk === a.station) : undefined;
+    if (now && a.lane > 0 && this.beside(now.desk, a, a.lane, true)) return { desk: now.desk, spot: this.sideSpot(now.desk, a.lane), lane: a.lane };
+    for (const pool of [mates, others]) {
+      for (const seen of [true, false]) {
+        for (const w of pool) {
+          for (let k = 1; k <= SIDES.length; k++) if (this.beside(w.desk, a, k, seen)) return { desk: w.desk, spot: this.sideSpot(w.desk, k), lane: k };
+        }
+      }
+    }
+    const first = mates[0] ?? others[0];
+    return { desk: first.desk, spot: this.sideSpot(first.desk, 1), lane: 1 };
+  }
+
+  // The k-th spot beside workstation d (see SIDES), on the floor.
+  private sideSpot(d: Desk, k: number): Spot {
+    const [du, dv] = SIDES[k - 1];
+    return this.clampToFloor(d.wall === 'right' ? { x: d.spot.x + du, y: d.spot.y + dv } : { x: d.spot.x + dv, y: d.spot.y + du });
+  }
+
+  // Whether `a` may stand at the k-th spot beside d: clear of everything,
+  // in view (if `seen`), and WORK_APART from where anyone else stands or
+  // is going.
+  private beside(d: Desk, a: Actor, k: number, seen: boolean): boolean {
+    const p = this.sideSpot(d, k);
+    if (!this.standable(p) || (seen && !this.level(p))) return false;
+    for (const o of this.cast.values()) {
+      if (o === a || o.state === 'leave' || o.gone) continue;
+      const at = o.path[o.path.length - 1] ?? o;
+      if (Math.hypot(at.x - p.x, at.y - p.y) < WORK_APART) return false;
+    }
+    return true;
   }
 
   // A puff of dust and a few sparkles where a workstation pops up or goes.
@@ -850,7 +946,6 @@ export class Stage {
       boomed: -1,
       error: null,
       cheered: -1,
-      settledAt: now,
       gait: 0,
       mind: newMind(info.id, this.life.clock),
       hush: 0,
@@ -877,7 +972,6 @@ export class Stage {
           this.sparkle(a, 16, a.traits.color);
         } else if (a.state === 'walk') {
           a.state = 'work';
-          a.settledAt = now;
         }
       } else if (a.state === 'work') {
         a.state = 'walk';

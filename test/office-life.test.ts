@@ -14,8 +14,8 @@ import type { WorldDef } from '../src/worlds/types.ts';
 
 // Office life: the kick-off huddle, coffee runs, high-fives and stand-ups.
 // Each fires when its trigger happens and not otherwise, ends within its
-// time, never takes a working agent from its station, and lets go of an
-// agent the moment it is given work; the demo crew shows all four.
+// time, never takes a working agent from its workstation, and lets go of
+// an agent the moment it is given work; the demo crew shows all four.
 
 const NOW = 1_700_000_000_000;
 // The smallest room (72 units), as the life tests use.
@@ -63,6 +63,8 @@ function run(stage: Stage, crew: (now: number) => AgentInfo[], seconds: number, 
 const find = (stage: Stage, id: string): Actor | undefined => stage.actors().find((a) => a.info.id === id);
 const byId = (stage: Stage, id: string): Actor => find(stage, id)!;
 const kindOf = (a: Actor | undefined): Errand['kind'] | undefined => a?.mind.errand?.kind;
+// An agent's own workstation's desk (none: undefined).
+const own = (stage: Stage, id: string) => stage.workstations().find((w) => w.owner === id)?.desk;
 const OFFICE = new Set(['huddle', 'coffee', 'five', 'standup']);
 const gap = (a: Spot, b: Spot) => Math.hypot(a.x - b.x, a.y - b.y);
 const confetti = (stage: Stage, now: number) => stage.frame(now, null)!.particles.filter((p) => p.kind === 'confetti').length;
@@ -95,12 +97,12 @@ function treadmill(stage: Stage): () => number {
 
 // ── the kick-off huddle ─────────────────────────────────────────────────
 
-test('subagents a lead starts within a few seconds gather round it, nodding along under its speech mark, then each goes to its station', () => {
+test('subagents a lead starts within a few seconds gather round it, nodding along under its speech mark, then each goes to its workstation', () => {
   const stage = newStage();
   const lead = agent('L', 'write', { role: 'lead' });
   let now = run(stage, () => [lead], 6);
   const desk = byId(stage, 'L').station;
-  assert.equal(desk?.kind, 'write');
+  assert.ok(desk && desk === own(stage, 'L'), 'the lead is not at its workstation');
   const t0 = now;
   const crew = (n: number) => [lead, ...(n > t0 ? [agent('s1', 'think', { parentId: 'L', since: t0 })] : []), ...(n > t0 + 1500 ? [agent('s2', 'think', { parentId: 'L', since: t0 + 1500 })] : [])];
   const there = new Set<string>();
@@ -122,9 +124,9 @@ test('subagents a lead starts within a few seconds gather round it, nodding alon
   assert.deepEqual([...there].sort(), ['s1', 's2'], 'both gathered round the lead');
   assert.ok(speech, 'no speech mark over the lead');
   assert.ok(over > 0 && (over - t0) / 1000 <= HUDDLE_GATHER + HUDDLE_S + 1, 'the huddle never ended');
-  // Off to work: each at its station.
+  // Off to work: each at its own workstation.
   run(stage, crew, 6, now);
-  for (const id of ['s1', 's2']) assert.equal(byId(stage, id).station?.kind, 'think', `${id} is not at its station`);
+  for (const id of ['s1', 's2']) assert.ok(own(stage, id) && byId(stage, id).station === own(stage, id), `${id} is not at its workstation`);
 });
 
 test('in a huddle the newcomers nod along, facing their lead', () => {
@@ -252,7 +254,7 @@ test('no huddle when the lead is not in the room or the first task is already ru
   });
 });
 
-test('a newcomer given its first task mid-huddle leaves for its station at once', () => {
+test('a newcomer given its first task mid-huddle leaves for its workstation at once', () => {
   const stage = newStage();
   const lead = agent('L', 'write', { role: 'lead' });
   let now = run(stage, () => [lead], 6);
@@ -264,7 +266,7 @@ test('a newcomer given its first task mid-huddle leaves for its station at once'
     if (!given && kindOf(a) === 'huddle') given = n + 50; // the next sync brings its first task
     else if (given && n >= given && !checked) {
       assert.notEqual(kindOf(a), 'huddle');
-      assert.equal(a!.station?.kind, 'read', 'not on its way to its station');
+      assert.ok(own(stage, 's1') && a!.station === own(stage, 's1'), 'not on its way to its workstation');
       checked = true;
     }
   });
@@ -322,7 +324,7 @@ test('an idle agent goes for a coffee and comes back with a mug, sipping from it
         work = id;
         at = n;
       }
-      if (id === work && a.state === 'work' && a.station?.kind === 'write') {
+      if (id === work && a.state === 'work' && a.station && a.station === own(stage, id)) {
         if (mug) mugAtWork = true;
         if (sip) sipWork = true;
         assert.notEqual(kindOf(a), 'coffee', 'a worker on a coffee run');
@@ -405,7 +407,7 @@ test('a coffee run ends within its time, and one agent goes for one at most ever
   for (const starts of runs.values()) for (let k = 1; k < starts.length; k++) assert.ok(starts[k] - starts[k - 1] >= 150_000, 'two coffee runs within 150 s');
 });
 
-test('an agent given work on a coffee run goes straight to its station', () => {
+test('an agent given work on a coffee run goes straight to its workstation', () => {
   const stage = newStage();
   const ids = ['c1', 'c2', 'c3'];
   let work = '';
@@ -419,7 +421,7 @@ test('an agent given work on a coffee run goes straight to its station', () => {
         at = n + 50; // the next sync brings its work
       } else if (id === work && n >= at && !checked) {
         assert.notEqual(kindOf(a), 'coffee', `${id} went on with its coffee run`);
-        assert.equal(a.station?.kind, 'write', `${id} is not on its way to its station`);
+        assert.ok(own(stage, id) && a.station === own(stage, id), `${id} is not on its way to its workstation`);
         checked = true;
       }
     }
@@ -436,7 +438,7 @@ test('a finished subagent high-fives its lead before the finale; a working lead 
   const crew = () => [lead, agent('s', done ? 'done' : 'read', { parentId: 'L', since: done || NOW })];
   let now = run(stage, crew, 10);
   const desk = byId(stage, 'L').station;
-  assert.equal(byId(stage, 's').station?.kind, 'read');
+  assert.ok(own(stage, 's') && byId(stage, 's').station === own(stage, 's'), 'the subagent is not at its workstation');
   done = now;
   let fived = false;
   let early = 0;
@@ -575,23 +577,27 @@ test('no high-five when the lead is not in the room: the finale goes off at once
   assert.ok(seen > 0, 'no finale');
 });
 
-// These desks, in an 80 x 24 terminal, leave no room the usual 7 units
-// either side of whoever works there. A subagent coming from the writing
-// desk was sent to a spot up or down the screen from its lead instead,
-// never counted as beside it, and walked on that spot until it gave up,
-// the finale held all the while.
-test('a lead whose desk leaves no room right beside it still gets its high-five, from a step nearer, further, higher or lower', () => {
-  for (const [id, desk] of [['station', 'think'], ['snowy', 'web'], ['shelter', 'web']] as const) {
+// A lead with no room the usual 7 units either side of it (as at a
+// station by the wall of a small room, or a workstation between two
+// others): a subagent coming from its own was sent to a spot up or down
+// the screen from its lead instead, never counted as beside it, and walked
+// on that spot until it gave up, the finale held all the while.
+test('a lead with no room right beside it still gets its high-five, from a step nearer, further, higher or lower', () => {
+  for (const id of ['station', 'snowy', 'shelter']) {
     const stage = newStage(WORLDS.find((w) => w.id === id)!);
-    const lead = agent('L', desk, { role: 'lead' });
+    const lead = agent('L', 'write', { role: 'lead' });
     let done = 0;
     const crew = () => [lead, agent('s', done ? 'done' : 'write', { parentId: 'L', since: done || NOW })];
     let now = run(stage, crew, 10);
     const L = byId(stage, 'L');
-    assert.equal(L.station?.kind, desk);
-    // (BESIDE in life.ts)
+    assert.ok(L.station && L.station === own(stage, 'L'), `${id}: the lead is not at its workstation`);
+    // No room at the six spots right beside it (BESIDE in life.ts).
+    const beside = [[7, 0], [-7, 0], [7, 1.5], [-7, 1.5], [7, -1.5], [-7, -1.5]].map(([sx, sy]) => onScreen(L, sx, sy));
+    const priv = stage as unknown as { standable(s: Spot): boolean };
+    const free = standableIn(stage);
+    priv.standable = (p) => free(p) && beside.every((q) => gap(p, q) > 0.75);
     const standable = standableIn(stage);
-    for (const [sx, sy] of [[7, 0], [-7, 0], [7, 1.5], [-7, 1.5], [7, -1.5], [-7, -1.5]]) assert.ok(!standable(onScreen(L, sx, sy)), `${id}: room beside the ${desk} desk now: find another for this test`);
+    for (const p of beside) assert.ok(!standable(p), `${id}: room beside the lead`);
     done = now;
     const stuck = treadmill(stage);
     let landed = 0;
@@ -776,7 +782,7 @@ test('anyone given work leaves a stand-up at once, a talker its talk and speech 
     } else if (step === 1 && work.get(talker)! <= n) {
       const a = byId(stage, talker);
       assert.notEqual(kindOf(a), 'standup', `${talker} stayed`);
-      assert.equal(a.station?.kind, 'write', `${talker} is not on its way to work`);
+      assert.ok(own(stage, talker) && a.station === own(stage, talker), `${talker} is not on its way to work`);
       assert.ok(quiet(stage, a, n), `${talker} goes on talking`);
       const rest = ids.filter((id) => id !== talker);
       assert.deepEqual(on, rest, 'the other two carry on');
