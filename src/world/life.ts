@@ -774,6 +774,10 @@ export class Life {
             e.arrived = true;
             e.until = c + FIVE_S;
             e.clap = c + FIVE_S * 0.4;
+            // over whatever either was doing (a wave, a word, a sip): the
+            // first gesture under way is the one that shows
+            a.mind.gestures = [];
+            lead.mind.gestures = [];
             this.gesture(a, 'highfive', FIVE_S, { face: lead });
             // a working lead turns and raises a hand where it is
             this.gesture(lead, 'highfive', FIVE_S, { face: a, hold: !working(lead) });

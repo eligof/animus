@@ -344,6 +344,32 @@ test('an idle lead stops for the high-five, the two facing each other', () => {
   assert.ok(faced, 'never high-fived face to face');
 });
 
+// With the demo crew a lead was often still waving, talking to a huddle or
+// sipping when its subagent got there, and that showed instead of its hand.
+test('the high-five shows over whatever either was doing: both raise a hand the whole time', () => {
+  const stage = newStage();
+  let done = 0;
+  const crew = (n: number) => [awake('L', n, { role: 'lead' }), agent('s', done ? 'done' : 'read', { parentId: 'L', since: done || NOW })];
+  const now = run(stage, crew, 10);
+  done = now;
+  // Each busy with something long: the lead talking, the subagent waving
+  // (as it walks).
+  stage.life.gesture(byId(stage, 'L'), 'talk', 30);
+  stage.life.gesture(byId(stage, 's'), 'wave', 30, { hold: false });
+  let both = 0;
+  const other: string[] = [];
+  run(stage, crew, FIVE_WALK + FIVE_S + 2, now, (n) => {
+    const s = byId(stage, 's');
+    const e = s.mind.errand;
+    if (e?.kind !== 'five' || !e.arrived) return;
+    const [a, b] = [stage.lookOf(s, n).pose, stage.lookOf(byId(stage, 'L'), n).pose];
+    if (a === 'highfive' && b === 'highfive') both++;
+    else other.push(`${a}/${b}`);
+  });
+  assert.ok(both > 0, 'no high-five');
+  assert.deepEqual(other, [], 'the subagent and the lead showed something else');
+});
+
 test('no high-five when the lead is not in the room: the finale goes off at once', () => {
   const stage = newStage();
   let done = 0;
