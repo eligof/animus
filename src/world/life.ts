@@ -27,6 +27,7 @@ const REACT_R = 40; // how far a bang or a cheer carries, units
 const CHEER_R = 70; // everyone this near a build cheers it finished, and each quarter of the way
 const CHAT_GAP = 5; // units between two chatting characters
 const CHAT_EMOTES: readonly Emote[] = ['note', 'heart', 'idea', 'question'];
+const APART = 3; // units between two standing in a ring or round a lead, at least (see around)
 // Office life. A huddle: subagents a lead starts within HUDDLE_JOIN seconds
 // of the first gather round it (at most one a lead every HUDDLE_EVERY),
 // HUDDLE_R units out; it starts once they are all there (or HUDDLE_WAIT
@@ -843,7 +844,7 @@ export class Life {
   // own.
   private huddleSpot(h: Huddle, a: Actor): Spot {
     const free = FAN.map(([sx, sy]) => onScreen(h.at, sx, sy)).filter((p) => this.host.standable(p) && h.spots.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > 2));
-    const spot = free[0] ?? this.around(h.at, HUDDLE_R, Math.atan2(a.y - h.at.y, a.x - h.at.x) + h.spots.length * 0.8);
+    const spot = free[0] ?? this.around(h.at, HUDDLE_R, Math.atan2(a.y - h.at.y, a.x - h.at.x) + h.spots.length * 0.8, h.spots);
     h.spots.push(spot);
     return spot;
   }
@@ -1056,10 +1057,13 @@ export class Life {
       const ring = group.slice(0, STANDUP_MAX);
       const r = 5 + 1.2 * ring.length;
       this.standups.set(crew, { members: ring.map((a) => a.info.id), centre, since: c, until: 0, beat: 0, turn: 0 });
+      const seats: Spot[] = [];
       ring.forEach((a, k) => {
         this.end(a);
         a.mind.errand = { kind: 'standup', crew, arrived: false, since: c };
-        this.host.walk(a, this.around(centre, r, (k / ring.length) * TAU + 0.4));
+        // (a seat that is blocked turns aside, clear of the others)
+        seats.push(this.around(centre, r, (k / ring.length) * TAU + 0.4, seats));
+        this.host.walk(a, seats[k]);
       });
     }
   }
@@ -1215,14 +1219,25 @@ export class Life {
     return this.around(cr, 3, Math.atan2(a.y - cr.y, a.x - cr.x));
   }
 
-  // A standable spot `d` from `c` at angle `ang`, turning either way to find one.
-  private around(c: Spot, d: number, ang: number): Spot {
-    for (let k = 0; k < 12; k++) {
-      const turn = (k % 2 ? -1 : 1) * Math.ceil(k / 2) * 0.35;
-      const s = { x: c.x + Math.cos(ang + turn) * d, y: c.y + Math.sin(ang + turn) * d };
-      if (this.host.standable(s)) return s;
+  // A standable spot `d` from `c` at angle `ang`, turning either way to find
+  // one, APART from each spot `taken` already if it can be (in finer turns,
+  // all the way round, then a step further out); else the one furthest
+  // from them.
+  private around(c: Spot, d: number, ang: number, taken: readonly Spot[] = []): Spot {
+    const [step, turns, rings] = taken.length ? [0.2, 32, [d, d + APART]] : [0.35, 12, [d]];
+    let best: Spot | null = null;
+    let room = -1;
+    for (const r of rings) {
+      for (let k = 0; k < turns; k++) {
+        const turn = (k % 2 ? -1 : 1) * Math.ceil(k / 2) * step;
+        const s = { x: c.x + Math.cos(ang + turn) * r, y: c.y + Math.sin(ang + turn) * r };
+        if (!this.host.standable(s)) continue;
+        const clear = Math.min(Infinity, ...taken.map((t) => Math.hypot(t.x - s.x, t.y - s.y)));
+        if (clear >= APART) return s;
+        if (clear > room) [best, room] = [s, clear];
+      }
     }
-    return { x: c.x + Math.cos(ang) * d, y: c.y + Math.sin(ang) * d };
+    return best ?? { x: c.x + Math.cos(ang) * d, y: c.y + Math.sin(ang) * d };
   }
 
   // Passers-by wave at each other (a pair at most every 40 s).

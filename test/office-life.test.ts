@@ -141,6 +141,34 @@ test('in a huddle the newcomers nod along, facing their lead', () => {
   assert.ok(looked, 'never stood in the huddle');
 });
 
+// Past the six spots fanned round the lead (or with some of them blocked)
+// newcomers once stood on top of each other.
+test('eight newcomers huddle round their lead in every world, each on a spot of its own', () => {
+  const subs = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'];
+  for (const world of WORLDS) {
+    const stage = newStage(world);
+    const lead = agent('L', 'write', { role: 'lead' });
+    let t0 = 0;
+    const crew = (n: number) => [lead, ...(t0 && n > t0 ? subs.map((id) => agent(id, 'think', { parentId: 'L', since: t0 })) : [])];
+    let now = run(stage, crew, 6);
+    t0 = now;
+    let most = 0;
+    run(stage, crew, HUDDLE_GATHER, now, () => {
+      const L = byId(stage, 'L');
+      const there = subs.map((id) => find(stage, id)).filter((a): a is Actor => {
+        const e = a?.mind.errand;
+        return e?.kind === 'huddle' && e.arrived && !a!.path.length;
+      });
+      most = Math.max(most, there.length);
+      for (const a of there) {
+        assert.ok(gap(a, L) >= 3.5, `${world.id}: ${a.info.id} ${gap(a, L).toFixed(1)} from its lead`);
+        for (const b of there) if (a !== b) assert.ok(gap(a, b) >= 2.5, `${world.id}: ${a.info.id} and ${b.info.id} ${gap(a, b).toFixed(1)} apart`);
+      }
+    });
+    assert.ok(most >= 6, `${world.id}: only ${most} gathered`);
+  }
+});
+
 test('at most one huddle a lead every 30 seconds', () => {
   const stage = newStage();
   const lead = agent('L', 'write', { role: 'lead' });
@@ -617,25 +645,30 @@ test('three idle agents of a crew gather in a ring and take turns talking with s
   assert.ok(!again, `a second stand-up within ${STANDUP_EVERY} s`);
 });
 
-test('in a stand-up they stand apart, round a middle, facing it', () => {
-  const stage = newStage();
-  const ids = ['a1', 'a2', 'a3', 'a4'];
-  let checked = 0;
-  run(stage, (n) => ids.map((id) => awake(id, n, { crew: 'c' })), STANDUP_GATHER + STANDUP_S, NOW, (n) => {
-    const ring = ids.map((id) => byId(stage, id)).filter((a) => {
-      const e = a.mind.errand;
-      return e?.kind === 'standup' && e.arrived && !a.path.length;
+// A ring of six in the smallest terminal: a spot that was blocked turned
+// onto its neighbour's, and two stood on top of each other.
+test('in a stand-up of six, in every world, they stand apart, round a middle, facing it', () => {
+  const ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
+  for (const world of WORLDS) {
+    const stage = newStage(world);
+    let checked = 0;
+    run(stage, (n) => ids.map((id) => awake(id, n, { crew: 'c' })), STANDUP_GATHER + STANDUP_S, NOW, (n) => {
+      const ring = ids.map((id) => byId(stage, id)).filter((a) => {
+        const e = a.mind.errand;
+        return e?.kind === 'standup' && e.arrived && !a.path.length;
+      });
+      if (ring.length < ids.length) return;
+      for (const a of ring) for (const b of ring) if (a !== b) assert.ok(gap(a, b) >= 3, `${world.id}: ${a.info.id} and ${b.info.id} ${gap(a, b).toFixed(1)} apart`);
+      // all facing one middle, round it (no gap of half the circle)
+      const mid = stage.lookOf(ring[0], n).face!;
+      for (const a of ring) assert.ok(gap(stage.lookOf(a, n).face!, mid) < 0.5, `${world.id}: ${a.info.id} looks away`);
+      const angs = ring.map((a) => Math.atan2(a.y - mid.y, a.x - mid.x)).sort((p, q) => p - q);
+      const widest = Math.max(...angs.map((t, i) => (i ? t - angs[i - 1] : t + 2 * Math.PI - angs[angs.length - 1])));
+      assert.ok(widest < Math.PI, `${world.id}: not round the middle`);
+      checked++;
     });
-    if (ring.length < 4) return;
-    for (const a of ring) for (const b of ring) if (a !== b) assert.ok(gap(a, b) >= 3, `${a.info.id} and ${b.info.id} ${gap(a, b).toFixed(1)} apart`);
-    const mid = { x: ring.reduce((s, a) => s + a.x, 0) / 4, y: ring.reduce((s, a) => s + a.y, 0) / 4 };
-    for (const a of ring) {
-      const f = stage.lookOf(a, n).face;
-      if (f) assert.ok(Math.hypot(f.x - mid.x, f.y - mid.y) < 4, `${a.info.id} looks away`);
-    }
-    checked++;
-  });
-  assert.ok(checked > 0, 'the ring never stood');
+    assert.ok(checked > 0, `${world.id}: the ring never stood`);
+  }
 });
 
 test('no stand-up for two waiting, nor for three of different crews or of none', () => {
