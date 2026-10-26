@@ -5,6 +5,7 @@ import { DECOR } from './office/decor.ts';
 import { INK } from './office/kit.ts';
 import { officePois, room } from './office/room.ts';
 import { STATIONS } from './office/stations.ts';
+import { WORKSTATION } from './office/workstation.ts';
 
 // The Startup: a startup's loft, exposed brick and big black-framed windows
 // onto the city, polished concrete with a warm wood-plank corner, standing
@@ -45,6 +46,7 @@ export const office: WorldDef = {
   pois: officePois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'startup',
   critter: { kind: 'corgi', body: hex('#d98a3c') }, // the office dog, a red corgi
   finale: { colors: [[255, 107, 107], [255, 200, 87], [78, 205, 196], [167, 139, 250]] }, // coral, sunflower, teal and lilac confetti
