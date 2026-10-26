@@ -24,7 +24,7 @@ import type { Look, Mind } from './life.ts';
 import { smoke, updateParticles } from './particles.ts';
 import { NavGrid, smooth } from './path.ts';
 import { Rng, hashString } from './rng.ts';
-import { NAV_CELL, NAV_PAD, deskSpots, footprint, heightAt, planRoom, toWorld } from './room.ts';
+import { NAV_CELL, NAV_PAD, footprint, heightAt, planRoom, toWorld } from './room.ts';
 import type { Room } from './room.ts';
 import type { Desk, Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
 
@@ -98,17 +98,10 @@ const MAX_EMOTES = 3; // shown at once
 // one every HOP_IDLE seconds standing about.
 const HOP_WALK = 0.25;
 const HOP_IDLE = 0.5;
-// Desk upgrades by role (picked by a hash of crew and role); how far it
-// keeps from where anyone works or stands (the first of these it can, so
-// a small room's crowded station still gets one, never on such a spot)
-// and from the entrance; how often they are worked out again (seconds)
-// when nothing says so sooner; crew roles whose time at each station is
-// kept, at most. Where one may stand by its station: see deskSpots.
+// Desk upgrades by role (picked by a hash of crew and role), and how often
+// they are worked out again (seconds) when nothing says so sooner.
 const TRINKETS: readonly Trinket[] = ['plant', 'mug', 'trophy'];
-const TRINKET_CLEAR = [4, 3, 2];
-const TRINKET_DOOR = 4;
 const TRINKETS_EVERY = 0.5;
-const MAX_WORKED = 200;
 // A level-up's ★N! rises this long (seconds), its figure's emotes kept
 // down meanwhile; how opaque its pill is.
 const WORD_S = 3;
@@ -186,9 +179,6 @@ function wearAt(level: number): Wear | undefined {
   return wears.get(level);
 }
 
-// How far a spot is from a rect (0 inside it).
-const off = (p: Spot, r: Box) => Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1));
-
 export function stationKindFor(a: Activity): StationKind | null {
   switch (a) {
     case 'talk':
@@ -245,9 +235,7 @@ export class Stage {
   private desks = new Map<number, Workstation>();
   private desksVer = 0;
   private desksSeen = 0;
-  // Seconds each crew role (see roleKey) worked at each station this run,
-  // and the desk upgrades as they stand.
-  private worked = new Map<string, Map<StationKind, number>>();
+  // The desk upgrades as they stand.
   private trinkets: TrinketFrame[] = [];
   // The upgrades are due to be worked out again (the cast, a level or the
   // room changed), and when they last were.
@@ -898,7 +886,8 @@ export class Stage {
     }
     this.life.update([...this.cast.values()], dt);
     this.upkeep(dt);
-    this.tally(dt);
+    this.tally();
+    this.steamUp(dt);
     if ((this.works?.version ?? -1) !== this.blocksAt || this.desksVer !== this.desksSeen) this.makeWay();
     for (const [id, a] of this.cast) {
       if (!a.gone) continue;
@@ -914,92 +903,45 @@ export class Stage {
     updateParticles(this.particles, dt, this.L ?? undefined);
   }
 
-  // Time at work at each station, by crew role, and the desk upgrades it
-  // earns (worked out again when the cast or a level changes, else now and
-  // then: a favourite station shifts slowly); a mug steams.
-  private tally(dt: number): void {
-    for (const a of this.cast.values()) {
-      const k = a.station?.kind;
-      if (a.state !== 'work' || !k || k === 'entrance' || !a.info.crew) continue;
-      const key = roleKey(a.info);
-      let m = this.worked.get(key);
-      if (!m) {
-        if (this.worked.size >= MAX_WORKED) this.worked.delete(this.worked.keys().next().value!);
-        this.worked.set(key, (m = new Map()));
-      }
-      m.set(k, (m.get(k) ?? 0) + dt);
-    }
-    if (this.trinketsDue || this.clock >= this.trinketsAt + TRINKETS_EVERY) {
+  // The desk upgrades (worked out again when the cast, a level or the room
+  // changed, else now and then), and a mug's steam.
+  private tally(): void {
+    const dt = this.clock - this.trinketsAt;
+    if (this.trinketsDue || dt >= TRINKETS_EVERY) {
       this.trinkets = this.placeTrinkets();
       this.trinketsDue = false;
       this.trinketsAt = this.clock;
     }
-    const r = this.steam;
-    for (const tk of this.trinkets) {
-      if (tk.kind === 'mug' && r.next() < dt / 0.45) this.add({ ...smoke(tk.x, tk.y, MUG_TOP, r, [236, 232, 228], 'steam'), vz: 2.5, life: 1.3 });
-    }
   }
 
-  // The desk upgrades (★5): one for each crew role here at that level, at
-  // the station it worked most this run, a plant, a mug or a trophy by
-  // its role, in the colour of one of its agents.
+  // The desk upgrades (★5): one for each crew role here at that level, on
+  // the workstation of the first of its agents that has one up (where the
+  // world's workstation says, see WorkstationArt.top), a plant, a mug or a
+  // trophy by its role, in that agent's colour.
   private placeTrinkets(): TrinketFrame[] {
-    const L = this.L;
-    if (!L || this.worked.size === 0) return [];
+    if (!this.L) return [];
     const out: TrinketFrame[] = [];
     const done = new Set<string>();
+    const top = workstationOf(this.world).top;
     for (const a of this.actors()) {
       if (!a.info.crew || !unlocks(a.info.level ?? 1).desk) continue;
       const key = roleKey(a.info);
-      const m = this.worked.get(key);
-      if (done.has(key) || !m) continue;
-      let best: StationKind | null = null;
-      let most = 0;
-      for (const [k, secs] of m) {
-        if (secs > most) {
-          best = k;
-          most = secs;
-        }
-      }
-      const slot = L.slots.find((s) => s.kind === best);
-      if (!slot) continue;
+      const w = this.ownDesk(a);
+      if (done.has(key) || !w || this.clock - w.born < POP_S) continue;
       done.add(key);
-      const at = this.trinketSpot(slot, out);
-      if (at) out.push({ id: key, kind: TRINKETS[hashString(key) % TRINKETS.length], ...at, color: a.traits.color });
+      const [x, y, z] = toWorld(w.desk, top[0], top[1], top[2]);
+      out.push({ id: key, kind: TRINKETS[hashString(key) % TRINKETS.length], x, y, z, color: a.traits.color });
     }
     return out;
   }
 
-  // Where a desk upgrade stands by `slot`: a step out from one of its
-  // corners, or further along the wall, the nearest such to it. On the
-  // floor clear of every prop, of the entrance and of the upgrades already
-  // placed, nearer this station than any other, and as far as it can be
-  // from where anyone works (a station's spot and the lanes along it) or
-  // likes to stand (see TRINKET_CLEAR); null where there is no such spot.
-  private trinketSpot(slot: Slot, placed: readonly Spot[]): Spot | null {
-    const L = this.L!;
-    const spots = deskSpots(slot);
-    const own = slotRect(slot);
-    const others = L.slots.filter((s) => s !== slot);
-    const stands: Spot[] = [...this.spots];
-    for (const s of L.slots) {
-      if (s.kind === 'entrance') stands.push(s.spot);
-      else for (let k = 0; k < 5; k++) stands.push(this.laneSpot(s, k));
+  // Steam off the mugs (on their own chance, so whether one stands shifts
+  // nothing else the stage draws).
+  private steamUp(dt: number): void {
+    const r = this.steam;
+    for (const tk of this.trinkets) {
+      if (tk.kind === 'mug' && r.next() < dt / 0.45) this.add({ ...smoke(tk.x, tk.y, (tk.z ?? 0) + MUG_TOP, r, [236, 232, 228], 'steam'), vz: 2.5, life: 1.3 });
     }
-    const free = (p: Spot) =>
-      this.standable(p) &&
-      placed.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= 3) &&
-      others.every((s) => off(p, slotRect(s)) > off(p, own) && (s.kind !== 'entrance' || off(p, slotRect(s)) >= TRINKET_DOOR));
-    // Each free spot, nearest the station first, with how close it comes to where anyone stands.
-    const fit = spots
-      .filter(free)
-      .sort((p, q) => off(p, own) - off(q, own))
-      .map((p) => ({ p, clear: Math.min(...stands.map((q) => Math.hypot(q.x - p.x, q.y - p.y))) }));
-    for (const clear of TRINKET_CLEAR) {
-      const f = fit.find((s) => s.clear >= clear);
-      if (f) return f.p;
-    }
-    return null;
   }
 
   // Each prop that gives off bits (steam off a cup, sparks while worked)

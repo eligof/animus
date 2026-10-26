@@ -43,10 +43,9 @@ export type Room = {
 export const NAV_CELL = 2; // units per routing cell
 export const NAV_PAD = 2; // routing keeps this far from props and builds
 
-// Where a station's desk upgrades may stand (see Stage.trinketSpot): a
-// step (DESK_GAP) out from either end, by its back and by its front, then
-// `steps` - 1 more steps of 3 units further along. The nearest of these
-// are kept clear of decor (see planRoom).
+// The floor by a station's ends: a step (DESK_GAP) out from either end, by
+// its back and by its front, then `steps` - 1 more steps of 3 units further
+// along. The nearest of these are kept clear of floor decor (see planRoom).
 const DESK_GAP = 2;
 export function deskSpots(s: Slot, steps = 3): Spot[] {
   const g = DESK_GAP;
@@ -106,7 +105,7 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   mark({ x0: yd.x - yd.r, y0: yd.y - yd.r, x1: yd.x + yd.r, y1: yd.y + yd.r }, 1);
   // Kept clear of floor decor too: the way in, across its width out past
   // where arrivals stand, and the floor a step from each station's ends
-  // for its desk upgrades (floor decor likes to stand by the stations).
+  // (floor decor likes to stand by the stations, not against them).
   const aside = new Uint8Array(W * D);
   for (const s of L.slots) {
     if (s.kind === 'entrance') {

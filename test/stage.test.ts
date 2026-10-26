@@ -13,6 +13,7 @@ import { placeCard } from '../src/ui/card.ts';
 import { DEFAULT, Screen } from '../src/term/screen.ts';
 import { mines } from '../src/worlds/mines.ts';
 import { stubProp } from '../src/worlds/stub.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import type { WorldDef } from '../src/worlds/types.ts';
 import type { AgentInfo, Activity, Vitals } from '../src/agents.ts';
 import type { Pose } from '../src/world/character.ts';
@@ -890,7 +891,7 @@ test('figures show how their meters say they feel, and what their level lets the
   assert.ok(hops.size >= 3 && Math.max(...hops) <= 9, `hops ${[...hops]}`);
 });
 
-test('at ★5 a crew role gets a desk upgrade by the station it worked at most; below, none', () => {
+test('at ★5 a crew role gets a desk upgrade, on its agent\'s workstation; below, none; it goes with its agent', () => {
   const stage = newStage(WIDE);
   const writer = agent('w', 'write', { crew: '/p', role: 'lead', level: 5 });
   const junior = agent('j', 'write', { crew: '/p', agentType: 'Explore', level: 4 });
@@ -900,22 +901,20 @@ test('at ★5 a crew role gets a desk upgrade by the station it worked at most; 
   const tk = f.trinkets![0];
   assert.equal(tk.id, '/p\nlead');
   assert.ok(['plant', 'mug', 'trophy'].includes(tk.kind));
-  const desk = slot(stage, 'write');
-  const r = footprintOf(desk);
-  const away = Math.max(r.x0 - tk.x, tk.x - r.x1, r.y0 - tk.y, tk.y - r.y1);
-  assert.ok(away > 0 && away < 12, `beside the desk (${away.toFixed(1)} units off it)`);
-  // Reading for longer than it wrote: the shelves are its favourite now.
-  now = run(stage, [{ ...writer, activity: 'read', since: now }, junior], 70, now);
+  const own = stage.workstations().find((w) => w.owner === 'w')!;
+  const r = footprint(own.desk);
+  assert.ok(tk.x > r.x0 && tk.x < r.x1 && tk.y > r.y0 && tk.y < r.y1, `at ${tk.x},${tk.y}, not on its workstation`);
+  assert.ok(tk.z! > 2 && tk.z! < workstationOf(mines).height, `${tk.z} up: not on its top`);
+  // Reading now: still on its own workstation.
+  now = run(stage, [{ ...writer, activity: 'read', since: now }, junior], 10, now);
   f = stage.frame(now)!;
-  const shelves = footprintOf(slot(stage, 'read'));
-  const t2 = f.trinkets![0];
-  assert.ok(Math.max(shelves.x0 - t2.x, t2.x - shelves.x1, shelves.y0 - t2.y, t2.y - shelves.y1) < 12, 'moved to the shelves');
+  assert.deepEqual(f.trinkets!.map((t) => [t.x, t.y]), [[tk.x, tk.y]]);
   // Gone with its agent.
   now = run(stage, [junior], 20, now);
   assert.deepEqual(stage.frame(now)!.trinkets, []);
 });
 
-test('two upgrades at one station stand apart; a mug steams', () => {
+test('two roles\' upgrades stand each on its own workstation; a mug steams', () => {
   const stage = newStage(WIDE);
   // Roles whose upgrade is a mug, and another.
   const roles = Array.from({ length: 40 }, (_, i) => `type-${i}`);
@@ -929,7 +928,7 @@ test('two upgrades at one station stand apart; a mug steams', () => {
   let steam = 0;
   for (let i = 0; i < 40; i++) {
     now = run(stage, crew, 0.05, now);
-    steam = Math.max(steam, particlesOf(stage).filter((p) => p.kind === 'steam' && Math.hypot(p.x - mug.x, p.y - mug.y) < 3).length);
+    steam = Math.max(steam, particlesOf(stage).filter((p) => p.kind === 'steam' && Math.hypot(p.x - mug.x, p.y - mug.y) < 3 && p.z >= mug.z!).length);
   }
   assert.ok(steam > 0, 'steam off the mug');
 });
@@ -1060,57 +1059,27 @@ test("close up, a figure whose hat reaches over the scene's top keeps its label,
   }
 });
 
-// How far a spot is from a rect (0 inside it).
-const off = (p: { x: number; y: number }, r: { x0: number; y0: number; x1: number; y1: number }) => Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1));
-
-test('a desk upgrade stands by its own station, nearer it than any other, clear of the props and of the entrance, off where anyone works or stands; with no such spot, none', () => {
-  let shown = 0;
-  for (const id of ['snowy', 'cafe']) {
-    const w = THEMES.find((t) => t.id === id)!;
-    for (const act of ['write', 'read', 'search', 'run', 'web', 'think'] as Activity[]) {
-      // A 90x26 terminal's scene; four roles at one station, at ★5.
-      const stage = newStage({ x: 0, y: 1, w: 90, h: 23 }, w);
-      const crew = [0, 1, 2, 3].map((i) => agent(`a${i}`, act, { crew: '/p', agentType: `t${i}`, level: 5 }));
-      const now = run(stage, crew, 12);
-      const slots = stage.stations();
-      const own = slotRect(slots.find((s) => s.kind === stationKindFor(act))!);
-      const door = slots.find((s) => s.kind === 'entrance')!;
-      for (const tk of stage.frame(now)!.trinkets!) {
-        shown++;
-        const what = `${id}/${act}/${tk.id.split('\n')[1]} at ${tk.x.toFixed(1)},${tk.y.toFixed(1)}`;
-        for (const s of slots) if (s.kind !== stationKindFor(act)) assert.ok(off(tk, slotRect(s)) > off(tk, own), `${what}: nearer the ${s.kind}`);
-        for (const p of stage.room()!.props) assert.ok(off(tk, footprint(p)) >= 1, `${what}: in a prop`);
-        for (const p of [...slots.map((s) => s.spot), ...stage.pois()]) assert.ok(Math.hypot(p.x - tk.x, p.y - tk.y) >= 2, `${what}: on a spot someone stands at`);
-        assert.ok(off(tk, slotRect(door)) >= 4, `${what}: in the way in`);
-      }
-    }
-  }
-  assert.ok(shown >= 12, `${shown} desk upgrades`);
-});
-
-test('in a small room a desk upgrade stands nearer where anyone works rather than not at all, never on a spot or a lane, nor by the way in', () => {
-  let roles = 0;
+test('in every world, in a small room, each ★5 role whose agent has a workstation up has its upgrade on it, at the world\'s spot; one sharing has none', () => {
   let shown = 0;
   for (const w of THEMES) {
-    // An 80x24 terminal's scene; a role at each station, at ★5.
+    // An 80x24 terminal's scene; more roles at ★5 than places.
     const stage = newStage({ x: 0, y: 1, w: 80, h: 22 }, w);
-    const crew = (['write', 'read', 'search', 'run', 'web', 'think'] as Activity[]).map((act, i) => agent(`a${i}`, act, { crew: '/p', agentType: `t${i}`, level: 5, since: NOW - 60_000 }));
+    const places = stage.room()!.desks.length;
+    const crew = Array.from({ length: places + 2 }, (_, i) => agent(`a${i}`, (['write', 'read', 'search'] as Activity[])[i % 3], { crew: '/p', agentType: `t${i}`, level: 5, since: NOW - 60_000 }));
     const now = run(stage, crew, 15);
-    roles += crew.length;
-    const slots = stage.stations();
-    const door = slots.find((s) => s.kind === 'entrance')!;
-    // Where anyone stands: the spots idlers like, the way in, and a crowd's first lanes at each station.
-    const lanes = stage as unknown as { laneSpot(s: Slot, k: number): { x: number; y: number } };
-    const stands = [...stage.pois(), door.spot, ...slots.filter((s) => s !== door).flatMap((s) => [0, 1, 2, 3, 4].map((k) => lanes.laneSpot(s, k)))];
-    for (const tk of stage.frame(now)!.trinkets!) {
+    const top = workstationOf(w).top;
+    const trinkets = stage.frame(now)!.trinkets!;
+    for (const ws of stage.workstations()) {
+      const role = `/p\nt${ws.owner!.slice(1)}`;
+      const tk = trinkets.find((t) => t.id === role);
+      assert.ok(tk, `${w.id}: ${ws.owner} has no upgrade`);
+      const [x, y, z] = toWorld(ws.desk, ...top);
+      assert.deepEqual([tk.x, tk.y, tk.z], [x, y, z], `${w.id}: ${ws.owner}'s upgrade is not on its workstation`);
       shown++;
-      const what = `${w.id}/${tk.id.split('\n')[1]} at ${tk.x.toFixed(1)},${tk.y.toFixed(1)}`;
-      for (const p of stage.room()!.props) assert.ok(off(tk, footprint(p)) >= 1, `${what}: in a prop`);
-      for (const p of stands) assert.ok(Math.hypot(p.x - tk.x, p.y - tk.y) >= 2, `${what}: on a spot someone stands at`);
-      assert.ok(off(tk, slotRect(door)) >= 4, `${what}: in the way in`);
     }
+    assert.equal(trinkets.length, stage.workstations().length, `${w.id}: an upgrade with no workstation`);
   }
-  assert.ok(shown >= roles - 1, `${shown} of ${roles} roles have a desk upgrade`);
+  assert.ok(shown >= 16 * 3, `${shown} desk upgrades`);
 });
 
 test("a mug's steam leaves the rest of the stage's chance alone", () => {

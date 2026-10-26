@@ -136,12 +136,12 @@ export type BuildFrame = {
 export type LabelFrame = { col: number; row: number; w: number; kind: 'name' | 'bubble' | 'error' | 'glyph' | 'word'; color: RGB; alpha: number; text: string; ink: RGB; bold: boolean; mark?: { col: number; ch: string; ink: RGB } };
 
 // A desk upgrade (★5; see Stage.trinkets): a plant, a steaming mug or a
-// trophy standing on the floor by its owner's favourite station, in its
-// owner's colour.
+// trophy standing on its owner's workstation, `z` up (on the floor without
+// one), in its owner's colour.
 export type Trinket = 'plant' | 'mug' | 'trophy';
-// Steam rises off a mug's rim this high (units).
+// Steam rises off a mug's rim this high (units) over where it stands.
 export const MUG_TOP = 3.7;
-export type TrinketFrame = { id: string; kind: Trinket; x: number; y: number; color: RGB };
+export type TrinketFrame = { id: string; kind: Trinket; x: number; y: number; z?: number; color: RGB };
 
 // What a workstation's screen shows (the shared activity layer, see
 // art/screen.ts): the work of the agent at it, or dim ('off') while it

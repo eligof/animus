@@ -898,12 +898,13 @@ export class Scene {
       if (seen(it)) out.push(it);
     }
     for (const tk of f.trinkets ?? []) {
-      // Desk upgrades stand on the floor, sorted like a figure.
+      // Desk upgrades stand on their workstation, sorted like a figure (on
+      // top of the desk it stands on).
       const sp = trinketSprite(tk.kind, tk.color, s, ink);
-      const [x, y] = P(tk.x, tk.y, 0);
+      const [x, y] = P(tk.x, tk.y, tk.z ?? 0);
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: 0, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
+      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: tk.z ?? 0, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
       if (seen(it)) out.push(it);
     }
     const cr = f.critter;
