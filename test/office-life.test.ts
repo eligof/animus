@@ -234,6 +234,27 @@ test('an idle agent goes for a coffee and comes back with a mug, sipping from it
   assert.ok(mugAtWork && sipWork, `the mug at work: carried ${mugAtWork}, sipped ${sipWork}`);
 });
 
+// An agent that hit an error with a mug in hand went on sipping, smiling,
+// a quarter of the time.
+test('an agent in error never sips: its error shows, even over a sip under way', () => {
+  const stage = newStage();
+  let err = 0;
+  const crew = () => [agent('e', err ? 'error' : 'write', { since: err || NOW })];
+  let now = run(stage, crew, 8);
+  const a = byId(stage, 'e');
+  a.mind.mug = stage.life.clock + 60;
+  a.mind.sip = stage.life.clock;
+  now = run(stage, crew, 0.5, now);
+  assert.equal(stage.lookOf(a, now).pose, 'sip', 'no sip under way at its desk');
+  err = now + 50; // the next sync brings the error
+  const other = new Set<string>();
+  run(stage, crew, 40, now, (n) => {
+    const pose = stage.lookOf(a, n).pose;
+    if (n >= err && pose !== 'error') other.add(pose);
+  });
+  assert.deepEqual([...other], [], 'shown over the error');
+});
+
 test('in a room with no drink spot open, a coffee run goes to a warm one', () => {
   const dry: WorldDef = {
     ...mines,
@@ -390,6 +411,54 @@ test('the high-five shows over whatever either was doing: both raise a hand the 
   });
   assert.ok(both > 0, 'no high-five');
   assert.deepEqual(other, [], 'the subagent and the lead showed something else');
+});
+
+// Such a lead's gestures were cleared for a held high-five, hiding its
+// error or the block it carried.
+test('a lead in error only turns to a subagent come to high-five it: its error shows', () => {
+  const stage = newStage();
+  let err = 0;
+  let done = 0;
+  const crew = () => [agent('L', err ? 'error' : 'write', { role: 'lead', since: err || NOW }), agent('s', done ? 'done' : 'read', { parentId: 'L', since: done || NOW })];
+  let now = run(stage, crew, 10);
+  err = now;
+  now = run(stage, crew, 1, now);
+  done = now;
+  let fived = 0;
+  run(stage, crew, FIVE_WALK + FIVE_S, now, (n) => {
+    const s = byId(stage, 's');
+    const e = s.mind.errand;
+    if (e?.kind !== 'five' || !e.arrived) return;
+    const look = stage.lookOf(byId(stage, 'L'), n);
+    assert.equal(look.pose, 'error');
+    assert.ok(look.face && gap(look.face, s) < 0.5, 'not facing its subagent');
+    if (stage.lookOf(s, n).pose === 'highfive') fived++;
+  });
+  assert.ok(fived > 0, 'no high-five');
+});
+
+test('a lead carrying a block only turns to a subagent come to high-five it: the block shows', () => {
+  for (const world of [lively, ...['office', 'cafe', 'den'].map((id) => WORLDS.find((w) => w.id === id)!)]) {
+    const stage = newStage(world);
+    let free = 0;
+    let done = 0;
+    const crew = () => [agent('L', free ? 'done' : 'write', { role: 'lead', since: free || NOW }), agent('s', done ? 'done' : 'read', { parentId: 'L', since: done || NOW })];
+    let now = run(stage, crew, 8);
+    free = now; // the lead helps build
+    let carried = 0;
+    run(stage, crew, 60, now, (n) => {
+      const L = byId(stage, 'L');
+      if (!done && stage.life.carrying(L)) done = n + 50; // its subagent finishes
+      const s = find(stage, 's');
+      const e = s?.mind.errand;
+      if (e?.kind !== 'five' || !e.arrived || !stage.life.carrying(L)) return;
+      const look = stage.lookOf(L, n);
+      assert.ok(look.pose === 'carry' || look.pose === 'place', `${world.id}: ${look.pose} over the block`);
+      if (!L.path.length) assert.ok(look.face && gap(look.face, s!) < 0.5, `${world.id}: not facing its subagent`);
+      carried++;
+    });
+    assert.ok(carried > 0, `${world.id}: never high-fived carrying`);
+  }
 });
 
 test('no high-five when the lead is not in the room: the finale goes off at once', () => {

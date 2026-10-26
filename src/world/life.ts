@@ -93,8 +93,10 @@ export type Errand =
   | { kind: 'standup'; crew: string; arrived: boolean; since: number };
 
 // Office life's errands: dropped when it is turned off; a working agent
-// that ends one goes straight back to its station.
+// that ends one goes straight back to its station. And its poses (see
+// hush).
 const OFFICE: ReadonlySet<Errand['kind']> = new Set(['huddle', 'coffee', 'five', 'standup']);
+const OFFICE_POSES: ReadonlySet<Pose> = new Set(['talk', 'sip', 'highfive']);
 // A lead's kick-off huddle: when it opened, where the lead stands (or is
 // heading), who is in it and where each stands, when the first got there,
 // when it ends (0: not started). A crew's stand-up: who is in it, the
@@ -245,13 +247,15 @@ export class Life {
   }
 
   // The activity changed: whatever they were up to is dropped (a working
-  // agent leaves an office moment for its station at once, see end). A
-  // subagent that finished goes to high-five its lead first.
+  // agent leaves an office moment for its station at once, see end; an
+  // error shows at once). A subagent that finished goes to high-five its
+  // lead first.
   changed(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
     m.exit = 0;
     this.end(a);
+    if (a.info.activity === 'error') this.hush(a);
     if (a.info.activity === 'done') {
       m.think = c + 1.6; // celebrate before anything else
       if (this.office) this.highFive(a);
@@ -783,10 +787,13 @@ export class Life {
             // over whatever either was doing (a wave, a word, a sip): the
             // first gesture under way is the one that shows
             a.mind.gestures = [];
-            lead.mind.gestures = [];
             this.gesture(a, 'highfive', FIVE_S, { face: lead });
-            // a working lead turns and raises a hand where it is
-            this.gesture(lead, 'highfive', FIVE_S, { face: a, hold: !working(lead) });
+            // a working lead turns and raises a hand where it is; one in
+            // trouble or with a block in its hands only turns (see look)
+            if (!this.noHand(lead)) {
+              lead.mind.gestures = [];
+              this.gesture(lead, 'highfive', FIVE_S, { face: a, hold: !working(lead) });
+            }
           }
           return;
         }
@@ -902,7 +909,8 @@ export class Life {
   }
 
   // Carrying a mug: a sip now and then (standing about, or at work: a
-  // worker sips where it is), until it is finished.
+  // worker sips where it is; none in trouble: its error shows), until it is
+  // finished.
   private sipping(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
@@ -910,7 +918,7 @@ export class Life {
       m.mug = 0;
       return;
     }
-    if (c < m.sip || a.path.length || m.gestures.length || this.carrying(a)) return;
+    if (c < m.sip || a.path.length || m.gestures.length || this.carrying(a) || a.info.activity === 'error') return;
     const busy = working(a);
     if (busy && a.state !== 'work') return;
     m.sip = c + m.rng.range(...SIP);
@@ -970,6 +978,28 @@ export class Life {
       if (e?.kind === 'five' && e.lead === lead.info.id) return true;
     }
     return false;
+  }
+
+  // The subagent high-fiving `lead` right now, if any.
+  private fiver(lead: Actor): Actor | null {
+    for (const o of this.byId.values()) {
+      const e = o.mind.errand;
+      if (e?.kind === 'five' && e.arrived && e.lead === lead.info.id) return o;
+    }
+    return null;
+  }
+
+  // No hand to spare for a high-five: in trouble (its error shows) or a
+  // block in its hands.
+  private noHand(a: Actor): boolean {
+    return a.info.activity === 'error' || this.carrying(a);
+  }
+
+  // Office poses and the speech mark over a talker, dropped at once.
+  private hush(a: Actor): void {
+    const m = a.mind;
+    m.gestures = m.gestures.filter((g) => !OFFICE_POSES.has(g.pose));
+    if (m.emote?.e === 'speech') m.emote = null;
   }
 
   // Free for a stand-up: idle, awake, in the room, not leaving, not hauling
@@ -1291,6 +1321,9 @@ export class Life {
   look(a: Actor, walking: boolean, base: Pose): Look {
     const out = this.looks(a, walking, base);
     if (this.office && a.mind.mug > this.clock) out.mug = true;
+    // high-fived with no hand to spare: it only turns to the subagent
+    const s = !walking && this.noHand(a) ? this.fiver(a) : null;
+    if (s) out.face = { x: s.x, y: s.y };
     return out;
   }
 
