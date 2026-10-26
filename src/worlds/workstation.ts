@@ -5,8 +5,8 @@ import type { PropView, WorkstationArt, WorldDef } from './types.ts';
 // The plain workstation, for a world that has not drawn its own (see
 // WorldDef.workstation): a desk on four legs with a monitor and a
 // keyboard, in the world's colours and ink. Its screen faces the agent,
-// right of where it stands; a desk upgrade stands at the desk's left end,
-// behind the keyboard.
+// right of where it stands; a desk upgrade stands at the desk's far right
+// end, at the back, past the monitor (clear of the agent at work).
 
 export function plainWorkstation(w: Pick<WorldDef, 'palette' | 'ink'>): WorkstationArt {
   const p = w.palette;
@@ -22,8 +22,8 @@ export function plainWorkstation(w: Pick<WorldDef, 'palette' | 'ink'>): Workstat
     box(0.4, 0.15, 2, 6.2, 0.3, 3.3, dark, false); // the modesty panel
     box(0, 0, 5.3, DESK.len, DESK.dep, 0.8, wood);
     // the monitor on its stand, its screen toward the agent
-    box(4.15, 0.75, 6.1, 0.6, 0.45, 0.9, case_, false);
-    box(2.75, 0.5, 6.8, 3.4, 0.4, 3.1, case_);
+    box(3.65, 0.75, 6.1, 0.6, 0.45, 0.9, case_, false);
+    box(2.6, 0.5, 6.8, 2.7, 0.4, 3.1, case_);
     // the keyboard, in front of the agent
     box(0.9, 1.7, 6.1, 2.6, 0.9, 0.22, shade(case_, 0.25), false);
   };
@@ -34,12 +34,12 @@ export function plainWorkstation(w: Pick<WorldDef, 'palette' | 'ink'>): Workstat
     draw,
     // the monitor's front face, inside its bezel
     screen: [
-      [2.95, 0.9, 7.0],
-      [5.95, 0.9, 7.0],
-      [5.95, 0.9, 9.7],
-      [2.95, 0.9, 9.7],
+      [2.8, 0.9, 7.0],
+      [5.1, 0.9, 7.0],
+      [5.1, 0.9, 9.7],
+      [2.8, 0.9, 9.7],
     ],
-    top: [1.1, 0.9, 6.1],
+    top: [6.4, 0.6, 6.1],
   };
 }
 
