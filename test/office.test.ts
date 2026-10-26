@@ -6,21 +6,24 @@ import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
 import { hashString } from '../src/world/rng.ts';
 import { footprint, planRoom, toWorld } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
-import type { PropArt } from '../src/worlds/types.ts';
+import type { PropArt, RoomArt } from '../src/worlds/types.ts';
 import { office } from '../src/worlds/office.ts';
 import { DECOR_ART } from '../src/worlds/office/decor.ts';
-import { CAP, planFor } from '../src/worlds/office/room.ts';
+import { CAP, GAP, LAMP_N, pendantZ, planFor } from '../src/worlds/office/room.ts';
 import { budget } from './helpers.ts';
 
 // The Startup's art: every piece draws in both wall frames and as an
 // island at the fitted scale and zoomed in, inside its footprint and
 // height; animated pieces move while worked and hold still otherwise; the
-// brick walls keep their big windows, prints, neon squiggle and pendant
-// lamps off the stations and apart, under their caps; coffee at the
-// espresso counter, a stool there, a look at the skyline; a 150-column
-// room is lively, its decor by the walls and stations, none in the front
-// of the room; the shell, its clouds and city lights and every prop stay
-// within their time budgets.
+// brick walls keep their big windows, prints, neon squiggle, bike and
+// pendant lamps off the stations, the tall furniture and each other, under
+// their caps, each lamp seen in the middle of a full bay and never under
+// the clouds; each window keeps its own city whatever room was drawn
+// before; coffee at the espresso counter, seats at its stools, a look at
+// the skyline; a 150-column room is lively, its decor by the walls and
+// stations (the extra desks backed onto a wall, the beanbags big enough to
+// sit in), none in the front of the room; the shell, its clouds and city
+// lights and every prop stay within their time budgets.
 
 const ARTS: Array<[string, PropArt]> = [...(Object.entries(office.stations) as Array<[SlotKind, PropArt]>), ...Object.entries(DECOR_ART)];
 // Stations that move with nobody at them; every other animated station
@@ -158,7 +161,7 @@ test('The Startup room: the walls keep their windows, prints, neon squiggle and 
   }
 });
 
-test('The Startup room: its caps over the whole room, windows on both walls of a roomy one, pendant lamps between', () => {
+test('The Startup room: its caps over the whole room, windows on both walls of a roomy one, the bike on a wall, pendant lamps between', () => {
   for (const [w, h] of SIZES) {
     const L = planLayout(w, h, 'office');
     const { features } = planFor(L.W, L.D, L.H, L.T);
@@ -171,11 +174,90 @@ test('The Startup room: its caps over the whole room, windows on both walls of a
     const L = planLayout(w, h, 'office');
     const { features } = planFor(L.W, L.D, L.H, L.T);
     for (const wall of ['left', 'right'] as const) assert.ok(features.some((f) => f.wall === wall && f.kind === 'window'), `${L.W}: no window on the ${wall} wall`);
+    assert.ok(features.some((f) => f.kind === 'bike'), `${L.W}: no bike on the walls`);
     assert.ok(features.some((f) => f.kind === 'pendant'), `${L.W}: no pendant lamps`);
+  }
+  // the bike hangs flat on the wall, the shell's, not free-standing decor
+  assert.ok(!Object.keys(DECOR_ART).includes('bike'), 'the bike is still a piece of decor');
+});
+
+test('The Startup room: the windows, prints, neon and bike keep clear of the tall furniture stood along the walls', () => {
+  // slim pieces (a fig, a standing lamp) may stand before a window or the
+  // neon, never a print or the bike; solid ones over a sill (the booth, the
+  // snack shelf, the fridge, the desks) before nothing
+  const slim = new Set<PropArt>([DECOR_ART.fig, DECOR_ART.lamp]);
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'office');
+    const room = planRoom(office, L, hashString('office'));
+    const { features } = planFor(L.W, L.D, L.H, L.T);
+    for (const p of room.props) {
+      if (p.slot || (!slim.has(p.art) && p.art.height <= 6)) continue;
+      const r = footprint(p);
+      for (const wall of ['right', 'left'] as const) {
+        const [n0, a0, a1] = wall === 'right' ? [r.y0, r.x0, r.x1] : [r.x0, r.y0, r.y1];
+        if (n0 > L.T + 2) continue; // not against this wall
+        for (const f of features) {
+          if (f.wall !== wall || f.kind === 'pendant' || (slim.has(p.art) && (f.kind === 'window' || f.kind === 'neon'))) continue;
+          assert.ok(f.a + f.w / 2 <= a0 || f.a - f.w / 2 >= a1, `${L.W}: the ${f.kind} at ${f.a} on the ${wall} wall behind decor ${p.art.height} tall at ${a0}..${a1}`);
+        }
+      }
+    }
   }
 });
 
-test('The Startup points of interest: coffee at the espresso counter, a stool there, a look at the skyline', () => {
+test('The Startup room: each pendant lamp is seen in the middle of a full bay, GAP clear of its neighbours, and the clouds never pass over it', () => {
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'office');
+    const { features } = planFor(L.W, L.D, L.H, L.T);
+    for (const p of features.filter((f) => f.kind === 'pendant')) {
+      // hung LAMP_N out from the wall, it is seen against the bricks LAMP_N back along it
+      const c = p.a - LAMP_N;
+      for (const g of features) {
+        if (g.wall !== p.wall || g.kind === 'pendant') continue;
+        const clear = Math.max(g.a - g.w / 2 - (c + p.w / 2), c - p.w / 2 - (g.a + g.w / 2));
+        assert.ok(clear >= GAP - 0.5, `${L.W}: the pendant at ${p.a} (seen at ${c}) only ${clear.toFixed(2)} from the ${g.kind} at ${g.a}`);
+      }
+    }
+  }
+  // the overlay (painted over the finished frame) never over a shade
+  for (const [w, h] of ROOMY) {
+    const L = planLayout(w, h, 'office');
+    const { features } = planFor(L.W, L.D, L.H, L.T);
+    const s = 4;
+    const P = project(L.D * s + 20, L.H * s + 30, s);
+    const o = new Canvas(Math.ceil((L.W + L.D) * s + 40), Math.ceil(((L.W + L.D) / 2 + L.H) * s + 60));
+    const shades = features.filter((f) => f.kind === 'pendant').map((f) => frame(P, f.wall, f.wall === 'right' ? 0 : L.T, f.wall === 'right' ? L.T : 0)(f.a, LAMP_N, pendantZ(L.H) + 0.3));
+    for (let t = 0; t < 48; t += 2) {
+      o.clear();
+      office.room.overlay!({ pen: o, s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t, seed: 1 });
+      for (const [cx, cy] of shades) {
+        for (let y = Math.floor(cy - 1.2 * s); y <= cy + 1.2 * s; y++) {
+          for (let x = Math.floor(cx - 1.8 * s); x <= cx + 1.8 * s; x++) {
+            assert.ok(o.data[(y * o.width + x) * 4 + 3] <= 8, `${L.W}: at t = ${t} the overlay paints over the pendant seen at (${cx.toFixed(0)}, ${cy.toFixed(0)})`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test('The Startup windows: each shows its own city, whatever size of room was drawn before', async () => {
+  // a second copy of the shell's module, its caches empty
+  const spec = `../src/worlds/office/room.ts?fresh=${process.pid}`;
+  const fresh = (await import(spec)) as { room: RoomArt };
+  const draw = (art: RoomArt, [w, h]: [number, number]) => {
+    const L = planLayout(w, h, 'office');
+    const s = 2;
+    const c = new Canvas(Math.ceil((L.W + L.D) * s + 20), Math.ceil(((L.W + L.D) / 2 + L.H) * s + 30));
+    art.draw({ pen: c, s, at: project(L.D * s + 10, L.H * s + 20, s), W: L.W, D: L.D, H: L.H, T: L.T, t: 0, seed: 1 });
+    return c;
+  };
+  draw(office.room, [300, 165]);
+  draw(office.room, [375, 220]);
+  assert.ok(same(draw(office.room, [500, 300]), draw(fresh.room, [500, 300])), 'a 200 x 60 room drawn after smaller ones differs from one drawn fresh');
+});
+
+test('The Startup points of interest: coffee at the espresso counter, seats at its stools, a look at the skyline', () => {
   for (const [w, h] of ROOMY) {
     const L = planLayout(w, h, 'office');
     // furnished as the stage furnishes it (seeded by the world's id); its
@@ -190,6 +272,9 @@ test('The Startup points of interest: coffee at the espresso counter, a stool th
     assert.ok(drinks.length >= 2, `${L.W}: ${drinks.length} drink spots`);
     for (const d of drinks) assert.ok(near(d), `${L.W}: a drink spot at (${d.x}, ${d.y}), away from the espresso counter`);
     assert.ok(count('seat') >= 2, `${L.W}: ${count('seat')} seat spots`);
+    // a seat is by a stool, just off the counter's footprint, not out on the concrete
+    const by = (p: { x: number; y: number }) => Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1)) <= 2;
+    for (const p of room.pois.filter((q) => q.kind === 'seat')) assert.ok(by(p), `${L.W}: a seat at (${p.x}, ${p.y}), away from the counter's stools`);
     assert.ok(count('view') >= 3, `${L.W}: ${count('view')} view spots, two of the stations and the skyline`);
   }
 });
@@ -206,6 +291,19 @@ test('The Startup decor: every piece is in DECOR_ART, each finds floor in a 150 
     const r = footprint(p);
     assert.ok(r.x1 + r.y1 <= (2 / 3) * (L.W + L.D) + 1, `a piece of decor at (${r.x0}, ${r.y0}) out in the front of the room`);
   }
+});
+
+test('The Startup decor: the extra desks back onto a wall, and a beanbag is big enough to sit in', () => {
+  const { desks, beanbag } = DECOR_ART;
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'office');
+    const room = planRoom(office, L, hashString('office'));
+    for (const p of room.props.filter((q) => q.art === desks)) {
+      const r = footprint(p);
+      assert.ok(!p.island && (p.wall === 'right' ? r.y0 : r.x0) === L.T, `${L.W}: a bench of desks out on the floor at (${r.x0}, ${r.y0})`);
+    }
+  }
+  assert.ok(beanbag.len >= 6 && beanbag.dep >= 6 && beanbag.height >= 4.5, `a beanbag ${beanbag.len} x ${beanbag.dep} x ${beanbag.height}`);
 });
 
 test('The Startup room: the shell draws inside the canvas, clouds drift and city lights come on, and it all stays in budget', () => {

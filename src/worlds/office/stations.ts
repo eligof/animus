@@ -175,7 +175,7 @@ const read: PropArt = {
     for (let r = 0; r <= rows; r++) edges.push([[u0 + 0.1, n, plinth + r * (rh + BOARD) + BOARD - 0.08], [u1 - 0.1, n, plinth + r * (rh + BOARD) + BOARD - 0.08]]);
     k.segs(edges, withAlpha('#fff3dc', 0.6), Math.max(0.6, 0.1 * k.s));
     // the beanbag slumped against its right end
-    beanbag(k, 12.1, 2.7, 1.55, 2.6, C.fabricB);
+    beanbag(k, 11.75, 2.1, 1.9, 3.5, C.fabricB);
   },
 };
 

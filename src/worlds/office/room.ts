@@ -2,13 +2,17 @@ import { Canvas } from '../../art/canvas.ts';
 import type { At } from '../../art/iso.ts';
 import { frame, mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
-import { planLayout, slotRect, wallGaps } from '../../world/layout.ts';
-import { defaultPois, footprint } from '../../world/room.ts';
+import { planLayout, slotRect, slotsOn, wallGaps } from '../../world/layout.ts';
+import { defaultPois, footprint, planRoom, toWorld } from '../../world/room.ts';
+import type { PlacedProp } from '../../world/room.ts';
+import { hashString } from '../../world/rng.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { PropArt, RoomArt, RoomView, WorldDef } from '../types.ts';
 import { dome, hull, succulent } from './bits.ts';
+import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
-import { C, INK, Kit, hash, withAlpha } from './kit.ts';
+import { C, INK, Kit, circle, hash, withAlpha } from './kit.ts';
+import { STATIONS } from './stations.ts';
 
 // The Startup's shell, a loft at dusk: polished concrete in big slabs with
 // sawn joints, a warm wood-plank corner under the kitchen island and its
@@ -18,20 +22,21 @@ import { C, INK, Kit, hash, withAlpha } from './kit.ts';
 // duct run under it. In the free stretches between the stations: big
 // black-framed industrial windows onto a city skyline turning on its
 // lights (a soldier course over each, a deep brick sill), framed abstract
-// prints and a cork board, one neon squiggle on a black plate, and pendant
-// lamps hung from the beam between them, their warm light pooled on the
-// bricks and the floor. The windows' light lies on the concrete in front
-// of them. Every piece sits where the stage's plan leaves the wall free.
+// prints and a cork board, one neon squiggle on a black plate, a bike hung
+// on a rack, and pendant lamps hung from the beam between them, their warm
+// light pooled on the bricks and the floor. The windows' light lies on the
+// concrete in front of them. Every piece sits where the stage's plan
+// leaves the wall free, clear of the tall furniture stood against it.
 // The overlay drifts clouds past the windows, turns the city's lights on
 // and off and lets the neon breathe.
 
 type Wall = 'left' | 'right';
-type Kind = 'window' | 'art' | 'neon' | 'pendant';
+type Kind = 'window' | 'art' | 'neon' | 'bike' | 'pendant';
 export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number };
 export type Plan = { L: Layout; features: Feature[] };
 
 // How many of each the room may have, counted over both walls.
-export const CAP = { art: 3, neon: 1 } as const;
+export const CAP = { art: 3, neon: 1, bike: 1 } as const;
 
 const SLAB = 2.5; // the floor's thickness, shown along the front cut
 const BASE = 1.0; // the baseboard's height
@@ -41,11 +46,21 @@ const BRICK = 3.0; // a brick's length
 const JOINT = 16; // the concrete's sawn joints
 const PLANK = 2.4; // a floor plank's width
 const DEPTH = 1.0; // the windows' glass, set back in the wall
-const WIDTH: Record<Kind, number> = { window: 12, art: 5, neon: 7, pendant: 3 };
-const ORDER: Kind[] = ['window', 'art', 'window', 'neon', 'window', 'art', 'window'];
-const GAP = 4;
+const WIDTH: Record<Kind, number> = { window: 12, art: 5, neon: 7, bike: 10, pendant: 3 };
+export const GAP = 4;
 // Between two pieces, room for a pendant lamp with GAP either side of it.
 const BAY = GAP + WIDTH.pendant + GAP;
+// The furniture stood against a wall that the wall's pieces mind (SIDE
+// clear of it): solid pieces over a window's sill (LOW: the booth, the
+// snack shelf, the fridge, the desks) split the wall's stretches; slim ones
+// (a fig, a standing lamp) may stand before a window or the neon, never a
+// print or the bike. Lower ones (a potted plant, the sofa) stand under all
+// of them.
+const LOW = 6;
+const SIDE = 1.5;
+const SLIM = new Set<PropArt>([DECOR_ART.fig, DECOR_ART.lamp]);
+// The pieces a slim piece of furniture may not stand before.
+const PICKY = new Set<Kind>(['art', 'bike']);
 
 // ── the plan ───────────────────────────────────────────────────────────────
 
@@ -53,78 +68,161 @@ const PLANS = new Map<string, Plan>();
 
 // The stage's layout for a room this size (planLayout is a pure function of
 // the room's side, so the shell can find the stations without being told),
-// and what hangs on the walls between them.
+// the furniture it stands along the walls (planRoom seeded by the world's
+// id, as the stage furnishes it), and what hangs on the walls between them.
 export function planFor(W: number, D: number, H: number, T: number): Plan {
   const key = `${W}x${D}x${H}x${T}`;
   const hit = PLANS.get(key);
   if (hit) return hit;
   let L = planLayout(2 * W + 12, W + H + 12, 'office');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
-  const plan = { L, features: features(L) };
+  const decor = L.slots.length ? planRoom({ id: 'office', stations: STATIONS, decor: DECOR } as unknown as WorldDef, L, hashString('office')).props.filter((p) => !p.slot) : [];
+  const plan = { L, features: features(L, decor) };
   PLANS.set(key, plan);
   return plan;
 }
 
-// Each free stretch packed from ORDER (cycled through the room), a window
-// first in each stretch it fits in (so first on each wall), kinds at their
-// cap or too wide skipped, a bay between pieces (a pendant's width and GAP
-// either side), then spread along it with even gaps; then the fillers,
-// pendant lamps, in the middle of the gaps between neighbours (and of a
-// roomy end). A stretch too short for anything else gets a lamp or two.
-function features(L: Layout): Feature[] {
-  const out: Feature[] = [];
-  const spans: Array<{ wall: Wall; a0: number; a1: number }> = [];
-  for (const wall of ['right', 'left'] as const) {
-    const end = wall === 'right' ? L.W : L.D;
-    for (const [g0, g1] of wallGaps(L, wall)) {
-      const a0 = g0 + (g0 <= L.T ? 2 : 2.5);
-      const a1 = Math.min(g1, end - 2) - (g1 >= end ? 0 : 2.5);
-      if (a1 - a0 >= WIDTH.pendant) spans.push({ wall, a0, a1 });
+type Span = { wall: Wall; a0: number; a1: number; slim: Array<[number, number]> };
+
+// A wall's free stretches for its pieces: between the stations (2.5 clear
+// of them, 2 of the corner and the cut end) and the solid furniture stood
+// against it, each with the slim furniture standing in it.
+function stretches(L: Layout, wall: Wall, decor: readonly PlacedProp[]): Span[] {
+  const end = wall === 'right' ? L.W : L.D;
+  let out: Array<[number, number]> = wallGaps(L, wall).map(([g0, g1]) => [g0 + (g0 <= L.T ? 2 : 2.5), Math.min(g1, end - 2) - (g1 >= end ? 0 : 2.5)]);
+  const slim: Array<[number, number]> = [];
+  for (const p of decor) {
+    const r = footprint(p);
+    const [n0, b0, b1] = wall === 'right' ? [r.y0, r.x0, r.x1] : [r.x0, r.y0, r.y1];
+    if (n0 > L.T + 2) continue;
+    if (SLIM.has(p.art)) slim.push([b0 - SIDE, b1 + SIDE]);
+    else if (p.art.height > LOW) {
+      out = out.flatMap(([a0, a1]): Array<[number, number]> => (b1 + SIDE <= a0 || b0 - SIDE >= a1 ? [[a0, a1]] : [[a0, b0 - SIDE], [b1 + SIDE, a1]]));
     }
   }
-  const count: Partial<Record<Kind, number>> = {};
-  const capOf = (k: Kind) => (k === 'art' || k === 'neon' ? CAP[k] : Infinity);
-  let n = 0;
-  for (const s of spans) {
-    const len = s.a1 - s.a0;
-    const kinds: Kind[] = [];
-    let used = 0;
-    const room = (k: Kind) => used + WIDTH[k] + (kinds.length ? BAY : 0) <= len;
-    for (;;) {
-      let k: Kind | undefined;
-      if (!kinds.length && room('window')) k = 'window';
-      for (let i = 0; !k && i < ORDER.length; i++) {
-        const c = ORDER[(n + i) % ORDER.length];
-        if ((count[c] ?? 0) < capOf(c) && room(c)) k = c;
+  return out.filter(([a0, a1]) => a1 - a0 >= WIDTH.pendant).map(([a0, a1]) => ({ wall, a0, a1, slim: slim.filter(([b0, b1]) => b1 > a0 && b0 < a1) }));
+}
+
+// The pieces of `kinds` spread along a stretch, a bay between neighbours
+// and what is left over shared out evenly between the bays and the ends,
+// in the order that keeps the prints and the bike clear of the slim
+// furniture with the windows least behind it (the given order first among
+// equals); null if no order does.
+function arrange(s: Span, kinds: readonly Kind[]): Array<{ kind: Kind; a: number }> | null {
+  const used = kinds.reduce((m, k) => m + WIDTH[k], 0) + (kinds.length - 1) * BAY;
+  const e = (s.a1 - s.a0 - used) / (kinds.length + 1);
+  if (e < 0) return null;
+  let best: Array<{ kind: Kind; a: number }> | null = null;
+  let cost = Infinity;
+  for (const order of orders(kinds)) {
+    let at = s.a0 + e;
+    let c = 0;
+    const out = order.map((kind) => {
+      const p = { kind, a: at + WIDTH[kind] / 2 };
+      for (const [b0, b1] of s.slim) {
+        const over = Math.min(b1, at + WIDTH[kind]) - Math.max(b0, at);
+        if (over > 0) c += PICKY.has(kind) ? Infinity : over;
       }
-      if (!k) break;
-      used += WIDTH[k] + (kinds.length ? BAY : 0);
-      kinds.push(k);
-      count[k] = (count[k] ?? 0) + 1;
-      n++;
-    }
-    if (!kinds.length) {
-      // too short for anything but a lamp or two
-      const m = Math.max(1, Math.min(2, Math.floor((len + GAP) / (WIDTH.pendant + GAP))));
-      const gap = (len - m * WIDTH.pendant) / (m + 1);
-      for (let i = 0; i < m; i++) out.push({ wall: s.wall, kind: 'pendant', a: s.a0 + gap + i * (WIDTH.pendant + gap) + WIDTH.pendant / 2, w: WIDTH.pendant, k: n * 7 + 50 + i });
-      continue;
-    }
-    const gap = (len - kinds.reduce((m, k) => m + WIDTH[k], 0)) / (kinds.length + 1);
-    let at = s.a0 + gap;
-    const placed: Feature[] = kinds.map((k, i) => {
-      const f = { wall: s.wall, kind: k, a: at + WIDTH[k] / 2, w: WIDTH[k], k: n * 7 + i };
-      at += WIDTH[k] + gap;
-      return f;
+      at += WIDTH[kind] + BAY + e;
+      return p;
     });
-    out.push(...placed);
-    // pendant lamps between neighbours, and at an end with room to spare
-    const lamp = (a: number, i: number) => out.push({ wall: s.wall, kind: 'pendant', a, w: WIDTH.pendant, k: n * 7 + 20 + i });
-    for (let i = 0; i + 1 < placed.length; i++) lamp((placed[i].a + placed[i].w / 2 + placed[i + 1].a - placed[i + 1].w / 2) / 2, i);
-    if (gap >= BAY) {
-      lamp(s.a0 + gap / 2, 8);
-      lamp(s.a1 - gap / 2, 9);
+    if (c < cost) {
+      cost = c;
+      best = out;
     }
+  }
+  return best;
+}
+
+// Every distinct order of a few kinds, the given one first.
+function orders(kinds: readonly Kind[]): Kind[][] {
+  if (kinds.length <= 1) return [[...kinds]];
+  const out: Kind[][] = [];
+  const seen = new Set<Kind>();
+  kinds.forEach((k, i) => {
+    if (seen.has(k)) return;
+    seen.add(k);
+    for (const rest of orders([...kinds.slice(0, i), ...kinds.slice(i + 1)])) out.push([k, ...rest]);
+  });
+  return out;
+}
+
+// What hangs where: a window on each wall first (in its roomiest stretch),
+// then the bike, a window in each stretch still bare, the neon, then
+// windows and prints by turns while any fits, the prints up to their cap;
+// each piece into the stretch it leaves the most room in (one without a
+// print, the neon or the bike first, for those), and spread along it (see
+// arrange); then the pendant lamps between (see lamps).
+function features(L: Layout, decor: readonly PlacedProp[]): Feature[] {
+  const spans = (['right', 'left'] as const).flatMap((wall) => stretches(L, wall, decor));
+  const kinds: Kind[][] = spans.map(() => []);
+  const count: Partial<Record<Kind, number>> = {};
+  const capOf = (k: Kind) => (k === 'art' || k === 'neon' || k === 'bike' ? CAP[k] : Infinity);
+  const plain = (i: number) => kinds[i].every((k) => k === 'window');
+  // puts a k in the stretch with the most room left after it, of those
+  // `pick` allows; false if none has room (or k is at its cap)
+  const put = (k: Kind, pick: (i: number) => boolean = () => true): boolean => {
+    if ((count[k] ?? 0) >= capOf(k)) return false;
+    let best = -1;
+    let most = -Infinity;
+    spans.forEach((s, i) => {
+      const next = [...kinds[i], k];
+      if (!pick(i) || !arrange(s, next)) return;
+      const left = s.a1 - s.a0 - next.reduce((m, q) => m + WIDTH[q], 0) - (next.length - 1) * BAY;
+      if (left > most) {
+        most = left;
+        best = i;
+      }
+    });
+    if (best < 0) return false;
+    kinds[best].push(k);
+    count[k] = (count[k] ?? 0) + 1;
+    return true;
+  };
+  for (const wall of ['right', 'left'] as const) put('window', (i) => spans[i].wall === wall);
+  put('bike', plain) || put('bike');
+  while (put('window', (i) => !kinds[i].length));
+  put('neon', plain) || put('neon');
+  for (let more = true; more; ) {
+    more = put('window');
+    more = put('art', plain) || put('art') || more;
+  }
+  const pieces = spans.flatMap((s, si) => (kinds[si].length ? arrange(s, kinds[si])!.map(({ kind, a }, i): Feature => ({ wall: s.wall, kind, a, w: WIDTH[kind], k: si * 10 + i })) : []));
+  return [...pieces, ...(['right', 'left'] as const).flatMap((wall) => lamps(L, wall, pieces, decor))];
+}
+
+// About this far apart along bare brick, the pendant lamps.
+const PITCH = 18;
+
+// The fillers, pendant lamps hung from the beam: one in each bay between
+// the pieces, more along bare brick about PITCH apart. A lamp hangs LAMP_N
+// out from the wall, so it is seen LAMP_N back along it (and LAMP_N
+// lower): where it is seen it keeps GAP clear of every piece (out of the
+// clouds' way), in front of no station and over the furniture (none in
+// front of a piece reaching up to it, the booth); where it hangs, inside
+// the wall and off the stations.
+function lamps(L: Layout, wall: Wall, pieces: readonly Feature[], decor: readonly PlacedProp[]): Feature[] {
+  const end = wall === 'right' ? L.W : L.D;
+  const h = WIDTH.pendant / 2;
+  // where a lamp may be seen (its middle), cut down
+  let free: Array<[number, number]> = [[L.T + 1 + h, end - 2 - h - LAMP_N]];
+  const cut = (x0: number, x1: number) => {
+    free = free.flatMap(([f0, f1]): Array<[number, number]> => (x1 <= f0 || x0 >= f1 ? [[f0, f1]] : ([[f0, Math.min(f1, x0)], [Math.max(f0, x1), f1]] as Array<[number, number]>).filter(([p, q]) => q >= p)));
+  };
+  for (const q of slotsOn(L, wall)) {
+    const [s0, s1] = wall === 'right' ? [q.x0, q.x0 + q.len] : [q.y0, q.y0 + q.len];
+    cut(s0 - 1.5 - h - LAMP_N, s1 + 1.5 + h);
+  }
+  for (const g of pieces) if (g.wall === wall) cut(g.a - g.w / 2 - GAP - h, g.a + g.w / 2 + GAP + h);
+  for (const p of decor) {
+    const r = footprint(p);
+    const [n0, n1, b0, b1] = wall === 'right' ? [r.y0, r.y1, r.x0, r.x1] : [r.x0, r.x1, r.y0, r.y1];
+    if (n0 <= L.T + 2 && p.art.height > pendantZ(L.H) - LAMP_N - 2) cut(b0 - (n1 - n0) - 1 - h, b1 + 1 + h);
+  }
+  const out: Feature[] = [];
+  for (const [f0, f1] of free) {
+    const m = 1 + Math.floor((f1 - f0) / PITCH);
+    for (let i = 0; i < m; i++) out.push({ wall, kind: 'pendant', a: f0 + ((f1 - f0) * (i + 0.5)) / m + LAMP_N, w: WIDTH.pendant, k: 200 + out.length });
   }
   return out;
 }
@@ -135,8 +233,8 @@ function windowZ(H: number): { z0: number; z1: number } {
 }
 
 // A pendant's rim (z) on a wall H tall.
-const pendantZ = (H: number) => Math.min(H - 11, 24);
-const LAMP_N = 3.6; // how far out from the wall the pendants hang
+export const pendantZ = (H: number) => Math.min(H - 11, 24);
+export const LAMP_N = 3.6; // how far out from the wall the pendants hang
 
 // The galvanised duct along the top of each wall: a little under the beam,
 // over the windows' heads (smaller on a low wall, with less room between
@@ -153,11 +251,15 @@ function ductAt(H: number): { zc: number; r: number } {
 const NEON = { z0: 20, z1: 26 };
 
 // ── points of interest ─────────────────────────────────────────────────────
-// The defaults (warm either side of the espresso counter, a stool in front
-// of it, a look at the dashboards and the shelves, a dance at the hub, the
-// dog's spot in the yard) less their drink by the run prop (a server rack
-// here): coffee at the espresso counter instead, at either end of it, a
-// second stool, and a look out of up to three windows at the city.
+// The defaults (warm either side of the espresso counter, a look at the
+// dashboards and the shelves, a dance at the hub, the dog's spot in the
+// yard) less their drink by the run prop (a server rack here) and their
+// seat out on the floor: coffee at the espresso counter instead, at either
+// end of it, seats at two of its stools (just off the island, by the stools
+// along its front), and a look out of up to three windows at the city.
+const STOOLS = [7.5, 12.4]; // the stools sat at, along the island (see idle in stations.ts)
+const STOOL_OUT = 9.7; // the stools' line, out from the island's back
+
 export function officePois(L: Layout): Poi[] {
   const { features: fs } = planFor(L.W, L.D, L.H, L.T);
   const pt = (wall: Wall, a: number, out: number) => (wall === 'right' ? { x: a, y: L.T + out } : { x: L.T + out, y: a });
@@ -167,12 +269,17 @@ export function officePois(L: Layout): Poi[] {
     const r = footprint(q);
     return { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 };
   };
-  const out = defaultPois(L).filter((p) => p.kind !== 'drink');
+  const out = defaultPois(L).filter((p) => p.kind !== 'drink' && p.kind !== 'seat');
   const bar = slot('idle');
   if (bar) {
     out.push({ ...at(bar, -4, 0), kind: 'drink', face: mid(bar) });
     out.push({ ...at(bar, 4, 0), kind: 'drink', face: mid(bar) });
-    out.push({ ...at(bar, -4, 8), kind: 'seat', face: mid(bar) });
+    // a step off the footprint (spots inside a prop or a unit of it are dropped)
+    const by = Math.max(STOOL_OUT + 2, bar.dep + 1);
+    for (const u of STOOLS) {
+      const [x, y] = toWorld(bar, u, by, 0);
+      out.push({ x, y, kind: 'seat', face: mid(bar) });
+    }
   }
   for (const f of fs.filter((g) => g.kind === 'window').slice(0, 3)) out.push({ ...pt(f.wall, f.a, 6), kind: 'view', face: pt(f.wall, f.a, 0) });
   return out.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) }));
@@ -439,6 +546,8 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
       if (k.sees(f.a - f.w / 2, 0, 12, f.a + f.w / 2, 1, 21)) artPiece(k, f);
     } else if (f.kind === 'neon') {
       if (k.sees(f.a - f.w / 2, 0, NEON.z0 - 1, f.a + f.w / 2, 1, NEON.z1 + 1)) neonArt(k, f);
+    } else if (f.kind === 'bike') {
+      if (k.sees(f.a - f.w / 2, 0, 4.5, f.a + f.w / 2, 2.2, 13)) bikeArt(k, f);
     }
   }
   duct(k, v, wall, lo, hi, end, tone);
@@ -614,8 +723,10 @@ const SKYLINES = new Map<string, Skyline>();
 // The city through a window: far towers behind near ones, flat-topped,
 // their heights by the window's seed, a water tower on one near roof;
 // and where its lights come on (in the far towers, over anyone's head).
+// Kept by where the window is as well as its seed: the towers stand at
+// places along the wall, and a seed comes round again in another room.
 function skyline(f: Feature, z0: number, z1: number): Skyline {
-  const key = `${f.k}:${z0}:${z1}`;
+  const key = `${f.wall}:${f.a}:${f.w}:${f.k}:${z0}:${z1}`;
   const hit = SKYLINES.get(key);
   if (hit) return hit;
   const w = f.w - 1;
@@ -793,7 +904,7 @@ function city(k: Kit, f: Feature, a: number, w: number, z0: number, z1: number):
   }
 }
 
-// ── prints, the cork board, the neon, the pendants ──────────────────────────
+// ── prints, the cork board, the neon, the bike, the pendants ─────────────────
 
 // By its seed: a framed abstract print (a circle, a bar and a triangle on
 // white), or a cork board of plain cards and one photo of shapes. No words.
@@ -852,12 +963,13 @@ function artPiece(k: Kit, f: Feature): void {
   for (const [i, q] of pins.entries()) k.face(q[0], n + 0.05, q[2], 0.13, [C.chartHot, C.penBlue, C.chartWarm][i % 3], 0, 10);
 }
 
-// The neon's squiggle: one wavy tube across the plate.
+// The neon's squiggle: one tube along the plate in an even wave, two and a
+// half crests of one height (a wave, no letter in it).
 function squiggle(a: number): P3[] {
   const pts: P3[] = [];
-  for (let i = 0; i <= 40; i++) {
-    const t = i / 40;
-    pts.push([a - 2.5 + 5 * t, 0.5, 23 + 1.5 * Math.sin(t * Math.PI * 3 + 0.4) * (0.55 + 0.45 * Math.sin(t * Math.PI))]);
+  for (let i = 0; i <= 50; i++) {
+    const t = i / 50;
+    pts.push([a - 2.6 + 5.2 * t, 0.5, 23 + 0.8 * Math.sin(t * Math.PI * 5)]);
   }
   return pts;
 }
@@ -887,13 +999,83 @@ function neonGlow(k: Kit, f: Feature, a: number): void {
   pen.restore();
 }
 
+// A red-framed bike hung side on from a rail of two hooks, wheels between
+// z 5 and 12: black tyres on spoked rims, a chainring and crank, a black
+// saddle and straight bars, its shadow on the bricks; no maker's name.
+function bikeArt(k: Kit, f: Feature): void {
+  const o = f.a - 4.5;
+  const n = 1.1;
+  const R = [o + 2.1, 7.3] as const;
+  const F = [o + 6.9, 7.3] as const;
+  const BB = [o + 4.2, 6.9] as const;
+  const S = [o + 3.6, 10.2] as const;
+  const HT = [o + 6.15, 10.35] as const;
+  const HB = [o + 6.35, 9.5] as const;
+  const P = (q: readonly [number, number], dn = 0): P3 => [q[0], n + dn, q[1]];
+  const tubes: ReadonlyArray<readonly [P3, P3, number, Color]> = [
+    [P(R), P(BB), 0.22, C.bikeRed],
+    [P(R), P(S), 0.22, C.bikeRed],
+    [P(BB), P(S), 0.32, C.bikeRed],
+    [P(BB), P(HB), 0.36, C.bikeRed],
+    [P(S), P(HT), 0.32, C.bikeRed],
+    [P(HB), P(F), 0.24, C.steel],
+    [P(HT), P(HB), 0.4, C.bikeRed],
+  ];
+  // its shadow on the bricks, down and away from the light
+  const du = k.lit(-1, 0) ? 0.45 : -0.45;
+  const flat = (q: P3): P3 => [q[0] + du, 0.03, q[2] - 0.5];
+  const dark = withAlpha('#1a0c06', 0.22);
+  for (const c of [R, F]) {
+    const tire = circle(c[0] + du, 0.03, c[1] - 0.5, 2.0, 32);
+    k.line([...tire, tire[0]], dark, 0.55 * k.s);
+  }
+  k.segs(tubes.map(([a, b]) => [flat(a), flat(b)] as [P3, P3]), dark, 0.35 * k.s);
+  // the rack: a rail on the wall, two hooks off it
+  k.box(o + 1.6, 0, 11.6, 5.8, 0.3, 0.6, C.steel, { line: k.thin });
+  for (const u of [o + 3.0, o + 5.6]) k.rod([[u, 0.3, 11.9], [u, n, 11.9], [u, n, 11.0]], C.steelLight, 0.14);
+  // the wheels
+  for (const [u, z] of [R, F]) {
+    const tire = circle(u, n, z, 2.0, 32);
+    const loop = [...tire, tire[0]];
+    k.line(loop, INK, 0.5 * k.s + k.lw);
+    k.line(loop, C.tire, 0.5 * k.s);
+    const rim = circle(u, n + 0.02, z, 1.65, 28);
+    k.line([...rim, rim[0]], C.chrome, Math.max(0.7, 0.1 * k.s));
+    if (k.fine) {
+      const spokes: Array<[P3, P3]> = [];
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        spokes.push([[u, n + 0.02, z], [u + Math.cos(a) * 1.6, n + 0.02, z + Math.sin(a) * 1.6]]);
+      }
+      k.segs(spokes, withAlpha(C.chrome, 0.8), 0.04 * k.s);
+    }
+    k.face(u, n + 0.03, z, 0.22, C.steel, k.thin, 10);
+  }
+  // the frame: stays, seat tube, top and down tubes, the fork
+  const tube = (a: P3, b: P3, w = 0.32, c: Color = C.bikeRed) => {
+    k.line([a, b], INK, w * k.s + k.lw);
+    k.line([a, b], c, w * k.s);
+  };
+  for (const [a, b, w, c] of tubes) tube(a, b, w, c);
+  // the chainring and crank
+  k.face(BB[0], n + 0.05, BB[1], 0.62, C.chrome, k.thin, 18);
+  k.face(BB[0], n + 0.06, BB[1], 0.25, C.steel, 0, 10);
+  tube([BB[0], n + 0.08, BB[1]], [BB[0] + 0.6, n + 0.08, BB[1] - 0.75], 0.16, C.steel);
+  // the seat post and saddle, the stem and bars
+  tube(P(S), [S[0] - 0.2, n, S[1] + 0.7], 0.18, C.steel);
+  k.poly([[S[0] - 0.95, n, S[1] + 0.75], [S[0] + 0.55, n, S[1] + 0.85], [S[0] + 0.5, n, S[1] + 1.15], [S[0] - 0.85, n, S[1] + 1.2]], '#26272c', k.thin, 0.2);
+  tube(P(HT), [HT[0] + 0.25, n, HT[1] + 0.75], 0.18, C.steel);
+  k.rod([[HT[0] + 0.2, n - 0.6, HT[1] + 0.8], [HT[0] + 0.3, n + 0.7, HT[1] + 0.8]], '#26272c', 0.2);
+}
+
 // A pendant lamp hung from the beam on a black cord: a black dome shade,
 // the warm bulb under it, its halo, and its light washing the bricks.
 function pendant(k: Kit, v: RoomView, f: Feature): void {
   const zs = pendantZ(v.H);
   const a = f.a;
   const n = LAMP_N;
-  k.wash(a, 0.05, zs - 3, 5, 8, C.lamp, 0.32);
+  // its light on the bricks it is seen against, LAMP_N back along the wall
+  k.wash(a - n, 0.05, zs - n - 1, 4.5, 8, C.lamp, 0.32);
   k.line([[a, n, v.H - BEAM], [a, n, zs + 1.7]], INK, Math.max(0.9, 0.14 * k.s));
   k.cyl(a, n, zs + 1.2, 0.22, 0.6, C.beam, { line: k.thin });
   dome(k, a, n, zs, 1.55, C.beam, C.lamp);

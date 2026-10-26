@@ -47,7 +47,7 @@ export function ring(k: Kit, c: P3, n: P3, r: number, steps = 20): Pt[] {
 }
 
 // Fills (and inks, line > 0) a polygon of screen points.
-export function fillPts(k: Kit, pts: ReadonlyArray<Pt>, c: Color | Gradient | null, line = 0): void {
+function fillPts(k: Kit, pts: ReadonlyArray<Pt>, c: Color | Gradient | null, line = 0): void {
   k.pen.beginPath();
   pts.forEach(([x, y], i) => (i ? k.pen.lineTo(x, y) : k.pen.moveTo(x, y)));
   k.pen.closePath();
@@ -286,7 +286,7 @@ export function mug(k: Kit, u: number, v: number, z: number, color: Color, r = 0
 }
 
 // Muted spines for books (no titles, no marks).
-export const SPINES: readonly Color[] = ['#c9714b', '#4f7fae', '#e2b44a', '#3f8f8a', '#a35a6e', '#7b8a5a', '#d8cbb0', '#5a5f7a', '#b98c5a', '#8c6ab8'];
+const SPINES: readonly Color[] = ['#c9714b', '#4f7fae', '#e2b44a', '#3f8f8a', '#a35a6e', '#7b8a5a', '#d8cbb0', '#5a5f7a', '#b98c5a', '#8c6ab8'];
 
 // A row of books standing on a shelf at z, their spines on the plane v,
 // from u0 to u1, no taller than hmax. Books of one colour go in one path.
@@ -332,7 +332,7 @@ export function bookRow(k: Kit, u0: number, u1: number, v: number, z: number, hm
 }
 
 // A flat screen's face on the plane v = n, from (u0, z0) to (u1, z1): a
-// gradient of the dark glass and a soft diagonal sheen.
+// gradient of the dark glass, `bottom` up to `top`.
 export function glass(k: Kit, u0: number, z0: number, u1: number, z1: number, n: number, top: Color, bottom: Color): void {
   k.poly([[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]], k.vgrad(u0, n, z0, z1, [[0, bottom], [1, top]]), 0);
 }
@@ -351,53 +351,82 @@ function lump(k: Kit, cu: number, cv: number, cz: number, ru: number, rv: number
   return hull(pts);
 }
 
-// A slumped beanbag at (cu, cv), r across and h tall: a soft body sagging
-// on the floor, its back risen toward the wall, the hollow where you sit,
-// a seam over the back.
+// A beanbag at (cu, cv), r across and h tall, pear-shaped: a full round
+// bottom sat on the floor, a narrower crown risen at its back (toward -v),
+// shaded down to the floor; the seat sunk into its front (a soft hollow, a
+// fold where the crown rises behind it, a lit lip in front, creases off its
+// sides), a seam over the crown and a glint on it.
 export function beanbag(k: Kit, cu: number, cv: number, r: number, h: number, color: Color): void {
-  k.shadow(cu, cv + 0.1 * r, r * 1.2, r * 1.1, 0.32);
-  const back = lump(k, cu + 0.25 * r, cv - 0.55 * r, h * 0.56, r * 0.8, r * 0.5, h * 0.44);
-  const body = lump(k, cu - 0.05 * r, cv + 0.12 * r, h * 0.28, r, r * 0.95, h * 0.28);
-  const sil = hull([...back, ...body]);
-  fillPts(k, sil, across(k, sil, color, 0.2, 0.26), k.lw);
-  // the back's soft fold over the seat
-  const [fx0, fy0] = k.p(cu - 0.55 * r, cv - 0.35 * r, h * 0.6);
-  const [fx1, fy1] = k.p(cu + 0.35 * r, cv - 0.1 * r, h * 0.85);
-  const [fx2, fy2] = k.p(cu + 0.95 * r, cv - 0.3 * r, h * 0.5);
-  k.pen.beginPath();
-  k.pen.moveTo(fx0, fy0);
-  k.pen.quadraticCurveTo(fx1, fy1, fx2, fy2);
-  k.pen.strokeStyle = withAlpha(shade(color, -0.4), 0.8);
-  k.pen.lineWidth = Math.max(0.8, 0.12 * k.s);
-  k.pen.lineCap = 'round';
-  k.pen.stroke();
-  // the hollow: shade at its back, a lit lip along its front
-  const [hx, hy] = k.p(cu - 0.1 * r, cv + 0.12 * r, h * 0.52);
-  k.pen.beginPath();
-  k.pen.ellipse(hx, hy, r * 0.62 * k.s, r * 0.3 * k.s, 0, 0, Math.PI * 2);
-  k.pen.fillStyle = withAlpha(shade(color, -0.32), 0.7);
-  k.pen.fill();
-  k.pen.beginPath();
-  k.pen.ellipse(hx, hy + r * 0.04 * k.s, r * 0.6 * k.s, r * 0.28 * k.s, 0, 0.15 * Math.PI, 0.85 * Math.PI);
-  k.pen.strokeStyle = withAlpha(shade(color, 0.4), 0.9);
-  k.pen.lineWidth = Math.max(0.8, 0.13 * k.s);
-  k.pen.lineCap = 'round';
-  k.pen.stroke();
-  // a glint on the back's crown, and a seam over it
-  const [gx, gy] = k.p(cu + 0.05 * r, cv - 0.65 * r, h * 0.92);
-  k.pen.beginPath();
-  k.pen.ellipse(gx, gy, r * 0.22 * k.s, r * 0.1 * k.s, -0.3, 0, Math.PI * 2);
-  k.pen.fillStyle = withAlpha('#ffffff', 0.3);
-  k.pen.fill();
+  const pen = k.pen;
+  k.shadow(cu, cv + 0.05 * r, r * 1.15, r * 1.05, 0.32);
+  const body = lump(k, cu, cv + 0.1 * r, 0.3 * h, r, r * 0.9, 0.3 * h);
+  const crown = lump(k, cu + 0.03 * r, cv - 0.36 * r, 0.62 * h, r * 0.6, r * 0.52, 0.42 * h);
+  const sil = hull([...body, ...crown]);
+  fillPts(k, sil, across(k, sil, color, 0.2, 0.26), 0);
+  // darker toward the floor
+  const ys = sil.map((q) => q[1]);
+  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  const g = pen.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, withAlpha('#1a0c06', 0));
+  g.addColorStop(0.55, withAlpha('#1a0c06', 0));
+  g.addColorStop(1, withAlpha('#1a0c06', 0.22));
+  fillPts(k, sil, g, 0);
+  // the seat: a soft hollow sunk in front of the crown
+  const dv = cv + 0.2 * r;
+  const zd = 0.58 * h;
+  const e = k.ell(cu, dv, zd, 0.58 * r);
+  pen.save();
+  pen.translate(e.cx, e.cy);
+  pen.rotate(e.rot);
+  pen.scale(e.rx, e.ry * 1.3);
+  const hollow = pen.createRadialGradient(0, -0.3, 0, 0, -0.1, 1);
+  hollow.addColorStop(0, withAlpha(shade(color, -0.42), 0.8));
+  hollow.addColorStop(0.55, withAlpha(shade(color, -0.32), 0.45));
+  hollow.addColorStop(1, withAlpha(shade(color, -0.25), 0));
+  pen.beginPath();
+  pen.arc(0, 0, 1, 0, Math.PI * 2);
+  pen.fillStyle = hollow;
+  pen.fill();
+  pen.restore();
+  const stroke = (pts: Pt[], c: Color, w: number) => {
+    pen.beginPath();
+    pts.forEach(([x, y], i) => (i ? pen.lineTo(x, y) : pen.moveTo(x, y)));
+    pen.strokeStyle = c;
+    pen.lineWidth = w;
+    pen.lineCap = 'round';
+    pen.stroke();
+  };
+  // round the seat (its back higher than its front)
+  const rim = (th: number): Pt => k.p(cu + Math.cos(th) * 0.55 * r, dv + Math.sin(th) * 0.4 * r, zd - Math.sin(th) * 0.1 * h);
+  const arc = (a0: number, a1: number, n = 14): Pt[] => Array.from({ length: n + 1 }, (_, i) => rim(a0 + ((a1 - a0) * i) / n));
+  // the fold where the crown rises behind the seat, the lit lip in front
+  stroke(arc(Math.PI * 1.15, Math.PI * 1.85), withAlpha(shade(color, -0.5), 0.85), Math.max(0.8, 0.1 * k.s));
+  stroke(arc(Math.PI * 0.3, Math.PI * 0.7), withAlpha(shade(color, 0.4), 0.8), Math.max(0.8, 0.12 * k.s));
+  // creases off the seat's sides, down the body
   if (k.fine) {
-    const [sx0, sy0] = k.p(cu - 0.9 * r, cv - 0.2 * r, h * 0.45);
-    const [sx1, sy1] = k.p(cu - 0.15 * r, cv - 0.55 * r, h * 1.05);
-    const [sx2, sy2] = k.p(cu + 0.65 * r, cv - 0.55 * r, h * 0.55);
-    k.pen.beginPath();
-    k.pen.moveTo(sx0, sy0);
-    k.pen.quadraticCurveTo(sx1, sy1, sx2, sy2);
-    k.pen.strokeStyle = withAlpha(INK, 0.35);
-    k.pen.lineWidth = Math.max(0.6, 0.07 * k.s);
-    k.pen.stroke();
+    for (const sd of [-1, 1]) {
+      const a = k.p(cu + sd * 0.58 * r, dv - 0.05 * r, zd + 0.02 * h);
+      const b = k.p(cu + sd * 0.82 * r, dv + 0.15 * r, 0.4 * h);
+      const c = k.p(cu + sd * 0.88 * r, dv + 0.3 * r, 0.26 * h);
+      stroke([a, b, c], withAlpha(shade(color, -0.4), 0.55), Math.max(0.6, 0.07 * k.s));
+    }
+  }
+  fillPts(k, sil, null, k.lw);
+  // a glint on the crown, and a seam over it
+  const [gx, gy] = k.p(cu - 0.2 * r, cv - 0.42 * r, 0.92 * h);
+  pen.beginPath();
+  pen.ellipse(gx, gy, r * 0.22 * k.s, r * 0.1 * k.s, -0.35, 0, Math.PI * 2);
+  pen.fillStyle = withAlpha('#ffffff', 0.32);
+  pen.fill();
+  if (k.fine) {
+    const [sx0, sy0] = k.p(cu - 0.58 * r, cv - 0.36 * r, 0.6 * h);
+    const [sx1, sy1] = k.p(cu, cv - 0.56 * r, 1.14 * h);
+    const [sx2, sy2] = k.p(cu + 0.6 * r, cv - 0.36 * r, 0.58 * h);
+    pen.beginPath();
+    pen.moveTo(sx0, sy0);
+    pen.quadraticCurveTo(sx1, sy1, sx2, sy2);
+    pen.strokeStyle = withAlpha(INK, 0.35);
+    pen.lineWidth = Math.max(0.6, 0.07 * k.s);
+    pen.stroke();
   }
 }

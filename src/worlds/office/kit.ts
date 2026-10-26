@@ -38,7 +38,6 @@ export const C = {
   // black steel and glass: the window frames, the door
   frame: '#26282d',
   glass: '#9fc6dc',
-  glassDark: '#6e9ab6',
   // outside: the city at dusk
   skyTop: '#4b5a92',
   skyLow: '#f2a477',
@@ -55,7 +54,6 @@ export const C = {
   birch: '#e2c79d',
   birchDark: '#c4a57a',
   white: '#f2f0ea',
-  whiteDark: '#d4d0c6',
   steel: '#3a3c42',
   steelLight: '#5c5f67',
   chrome: '#c9ccd2',

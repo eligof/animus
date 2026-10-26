@@ -5,12 +5,12 @@ import { beanbag as bag, dome, frustum, monstera, mug, paddle, pot, snake, stool
 import type { Kit, P3 } from './kit.ts';
 import { C, INK, circle, hash, kitOf, withAlpha } from './kit.ts';
 
-// The Startup's furniture between the stations: benches of standing
-// desks, a ping-pong table, beanbags, potted plants and fiddle-leaf figs,
-// a bike hung on the wall, a snack shelf, a phone booth, standing lamps, a
-// drinks fridge and a sofa. All still (drawn once into the scene's static
-// layer), each on its own soft shadow, varied by seed. No maker's name or
-// label on any of it.
+// The Startup's furniture between the stations: a bench of standing desks
+// backed onto a wall, a ping-pong table, beanbags, potted plants and
+// fiddle-leaf figs, a snack shelf, a phone booth, standing lamps, a drinks
+// fridge and a sofa (the bike hangs on the wall, the shell's: see room.ts).
+// All still (drawn once into the scene's static layer), each on its own
+// soft shadow, varied by seed. No maker's name or label on any of it.
 
 const quad = (u0: number, z0: number, u1: number, z1: number, n: number): P3[] => [[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]];
 
@@ -74,13 +74,16 @@ function bat(k: Kit, u: number, v: number, z: number, c: Color, a: number): void
 
 // ── beanbags ────────────────────────────────────────────────────────────────
 
+// A big pear-shaped beanbag in coral, blue or sunflower by seed, its seat
+// dented in.
+
 const beanbag: PropArt = {
-  len: 4,
-  dep: 4,
-  height: 3,
+  len: 6,
+  dep: 6,
+  height: 4.5,
   draw(v: PropView): void {
     const k = kitOf(v);
-    bag(k, 2, 2.15, 1.55, 2.95, [C.fabricA, C.fabricB, C.fabricC][v.seed % 3]);
+    bag(k, 3, 3.05, 2.45, 4.4, [C.fabricA, C.fabricB, C.fabricC][v.seed % 3]);
   },
 };
 
@@ -132,70 +135,6 @@ const fig: PropArt = {
       const c = lf.d < 3.7 ? '#3e7d4a' : i & 1 ? C.leaf : C.leafLight;
       paddle(k, x, y, ang, lf.l * k.s, c, false, true);
     }
-  },
-};
-
-// ── the bike on the wall ────────────────────────────────────────────────────
-// A red-framed bike hung on two hooks, side on: black tyres, a chainring,
-// a black saddle and straight bars; no maker's name.
-
-const bike: PropArt = {
-  len: 9,
-  dep: 2,
-  height: 13,
-  draw(v: PropView): void {
-    const k = kitOf(v);
-    const n = 1.1;
-    const R: [number, number] = [2.1, 7.3];
-    const F: [number, number] = [6.9, 7.3];
-    const BB: [number, number] = [4.2, 6.9];
-    const S: [number, number] = [3.6, 10.2];
-    const HT: [number, number] = [6.15, 10.35];
-    const HB: [number, number] = [6.35, 9.5];
-    const P = (q: readonly [number, number], dn = 0): P3 => [q[0], n + dn, q[1]];
-    k.shadow(4.5, 0.6, 4, 0.5, 0.2, 5);
-    // the rack: two hooks off a rail on the wall
-    k.box(1.6, 0, 11.6, 5.8, 0.3, 0.6, C.steel, { line: k.thin });
-    for (const u of [3.0, 5.6]) k.rod([[u, 0.3, 11.9], [u, n, 11.9], [u, n, 11.0]], C.steelLight, 0.14);
-    // the wheels
-    for (const [u, z] of [R, F]) {
-      const tire = circle(u, n, z, 2.0, 32);
-      const loop = [...tire, tire[0]];
-      k.line(loop, INK, 0.5 * k.s + k.lw);
-      k.line(loop, C.tire, 0.5 * k.s);
-      const rim = circle(u, n + 0.02, z, 1.65, 28);
-      k.line([...rim, rim[0]], C.chrome, Math.max(0.7, 0.1 * k.s));
-      if (k.fine) {
-        const spokes: Array<[P3, P3]> = [];
-        for (let i = 0; i < 12; i++) {
-          const a = (i / 12) * Math.PI * 2;
-          spokes.push([[u, n + 0.02, z], [u + Math.cos(a) * 1.6, n + 0.02, z + Math.sin(a) * 1.6]]);
-        }
-        k.segs(spokes, withAlpha(C.chrome, 0.8), 0.04 * k.s);
-      }
-      k.face(u, n + 0.03, z, 0.22, C.steel, k.thin, 10);
-    }
-    // the frame: stays, seat tube, top and down tubes, the fork
-    const tube = (a: P3, b: P3, w = 0.32, c: Color = C.bikeRed) => {
-      k.line([a, b], INK, w * k.s + k.lw);
-      k.line([a, b], c, w * k.s);
-    };
-    tube(P(R), P(BB), 0.22);
-    tube(P(R), P(S), 0.22);
-    tube(P(BB), P(S));
-    tube(P(BB), P(HB), 0.36);
-    tube(P(S), P(HT));
-    tube(P(HB), P(F), 0.24, C.steel);
-    tube(P(HT), P(HB), 0.4);
-    // the chainring and crank
-    k.face(BB[0], n + 0.05, BB[1], 0.62, C.chrome, k.thin, 18);
-    k.face(BB[0], n + 0.06, BB[1], 0.25, C.steel, 0, 10);
-    tube([BB[0], n + 0.08, BB[1]], [BB[0] + 0.6, n + 0.08, BB[1] - 0.75], 0.16, C.steel);
-    // the seat post and saddle, the stem and bars
-    tube(P(S), [S[0] - 0.2, n, S[1] + 0.7], 0.18, C.steel);
-    k.poly([[S[0] - 0.95, n, S[1] + 0.75], [S[0] + 0.55, n, S[1] + 0.85], [S[0] + 0.5, n, S[1] + 1.15], [S[0] - 0.85, n, S[1] + 1.2]], '#26272c', k.thin, 0.2);
-    tube(P(HT), [HT[0] + 0.25, n, HT[1] + 0.75], 0.18, C.steel);
-    k.rod([[HT[0] + 0.2, n - 0.6, HT[1] + 0.8], [HT[0] + 0.3, n + 0.7, HT[1] + 0.8]], '#26272c', 0.2);
   },
 };
 
@@ -402,7 +341,8 @@ const cooler: PropArt = {
 };
 
 // ── more desks ──────────────────────────────────────────────────────────────
-// A bench of two standing desks side by side, white tops on black frames:
+// A bench of two standing desks side by side, backed onto a wall (like the
+// write desk), white tops on black frames:
 // on one a monitor (abstract code on its screen, still), a keyboard and a
 // plant; on the other an open laptop, a notebook, headphones and a mug; a
 // mat to stand on in front of each.
@@ -491,18 +431,23 @@ const sofa: PropArt = {
   },
 };
 
+// The stage places these one after another, each where it fits best then,
+// and leaves out what no longer fits: in this order (looked at in rooms
+// from 80 x 24 to 200 x 60) no piece stands mostly hidden behind a station
+// or squeezed into a gap between two others, and a small room keeps its
+// windows rather than its fridge or booth (the shell keeps its windows
+// clear of them).
 export const DECOR: NonNullable<WorldDef['decor']> = [
-  { art: pingpong, count: 1, place: 'floor' },
-  { art: beanbag, count: 3, place: 'floor' },
-  { art: plant, count: 3, place: 'wall' },
-  { art: fig, count: 2, place: 'wall' },
-  { art: bike, count: 1, place: 'wall' },
-  { art: snacks, count: 1, place: 'wall' },
-  { art: booth, count: 1, place: 'wall' },
-  { art: lamp, count: 2, place: 'wall' },
-  { art: cooler, count: 1, place: 'wall' },
   { art: sofa, count: 1, place: 'wall' },
-  { art: desks, count: 2, place: 'floor' },
+  { art: lamp, count: 2, place: 'wall' },
+  { art: pingpong, count: 1, place: 'floor' },
+  { art: snacks, count: 1, place: 'wall' },
+  { art: desks, count: 1, place: 'wall' },
+  { art: plant, count: 3, place: 'wall' },
+  { art: beanbag, count: 3, place: 'floor' },
+  { art: fig, count: 2, place: 'wall' },
+  { art: cooler, count: 1, place: 'wall' },
+  { art: booth, count: 1, place: 'wall' },
 ];
 
-export const DECOR_ART = { pingpong, beanbag, plant, fig, bike, snacks, booth, lamp, cooler, desks, sofa };
+export const DECOR_ART = { pingpong, beanbag, plant, fig, snacks, booth, lamp, cooler, desks, sofa };
