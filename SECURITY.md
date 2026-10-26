@@ -22,14 +22,28 @@
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately to the repository owner
-(open an issue only for non-sensitive problems). Include steps to reproduce
-and the version (`animus --version`). You will get an acknowledgement within
-a week.
+Please report suspected vulnerabilities privately through GitHub's private
+vulnerability reporting: open the repository's Security tab and choose
+"Report a vulnerability" (or go to
+https://github.com/eligof/animus/security/advisories/new). Please do not
+report them in public issues. Include steps to reproduce and the version
+(`animus --version`). You will get an acknowledgement within a week.
+
+## Supported versions
+
+The latest release and `main`.
 
 ## Automated checks
 
-Every pull request runs: tests on Linux and macOS, a TypeScript type check,
-workflow linting, CodeQL (security-extended queries; any finding fails the
-build) and a gitleaks secret scan over the full history. Dependabot watches
-GitHub Actions versions, and all actions are pinned to commit SHAs.
+- Tests on Linux and macOS, a TypeScript type check and workflow linting
+  run on every pull request.
+- CodeQL (security-extended queries) scans every change and weekly; results
+  are in the Security tab, and any finding fails the build.
+- GitHub secret scanning with push protection is enabled, and a gitleaks
+  scan covers the full history of every push and pull request.
+- OpenSSF Scorecard runs weekly.
+- Dependabot alerts and security updates are on, with weekly version
+  updates for GitHub Actions and npm.
+- All actions are pinned to commit SHAs.
+- `main` is protected by a ruleset: changes only through pull requests
+  whose checks pass, and no force pushes or deletion.

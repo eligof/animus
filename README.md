@@ -1,5 +1,10 @@
 # animus
 
+[![CI](https://github.com/eligof/animus/actions/workflows/ci.yml/badge.svg)](https://github.com/eligof/animus/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/eligof/animus/actions/workflows/codeql.yml/badge.svg)](https://github.com/eligof/animus/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/eligof/animus/badge)](https://scorecard.dev/viewer/?uri=github.com/eligof/animus)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Your Claude Code agents as cartoon characters, living and working in an
 illustrated room in your terminal.
 
@@ -24,6 +29,8 @@ Requires Node ≥ 23.6 (it runs the TypeScript directly: no build step, no
 dependencies).
 
 ```sh
+git clone https://github.com/eligof/animus.git && cd animus
+
 node bin/animus.js            # live: the Claude Code agents on this machine
 node bin/animus.js --demo     # a simulated crew, no Claude data needed
 node bin/animus.js -t cafe    # pick a world
@@ -419,3 +426,11 @@ Layout:
    picker's and the number keys'), add its id to the registry test in
    `test/themes.test.ts`, and look at it with
    `node scripts/scene-shot.ts <id> /tmp/<id>.png`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
+
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).

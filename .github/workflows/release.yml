@@ -1,0 +1,43 @@
+name: Release
+
+# To cut a release: bump "version" in package.json, merge that to main, then
+# tag the merge commit vX.Y.Z on main and push the tag:
+#   git tag v0.2.0 && git push origin v0.2.0
+# This workflow runs the tests, checks the tag matches package.json and
+# creates a GitHub release with generated notes.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          package-manager-cache: false
+      - name: Tests
+        run: node --test "test/**/*.test.ts"
+      - name: Tag matches package.json
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::package.json version is ${version} but the tag is ${GITHUB_REF_NAME}; bump package.json, merge, and tag again."
+            exit 1
+          fi
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "animus $GITHUB_REF_NAME"
