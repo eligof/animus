@@ -246,7 +246,7 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
   });
 }
 
-test('every world dresses its desks: things to pick from, and something that moves', { todo: "the worlds' desk art" }, () => {
+test('every world dresses its desks: things to pick from, and something that moves', () => {
   const bare = THEMES.filter((w) => !workstationOf(w).clutter || !workstationOf(w).loops?.length).map((w) => w.id);
   assert.deepEqual(bare, []);
 });

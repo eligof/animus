@@ -159,7 +159,7 @@ test("seen from behind at its desk, a figure at work shows each tool it holds, a
   }
 });
 
-test("each world works with its own tools, as the design's table says, and tools of other names look other", { todo: 'the tool art' }, () => {
+test("each world works with its own tools, as the design's table says, and tools of other names look other", () => {
   const wrong: string[] = [];
   for (const c of COSTUMES) SLOTS.forEach((slot, k) => toolOf(c, slot).name !== TABLE[c][k] && wrong.push(`${c} ${slot}: ${toolOf(c, slot).name}, not ${TABLE[c][k]}`));
   assert.deepEqual(wrong, []);
