@@ -408,8 +408,10 @@ export class Life {
     const e = m.errand;
     const idleFor = this.host.idleFor(a);
     if (idleFor >= SLEEP_AFTER) {
-      // Up for a moment, or a block to lay first; then back to bed.
+      // Up for a moment, a block to lay first, or a subagent on its way to
+      // high-five it; then back to bed.
       if (this.clock < m.up || this.carrying(a)) return;
+      if (e?.kind !== 'nap' && this.awaited(a)) return;
       if (e?.kind === 'nap') {
         if (this.clock >= e.wake && !a.path.length) this.rise(a);
         return;
@@ -757,7 +759,8 @@ export class Life {
             this.emote(a, 'cup', 1.6, COFFEE_POUR - 1.6);
           } else if (c - e.since > COFFEE_LEG) this.end(a);
         } else if (e.step === 'pour') {
-          if (c < e.until) return;
+          // poured, it waits there for a subagent on its way to high-five it
+          if (c < e.until || this.awaited(a)) return;
           m.mug = c + m.rng.range(...MUG);
           m.sip = c + m.rng.range(2, 4);
           e.step = 'back';
@@ -978,7 +981,8 @@ export class Life {
   }
 
   // Someone a finished subagent is on its way to high-five: it holds still
-  // (no new wanderings) until it has been.
+  // (no new wanderings, no nap, not back from the coffee yet) until it has
+  // been.
   private awaited(lead: Actor): boolean {
     for (const o of this.byId.values()) {
       const e = o.mind.errand;

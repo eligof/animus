@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
 import { DemoSource } from '../src/demo/source.ts';
-import { COFFEE_LEG, COFFEE_POUR, FIVE_S, FIVE_WALK, HUDDLE_EVERY, HUDDLE_GATHER, HUDDLE_S, STANDUP_EVERY, STANDUP_GATHER, STANDUP_S } from '../src/world/life.ts';
+import { COFFEE_LEG, COFFEE_POUR, FIVE_S, FIVE_WALK, HUDDLE_EVERY, HUDDLE_GATHER, HUDDLE_S, SLEEP_AFTER, STANDUP_EVERY, STANDUP_GATHER, STANDUP_S } from '../src/world/life.ts';
 import type { Errand } from '../src/world/life.ts';
 import { hub } from '../src/world/layout.ts';
 import { Stage } from '../src/world/stage.ts';
@@ -487,6 +487,26 @@ test('an idle lead stops for the high-five, the two facing each other', () => {
     faced = true;
   });
   assert.ok(faced, 'never high-fived face to face');
+});
+
+// With the demo crew a lead long idle went off to its nap while its
+// subagent was on the way to high-five it, and the subagent chased it
+// across the room.
+test('an idle lead due for its nap waits for the high-five first', () => {
+  const stage = newStage();
+  let done = 0;
+  // Its nap due a moment after its subagent finishes.
+  const since = NOW + 10_000 - (SLEEP_AFTER - 0.3) * 1000;
+  const crew = () => [agent('L', 'idle', { role: 'lead', since }), agent('s', done ? 'done' : 'read', { parentId: 'L', since: done || NOW })];
+  const now = run(stage, crew, 10);
+  done = now;
+  let landed = false;
+  run(stage, crew, FIVE_WALK + FIVE_S + 2, now, () => {
+    const e = byId(stage, 's').mind.errand;
+    if (e?.kind === 'five' && e.arrived) landed = true;
+    if (!landed) assert.notEqual(kindOf(byId(stage, 'L')), 'nap', 'the lead went to bed with its high-five on the way');
+  });
+  assert.ok(landed, 'the high-five never landed');
 });
 
 // With the demo crew a lead was often still waving, talking to a huddle or
