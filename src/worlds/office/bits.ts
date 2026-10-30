@@ -66,14 +66,15 @@ export function across(k: Kit, pts: ReadonlyArray<Pt>, base: Color, lift = 0.14,
 }
 
 // An upright cone frustum (pots, shades, a hopper): radius r0 at z0, r1 at
-// z1, shaded across, its top opening in `inside`.
-export function frustum(k: Kit, cu: number, cv: number, z0: number, r0: number, z1: number, r1: number, base: Color, inside: Color | null): void {
+// z1, shaded across, its top opening in `inside`, outlined `line` px (the
+// full ink by default; small things on a desk take a lighter one).
+export function frustum(k: Kit, cu: number, cv: number, z0: number, r0: number, z1: number, r1: number, base: Color, inside: Color | null, line = k.lw): void {
   const bot = ring(k, [cu, cv, z0], [0, 0, 1], r0, 24);
   const top = ring(k, [cu, cv, z1], [0, 0, 1], r1, 24);
   const sil = hull([...bot, ...top]);
   fillPts(k, sil, across(k, sil, base), 0);
   if (inside) fillPts(k, top, inside, k.thin);
-  fillPts(k, sil, null, k.lw);
+  fillPts(k, sil, null, line);
 }
 
 // A dome shade hung with its rim at z (a pendant's, a floor lamp's): a
@@ -111,8 +112,9 @@ export function dome(k: Kit, cu: number, cv: number, z: number, r: number, color
   }
 }
 
-// One pointed leaf from (x, y) toward angle a, length L px (screen space).
-export function leaf(k: Kit, x: number, y: number, a: number, L: number, w: number, fill: Color, rib = true): void {
+// One pointed leaf from (x, y) toward angle a, length L px (screen space),
+// outlined `line` px (the thin ink by default).
+export function leaf(k: Kit, x: number, y: number, a: number, L: number, w: number, fill: Color, rib = true, line = k.thin): void {
   const pen = k.pen;
   const ca = Math.cos(a);
   const sa = Math.sin(a);
@@ -128,7 +130,7 @@ export function leaf(k: Kit, x: number, y: number, a: number, L: number, w: numb
   const [d2x, d2y] = P(L * 0.3, w);
   pen.bezierCurveTo(d1x, d1y, d2x, d2y, x0, y0);
   pen.closePath();
-  k.paint(fill, k.thin);
+  k.paint(fill, line);
   if (rib && L > 10) {
     pen.beginPath();
     pen.moveTo(x0, y0);

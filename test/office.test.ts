@@ -8,6 +8,7 @@ import { footprint, planRoom, toWorld } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import type { PropArt, RoomArt } from '../src/worlds/types.ts';
 import { office } from '../src/worlds/office.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import { DECOR_ART } from '../src/worlds/office/decor.ts';
 import { CAP, GAP, LAMP_N, pendantZ, planFor } from '../src/worlds/office/room.ts';
 import { budget } from './helpers.ts';
@@ -364,4 +365,10 @@ test('The Startup\'s workstation: its own, still whatever the clock', () => {
   assert.ok(art, 'no workstation of its own');
   const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
   for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
+
+test('The Startup: its desks have things of their own to pick from, and something that moves', () => {
+  const art = workstationOf(office);
+  assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
+  assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
