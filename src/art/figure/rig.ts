@@ -190,10 +190,10 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
         // from behind (at the desk): the surface held out at the near side,
         // the writer going over it, both past the body
         const w = Math.sin(u * TAU * 2);
-        r.arms[1] = arm([3.2, -2.9], 1, { fwd: true });
+        r.arms[1] = arm([3.75 + 0.15 * w, -3.0], 1, { fwd: true });
         r.arms[0] = arm([1.4 + 0.2 * w, -2.75 + 0.12 * c1], 1, { fwd: true });
-        r.props.push(prop('notepad', 1, 0.6, -0.3, 0.3));
-        r.props.push(prop('pencil', 1, 2.4 + 0.15 * w, -1.6, Math.PI - 0.5));
+        r.props.push(prop('notepad', -1, 3.7, -1.8, 0.25));
+        r.props.push(prop('pencil', 1, -0.1, 0.1, Math.PI - 1.1));
       } else {
         // scribbling in a notepad
         const w = Math.sin(u * TAU * 2);
@@ -215,9 +215,9 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       const turning = turnV < 1 && u < 0.22 ? turnV : 0;
       if (c.back) {
         // from behind: held open at the near side
-        r.arms[0] = arm([1.2, -2.6], 1, { fwd: true });
-        r.arms[1] = arm([3.4, -2.75], 1, { fwd: true });
-        r.props.push(prop('book', -1, 3.0, -3.2, 0.22, turning));
+        r.arms[0] = arm([1.8, -2.6], 1, { fwd: true });
+        r.arms[1] = arm([4.0, -2.75], 1, { fwd: true });
+        r.props.push(prop('book', -1, 4.4, -3.2, 0.22, turning));
       } else {
         r.arms[0] = arm([0.5, -2.35], 1, { fwd: true });
         r.arms[1] = arm([3.05, -2.45], 1, { fwd: true });
@@ -274,10 +274,11 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.mouth = 'smile';
       r.face.look = [0.3, 0];
       if (c.back) {
-        // from behind: held up and out at the near side, a thumb going over it
-        r.arms[1] = arm([3.55, -3.9], 1, { fwd: true });
-        r.arms[0] = arm([1.3 + 0.25 * swipe, -3.0], 1, { fwd: true });
-        r.props.push(prop('tablet', 1, 0.6, -0.5, -0.25, Math.floor(u * 2)));
+        // from behind: held up and out at the near side, the hand bobbing
+        // with each swipe
+        r.arms[1] = arm([3.55, -3.9 + 0.15 * swipe], 1, { fwd: true });
+        r.arms[0] = arm([1.3, -3.0], 1, { fwd: true });
+        r.props.push(prop('tablet', 1, 1.2, -0.4, -0.2, Math.floor(u * 2)));
       } else {
         r.arms[0] = arm([1.0 + 0.55 * swipe, -2.85 - 0.2 * swipe], 1, { fwd: true });
         r.arms[1] = arm([3.55, -2.95], 1, { fwd: true });

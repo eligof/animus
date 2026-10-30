@@ -7,8 +7,9 @@ import type { Sketch } from '../paint.ts';
 // hand that holds it (or where the rig puts it), +x the way it points, in
 // figure units (a figure is 14 tall). `v` is its pose's value for it (a
 // page turning over, 0 to 1; a strike landing, 1; a screen's page, 0 or
-// 1); `back` is true seen from behind (a book may show its cover, a phone
-// its case). `name` is the design's (see the table in test/tools.test.ts).
+// 1); `back` is true seen from behind, where its working face still shows
+// over the shoulder, so `back` is only for what differs. `name` is the
+// design's (see the table in test/tools.test.ts).
 export type Tool = { name: string; draw(sk: Sketch, v: number, L: Look, back: boolean): void };
 
 // What a costume holds for each kind of work: the write pose's surface and

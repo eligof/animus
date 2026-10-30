@@ -6,8 +6,8 @@ import { buildFigure } from '../src/art/figure/body.ts';
 import { lookOf } from '../src/art/figure/look.ts';
 import { Sketch, render } from '../src/art/figure/paint.ts';
 import { LOOP, rigFor, type Rig } from '../src/art/figure/rig.ts';
-import { ENVELOPE, toolOf, type Slot } from '../src/art/figure/tools/index.ts';
-import { COSTUMES, traitsFor, type Costume, type Pose } from '../src/world/character.ts';
+import { ENVELOPE, SLOT_OF, toolOf, type Slot } from '../src/art/figure/tools/index.ts';
+import { COSTUMES, traitsFor, type Costume, type Pose, type Species, type Traits } from '../src/world/character.ts';
 
 // The tools of the work poses: every costume's own (a world's), each kept
 // to its slot's room, and seen from behind at the desk.
@@ -35,21 +35,26 @@ const TABLE: Record<Costume, string[]> = {
   wizard: ['notepad', 'pencil', 'book', 'mallet', 'magnifier', 'tablet'],
 };
 const tr = traitsFor('agent-1', 'sub');
+// The first agent id that rolls each species.
+const idOf = (sp: Species): string => {
+  for (let i = 0; i < 3000; i++) if (traitsFor(`agent-${i}`, 'sub').species === sp) return `agent-${i}`;
+  throw new Error(sp);
+};
 const hash = (c: Canvas) => createHash('sha256').update(c.data).digest('hex');
 
-// A tool alone at s, its hand in the middle of a canvas 12 units across.
+// A tool alone at s, its hand in the middle of a canvas 16 units across.
 function alone(slot: Slot, c: Costume, s: number, back: boolean, v = 0): Canvas {
   const sk = new Sketch();
   toolOf(c, slot).draw(sk, v, lookOf(tr, c), back);
-  const cv = new Canvas(12 * s, 12 * s);
-  render(cv, sk, [s, 0, 0, s, 6 * s, 6 * s], Math.max(1.5, 0.28 * s), INK);
+  const cv = new Canvas(16 * s, 16 * s);
+  render(cv, sk, [s, 0, 0, s, 8 * s, 8 * s], Math.max(1.5, 0.28 * s), INK);
   return cv;
 }
 
 // A figure from rig r at s, standing in the middle of its canvas.
-function figure(r: Rig, c: Costume, back: boolean, s: number): Canvas {
+function figure(r: Rig, c: Costume, back: boolean, s: number, t: Traits = tr): Canvas {
   const sk = new Sketch();
-  buildFigure(sk, r, lookOf(tr, c), { back, item: null, frame: 0 });
+  buildFigure(sk, r, lookOf(t, c), { back, item: null, frame: 0 });
   const cv = new Canvas(30 * s, 34 * s);
   render(cv, sk, [s, 0, 0, s, 15 * s, 28 * s], Math.max(1.5, 0.28 * s), INK);
   return cv;
@@ -59,6 +64,25 @@ function figure(r: Rig, c: Costume, back: boolean, s: number): Canvas {
 function differ(a: Canvas, b: Canvas): number {
   let n = 0;
   for (let o = 0; o < a.data.length; o += 4) {
+    const d = Math.abs(a.data[o] - b.data[o]) + Math.abs(a.data[o + 1] - b.data[o + 1]) + Math.abs(a.data[o + 2] - b.data[o + 2]);
+    if (d > 48 || Math.abs(a.data[o + 3] - b.data[o + 3]) > 32) n++;
+  }
+  return n;
+}
+
+// Opaque pixels (alpha 192 and up) of a picture.
+function solid(c: Canvas): number {
+  let n = 0;
+  for (let o = 3; o < c.data.length; o += 4) if (c.data[o] >= 192) n++;
+  return n;
+}
+
+// Opaque pixels of a that differ from b (same size): what a shows that b
+// does not, not counting a glow.
+function opaqueChange(a: Canvas, b: Canvas): number {
+  let n = 0;
+  for (let o = 0; o < a.data.length; o += 4) {
+    if (a.data[o + 3] < 192) continue;
     const d = Math.abs(a.data[o] - b.data[o]) + Math.abs(a.data[o + 1] - b.data[o + 1]) + Math.abs(a.data[o + 2] - b.data[o + 2]);
     if (d > 48 || Math.abs(a.data[o + 3] - b.data[o + 3]) > 32) n++;
   }
@@ -88,8 +112,8 @@ test("each tool draws something inside its slot's room, front and back, whatever
             for (let x = 0; x < cv.width; x++) {
               if (cv.data[(y * cv.width + x) * 4 + 3] < 16) continue;
               n++;
-              const ux = x / s - 6;
-              const uy = y / s - 6;
+              const ux = x / s - 8;
+              const uy = y / s - 8;
               assert.ok(ux >= e.x0 - 0.5 && ux <= e.x1 + 0.5 && uy >= e.y0 - 0.5 && uy <= e.y1 + 0.5, `${what}: painted at ${ux.toFixed(2)}, ${uy.toFixed(2)}`);
             }
           }
@@ -100,28 +124,37 @@ test("each tool draws something inside its slot's room, front and back, whatever
   }
 });
 
-test('seen from behind at its desk, a figure at work shows its tool beside the body: writing, reading, browsing and searching in every frame, swinging in a quarter of them', () => {
+test("seen from behind at its desk, a figure at work shows each tool it holds, at least 40% of its own opaque area, beside the body: in every frame of writing, reading, browsing and searching, in a quarter of the frames of swinging", () => {
   const s = 6;
   const WORK: Array<[Pose, number]> = [['write', 1], ['read', 1], ['web', 1], ['search', 1], ['run', 0.25]];
-  for (const c of COSTUMES) {
-    for (const [pose, share] of WORK) {
-      const n = LOOP[pose][1];
-      let frames = 0;
-      let shown = 0;
-      let writers = 0;
-      let writerShown = 0;
-      for (let i = 0; i < n; i += 2) {
-        const r = rigFor(pose, i, { back: true, walking: false, walkU: 0, item: false, mug: false });
-        frames++;
-        if (differ(figure(r, c, true, s), figure({ ...r, props: [] }, c, true, s)) >= 1.5 * s * s) shown++;
-        // the write pose's writer shows over its surface, not only the surface
-        if (pose === 'write') {
-          writers++;
-          if (differ(figure(r, c, true, s), figure({ ...r, props: r.props.filter((p) => p.kind === 'notepad') }, c, true, s)) >= 0.5 * s * s) writerShown++;
+  for (const sp of ['human', 'robot'] as const) {
+    const t = traitsFor(idOf(sp), 'sub');
+    for (const c of COSTUMES) {
+      for (const [pose, share] of WORK) {
+        // per tool held (a prop that fills a slot): the frames it shows in
+        const shown = new Map<string, number>();
+        const own = new Map<string, number>();
+        const n = LOOP[pose][1];
+        for (let i = 0; i < n; i++) {
+          const r = rigFor(pose, i, { back: true, walking: false, walkU: 0, item: false, mug: false });
+          const all = figure(r, c, true, s, t);
+          for (const pr of r.props) {
+            const slot = SLOT_OF[pr.kind];
+            if (!slot) continue;
+            const key = `${slot} ${toolOf(c, slot).name}`;
+            if (!own.has(key)) own.set(key, 0);
+            const painted = solid(alone(slot, c, s, true, pr.v));
+            const change = opaqueChange(all, figure({ ...r, props: r.props.filter((q) => q !== pr) }, c, true, s, t));
+            if (change >= 0.4 * painted) shown.set(key, (shown.get(key) ?? 0) + 1);
+            own.set(key, own.get(key)! + 1);
+          }
+        }
+        assert.ok(own.size > 0, `${c} ${pose}: holds no tool`);
+        for (const [key, frames] of own) {
+          const k = shown.get(key) ?? 0;
+          assert.ok(k >= share * frames, `${sp} ${c} ${pose}: the ${key} shows in ${k} of ${frames} frames from behind`);
         }
       }
-      assert.ok(shown >= share * frames, `${c} ${pose}: the tool shows in ${shown} of ${frames} frames from behind`);
-      if (pose === 'write') assert.ok(writerShown >= writers, `${c} write: the writer shows in ${writerShown} of ${writers} frames from behind`);
     }
   }
 });

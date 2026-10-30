@@ -157,6 +157,8 @@ function propZ(pr: Prop, back: boolean): number {
       return back ? 0.2 : 5.5;
     case 'tablet':
       return back ? 0.2 : 8.7;
+    case 'pencil':
+      return back ? 0.6 : 9;
     case 'thought':
     case 'sweat':
     case 'spark':

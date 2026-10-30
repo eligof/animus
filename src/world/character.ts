@@ -32,12 +32,8 @@ export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 
 // parka in the snowy depths, a guard's uniform in the vault and a devil's
 // robe in hell; and at the startup an open zip hoodie over a tee, jeans and
 // sneakers.
-export type Costume =
-  | 'wizard' | 'scientist' | 'raver' | 'hacker' | 'astronaut' | 'casual'
-  | 'drifter' | 'nord' | 'exosuit' | 'jumpsuit' | 'colonist'
-  | 'miner' | 'forager' | 'parka' | 'guard' | 'demon'
-  | 'startup';
-export const COSTUMES: readonly Costume[] = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon', 'startup'];
+export const COSTUMES = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon', 'startup'] as const;
+export type Costume = (typeof COSTUMES)[number];
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
 

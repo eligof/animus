@@ -11,7 +11,7 @@ import { COVER, PAGE, PAGE_D, WHITE, everyone, type Tool } from './tool.ts';
 // An open book.
 const book: Tool = { name: 'book', draw: (sk, v) => sk.at(zoom(1.15), () => openBook(sk, v)) };
 
-// An open book, pages toward the viewer; `turn` (0..1) flips a page over
+// An open book, pages toward the viewer; `flip` (0..1) flips a page over
 // from right to left.
 function openBook(sk: Sketch, flip: number): void {
   sk.blob((p) => {
