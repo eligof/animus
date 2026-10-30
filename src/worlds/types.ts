@@ -55,15 +55,42 @@ export type PropArt = {
 export type P3 = readonly [number, number, number];
 export type Quad = readonly [P3, P3, P3, P3];
 
+// A small thing that may stand on a workstation's top (see
+// WorkstationArt.clutter), in the world's style: `r` is the radius of its
+// footprint and `h` how tall it stands (units), round where it stands.
+// `draw` paints it standing at `at` (u, v on the top, z the top's surface)
+// with the desk's view (`v.active` while its screen is on: a candle may be
+// lit). `name` tells it apart (camelCase, unique in its world).
+export type Clutter = { name: string; r: number; h: number; draw(v: PropView, at: P3): void };
+
+// Something on a workstation that moves while its agent works (a
+// lantern's flame, a cauldron's bubbles, steam off a cup): `frames`
+// pictures (4 to 8) shown `fps` a second (at most 8), standing at `at` in
+// the desk's frame, inside `r` round it and `h` over it. `draw` paints
+// frame `i`; frame 0 is the still one shown while the screen is off
+// (`v.active` false: unlit). The desk's own draw leaves out what its loops
+// paint.
+export type DeskLoop = { name: string; at: P3; r: number; h: number; frames: number; fps: number; draw(v: PropView, i: number): void };
+
 // A world's workstation (see world/desks.ts): a prop DESK.len x DESK.dep
 // that stands at most DESK.height tall and is never animated (it is drawn
-// once a scale, frame, look and screen, and kept; see art/scene/desk.ts).
-// Its agent stands at DESK_SPOT, in front. It names where its screen is
-// (`screen`, upright on its body, to the right of where its agent stands:
-// the shared activity layer draws on it, see art/screen.ts) and where a
-// desk upgrade stands on it (`top`, on its top surface). `v.active` is true
-// while its screen is on; `v.seed` is 0, 1 or 2: the world's few looks of it.
-export type WorkstationArt = PropArt & { screen: Quad; top: P3 };
+// once a scale, frame, look and pick of clutter, and kept; see
+// art/scene/desk.ts). Its agent stands at DESK_SPOT, in front. It names
+// where its screen is (`screen`, upright on its body, to the right of
+// where its agent stands: the shared activity layer draws on it, see
+// art/screen.ts) and where a desk upgrade stands on it (`top`, on its top
+// surface). `v.active` is true while its screen is on; `v.seed` is 0, 1 or
+// 2: the world's few looks of it. `clutter`: things a place's desk picks a
+// few of (see clutterOf in ./workstation.ts) and the spots on the top they
+// may stand on, clear of the screen, the upgrade and the agent at work;
+// `loops`: one or two things that move on it while its agent works, as
+// clear.
+export type WorkstationArt = PropArt & {
+  screen: Quad;
+  top: P3;
+  clutter?: { items: readonly Clutter[]; spots: readonly P3[] };
+  loops?: readonly DeskLoop[];
+};
 
 // What the room shell draws with: the floor and the two back walls.
 // `W` x `D` is the floor (units), `H` the wall height, `T` the wall
