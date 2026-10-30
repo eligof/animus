@@ -43,8 +43,8 @@ function inView(p: Spot, tall: (x: number, y: number) => number): boolean {
   return true;
 }
 
-test('a room plans places for workstations: a few in the smallest room, two dozen and more in a 150 x 46 terminal', () => {
-  const want: Record<string, number> = { '80x24': 3, '100x30': 10, '120x36': 19, '150x46': 25, '200x60': 28 };
+test('a room plans places for workstations: half a dozen and more in the smallest room, two dozen and more in a 150 x 46 terminal', () => {
+  const want: Record<string, number> = { '80x24': 6, '100x30': 10, '120x36': 19, '150x46': 25, '200x60': 28 };
   for (const [cols, rows] of TERMS) {
     for (const w of THEMES) {
       const room = roomFor(w, cols, rows);

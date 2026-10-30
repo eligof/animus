@@ -628,11 +628,12 @@ export class Stage {
 
   // A place for a's workstation (see claim): the one it left a moment ago
   // if it is still there; for a lead (or a subagent whose lead is not in
-  // the room), the lead's place of a pod nobody is in, else of any pod,
-  // else the free place nearest the way in; for a subagent, the place in
-  // its lead's pod nearest its lead's, else the free place nearest its
-  // lead's (sparing the lead's places of pods nobody is in); null when
-  // every place is taken.
+  // the room), the lead's place of a pod nobody is in (with more in the
+  // room than places, one with room in front for its team to share it
+  // first, see roomy), else of any pod, else the free place nearest the
+  // way in; for a subagent, the place in its lead's pod nearest its
+  // lead's, else the free place nearest its lead's (sparing the lead's
+  // places of pods nobody is in); null when every place is taken.
   private placeFor(a: Actor): Desk | null {
     const all = this.plan?.desks ?? [];
     const free = all.filter((d) => this.open(d));
@@ -643,13 +644,26 @@ export class Stage {
     const by = (p: Spot) => (x: Desk, y: Desk) => Math.hypot(x.spot.x - p.x, x.spot.y - p.y) - Math.hypot(y.spot.x - p.x, y.spot.y - p.y);
     const door = this.door()?.spot ?? { x: 0, y: 0 };
     const lead = this.cast.get(teamOf(a.info));
-    if (!lead || lead === a) return free.find((d) => d.lead && empty(d.pod)) ?? free.find((d) => d.lead) ?? [...free].sort(by(door))[0];
+    if (!lead || lead === a) {
+      const pods = free.filter((d) => d.lead && empty(d.pod));
+      const short = [...this.cast.values()].filter((o) => o.state !== 'leave' && !o.gone).length > all.length;
+      return (short ? pods.find((d) => this.roomy(d)) : undefined) ?? pods[0] ?? free.find((d) => d.lead) ?? [...free].sort(by(door))[0];
+    }
     const home = this.ownDesk(lead)?.desk;
     const from: Spot = home?.spot ?? lead;
     const pod = home ? free.filter((d) => d.pod === home.pod) : [];
     if (pod.length) return [...pod].sort(by(from))[0];
     const spare = free.filter((d) => !(d.lead && empty(d.pod)));
     return [...(spare.length ? spare : free)].sort(by(from))[0];
+  }
+
+  // Whether desk d leaves room in front for those sharing it: the first
+  // row out beside it (see SIDES) on the floor, not past the front cut (a
+  // place right at the front has only its ends).
+  private roomy(d: Desk): boolean {
+    const L = this.L!;
+    const [, out] = SIDES[2];
+    return d.wall === 'right' ? d.spot.y + out <= L.D - 2 : d.spot.x + out <= L.W - 2;
   }
 
   // Puts up a workstation for `a` on a free place, if it has none and there
@@ -909,13 +923,20 @@ export class Stage {
     this.now = now;
     const ids = new Set<string>();
     // Newcomers in order of arrival, leads before their subagents (a lead's
-    // workstation goes up first, its team's round it).
-    for (const info of agents) if (!this.cast.has(info.id) && info.role === 'lead') this.spawn(info, now);
+    // workstation goes up first, its team's round it); subagents that come
+    // in together, a team at a time in turn (the first of each team, then
+    // the second, ...), so where places run short each team has some. All
+    // are in before any workstation goes up (see placeFor), and all theirs
+    // are up before any of them sets off, so none plans its way (or a spot
+    // at a teammate's side) where the next one's is about to stand.
+    const fresh: Actor[] = [];
+    for (const info of agents) if (!this.cast.has(info.id) && info.role === 'lead') fresh.push(this.spawn(info, now));
+    const teams = new Map<string, AgentInfo[]>();
     for (const info of agents) {
       ids.add(info.id);
       const a = this.cast.get(info.id);
       if (!a) {
-        this.spawn(info, now);
+        teams.set(teamOf(info), [...(teams.get(teamOf(info)) ?? []), info]);
         continue;
       }
       if (a.info.agentType !== info.agentType || a.info.role !== info.role) {
@@ -943,6 +964,10 @@ export class Stage {
       // Off to the new prop once the change has lasted (see update).
       if (kindChanged && stationKindFor(info.activity) === 'idle') this.retarget(a);
     }
+    const each = [...teams.values()];
+    for (let k = 0; each.some((t) => k < t.length); k++) for (const t of each) if (k < t.length) fresh.push(this.spawn(t[k], now));
+    for (const a of fresh) this.claim(a);
+    for (const a of fresh) this.welcome(a);
     for (const a of this.cast.values()) {
       if (!ids.has(a.info.id) && a.state !== 'leave') {
         // Someone carrying a block sets it down before going.
@@ -954,7 +979,8 @@ export class Stage {
     }
   }
 
-  private spawn(info: AgentInfo, now: number): void {
+  // A newcomer at the door.
+  private spawn(info: AgentInfo, now: number): Actor {
     const at = this.door()?.spot ?? { x: 12, y: 12 };
     const a: Actor = {
       info,
@@ -981,7 +1007,12 @@ export class Stage {
     };
     this.cast.set(info.id, a);
     this.trinketsDue = true;
-    this.claim(a);
+    return a;
+  }
+
+  // A newcomer sets off (its workstation up, if a place was free), with a
+  // sparkle at the door.
+  private welcome(a: Actor): void {
     this.retarget(a);
     this.sparkle(a, 16, a.traits.color);
     this.life.arrived(a, this.cast.values());

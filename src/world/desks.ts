@@ -56,7 +56,8 @@ const FRONT = 2;
 const SPREAD = 40;
 
 // How many places a room plans at most: a dozen in the smallest room
-// (whose floor holds a few), about two dozen in a 150 x 46 terminal's.
+// (whose floor holds about half that), about two dozen in a 150 x 46
+// terminal's.
 export function deskCap(L: Layout): number {
   return Math.round(12 + ((L.W - 72) * 13) / 71);
 }
@@ -205,10 +206,13 @@ export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Arra
   const centres: Spot[] = [];
   // Each place a lone desk fits (its back corner at x + W * y), by wall,
   // and how snug it stands there (0: it does not fit); worked out afresh
-  // where a pod has just gone down.
+  // where a pod has just gone down. Desks keep a step (`pad`) off the
+  // floor they may not stand on while a pod still fits so; once none does
+  // (a small room), the rest stand up close.
   const fit = { right: new Float32Array(W * D), left: new Float32Array(W * D) };
   let stale = { x0: T, y0: T, x1: W, y1: D };
-  for (let pod = 0; out.length < cap; pod++) {
+  let pad = 0.5;
+  while (out.length < cap) {
     const free = boxCount(ground, W, D);
     const open = boxCount(floor, W, D);
     const hidden = boxCount(cover, W, D);
@@ -217,7 +221,7 @@ export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Arra
         for (let x = Math.max(T, stale.x0); x < Math.min(W, stale.x1); x++) {
           const d = { wall, x0: x, y0: y };
           const s = onFloor(d, STAND);
-          const ok = s.x1 <= W - FRONT && s.y1 <= D - FRONT && !free(onFloor(d, BODY, 0.5)) && !hidden(onFloor(d, BODY)) && !open(s);
+          const ok = s.x1 <= W - FRONT && s.y1 <= D - FRONT && !free(onFloor(d, BODY, pad)) && !hidden(onFloor(d, BODY)) && !open(s);
           fit[wall][x + W * y] = ok ? 1 + free(onFloor(d, BODY, 1.5)) : 0;
         }
       }
@@ -271,8 +275,14 @@ export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Arra
         }) ?? null;
       if (found) break;
     }
-    if (!found) break;
+    if (!found) {
+      if (!pad) break;
+      pad = 0;
+      stale = { x0: T, y0: T, x1: W, y1: D };
+      continue;
+    }
     const wall = found.wall;
+    const pod = centres.length;
     centres.push(found.at.map(([x, y]) => deskAt(wall, x, y).spot).reduce((c, p, k, all) => ({ x: c.x + p.x / all.length, y: c.y + p.y / all.length }), { x: 0, y: 0 }));
     // What changed: the pod, its aisle and the reach of its cover, and a
     // desk's length further back (a desk there may no longer fit).

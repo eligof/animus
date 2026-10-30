@@ -114,6 +114,20 @@ for (const [cols, rows] of SIZES) {
   });
 }
 
+test('80x24: with too few places for twenty coming in together, each team gets some, none more than one over another', () => {
+  for (const w of WORLDS) {
+    const { stage } = stressed(w, 80, 24, 1);
+    const actors = stage.actors();
+    const per = new Map<string, number>();
+    for (const x of stage.workstations()) {
+      const t = team(actors.find((o) => o.info.id === x.owner)!.info);
+      per.set(t, (per.get(t) ?? 0) + 1);
+    }
+    const n = [...per.values()];
+    assert.ok(per.size === 4 && Math.max(...n) - Math.min(...n) <= 1, `${w.id}: ${[...per].map(([t, k]) => `${t} ${k}`).join(', ')}`);
+  }
+});
+
 test('80x24: forty at work, most of them sharing: none stands in the way in, on a plaza, in the yard, on a spot idlers like or a station\'s', () => {
   for (const w of WORLDS) {
     const stage = new Stage(w);
