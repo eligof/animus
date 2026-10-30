@@ -107,8 +107,10 @@ const LANE_APART = 5;
 // Walkers detouring through the hub keep this many units to one side of it
 // (which side hashed from the id), so the traffic forms two lanes.
 const HUB_LANE = 3;
-// Poses done with the back to the viewer, facing the prop.
-const FACES_STATION = new Set<Pose>(['write', 'read', 'search', 'web', 'run', 'think']);
+// Poses done with the back to the viewer, facing the prop: the work, and
+// the beats at it that look its way (a glance, a lean, a tap; a scratch
+// and a stretch turn to us).
+const FACES_STATION = new Set<Pose>(['write', 'read', 'search', 'web', 'run', 'think', 'glance', 'lean', 'tap']);
 const MAX_EMOTES = 3; // shown at once
 // A happy agent's bounce: HOP high (units), a hop a step while walking,
 // one every HOP_IDLE seconds standing about.
@@ -1324,6 +1326,7 @@ export class Stage {
       // Fading in at the door: shown once the entrance flash is over.
       if (a.state === 'enter' && now - a.bornAt <= ENTER_MS * 0.5) continue;
       const look = this.lookOf(a, now);
+      // A beat's pose runs from its first frame (see Look.since).
       const fig: FigureFrame = {
         id: a.info.id,
         x: a.x,
@@ -1332,8 +1335,8 @@ export class Stage {
         traits: a.traits,
         costume: this.world.costume,
         pose: look.pose,
-        poseT: t + a.gait,
-        phase: a.phase / 997,
+        poseT: look.since !== undefined ? c - look.since : t + a.gait,
+        phase: look.since !== undefined ? 0 : a.phase / 997,
         facing: look.facing,
         selected: a === sel,
         hurt: errNow(a),

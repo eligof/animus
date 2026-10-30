@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SLEEP_AFTER } from '../src/world/life.ts';
+import { BEATS, SLEEP_AFTER } from '../src/world/life.ts';
 import { hub } from '../src/world/layout.ts';
 import type { Layout } from '../src/world/types.ts';
 import type { Pose } from '../src/world/character.ts';
+import { LOOP, frameOf } from '../src/art/figure/rig.ts';
+import type { FigureFrame } from '../src/world/frame.ts';
 import { Stage } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
 import { mines } from '../src/worlds/mines.ts';
@@ -55,6 +57,7 @@ function run(stage: Stage, crew: (now: number) => AgentInfo[], seconds: number, 
 
 const byId = (stage: Stage, id: string) => stage.actors().find((a) => a.info.id === id)!;
 const pose = (stage: Stage, a: Actor, now: number): Pose => stage.lookOf(a, now).pose;
+const BEAT_POSES = new Set<Pose>(['glance', 'lean', 'stretch', 'scratch', 'tap']);
 
 test('idle agents wander between spots and do the fitting thing at each', () => {
   const stage = newStage();
@@ -245,8 +248,8 @@ test('workers keep at it, with an occasional break, and cheer a new file', () =>
     count.set(p, (count.get(p) ?? 0) + 1);
   });
   const total = [...count.values()].reduce((a, b) => a + b, 0);
-  assert.ok((count.get('write') ?? 0) / total >= 0.85, `writing only ${((100 * (count.get('write') ?? 0)) / total).toFixed(0)}% of the time`);
-  assert.ok(['stretch', 'drink', 'idle'].some((p) => count.has(p as Pose)), `no breaks: ${[...count.keys()].join(', ')}`);
+  assert.ok((count.get('write') ?? 0) / total >= 0.75, `writing only ${((100 * (count.get('write') ?? 0)) / total).toFixed(0)}% of the time`);
+  assert.ok([...BEAT_POSES].some((p) => count.has(p)), `no beats: ${[...count.keys()].join(', ')}`);
   w.mind.celebrated = -Infinity;
   w.mind.gestures = [];
   let cheered = false;
@@ -438,4 +441,84 @@ test('a big frame with a living crew stays within budget', () => {
   const ms = (performance.now() - t0) / 40;
   // The model's share of a frame: a few ms, leaving the scene its 25.
   assert.ok(ms < 10, `${ms.toFixed(2)} ms per frame`);
+});
+
+// A lone writer settled at its desk, then `secs` seconds of work: each
+// beat as it began (when, its pose, whether it showed its back).
+function beats(office: boolean, secs = 120): Array<{ at: number; pose: Pose; back: boolean }> {
+  const stage = newStage();
+  stage.office = office;
+  const now = run(stage, () => [agent('w', 'write')], 10);
+  const w = byId(stage, 'w');
+  const out: Array<{ at: number; pose: Pose; back: boolean }> = [];
+  const [x, y] = [w.x, w.y];
+  let was: Pose | null = null;
+  run(stage, () => [agent('w', 'write')], secs, now, (n) => {
+    const look = stage.lookOf(w, n);
+    if (BEAT_POSES.has(look.pose) && look.pose !== was) out.push({ at: n, pose: look.pose, back: look.facing.back });
+    if (BEAT_POSES.has(look.pose)) assert.ok(Math.hypot(w.x - x, w.y - y) < 1e-9, `a ${look.pose} moved it`);
+    was = look.pose;
+  });
+  return out;
+}
+
+test('at work, a beat every 6 to 15 seconds, the same every run, office life or not: a glance and a nod, leaning in, a stretch, a scratch, a tap', () => {
+  const a = beats(false);
+  assert.deepEqual(beats(false), a, 'not the same every run');
+  assert.ok(a.length >= 7, `${a.length} beats in two minutes`);
+  for (let k = 1; k < a.length; k++) {
+    const gap = (a[k].at - a[k - 1].at) / 1000;
+    assert.ok(gap >= 6 - 0.05 && gap <= 15 + 0.1, `${gap.toFixed(2)} s between beats`);
+  }
+  assert.ok(new Set(a.map((b) => b.pose)).size >= 4, `only ${[...new Set(a.map((b) => b.pose))].join(', ')}`);
+  for (const b of a) assert.equal(b.back, b.pose === 'glance' || b.pose === 'lean' || b.pose === 'tap', `a ${b.pose} ${b.back ? 'with its back to us' : 'facing us'}`);
+  assert.ok(beats(true, 60).length >= 3, 'no beats with office life on');
+});
+
+test('a beat lasts whole loops of its pose and begins at its first frame', () => {
+  for (const [p, , secs] of BEATS) {
+    const k = secs / LOOP[p][0];
+    assert.ok(Math.abs(k - Math.round(k)) < 1e-9 && secs >= 1 && secs <= 2.5, `${p}: ${secs} s, ${k} loops`);
+  }
+  const stage = newStage();
+  stage.office = false;
+  const now = run(stage, () => [agent('w', 'write')], 10);
+  const w = byId(stage, 'w');
+  w.mind.gestures = [];
+  w.mind.micro = 0;
+  let first: FigureFrame | undefined;
+  run(stage, () => [agent('w', 'write')], 0.5, now, (n) => {
+    const g = stage.frame(n)!.figures.find((f) => f.id === 'w')!;
+    if (!first && BEAT_POSES.has(g.pose)) first = g;
+  });
+  assert.ok(first, 'no beat');
+  assert.equal(frameOf(first.pose, first.poseT, first.phase), 0, `a ${first.pose} began mid-loop`);
+});
+
+test('no beat starts under an emote or over a high-five; a change of activity ends one at once', () => {
+  const stage = newStage();
+  stage.office = false;
+  let now = run(stage, () => [agent('w', 'write')], 10);
+  const w = byId(stage, 'w');
+  const noBeat = (why: string) => (n: number) => assert.ok(!BEAT_POSES.has(pose(stage, w, n)), why);
+  w.mind.gestures = [];
+  w.mind.micro = 0;
+  stage.life.emote(w, 'idea', 2);
+  now = run(stage, () => [agent('w', 'write')], 1.5, now, noBeat('a beat under an emote'));
+  let began = false;
+  now = run(stage, () => [agent('w', 'write')], 1, now, (n) => {
+    began ||= BEAT_POSES.has(pose(stage, w, n));
+  });
+  assert.ok(began, 'no beat once the emote went');
+  w.mind.gestures = [];
+  w.mind.micro = 0;
+  stage.life.gesture(w, 'highfive', 1.3, { hold: false });
+  now = run(stage, () => [agent('w', 'write')], 1.2, now, noBeat('a beat over a high-five'));
+  w.mind.gestures = [];
+  w.mind.emote = null;
+  w.mind.micro = 0;
+  now = run(stage, () => [agent('w', 'write')], 0.1, now);
+  assert.ok(BEAT_POSES.has(pose(stage, w, now)), 'no beat to break into');
+  now = run(stage, () => [agent('w', 'read', { since: now })], 0.05, now);
+  assert.equal(pose(stage, w, now), 'read');
 });

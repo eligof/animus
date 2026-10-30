@@ -77,11 +77,26 @@ export const STANDUP_EVERY = 180;
 export const STANDUP_GATHER = 15;
 export const STANDUP_S = 8;
 const STANDUP_TURN = 2;
+
+// A worker's beats (see work): one every BEAT_EVERY seconds (its own
+// rhythm), weighted, each lasting whole loops of its pose (see LOOP in
+// art/figure/rig.ts), so it eases out of rest and back: a glance at the
+// screen and a nod, leaning in, a stretch, a scratch of the head, a tap of
+// the foot. Work motion, not office life: on either way.
+export const BEAT_EVERY: readonly [number, number] = [6, 15];
+export const BEATS: ReadonlyArray<readonly [Pose, number, number]> = [
+  ['glance', 3, 1.6],
+  ['lean', 3, 2.2],
+  ['stretch', 2, 2.4],
+  ['scratch', 2, 1.2],
+  ['tap', 2, 1.8],
+];
 const TAU = Math.PI * 2;
 
 // A short pose over whatever else is going on: a wave, a cheer, a flinch,
-// a stretch. `hold` stops a walker for its length.
-export type Gesture = { pose: Pose; at: number; until: number; face?: Spot; hold: boolean };
+// a stretch. `hold` stops a walker for its length; `beat` marks a worker's
+// beat (see BEATS), which a change of activity ends.
+export type Gesture = { pose: Pose; at: number; until: number; face?: Spot; hold: boolean; beat?: boolean };
 
 export type Errand =
   | { kind: 'visit'; poi: Poi; arrived: boolean; until: number; pose: Pose; since: number; beat: number }
@@ -114,7 +129,7 @@ export type Mind = {
   gestures: Gesture[];
   emote: { e: Emote; born: number; until: number } | null;
   think: number; // clock time of the next free choice
-  micro: number; // clock time of a worker's next little break
+  micro: number; // clock time of a worker's next beat
   cheer: boolean; // a worker's detail just changed
   celebrated: number;
   lastPoi: Poi | null;
@@ -135,7 +150,7 @@ export function newMind(id: string, clock: number): Mind {
     gestures: [],
     emote: null,
     think: clock + rng.range(0.5, 1.5),
-    micro: clock + rng.range(8, 20),
+    micro: clock + rng.range(BEAT_EVERY[0], BEAT_EVERY[1]),
     cheer: false,
     celebrated: -Infinity,
     lastPoi: null,
@@ -150,9 +165,10 @@ export function newMind(id: string, clock: number): Mind {
 }
 
 // What a character looks like right now: its pose, what it faces, the
-// colour (an index into the world's build colours) of a block it holds, and
-// whether it carries a mug of coffee.
-export type Look = { pose: Pose; face?: Spot; item?: number; mug?: boolean };
+// colour (an index into the world's build colours) of a block it holds,
+// whether it carries a mug of coffee, and for a beat when it began (life
+// clock: its pose starts at its first frame then).
+export type Look = { pose: Pose; face?: Spot; item?: number; mug?: boolean; since?: number };
 
 // What life needs from the stage.
 export type LifeHost = {
@@ -257,6 +273,7 @@ export class Life {
   changed(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
+    m.gestures = m.gestures.filter((g) => !g.beat);
     m.exit = 0;
     this.end(a);
     if (a.info.activity !== 'idle' && a.info.activity !== 'done') this.hush(a);
@@ -469,7 +486,9 @@ export class Life {
     else m.think = this.clock + 3;
   }
 
-  // Workers keep at it, with a little break now and then.
+  // Workers keep at it, with a beat now and then (see BEATS), and a cheer
+  // for a new file. No beat on an errand (a huddle, a high-five) or over a
+  // gesture; one under an emote waits for it to go.
   private work(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
@@ -483,22 +502,10 @@ export class Life {
       }
       return;
     }
-    if (c < m.micro) return;
-    m.micro = c + m.rng.range(14, 30);
-    const r = { x: a.x + 4, y: a.y - 2 };
-    const l = { x: a.x - 2, y: a.y + 4 };
-    switch (m.rng.weighted<string>([['stretch', 3], ['drink', 2], ['look', 3]])) {
-      case 'stretch':
-        this.gesture(a, 'stretch', 1.6, { hold: false });
-        break;
-      case 'drink':
-        this.gesture(a, 'drink', 1.5, { hold: false });
-        this.emote(a, 'cup', 1.4);
-        break;
-      default:
-        this.gesture(a, 'idle', 0.8, { face: m.rng.chance(0.5) ? r : l, hold: false });
-        this.gesture(a, 'idle', 0.8, { delay: 0.8, face: m.rng.chance(0.5) ? l : r, hold: false });
-    }
+    if (c < m.micro || (m.emote && m.emote.until > c)) return;
+    m.micro = c + m.rng.range(BEAT_EVERY[0], BEAT_EVERY[1]);
+    const [pose, , secs] = m.rng.weighted(BEATS.map((b) => [b, b[1]] as const));
+    this.gesture(a, pose, secs, { hold: false, beat: true });
   }
 
   // An idle character with nothing on decides what next.
@@ -1329,10 +1336,11 @@ export class Life {
     return WANDER;
   }
 
-  gesture(a: Actor, pose: Pose, secs: number, o: { delay?: number; face?: Spot; hold?: boolean } = {}): void {
+  gesture(a: Actor, pose: Pose, secs: number, o: { delay?: number; face?: Spot; hold?: boolean; beat?: boolean } = {}): void {
     const at = this.clock + (o.delay ?? 0);
     const g: Gesture = { pose, at, until: at + secs, hold: o.hold ?? true };
     if (o.face) g.face = { x: o.face.x, y: o.face.y };
+    if (o.beat) g.beat = true;
     const gs = a.mind.gestures;
     gs.push(g);
     if (gs.length > 4) gs.splice(0, gs.length - 4);
@@ -1356,7 +1364,12 @@ export class Life {
   private looks(a: Actor, walking: boolean, base: Pose): Look {
     const c = this.clock;
     const g = a.mind.gestures.find((q) => q.at <= c && c < q.until);
-    if (g) return g.face ? { pose: g.pose, face: g.face } : { pose: g.pose };
+    if (g) {
+      const out: Look = { pose: g.pose };
+      if (g.face) out.face = g.face;
+      if (g.beat) out.since = g.at;
+      return out;
+    }
     const e = a.mind.errand;
     if (e?.kind === 'haul') {
       const pile = { x: (e.site.pile.x0 + e.site.pile.x1) / 2, y: (e.site.pile.y0 + e.site.pile.y1) / 2 };
