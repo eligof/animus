@@ -526,7 +526,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
     }
     case 'scratch': {
       // a hand up to the side of the head, scratching, puzzled
-      const k = ease(u, 0, 0.2) - ease(u, 0.85, 1);
+      const k = ease(u, 0, 0.2) - ease(u, 0.75, 1);
       const w = Math.sin(u * TAU * 4) * k;
       r.arms[1] = arm([2.8 + 0.2 * w, -2.4 - 5.4 * k + 0.25 * Math.abs(w)], 1, { high: k > 0.5, grip: 'open' });
       r.tilt = -0.08 * k;
