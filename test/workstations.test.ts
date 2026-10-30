@@ -14,6 +14,7 @@ import type { Desk, Particle, Spot } from '../src/world/types.ts';
 import { World } from '../src/world/world.ts';
 import { WORLDS } from '../src/worlds/index.ts';
 import { mines } from '../src/worlds/mines.ts';
+import { looped } from './desk-fakes.ts';
 import { budget } from './helpers.ts';
 
 // The stress test: twenty agents at work (four leads with four subagents
@@ -344,10 +345,10 @@ test('twenty at their workstations: the stage\'s frame and the scene\'s plate st
     10,
     { runs: 5, calls: 20 },
   );
-  // The plate: twenty figures, as many workstations, labels; the
-  // workstations' sprites drawn once, then placed.
+  // The plate: twenty figures, as many workstations with two loops each,
+  // labels; the workstations' pictures drawn once, then placed.
   const start = Date.UTC(2026, 9, 22, 21, 30, 0);
-  const w = new World({ theme: getTheme('cafe')!, live: new StressSource(4, 4, start), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start, images: true });
+  const w = new World({ theme: looped(getTheme('cafe')!), live: new StressSource(4, 4, start), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start, images: true });
   w.full = true;
   w.resize(150, 46);
   let t = start;
