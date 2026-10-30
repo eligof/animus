@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { getTheme } from '../src/themes/index.ts';
 import type { WorldDef } from '../src/worlds/types.ts';
 import { clutterOf, workstationOf } from '../src/worlds/workstation.ts';
-import { dressed } from './desk-fakes.ts';
+import { dressed, square } from './desk-fakes.ts';
 
 // What stands on each place's desk: a few of its world's things, picked by
 // the world and the place.
@@ -34,4 +34,9 @@ test("among a world's first twelve places at least eight have picks of their own
 
 test('a world with no clutter puts none on its desks', () => {
   assert.deepEqual(clutterOf({ ...cafe, workstation: { ...workstationOf(cafe), clutter: { items: [], spots: [] } } }, 3), []);
+});
+
+test('a pool with things but no spots puts none on its desks', () => {
+  const ws = workstationOf(cafe);
+  assert.deepEqual(clutterOf({ ...cafe, workstation: { ...ws, clutter: { items: [square('a', '#fff')], spots: [] } } }, 3), []);
 });

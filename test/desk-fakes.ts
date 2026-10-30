@@ -3,7 +3,9 @@ import { workstationOf } from '../src/worlds/workstation.ts';
 
 // Stand-ins for a world's desk art, for tests that must not hang on how a
 // world draws: clutter that is a square of colour, a loop that is a dot
-// rising a step a frame (dim while off).
+// rising a step a frame (dim while off). They are stand-ins for pictures and
+// picks, not held to the art contract (their spots stand in front of the
+// screen).
 
 const COLORS = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe'];
 

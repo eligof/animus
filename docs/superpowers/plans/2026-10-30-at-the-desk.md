@@ -1828,10 +1828,10 @@ One task an agent, each in its worlds' own files only:
 
 **What to build, for each world:**
 
-1. `clutter.items`: 8 to 12 `Clutter` things in the world's style (the ideas below are a start; the world's own art and research come first). Each has a unique camelCase `name`, `r` ≤ 0.75, `h` ≤ 2.5, and is drawn with the world's kit (`kitOf(v)` from `./kit.ts`) standing at `at`. It may light up while `v.active`.
-2. `clutter.spots`: at least 4 spots on the top (u, v, z: z the top's surface), u ≥ 2.6 (clear of the agent at u = 1), at least 1.6 apart, at least 1.75 from `top`, none where a thing would be painted over the screen.
+1. `clutter.items`: 8 to 12 `Clutter` things in the world's style (the ideas below are a start; the world's own art and research come first). Each has a unique camelCase `name`, `r` ≤ 0.5, `h` ≤ 1.5, and is drawn with the world's kit (`kitOf(v)` from `./kit.ts`) standing at `at`, never reading `v.t`. It may light up while `v.active`. Something taller belongs in the desk's body or in a loop.
+2. `clutter.spots`: at least 4 spots on the top (u, v, z: z the top's surface), each pair at least `2 × (the pool's largest r) + 0.2` apart, at least 1.75 from `top`. Every thing must pass at every spot, in both frames: not painted over the screen, not behind the agent at work. The free room is a thin strip between the agent's figure and the screen, and it differs from desk to desk: map it with `node scripts/desk-spots.ts <w> <r> <h>` (`.` free, `S` over the screen, `A` behind the agent, `U` too near the upgrade), using your pool's largest r and h. Small, low things give more spots.
 3. Take off the desk's own top whatever is now in the pool: things standing on the top that are not the screen, its frame or its structure, look-dependent ones included (like the mines' gold pan). Keep the three looks (`v.seed`) for what is under or part of the desk.
-4. `loops`: 1 or 2 `DeskLoop`s, 4 to 8 frames, at most 8 a second, frame 0 the still one (unlit when `!v.active`), clear of the screen, the upgrade and the agent. The desk's `draw` no longer paints what a loop paints (for example the lantern's lit flame).
+4. `loops`: 1 or 2 `DeskLoop`s, 4 to 8 frames, at most 8 a second, frame 0 the still one (unlit when `!v.active`). Each stays inside the desk's footprint and clear of the screen, the upgrade, the agent and the clutter's spots (at least its `r` plus the pool's largest `r` from each). Every frame paints something, lit or not (a loop of steam draws its cup too); it never reads `v.t` and is the same on every look. The desk's `draw` no longer paints what a loop paints (for example the lantern's lit flame).
 5. The comment block at the top of `workstation.ts` says what the pool and the loops are.
 6. A test in `test/<w>.test.ts` (import `workstationOf` from `../src/worlds/workstation.ts`; `<world>` is the world's const, like `mines`):
 
@@ -1851,13 +1851,13 @@ import type { Clutter, DeskLoop } from '../types.ts';
 // A tin cup, its handle on the +u side.
 const tinCup: Clutter = {
   name: 'tinCup',
-  r: 0.55,
+  r: 0.5,
   h: 0.6,
   draw(v, [u, w, z]) {
     const k = kitOf(v);
     k.cyl(u, w, z, 0.3, 0.55, C.steel, { line: k.thin });
     k.disc(u, w, z + 0.55, 0.22, shade(C.steel, -0.35), 0);
-    const handle: P3[] = [[u + 0.3, w, z + 0.45], [u + 0.52, w, z + 0.38], [u + 0.5, w, z + 0.17], [u + 0.3, w, z + 0.12]];
+    const handle: P3[] = [[u + 0.3, w, z + 0.45], [u + 0.48, w, z + 0.38], [u + 0.46, w, z + 0.17], [u + 0.3, w, z + 0.12]];
     k.line(handle, INK, Math.max(1, 0.16 * k.s));
     k.line(handle, C.steel, Math.max(0.6, 0.08 * k.s));
   },
