@@ -84,14 +84,18 @@ test('leaving the scene takes the pictures off, and coming back places the kept 
 });
 
 // Twenty at work in a world, played into the terminal: the bytes a step
-// once every workstation is up (after 15 seconds, over the next 3).
-function bytesAStep(theme: WorldDef): number {
+// once every workstation is up (after 15 seconds, over the next 3), and
+// how many loop pictures the last step placed.
+function bytesAStep(theme: WorldDef): { bytes: number; loops: number } {
   const rate = 18;
   const world = new World({ theme, live: new StressSource(4, 4, START), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start: START, images: true, view: 'scene' });
   world.setCell(8, 16);
   world.resize(150, 46);
   const screen = new Screen(150, 46);
   const player = new ScenePlayer({ encode: (b, opaque) => (opaque ? encodeRgb(b, 0, 1) : encodeRgba(b, 1)) });
+  let last: Plate | null = null;
+  const build = player.scene.plate.bind(player.scene);
+  player.scene.plate = (f) => (last = build(f));
   let bytes = 0;
   for (let k = 0; k < 18 * rate; k++) {
     const now = START + (k * 1000) / rate;
@@ -99,12 +103,15 @@ function bytesAStep(theme: WorldDef): number {
     const out = player.step(world, screen, now);
     if (k >= 15 * rate) bytes += out.length;
   }
-  return bytes / (3 * rate);
+  const loops = (last as Plate | null)?.layers.filter((l) => l.id.startsWith('loop:')).length ?? 0;
+  return { bytes: bytes / (3 * rate), loops };
 }
 
 test('two loops on every one of twenty workstations cost at most 4 KiB a step more than none', () => {
   const cafe = getTheme('cafe')!;
   const none = bytesAStep(cafe);
   const two = bytesAStep(looped(cafe));
-  assert.ok(two <= none + 4096, `${two.toFixed(0)} bytes a step with loops, ${none.toFixed(0)} without`);
+  assert.equal(two.loops, 40, 'not two loops on each of twenty desks');
+  assert.ok(two.bytes > none.bytes, 'the loops cost nothing: are they moving?');
+  assert.ok(two.bytes <= none.bytes + 4096, `${two.bytes.toFixed(0)} bytes a step with loops, ${none.bytes.toFixed(0)} without`);
 });
