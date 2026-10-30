@@ -176,46 +176,92 @@ const nuggetPan: Clutter = {
   },
 };
 
-// A coil of tarred safety fuse, its loose end over the rim.
+// A coil of tarred safety fuse, three fat turns stacked, each with the
+// lamp's light along its top, its loose end over the rim and cut pale.
+const FUSE = '#6e5a4c';
 const fuseCoil: Clutter = {
   name: 'fuseCoil',
   r: 0.4,
   h: 0.45,
   draw(v, [u, w, z]) {
     const k = kitOf(v);
-    const fuse = '#4a3a30';
     const pen = k.pen;
-    for (let i = 0; i < 4; i++) {
-      const e = k.ell(u, w, z + 0.07 + i * 0.09, 0.32 - i * 0.025);
+    const thick = 0.13 * k.s;
+    for (let i = 0; i < 3; i++) {
+      const e = k.ell(u, w, z + 0.08 + i * 0.13, 0.3 - i * 0.03);
       pen.beginPath();
       pen.ellipse(e.cx, e.cy, e.rx, e.ry, e.rot, 0, Math.PI * 2);
       pen.strokeStyle = INK;
-      pen.lineWidth = Math.max(1.4, 0.14 * k.s + k.thin);
+      pen.lineWidth = Math.max(1.6, thick + k.thin);
       pen.stroke();
-      pen.strokeStyle = shade(fuse, 0.08 * i);
-      pen.lineWidth = Math.max(0.8, 0.14 * k.s);
+      pen.strokeStyle = shade(FUSE, 0.06 * i);
+      pen.lineWidth = Math.max(0.9, thick);
+      pen.stroke();
+      // the sheen of the tar along the turn's top, on its near side
+      pen.beginPath();
+      pen.ellipse(e.cx, e.cy - thick * 0.22, e.rx, e.ry, e.rot, 0.25, Math.PI - 0.25);
+      pen.strokeStyle = '#b8a48c';
+      pen.lineWidth = Math.max(0.6, thick * 0.32);
       pen.stroke();
     }
-    strap(k, [[u + 0.12, w + 0.22, z + 0.34], [u + 0.26, w + 0.3, z + 0.2], [u + 0.36, w + 0.3, z + 0.03]], shade(fuse, 0.3), 0.14);
+    strap(k, [[u + 0.14, w + 0.2, z + 0.34], [u + 0.28, w + 0.28, z + 0.2], [u + 0.36, w + 0.3, z + 0.05]], shade(FUSE, 0.12), 0.12);
+    k.disc(u + 0.36, w + 0.3, z + 0.05, 0.06, '#e8d8b8', 0);
   },
 };
 
-// A few lumps of coal with a cold sheen.
+// A lump of coal: an angular nugget of anthracite, its top facet catching
+// the lamp blue-grey, its right side in shade, a glint on its edge.
+function coalLump(k: Kit, u: number, w: number, z: number, r: number, h: number, tilt: number): void {
+  const [x, y] = k.p(u, w, z);
+  const W = r * k.s * 1.35;
+  const H = h * k.s;
+  const t = tilt * W;
+  const pen = k.pen;
+  const out: Array<[number, number]> = [
+    [x - W, y - 0.12 * H],
+    [x - 0.78 * W, y - 0.62 * H],
+    [x - 0.18 * W + t, y - H],
+    [x + 0.52 * W + t, y - 0.86 * H],
+    [x + W, y - 0.3 * H],
+    [x + 0.62 * W, y + 0.2 * W],
+    [x - 0.42 * W, y + 0.22 * W],
+  ];
+  const mid: [number, number] = [x + 0.08 * W + t * 0.5, y - 0.46 * H];
+  const face = (pts: ReadonlyArray<readonly [number, number]>, fill: Color): void => {
+    pen.beginPath();
+    pts.forEach(([px, py], i) => (i ? pen.lineTo(px, py) : pen.moveTo(px, py)));
+    pen.closePath();
+    pen.fillStyle = fill;
+    pen.fill();
+  };
+  face(out, '#4c5266'); // the near faces
+  face([out[1], out[2], out[3], mid], '#8c95b0'); // the top, lit
+  face([out[3], out[4], out[5], mid], '#30333f'); // the right, in shade
+  pen.beginPath();
+  out.forEach(([px, py], i) => (i ? pen.lineTo(px, py) : pen.moveTo(px, py)));
+  pen.closePath();
+  k.paint(null, Math.max(0.9, 0.09 * k.s));
+  // a glint on the top's front edge
+  pen.beginPath();
+  pen.moveTo(out[2][0] + 0.1 * W, out[2][1] + 0.12 * H);
+  pen.lineTo(mid[0] - 0.1 * W, mid[1] - 0.05 * H);
+  pen.strokeStyle = '#e4eaff';
+  pen.lineWidth = Math.max(0.7, 0.05 * k.s);
+  pen.lineCap = 'round';
+  pen.stroke();
+}
+
+// A few lumps of coal with a cold blue sheen.
 const coal: Clutter = {
   name: 'coal',
-  r: 0.4,
-  h: 0.45,
+  r: 0.42,
+  h: 0.6,
   draw(v, [u, w, z]) {
     const k = kitOf(v);
-    const lumps: ReadonlyArray<readonly [number, number, number, number, number]> = [
-      [-0.13, -0.08, 0.22, 0.3, 4],
-      [0.15, -0.1, 0.18, 0.24, 9],
-      [0.02, 0.13, 0.24, 0.38, 13],
-    ];
-    for (const [du, dv, r, h, seed] of lumps) {
-      rock(k, u + du, w + dv, z, r, h, C.coal, seed, Math.max(0.7, 0.1 * k.s));
-      k.disc(u + du - r * 0.25, w + dv + r * 0.1, z + h * 0.7, r * 0.22, C.coalHi, 0);
-    }
+    // the back ones first
+    coalLump(k, u + 0.17, w - 0.13, z, 0.22, 0.36, 0.1);
+    coalLump(k, u - 0.17, w - 0.05, z, 0.24, 0.44, -0.1);
+    coalLump(k, u + 0.05, w + 0.16, z, 0.27, 0.52, 0.05);
   },
 };
 

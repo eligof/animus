@@ -434,10 +434,16 @@ const inkHorn: Clutter = {
     k.box(u - 0.32, w - 0.28, z, 0.64, 0.56, 0.28, C.timberDark, { line: e });
     horn(k, [[u, w, z + 0.92], [u + 0.03, w + 0.02, z + 0.6], [u + 0.14, w + 0.08, z + 0.3]], 0.22, false, e);
     k.disc(u, w, z + 0.92, 0.15, '#120c10', 0);
-    const nib: P3 = [u + 0.02, w + 0.02, z + 0.78];
-    const end: P3 = [u + 0.3, w + 0.22, z + 1.38];
-    const at = (f: number, off: number): P3 => [nib[0] + (end[0] - nib[0]) * f + off, nib[1] + (end[1] - nib[1]) * f - off * 0.4, nib[2] + (end[2] - nib[2]) * f];
-    k.poly([at(0.25, 0), at(0.45, 0.13), at(0.8, 0.12), at(1, 0), at(0.75, -0.09), at(0.45, -0.07)], C.cream, e);
+    // the quill leaning back along the desk (-u): it shows up and aside in
+    // either frame, its tip low enough to clear a screen behind the horn
+    const nib: P3 = [u - 0.02, w + 0.02, z + 0.78];
+    const end: P3 = [u - 0.4, w + 0.12, z + 1.1];
+    const [x0, y0] = k.p(...nib);
+    const [x1, y1] = k.p(...end);
+    const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+    const [nx, ny] = [(y0 - y1) / len, (x1 - x0) / len];
+    const q = (f: number, o: number): Pt => [x0 + (x1 - x0) * f + nx * o * k.s, y0 + (y1 - y0) * f + ny * o * k.s];
+    fillPts(k, [q(0.25, 0), q(0.45, 0.12), q(0.8, 0.11), q(1, 0), q(0.75, -0.08), q(0.45, -0.06)], C.cream, e);
     k.line([nib, end], shade(C.cream, -0.3), Math.max(0.8, 0.05 * k.s));
   },
 };

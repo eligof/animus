@@ -166,7 +166,7 @@ const noodleCup: Clutter = {
     const k = kitOf(v);
     const zt = z + 0.58;
     // the lid, folded up at the back
-    k.poly([[u - 0.22, w - 0.18, zt], [u + 0.22, w - 0.18, zt], [u + 0.26, w - 0.38, zt + 0.34], [u - 0.18, w - 0.4, zt + 0.36]], '#d9dfdd', fine(k), 0.05);
+    k.poly([[u - 0.24, w - 0.16, zt], [u + 0.16, w - 0.2, zt], [u + 0.06, w - 0.36, zt + 0.22], [u - 0.26, w - 0.36, zt + 0.28]], '#d9dfdd', fine(k), 0.05);
     taper(k, u, w, z, 0.21, zt, 0.3, '#f4efe4', '#e9c46a', fine(k));
     // a red band round its middle
     fillPts(k, hullPts([...ring(k, [u, w, z + 0.24], [0, 0, 1], 0.252, 20), ...ring(k, [u, w, z + 0.42], [0, 0, 1], 0.272, 20)]), C.red, 0);
@@ -176,8 +176,8 @@ const noodleCup: Clutter = {
         k.line([[u + du - 0.08, w + dw, zt + 0.01], [u + du, w + dw + 0.04, zt + 0.01], [u + du + 0.08, w + dw, zt + 0.01]], '#c99a3a', Math.max(0.6, 0.04 * k.s));
       }
     }
-    // the chopsticks
-    for (const d of [0, 0.08]) stick(k, [[u - 0.02 + d, w + 0.04, zt - 0.05], [u + 0.26 + d, w - 0.1 + d, z + 1.2]], '#e6c48a', 0.05);
+    // the chopsticks, leaning out to the front (clear of a screen beside it)
+    for (const d of [0, 0.08]) stick(k, [[u - 0.04 + d, w - 0.02, zt - 0.05], [u + 0.04 + d, w + 0.26 - d * 0.5, z + 1.18]], '#e6c48a', 0.05);
   },
 };
 

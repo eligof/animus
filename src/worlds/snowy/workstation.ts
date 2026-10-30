@@ -317,9 +317,10 @@ const tinCan: Clutter = {
     k.cyl(u, w, z + 0.12, 0.255, 0.28, C.navy, { line: k.thin });
     k.disc(u, w, z + 0.52, 0.2, '#c8603c', k.thin);
     // the lid, bent up at the back
-    k.poly(ring3([u + 0.02, w - 0.32, z + 0.66], [0.1, 0.75, 0.66], 0.21, 18), k.grad([u - 0.2, w, z + 0.8], [u + 0.2, w, z + 0.5], [[0, '#e6ecf2'], [1, C.tin]]));
-    // the spoon, its bowl down in the beans
-    const handle: P3[] = [[u + 0.06, w + 0.04, z + 0.5], [u + 0.3, w - 0.06, z + 0.9]];
+    k.poly(ring3([u - 0.08, w - 0.3, z + 0.64], [0.1, 0.75, 0.66], 0.19, 18), k.grad([u - 0.2, w, z + 0.8], [u + 0.2, w, z + 0.5], [[0, '#e6ecf2'], [1, C.tin]]));
+    // the spoon, its bowl down in the beans, its handle leaning out to the
+    // front (clear of a screen beside it)
+    const handle: P3[] = [[u + 0.04, w + 0.02, z + 0.5], [u + 0.02, w + 0.3, z + 0.88]];
     k.line(handle, INK, Math.max(1.2, 0.13 * k.s));
     k.line(handle, '#d9e1ea', Math.max(0.6, 0.06 * k.s));
   },

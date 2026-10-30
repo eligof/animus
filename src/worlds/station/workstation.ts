@@ -294,6 +294,21 @@ const rationTin: Clutter = {
   },
 };
 
+// A thing drawn f times its size about where it stands (its lines too):
+// the console's knobs and buttons are the size of the things as drawn, so
+// they stand out a size up (as wide as the spots a hand apart allow).
+function grown(c: Clutter, f: number): Clutter {
+  return {
+    name: c.name,
+    r: c.r * f,
+    h: c.h * f,
+    draw(v, p) {
+      const [pu, pw, pz] = p;
+      c.draw({ ...v, s: v.s * f, at: (u, w, z) => v.at(pu + (u - pu) * f, pw + (w - pw) * f, pz + (z - pz) * f) }, p);
+    },
+  };
+}
+
 // ── what moves ───────────────────────────────────────────────────────────
 
 // A holo emitter at the deck's front right: a steel puck with a lens. While
@@ -361,10 +376,12 @@ const holoPlanet: DeskLoop = {
   },
 };
 
-// A beacon on top of the screen: a stub of a mast with a red light on its
-// tip that swells and fades while the desk is worked, dark while it is not.
+// A beacon on top of the screen: a stub of a mast with a red lamp on its
+// tip. While the desk is worked the lamp is lit, a hot heart in a red
+// dome, and its red light swells out round it and ebbs (never out); while
+// it is not, the dome is dark glass and throws no light.
 const BEACON: P3 = [4.65, 0.77, 9.69];
-const GLOW = [0.15, 0.4, 0.75, 1, 0.75, 0.4] as const;
+const GLOW = [0.3, 0.55, 0.85, 1, 0.85, 0.55] as const;
 const beacon: DeskLoop = {
   name: 'beacon',
   at: BEACON,
@@ -376,10 +393,27 @@ const beacon: DeskLoop = {
     const k = kitOf(v);
     const [u, w, z] = BEACON;
     k.box(u - 0.12, w - 0.1, z - 0.03, 0.24, 0.2, 0.1, C.steelDark, { line: fine(k), stripe: false });
-    stick(k, [[u, w, z + 0.05], [u, w, z + 0.5]], C.steel, 0.05);
-    const b = v.active ? GLOW[i] : 0;
-    k.dot(u, w, z + 0.55, 0.08, b ? mix('#7a2a32', '#ff6a6a', b) : '#5a2a32', fine(k) * 0.8);
-    if (b) k.halo(u, w, z + 0.55, 0.15 + 0.3 * b, C.red, 0.25 + 0.45 * b);
+    stick(k, [[u, w, z + 0.05], [u, w, z + 0.45]], C.steel, 0.05);
+    const lamp: P3 = [u, w, z + 0.55];
+    if (!v.active) {
+      k.dot(...lamp, 0.12, '#3a2630', fine(k) * 0.8);
+      return;
+    }
+    const b = GLOW[i];
+    // the swell: red light painted over what is behind (so it shows on a
+    // pale wall as on a dark one), out to most of a unit at its height
+    const [x, y] = k.p(...lamp);
+    const R = (0.3 + 0.45 * b) * k.s;
+    const g = k.pen.createRadialGradient(x, y, 0, x, y, R);
+    g.addColorStop(0, withAlpha('#ff2a2a', 0.6 + 0.3 * b));
+    g.addColorStop(0.45, withAlpha('#ff2a2a', 0.22 + 0.2 * b));
+    g.addColorStop(1, withAlpha('#ff2a2a', 0));
+    k.pen.beginPath();
+    k.pen.arc(x, y, R, 0, Math.PI * 2);
+    k.pen.fillStyle = g;
+    k.pen.fill();
+    k.dot(...lamp, 0.13, mix('#e81c1c', '#ff6a5a', b), fine(k) * 0.8);
+    k.dot(...lamp, 0.03 + 0.04 * b, '#ffd8cc');
   },
 };
 
@@ -435,7 +469,7 @@ export const WORKSTATION: WorkstationArt = {
   // the shelf's right end, clear of the agent and the screen
   top: [6.5, 0.5, BODY.shelf],
   clutter: {
-    items: [drinkPouch, rationBar, tapeRoll, torch, modelRocket, plushAlien, zinnia, photo, sputnik, rationTin],
+    items: [grown(drinkPouch, 1.2), grown(rationBar, 1.05), grown(tapeRoll, 1.15), grown(torch, 1.05), grown(modelRocket, 1.2), grown(plushAlien, 1.2), grown(zinnia, 1.2), grown(photo, 1.2), grown(sputnik, 1.05), grown(rationTin, 1.2)],
     // two on the shelf left of the screen, three along the deck's front
     spots: [
       [1.45, 0.75, BODY.shelf],

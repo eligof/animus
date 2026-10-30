@@ -357,13 +357,27 @@ const cookies: Clutter = {
   },
 };
 
+// A thing drawn f times its size about where it stands (its lines too).
+function grown(c: Clutter, f: number): Clutter {
+  return {
+    name: c.name,
+    r: c.r * f,
+    h: c.h * f,
+    draw(v, p) {
+      const [pu, pw, pz] = p;
+      c.draw({ ...v, s: v.s * f, at: (u, w, z) => v.at(pu + (u - pu) * f, pw + (w - pw) * f, pz + (z - pz) * f) }, p);
+    },
+  };
+}
+
 // ── what moves ───────────────────────────────────────────────────────────
 
 // A candle in a little amber glass jar, right of the laptop: while its
-// desk is worked its flame sways and the glass glows; off, it is out.
+// desk is worked its flame sways and flickers tall and short, its warm
+// light swelling and ebbing with it, and the glass glows; off, it is out.
 const CANDLE: P3 = [6.45, 1.85, ZT];
-const SWAY = [0, 0.025, 0.04, 0.025, 0, -0.025] as const;
-const TALL = [0, 0.08, -0.03, 0.06, 0.02, -0.05] as const;
+const SWAY = [0, 0.03, 0.05, 0.03, 0, -0.03] as const;
+const TALL = [0, 0.09, -0.04, 0.07, 0.02, -0.06] as const;
 const candle: DeskLoop = {
   name: 'candle',
   at: CANDLE,
@@ -375,20 +389,48 @@ const candle: DeskLoop = {
     const k = kitOf(v);
     const [u, w, z] = CANDLE;
     const on = v.active;
-    k.cyl(u, w, z, 0.18, 0.38, on ? '#f2cf8a' : '#d9b67a', { line: fine(k), top: on ? '#ffe6a8' : '#efd9a8' });
+    const tall = on ? TALL[i] : 0;
+    if (on) {
+      // the warm light it throws on the table, swelling and ebbing with the
+      // flame (painted over the wood, so it shows on the palest top)
+      const pen = k.pen;
+      const [px, py] = k.p(u, w, z);
+      const R = (0.65 + tall * 1.5) * k.s * Math.SQRT2;
+      pen.save();
+      pen.translate(px, py);
+      pen.scale(1, 0.5);
+      const g = pen.createRadialGradient(0, 0, 0, 0, 0, R);
+      g.addColorStop(0, withAlpha('#ff9a30', 0.62 + tall * 1.5));
+      g.addColorStop(0.5, withAlpha('#ff9a30', 0.3 + tall));
+      g.addColorStop(1, withAlpha('#ff9a30', 0));
+      pen.beginPath();
+      pen.arc(0, 0, R, 0, Math.PI * 2);
+      pen.fillStyle = g;
+      pen.fill();
+      pen.restore();
+    }
+    k.cyl(u, w, z, 0.18, 0.38, on ? '#ffc96a' : '#d9b67a', { line: fine(k), top: on ? '#fff0b8' : '#efd9a8' });
     stick(k, [[u, w, z + 0.38], [u, w, z + 0.45]], '#3a2a22', 0.02);
     if (!on) return;
-    k.halo(u, w, z + 0.5, 0.7 + TALL[i], '#ffc070', 0.5);
-    const [x, y] = k.p(u, w, z + 0.54 + TALL[i] / 2);
+    k.halo(u, w, z + 0.55, 0.85 + tall * 1.5, '#ffb04a', 0.6 + tall * 2);
+    k.halo(u, w, z + 0.55, 0.32, '#fff0c0', 0.5 + tall * 2);
+    const [x, y] = k.p(u, w, z + 0.62 + tall / 2);
     const sx = SWAY[i] * k.s;
-    const h = (0.13 + TALL[i] / 2) * k.s;
+    const h = (0.22 + tall / 2) * k.s;
+    const wd = 0.13 * k.s;
     k.pen.beginPath();
     k.pen.moveTo(x + sx * 2, y - h);
-    k.pen.quadraticCurveTo(x + 0.08 * k.s, y + h * 0.2, x, y + h * 0.6);
-    k.pen.quadraticCurveTo(x - 0.08 * k.s, y + h * 0.2, x + sx * 2, y - h);
+    k.pen.quadraticCurveTo(x + wd, y + h * 0.2, x, y + h * 0.6);
+    k.pen.quadraticCurveTo(x - wd, y + h * 0.2, x + sx * 2, y - h);
+    k.pen.fillStyle = '#ff9a2a';
+    k.pen.fill();
+    k.pen.beginPath();
+    k.pen.moveTo(x + sx * 1.4, y - h * 0.6);
+    k.pen.quadraticCurveTo(x + wd * 0.6, y + h * 0.25, x, y + h * 0.55);
+    k.pen.quadraticCurveTo(x - wd * 0.6, y + h * 0.25, x + sx * 1.4, y - h * 0.6);
     k.pen.fillStyle = C.flame;
     k.pen.fill();
-    blob(k, u, w, z + 0.5, 0.025, 0.045, C.flameHot, 0);
+    blob(k, u, w, z + 0.53, 0.03, 0.055, C.flameHot, 0);
   },
 };
 
@@ -441,12 +483,14 @@ export const WORKSTATION: WorkstationArt = {
   screen: SCREEN,
   top: [6.5, 0.55, ZT],
   clutter: {
-    items: [croissant, succulent, paperback, sugarBowl, cupcake, budVase, macarons, menuCard, teapot, cookies],
+    // a size up on the broad top (as wide as the spots between the agent,
+    // the laptop and the loops allow)
+    items: [croissant, succulent, paperback, sugarBowl, cupcake, budVase, macarons, menuCard, teapot, cookies].map((c) => grown(c, c.r < 0.3 ? 1.25 : 1.1)),
     // three left of the laptop, one right of it
     spots: [
-      [1.38, 0.75, ZT],
-      [2.2, 0.75, ZT],
-      [2.55, 1.5, ZT],
+      [1.4, 0.75, ZT],
+      [2.25, 0.95, ZT],
+      [2.55, 1.8, ZT],
       [5.65, 2.15, ZT],
     ],
   },

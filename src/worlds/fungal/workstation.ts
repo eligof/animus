@@ -28,8 +28,9 @@ import { C, INK, Kit, kitOf, smallKitOf, withAlpha } from './kit.ts';
 // lit. Its spots: one at the back left, one by the slab's foot, two along
 // the front, between the agent and the screen and apart across the
 // picture, so a near thing does not stand right over a far one. Its loop:
-// a toadstool lamp at the front of the right end whose cap breathes light
-// while the desk is worked (dark while it is not).
+// a toadstool lamp at the front of the right end that breathes while the
+// desk is worked, its cap bobbing and glowing and spores rising off it
+// (dark and still while it is not).
 
 const ZT = 5.6; // the cap's top
 const TH = 0.85; // its lip
@@ -574,34 +575,60 @@ const acorns: Clutter = {
 // work and the slab: the back left, past the slab's foot, along the front.
 const SPOTS: readonly P3[] = [
   [1.5, 0.75, ZT],
-  [2.75, 1.25, ZT],
+  [2.5, 1.4, ZT],
   [4.0, 2.0, ZT],
   [5.25, 2.25, ZT],
 ];
 
-// A toadstool lamp at the front of the right end, its spotted cap
-// breathing light while the desk is worked: up and back down in six steps
-// (1.5 s); dark while it is not.
+// A toadstool lamp at the front of the right end. While the desk is
+// worked it breathes: its stalk stretches a little and its cap bobs up as
+// its light swells, then settles, eased round eight steps (1.6 s); and
+// three glowing spores, a third of a breath apart, rise off its crown,
+// drifting back away from the slab, brightening and then fading away. Dark, still and
+// spore-less while the desk is not worked.
 const LAMP: P3 = [6.3, 2.35, ZT];
-const BREATH = [0, 1 / 3, 2 / 3, 1, 2 / 3, 1 / 3];
+const BREATHS = 8;
+const breath = (i: number): number => (1 - Math.cos((i / BREATHS) * Math.PI * 2)) / 2;
+const SPORES: ReadonlyArray<readonly [number, number, number]> = [
+  [-0.04, -0.12, 0],
+  [0.16, 0.02, 1 / 3],
+  [0.14, 0.12, 2 / 3],
+];
 const glowCap: DeskLoop = {
   name: 'glowCap',
   at: LAMP,
   r: 0.6,
-  h: 1.7,
-  frames: 6,
-  fps: 4,
+  h: 2.3,
+  frames: BREATHS,
+  fps: 5,
   draw(v, i) {
     const k = smallKitOf(v);
     const [u, w, z] = LAMP;
     const lit = v.active;
-    const a = BREATH[i];
+    const a = lit ? breath(i) : 0;
+    const bob = 0.15 * a;
     if (lit) k.pool(u, w, 0.9, 0.65, C.glow, 0.2 + 0.15 * a, z);
     const cap = lit ? mix(shade(C.glow, -0.05), shade(C.glow, 0.3), a) : shade(C.glowSoft, -0.3);
-    shroom(k, u, w, z, 0.95, 0.55, cap, { spots: withAlpha(C.spot, 0.85), seed: 3, rb: 0.19, glow: lit });
-    if (lit) {
-      k.halo(u, w, z + 1.15, 0.75 + 0.25 * a, C.glow, 0.25 + 0.2 * a);
-      k.halo(u, w, z + 1.1, 0.4, '#ffffff', 0.15 + 0.15 * a);
+    shroom(k, u, w, z, 0.95 + bob, 0.55, cap, { spots: withAlpha(C.spot, 0.85), seed: 3, rb: 0.19, glow: lit });
+    if (!lit) return;
+    k.halo(u, w, z + 1.15 + bob, 0.75 + 0.25 * a, C.glow, 0.25 + 0.2 * a);
+    k.halo(u, w, z + 1.1 + bob, 0.4, '#ffffff', 0.15 + 0.15 * a);
+    // the spores: each from the crown up 0.85, drifting back off the slab's
+    // way (-v), faded in and out
+    const pen = k.pen;
+    for (const [du, dv, ph] of SPORES) {
+      const p = (i / BREATHS + ph) % 1;
+      const fade = Math.sin(Math.PI * p);
+      if (fade < 0.05) continue;
+      const su = u + du + 0.06 * p;
+      const sv = w + dv - 0.36 * p;
+      const sz = z + 1.3 + 0.85 * p;
+      k.halo(su, sv, sz, 0.32, C.glow, 0.9 * fade);
+      const [x, y] = k.p(su, sv, sz);
+      pen.beginPath();
+      pen.arc(x, y, Math.max(1, 0.12 * k.s), 0, Math.PI * 2);
+      pen.fillStyle = withAlpha(C.glowHot, 0.4 + 0.6 * fade);
+      pen.fill();
     }
   },
 };

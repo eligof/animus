@@ -107,29 +107,38 @@ const fine = (k: Kit): number => Math.max(0.7, 0.07 * k.s);
 const A = Math.SQRT1_2;
 const off = (u: number, v: number, t: number, n: number, z: number): P3 => [u + A * (t + n), v + A * (n - t), z];
 
-// Headphones set down on their cups, the band arched over them: pink
-// cups, a chrome band.
+// Headphones set down on their cups, the band arched over them: hot pink
+// cups with pale rims and a glint, a bright chrome band (thinly inked, so
+// they read on the booth's black top), a pink glow under them while the
+// desk is worked.
 const headphones: Clutter = {
   name: 'headphones',
   r: 0.32,
   h: 0.65,
   draw(v, [u, w, z]) {
     const k = kitOf(v);
+    const s = k.s;
+    if (v.active) k.halo(u, w, z + 0.12, 0.3, C.pink, 0.45);
     const band: P3[] = [];
     for (let i = 0; i <= 12; i++) {
       const th = (i / 12) * Math.PI;
-      band.push(off(u, w, -Math.cos(th) * 0.21, 0, z + 0.2 + Math.sin(th) * 0.36));
+      band.push(off(u, w, -Math.cos(th) * 0.22, 0, z + 0.2 + Math.sin(th) * 0.38));
     }
-    k.rod(band, C.chrome, 0.07);
+    k.line(band, INK, Math.max(2, 0.1 * s + 2 * fine(k)));
+    k.line(band, C.chrome, Math.max(1, 0.1 * s));
+    k.line(band.slice(3, 8), '#ffffff', Math.max(0.5, 0.035 * s));
     const pen = k.pen;
     for (const f of [-1, 1]) {
-      const [x, y] = k.p(...off(u, w, f * 0.23, 0, z + 0.15));
+      const [x, y] = k.p(...off(u, w, f * 0.23, 0, z + 0.16));
       pen.beginPath();
-      pen.ellipse(x, y, 0.11 * k.s, 0.16 * k.s, 0, 0, Math.PI * 2);
+      pen.ellipse(x, y, 0.13 * s, 0.18 * s, 0, 0, Math.PI * 2);
       k.paint(C.pink, fine(k));
       pen.beginPath();
-      pen.ellipse(x - f * 0.07 * k.s, y, 0.05 * k.s, 0.13 * k.s, 0, 0, Math.PI * 2);
-      k.paint('#3a2a44', 0);
+      pen.ellipse(x - f * 0.07 * s, y, 0.05 * s, 0.13 * s, 0, 0, Math.PI * 2);
+      k.paint(mix(C.pink, '#ffffff', 0.55), 0);
+      pen.beginPath();
+      pen.arc(x + f * 0.04 * s, y - 0.08 * s, Math.max(0.5, 0.03 * s), 0, Math.PI * 2);
+      k.paint('#ffffff', 0);
     }
   },
 };
@@ -249,8 +258,9 @@ const cocktail: Clutter = {
   },
 };
 
-// A little speaker covered in stickers (shapes, no words), its cone to
-// the front and a light lit while the desk is worked.
+// A little speaker covered in stickers (shapes, no words): a violet-grey
+// cabinet, a cyan neon rim round its front, its cone in a chrome surround,
+// a light lit while the desk is worked (the rim glowing too).
 const speaker: Clutter = {
   name: 'speaker',
   r: 0.32,
@@ -258,17 +268,23 @@ const speaker: Clutter = {
   draw(v, [u, w, z]) {
     const k = kitOf(v);
     const [u0, v0, H] = [u - 0.26, w - 0.2, 0.85];
-    k.box(u0, v0, z, 0.52, 0.42, H, C.black, { line: fine(k) * 1.3 });
     const F = w + 0.22;
+    k.box(u0, v0, z, 0.52, 0.42, H, '#5a4f70', { line: fine(k) * 1.3 });
+    // the neon rim round its front: lit, a bright tube with a white core;
+    // off, a paler cyan than the cabinet
+    const e = 0.045;
+    const rim: P3[] = [[u0 + e, F + 0.01, z + e], [u0 + 0.52 - e, F + 0.01, z + e], [u0 + 0.52 - e, F + 0.01, z + H - e], [u0 + e, F + 0.01, z + H - e], [u0 + e, F + 0.01, z + e]];
+    k.line(rim, v.active ? C.cyan : mix(C.cyan, '#5a4f70', 0.4), Math.max(1, 0.06 * k.s));
+    if (v.active) k.line(rim, mix(C.cyan, '#ffffff', 0.7), Math.max(0.5, 0.025 * k.s));
     cone(k, u, F + 0.005, z + 0.36, 0.17);
     const pen = k.pen;
     const [lx, ly] = k.p(u + 0.15, F + 0.01, z + 0.72);
     pen.beginPath();
-    pen.arc(lx, ly, Math.max(0.8, 0.04 * k.s), 0, Math.PI * 2);
-    k.paint(v.active ? C.lime : shade(C.lime, -0.6), 0);
+    pen.arc(lx, ly, Math.max(0.8, 0.045 * k.s), 0, Math.PI * 2);
+    k.paint(v.active ? C.lime : shade(C.lime, -0.45), 0);
     if (v.active) k.halo(u + 0.15, F + 0.02, z + 0.72, 0.18, C.lime, 0.6);
     // stickers on its front and its +u side
-    k.ring(u - 0.16, F + 0.01, z + 0.7, 0.07, C.pink, 0);
+    k.ring(u - 0.15, F + 0.01, z + 0.7, 0.07, C.pink, 0);
     k.poly([[u - 0.05, F + 0.01, z + 0.62], [u + 0.04, F + 0.01, z + 0.62], [u + 0.04, F + 0.01, z + 0.78], [u - 0.05, F + 0.01, z + 0.78]], C.amber, 0);
     const side = u + 0.26 + 0.01;
     k.poly([[side, w - 0.05, z + 0.5], [side, w + 0.12, z + 0.42], [side, w + 0.08, z + 0.66]], C.cyan, 0);
@@ -331,32 +347,41 @@ const pads: Clutter = {
   },
 };
 
-// A hand mic lying on the top: a black handle and a chrome grille.
+// A hand mic lying on the top: a steel handle with a hot pink grip ring,
+// a big chrome grille with a glint, and its cable curling off the end in
+// cyan (glowing while the desk is worked), so it reads on the black top.
 const mic: Clutter = {
   name: 'mic',
   r: 0.32,
   h: 0.2,
   draw(v, [u, w, z]) {
     const k = kitOf(v);
+    const s = k.s;
+    k.neon([off(u, w, -0.24, 0.06, z + 0.04), off(u, w, -0.3, 0.16, z + 0.02), off(u, w, -0.18, 0.24, z + 0.02), off(u, w, -0.06, 0.2, z + 0.02)], C.cyan, 0.05, v.active ? 0.5 : 0);
     const a = off(u, w, -0.24, 0.06, z + 0.07);
     const b = off(u, w, 0.1, -0.04, z + 0.08);
-    k.rod([a, b], '#211c28', 0.12);
-    k.rod([off(u, w, 0.04, -0.02, z + 0.08), off(u, w, 0.1, -0.04, z + 0.08)], C.pink, 0.13);
+    k.line([a, b], INK, Math.max(2, 0.13 * s + 2 * fine(k)));
+    k.line([a, b], C.steel, Math.max(1, 0.13 * s));
+    k.line([off(u, w, -0.2, 0.05, z + 0.1), off(u, w, 0.04, -0.02, z + 0.11)], mix(C.steel, '#ffffff', 0.5), Math.max(0.5, 0.035 * s));
+    k.line([off(u, w, 0.02, -0.01, z + 0.08), off(u, w, 0.1, -0.04, z + 0.08)], C.pink, Math.max(1, 0.14 * s));
     const [hx, hy] = k.p(...off(u, w, 0.16, -0.06, z + 0.11));
     const pen = k.pen;
     pen.beginPath();
-    pen.arc(hx, hy, 0.13 * k.s, 0, Math.PI * 2);
-    k.paint(C.chrome, fine(k) * 1.2);
-    if (k.s >= 5) {
+    pen.arc(hx, hy, 0.14 * s, 0, Math.PI * 2);
+    k.paint(C.chrome, fine(k));
+    if (s >= 5) {
       pen.beginPath();
       for (const f of [-0.5, 0, 0.5]) {
-        pen.moveTo(hx + f * 0.13 * k.s, hy - Math.sqrt(1 - f * f) * 0.12 * k.s);
-        pen.lineTo(hx + f * 0.13 * k.s, hy + Math.sqrt(1 - f * f) * 0.12 * k.s);
+        pen.moveTo(hx + f * 0.14 * s, hy - Math.sqrt(1 - f * f) * 0.13 * s);
+        pen.lineTo(hx + f * 0.14 * s, hy + Math.sqrt(1 - f * f) * 0.13 * s);
       }
-      pen.strokeStyle = C.steelDark;
-      pen.lineWidth = Math.max(0.5, 0.025 * k.s);
+      pen.strokeStyle = C.steel;
+      pen.lineWidth = Math.max(0.5, 0.025 * s);
       pen.stroke();
     }
+    pen.beginPath();
+    pen.arc(hx - 0.05 * s, hy - 0.05 * s, Math.max(0.6, 0.035 * s), 0, Math.PI * 2);
+    k.paint('#ffffff', 0);
   },
 };
 

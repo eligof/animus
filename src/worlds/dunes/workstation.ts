@@ -130,9 +130,10 @@ const cactus: Clutter = {
     k.cyl(u, w, z, 0.34, 0.5, C.scrap, { line: e, top: '#a88a5a' });
     k.line([[u - 0.34, w + 0.05, z + 0.24], [u + 0.25, w + 0.26, z + 0.24]], withAlpha(INK, 0.3), Math.max(0.6, 0.06 * k.s));
     inked(k, [[u + 0.08, w, z + 0.85], [u + 0.36, w, z + 0.9], [u + 0.38, w, z + 1.2]], C.cactusDark, 0.2);
-    lathe(k, u, w, z + 0.46, [[0, 0.24], [0.6, 0.25], [0.82, 0.18], [0.92, 0.05]], C.cactus, { line: e });
-    k.line([[u - 0.06, w + 0.2, z + 0.55], [u - 0.06, w + 0.2, z + 1.18]], withAlpha('#2a5a2a', 0.6), Math.max(0.6, 0.05 * k.s));
-    const [x, y] = k.p(u, w, z + 1.42);
+    lathe(k, u, w, z + 0.46, [[0, 0.24], [0.52, 0.25], [0.72, 0.18], [0.81, 0.05]], C.cactus, { line: e });
+    k.line([[u - 0.06, w + 0.2, z + 0.55], [u - 0.06, w + 0.2, z + 1.08]], withAlpha('#2a5a2a', 0.6), Math.max(0.6, 0.05 * k.s));
+    // its flower on the crown, set a touch forward (clear of a screen behind)
+    const [x, y] = k.p(u, w + 0.06, z + 1.3);
     k.pen.beginPath();
     k.pen.ellipse(x, y, 0.15 * k.s, 0.11 * k.s, 0, 0, Math.PI * 2);
     k.paint('#ec6a86', e * 0.8);

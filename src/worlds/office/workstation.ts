@@ -548,8 +548,9 @@ const cradle: DeskLoop = {
 };
 
 // A busy light clipped on the monitor's top, at its right corner: a white
-// puck, its dome lit red and breathing slowly (two seconds a breath) while
-// at work, out while not.
+// puck, its dome lit red while at work, its red light swelling out round it
+// and ebbing slowly (two seconds a breath, never out); while not, the dome
+// is grey and throws no light.
 const BUSY: P3 = [4.6, 0.75, MON.z1];
 const BREATH = [0.3, 0.45, 0.65, 0.85, 1, 0.85, 0.65, 0.45];
 const busyLight: DeskLoop = {
@@ -565,12 +566,23 @@ const busyLight: DeskLoop = {
     const glow = v.active ? BREATH[i % BREATH.length] : 0;
     k.box(u - 0.23, w - 0.18, z, 0.46, 0.36, 0.07, C.steel, { line: edge(k), stripe: false });
     k.cyl(u, w, z + 0.07, 0.27, 0.13, '#e3e6ea', { line: edge(k) });
-    const lens = glow > 0 ? mix('#ff9a8a', '#ff4a4a', glow) : '#c9b8b8';
-    cap(k, u, w, z + 0.2, 0.21, 0.2, lens);
     if (glow > 0) {
-      k.halo(u, w, z + 0.32, 0.55, '#ff6b5a', 0.25 + 0.35 * glow);
-      k.halo(u - 0.06, w, z + 0.32, 0.14, '#fff1e8', 0.5 * glow);
+      // the swell: red light painted over what is behind (so it shows on a
+      // pale wall as on a dark one)
+      const [x, y] = k.p(u, w, z + 0.3);
+      const R = (0.32 + 0.4 * glow) * k.s;
+      const g = k.pen.createRadialGradient(x, y, 0, x, y, R);
+      g.addColorStop(0, withAlpha('#ff3030', 0.55 + 0.35 * glow));
+      g.addColorStop(0.45, withAlpha('#ff3030', 0.2 + 0.2 * glow));
+      g.addColorStop(1, withAlpha('#ff3030', 0));
+      k.pen.beginPath();
+      k.pen.arc(x, y, R, 0, Math.PI * 2);
+      k.pen.fillStyle = g;
+      k.pen.fill();
     }
+    const lens = glow > 0 ? mix('#e8262a', '#ff6a5a', glow) : '#9a9396';
+    cap(k, u, w, z + 0.2, 0.21, 0.2, lens);
+    if (glow > 0) k.halo(u - 0.06, w, z + 0.32, 0.1 + 0.06 * glow, '#fff1e8', 0.4 + 0.4 * glow);
   },
 };
 
