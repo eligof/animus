@@ -53,14 +53,18 @@ the activity lasts.
     keyed by world, frame, activity and scale, shared by every desk of the
     world and laid over the body.
   A change of activity then sends only a small screen picture, less than
-  today's whole desk.
+  today's whole desk. While a desk pops up (five steps out of the
+  floor), body, screen and its loops' still frames are one picture, as
+  today: those pictures are few and shared.
 
 ### 2. Desks that animate
 
 - A world's `workstation` gains optional `loops` (one or two): an anchor
   on the desk, 4 to 8 frames, a rate of at most about 8 frames a second,
   and a draw for frame `i`: a lantern's flame, a cauldron's bubbles, a
-  candle, a holo screen's shimmer, a fan, steam off a cup.
+  candle, a holo emitter's flicker, a fan, steam off a cup. Like the
+  clutter, a loop stays clear of the screen, the upgrade's spot and the
+  agent at work, in either frame.
 - The shared engine piece (B reuses it for rooms): loop frames cached by
   world, loop, frame, frame wall and scale; placed right after their desk
   in depth order; each desk's phase offset (neighbours do not flicker in
@@ -69,10 +73,21 @@ the activity lasts.
 
 ### 3. Tools in hand
 
-- A shared library, `src/art/figure/tools/` (a file a grip), of about 40
-  small tools in the figure style. Each belongs to one grip, so the rig's motions stay as
-  they are: **swing** (run), **held out** (search), **two hands** (read),
-  **surface and writer** (write), **at the chest** (web).
+- A shared library, `src/art/figure/tools/`, a file a grip, of about 70
+  small tools in the figure style (the table's 72 names less the shared
+  ones). Each belongs to one grip, so the rig's motions stay as they
+  are: **swing** (run, `run.ts`), **held out** (search, `search.ts`),
+  **two hands** (read, `read.ts`), **surface and writer** (write,
+  `write.ts`), **at the chest** (web, `web.ts`). Each file maps every
+  costume to its tool, so the art for one grip is one file.
+- **Seen from behind.** At its desk an agent works with its back to the
+  viewer, and from behind the notepad, the book and the tablet are
+  hidden by the body today (typing shows no tool at all). From behind,
+  the rig holds them beside the body: the surface held out at the side
+  in one hand, the writer going over it in the other; the reading held
+  open at the side; the device held up and out at the side. The held-out
+  tool (search) and the raised swing (run) already show. From the front
+  the poses stay as they are.
 - Each costume (one a world) names its five:
 
 | world | write | read | run | search | web |
@@ -104,7 +119,13 @@ the activity lasts.
 - An agent at work (at its own desk, or sharing one) breaks its loop
   every 6 to 15 seconds (its own rhythm, the same every run) with one
   beat of 1 to 2.5 seconds: it glances at its screen and nods, leans in,
-  stretches, scratches its head, taps a foot, or, with a mug, sips.
+  stretches, scratches its head or taps a foot. With a mug (office life)
+  it also sips, as today. These replace today's breaks at work (a
+  stretch, a drink or a look round every 14 to 30 seconds).
+- A beat lasts a whole number of its pose's loops and starts at the
+  loop's first frame, so it eases in from rest and back. The glance, the
+  lean and the tap are done facing the desk (the back to us); the
+  scratch and the stretch turn to us.
 - Beats are gestures (the system the office-life moments use): they never
   move the agent, hold no one up, wait while it is in a huddle, a
   high-five or showing an emote, and end at once when its activity
@@ -129,19 +150,25 @@ the activity lasts.
 - **Beats:** at work, a beat every 6 to 15 seconds; none moves the agent;
   none during a huddle, a high-five or an emote; an activity change ends
   one at once; with office life off they still come.
-- **Budget:** twenty agents at 150 x 46 with every desk's loops: the next
-  frame's plate time within today's budget, and, warm, no more bytes a
-  frame to the terminal than today plus a few kilobytes.
+- **Seen from behind:** every costume's write, read, web and search tool
+  shows beside the body in every frame of its pose from behind; its run
+  tool in at least a quarter of them.
+- **Budget:** twenty agents at 150 x 46 with two loops on every desk:
+  the next frame's plate time within today's budget, and, warm, no more
+  bytes a step to the terminal than the same room without loops plus
+  4 KiB.
 
 ## Build, check, ship
 
 1. The tests above first, red.
-2. Groundwork in one agent: the split desk picture, the clutter contract
-   and pick, the loop engine, the tool library's grips with today's five
-   as the fallback, the costume table, the beats and their poses.
+2. Groundwork, one task at a time: the clutter contract and pick, the
+   split desk picture and the loop engine, the tool library with today's
+   five for everyone and the holds from behind, the beats and their
+   poses. The tests that need the art (every world dressed, every
+   costume's own tools) go in as `todo`.
 3. Art in parallel: clutter pools and loops for the sixteen worlds (about
    three worlds an agent, in each world's own files), and the tool
-   drawings (by grip, a file each).
+   drawings (a grip an agent, a file each). Then the `todo`s come off.
 4. One round of code and art review, fixes.
 5. Ghostty captures (zoomed at desks in a few worlds, before and after)
    for the user; frame timing against today.
