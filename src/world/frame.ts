@@ -140,7 +140,7 @@ export type LabelFrame = { col: number; row: number; w: number; kind: 'name' | '
 // one), in its owner's colour.
 export type Trinket = 'plant' | 'mug' | 'trophy';
 // Steam rises off a mug's rim this high (units) over where it stands.
-export const MUG_TOP = 3.7;
+export const MUG_TOP = 1.75;
 export type TrinketFrame = { id: string; kind: Trinket; x: number; y: number; z?: number; color: RGB };
 
 // What a workstation's screen shows (the shared activity layer, see

@@ -4,11 +4,10 @@ import type { Color, Pen } from '../types.ts';
 import { GOLD, WHITE } from './look.ts';
 import type { Sketch } from './paint.ts';
 
-// A level's desk upgrade (★5), standing on the floor by its owner's
-// favourite station, (0, 0) at its foot, 4 to 6 units tall: a potted plant
-// with a band in its owner's colour, a mug of its colour on a stool (the
-// stage sends steam up off it, see MUG_TOP), a gold trophy on a plinth
-// with a plate of its colour.
+// A level's desk upgrade (★5), standing on its owner's workstation, (0, 0)
+// at its foot: a potted plant with a band in its owner's colour, a mug of
+// its colour on a saucer (the stage sends steam up off it, see MUG_TOP), a
+// gold trophy on a plinth with a plate of its colour.
 
 const TAU = Math.PI * 2;
 
@@ -53,10 +52,9 @@ function plant(sk: Sketch, color: Color): void {
 }
 
 function mug(sk: Sketch, color: Color): void {
-  const wood = '#a8743f';
-  for (const x of [-1.2, 1.2]) sk.limb([x, -1.9, x * 1.1, 0], 0.45, shade(wood, -0.15), { line: 0.6 });
-  sk.blob((p) => p.roundRect(-1.7, -2.3, 3.4, 0.6, 0.25), wood, { dark: shade(wood, -0.22), d: 0.2 });
-  sk.limb([0.75, -3.25, 1.35, -3.0, 0.75, -2.55], 0.3, color, { line: 0.6 });
+  const china = '#efe6d8';
+  sk.blob((p) => p.ellipse(0, -0.2, 1.45, 0.42, 0, 0, TAU), china, { dark: shade(china, -0.2), d: 0.15 });
+  sk.limb([0.75, -MUG_TOP + 0.45, 1.35, -MUG_TOP + 0.7, 0.75, -MUG_TOP + 1.15], 0.3, color, { line: 0.6 });
   sk.blob((p) => p.roundRect(-0.8, -MUG_TOP, 1.6, 1.45, 0.3), color, { dark: shade(color, -0.22), d: 0.25 });
   sk.draw((p) => {
     p.beginPath();
