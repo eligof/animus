@@ -96,11 +96,11 @@ export class Kit {
   private ev: Pt;
   private ez: Pt;
 
-  constructor(pen: Pen, at: At, s: number) {
+  constructor(pen: Pen, at: At, s: number, lw = inkWidth(s)) {
     this.pen = pen;
     this.at = at;
     this.s = s;
-    this.lw = inkWidth(s);
+    this.lw = lw;
     this.thin = Math.max(1, this.lw * 0.6);
     this.fine = s >= 7;
     const o = at(0, 0, 0);
@@ -326,6 +326,11 @@ export function softDot(pen: Pen, x: number, y: number, r: number, color: Color,
 }
 
 export const kitOf = (v: { pen: Pen; at: At; s: number }): Kit => new Kit(v.pen, v.at, v.s);
+
+// A kit for small things (a desk's clutter and loops): its outline half
+// the usual one, its inner lines thinner again, so a thing a unit across
+// is not all ink.
+export const smallKitOf = (v: { pen: Pen; at: At; s: number }): Kit => new Kit(v.pen, v.at, v.s, Math.max(1, inkWidth(v.s) * 0.5));
 
 // ── sprites for animated props ─────────────────────────────────────────────
 // An animated prop is redrawn every frame; its still parts are painted once

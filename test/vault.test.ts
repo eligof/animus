@@ -10,6 +10,7 @@ import type { PropArt } from '../src/worlds/types.ts';
 import { vault } from '../src/worlds/vault.ts';
 import { DECOR_ART } from '../src/worlds/vault/decor.ts';
 import { planFor, reach, runnerArea } from '../src/worlds/vault/room.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
 
 // The Vault's art: every piece draws in both wall frames and as an island
@@ -219,4 +220,10 @@ test('The Vault\'s workstation: its own, still whatever the clock', () => {
   assert.ok(art, 'no workstation of its own');
   const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
   for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
+
+test('The Vault: its desks have things of their own to pick from, and something that moves', () => {
+  const art = workstationOf(vault);
+  assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
+  assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });

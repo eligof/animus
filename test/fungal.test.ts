@@ -9,6 +9,7 @@ import { fungal } from '../src/worlds/fungal.ts';
 import { DECOR_ART } from '../src/worlds/fungal/decor.ts';
 import { planFor } from '../src/worlds/fungal/room.ts';
 import type { PropArt } from '../src/worlds/types.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
 
 // The Fungal Caverns' art: every piece draws in both wall frames and as an
@@ -192,4 +193,10 @@ test('Fungal Caverns\'s workstation: its own, still whatever the clock', () => {
   assert.ok(art, 'no workstation of its own');
   const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
   for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
+
+test('Fungal Caverns: its desks have things of their own to pick from, and something that moves', () => {
+  const art = workstationOf(fungal);
+  assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
+  assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
