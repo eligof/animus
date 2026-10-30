@@ -101,7 +101,13 @@ test('agents at the props out on the floor stand on open floor, in view, backs t
     for (const r of [RECT, WIDE]) {
       const stage = newStage(r, w);
       const crew = [agent('r', 'run'), agent('w', 'web'), agent('t', 'think'), agent('z', 'idle', { since: NOW - 3_600_000 })];
-      run(stage, crew, 25);
+      const at = run(stage, crew, 25);
+      // No beat on now (a scratch or stretch turns to us): the work pose shows.
+      for (const a of stage.actors()) {
+        a.mind.gestures = a.mind.gestures.filter((g) => !g.beat);
+        a.mind.micro = Infinity;
+      }
+      run(stage, crew, 0.1, at);
       const room = stage.room()!;
       for (const a of stage.actors()) {
         const tag = `${w.id} ${r.w}x${r.h}: ${a.info.id}`;
@@ -121,8 +127,6 @@ test('agents at the props out on the floor stand on open floor, in view, backs t
         const cy = (f.y0 + f.y1) / 2;
         const look = stage.lookOf(a);
         assert.ok(cx + cy < a.x + a.y, `${tag}: the prop is not behind them`);
-        // A scratch or a stretch at work turns to us.
-        if (look.pose === 'scratch' || look.pose === 'stretch') continue;
         assert.ok(look.facing.back, `${tag}: facing us`);
         assert.equal(look.facing.flip, cx - cy < a.x - a.y, `${tag}: facing away from the prop`);
       }

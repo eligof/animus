@@ -10,7 +10,7 @@ import type { Facing, Particle, Poi, Spot } from './types.ts';
 // The life between the work: idle characters wander between the spots
 // they like (a seat, a drink, a view, the dance floor, the fire, the
 // critter), chat with each other, pet the critter and help build; workers
-// stretch, sip and look round now and then; everyone waves, flinches at a
+// keep at it with a beat now and then (a glance, a stretch, a scratch); everyone waves, flinches at a
 // bang and cheers a finish. And office life (the o key turns it off): a
 // kick-off huddle round a lead that has just started subagents, coffee
 // runs, a high-five when a subagent finishes, a stand-up when a crew waits.
@@ -281,7 +281,10 @@ export class Life {
       m.think = c + 1.6; // celebrate before anything else
       if (this.office) this.highFive(a);
     } else if (a.info.activity === 'idle') m.think = c + m.rng.range(2.5, 3.5); // a short wait is no reason to wander off
-    else m.micro = Math.max(m.micro, c + m.rng.range(6, 14));
+    else {
+      m.micro = Math.max(m.micro, c + m.rng.range(BEAT_EVERY[0], BEAT_EVERY[1]));
+      m.sip = Math.max(m.sip, c + 2); // the work pose shows at once, not a sip
+    }
   }
 
   // Same activity, new detail (a new file, a new command).
@@ -487,12 +490,16 @@ export class Life {
   }
 
   // Workers keep at it, with a beat now and then (see BEATS), and a cheer
-  // for a new file. No beat on an errand (a huddle, a high-five) or over a
+  // for a new file. No beat on an errand (a huddle, a coffee run) or over a
   // gesture; one under an emote waits for it to go.
   private work(a: Actor): void {
     const m = a.mind;
     const c = this.clock;
-    if (a.state !== 'work' || !a.station || a.path.length || m.errand || m.gestures.length) return;
+    if (a.state !== 'work' || !a.station) return;
+    if (a.path.length || m.errand || m.gestures.length) {
+      m.micro = Math.max(m.micro, c + BEAT_EVERY[0]); // no beat the moment it is free
+      return;
+    }
     if (m.cheer) {
       m.cheer = false;
       if (c - m.celebrated >= 8) {
@@ -1337,6 +1344,7 @@ export class Life {
   }
 
   gesture(a: Actor, pose: Pose, secs: number, o: { delay?: number; face?: Spot; hold?: boolean; beat?: boolean } = {}): void {
+    if (!o.beat) a.mind.gestures = a.mind.gestures.filter((g) => !g.beat);
     const at = this.clock + (o.delay ?? 0);
     const g: Gesture = { pose, at, until: at + secs, hold: o.hold ?? true };
     if (o.face) g.face = { x: o.face.x, y: o.face.y };

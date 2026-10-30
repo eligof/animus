@@ -1,3 +1,4 @@
+import { LOOP } from '../art/figure/rig.ts';
 import type { Activity, AgentInfo } from '../agents.ts';
 import type { Pen } from '../art/types.ts';
 import { clip } from '../claude/activity.ts';
@@ -107,6 +108,14 @@ const LANE_APART = 5;
 // Walkers detouring through the hub keep this many units to one side of it
 // (which side hashed from the id), so the traffic forms two lanes.
 const HUB_LANE = 3;
+// How far into its loop a beat is `t` seconds after it began: the loop
+// starts at its first frame whatever the character's phase (see frameOf in
+// art/figure/rig.ts), which still desyncs its blinks.
+function beatT(pose: Pose, t: number, phase: number): number {
+  const f = phase * 0.618;
+  return t - (f - Math.floor(f)) * LOOP[pose][0];
+}
+
 // Poses done with the back to the viewer, facing the prop: the work, and
 // the beats at it that look its way (a glance, a lean, a tap; a scratch
 // and a stretch turn to us).
@@ -1335,8 +1344,8 @@ export class Stage {
         traits: a.traits,
         costume: this.world.costume,
         pose: look.pose,
-        poseT: look.since !== undefined ? c - look.since : t + a.gait,
-        phase: look.since !== undefined ? 0 : a.phase / 997,
+        poseT: look.since !== undefined ? beatT(look.pose, c - look.since, a.phase / 997) : t + a.gait,
+        phase: a.phase / 997,
         facing: look.facing,
         selected: a === sel,
         hurt: errNow(a),

@@ -522,3 +522,47 @@ test('no beat starts under an emote or over a high-five; a change of activity en
   now = run(stage, () => [agent('w', 'read', { since: now })], 0.05, now);
   assert.equal(pose(stage, w, now), 'read');
 });
+
+test('a scratch and a stretch at work turn to us', () => {
+  const seen = new Set<Pose>();
+  for (const b of beats(false)) if (b.pose === 'scratch' || b.pose === 'stretch') {
+    seen.add(b.pose);
+    assert.ok(!b.back, `a ${b.pose} with its back to us`);
+  }
+  assert.equal(seen.size, 2, `only ${[...seen].join(', ')}`);
+});
+
+test('a cheer for a worker mid-beat shows at once; a subagent does not beat the moment it reaches its desk', () => {
+  const stage = newStage();
+  stage.office = false;
+  let now = run(stage, () => [agent('w', 'write')], 10);
+  const w = byId(stage, 'w');
+  w.mind.gestures = [];
+  w.mind.micro = 0;
+  now = run(stage, () => [agent('w', 'write')], 0.3, now);
+  assert.ok(BEAT_POSES.has(pose(stage, w, now)), 'no beat to cheer over');
+  stage.cheer('w');
+  now = run(stage, () => [agent('w', 'write')], 0.05, now);
+  assert.equal(pose(stage, w, now), 'cheer');
+  // Held by a gesture, its clock does not run out behind it.
+  w.mind.gestures = [];
+  w.mind.micro = 0;
+  stage.life.gesture(w, 'wave', 1, { hold: false });
+  now = run(stage, () => [agent('w', 'write')], 0.1, now);
+  assert.ok(w.mind.micro >= stage.life.clock + 5.9, 'a beat due the moment the gesture ends');
+});
+
+test('a change of activity at a desk with a mug shows the work pose at once', () => {
+  const stage = newStage();
+  stage.office = true;
+  let now = run(stage, () => [agent('w', 'write')], 10);
+  const w = byId(stage, 'w');
+  w.mind.gestures = [];
+  w.mind.mug = stage.life.clock + 30;
+  w.mind.sip = 0;
+  w.mind.micro = 0;
+  now = run(stage, () => [agent('w', 'write')], 0.3, now);
+  assert.ok(BEAT_POSES.has(pose(stage, w, now)), 'no beat to break into');
+  now = run(stage, () => [agent('w', 'read', { since: now })], 0.05, now);
+  assert.equal(pose(stage, w, now), 'read');
+});
