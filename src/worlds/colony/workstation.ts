@@ -13,7 +13,8 @@ import { C, INK, kitOf, withAlpha } from './kit.ts';
 //
 // Three planks on a pair of trestles, a stretcher between them. At the
 // right back a slate in a wooden frame leans on a little easel, a stick
-// of chalk on its ledge; at the front left an oil lamp, lit while the
+// of chalk on its ledge (the corner behind it kept clear for a desk
+// upgrade); at the front left an oil lamp, lit while the
 // screen is on; a tin mug and a pencil on a sheet of paper before the
 // slate; at the front right corner a jar of wildflowers, a bundle of
 // plain seed packets or a whittled bird, by look.
@@ -96,7 +97,7 @@ export const WORKSTATION: WorkstationArt = {
     oilLamp(k, 0.9, 2.1, ZT, v.active ? 1 : 0, 1.05);
   },
   screen: [onSlate(0, 0), onSlate(1, 0), onSlate(1, 1), onSlate(0, 1)],
-  top: [1.1, 0.9, ZT],
+  top: [6.5, 0.6, ZT],
 };
 
 // A little carved bird standing on (u, v, z), facing -u, about a unit

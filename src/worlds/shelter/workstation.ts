@@ -13,13 +13,14 @@ import { C, kitOf, withAlpha } from './kit.ts';
 //
 // A riveted steel desk on a drawer pedestal (its left end) and a plain
 // side panel (its right end), a teal trim along its front edge. On it, at
-// the right, a chunky teal terminal in a riveted case, the glass set in a
+// the right, a chunky teal terminal in a riveted case (its right back
+// corner kept clear for a desk upgrade), the glass set in a
 // dark bezel with a rim of green phosphor; before it a keyboard and a
 // stack of punch cards; at the front left a gooseneck lamp, its shade
 // mint, pink or aqua by look, lit while the screen is on.
 
 const ZT = 6.0; // the desk's top
-const GLASS = { u0: 2.95, u1: 6.0, n: 1.35, z0: 6.7, z1: 9.45 };
+const GLASS = { u0: 2.95, u1: 5.55, n: 1.35, z0: 6.7, z1: 9.45 };
 const SHADES = [C.mint, C.pink, C.aqua] as const;
 
 export const WORKSTATION: WorkstationArt = {
@@ -47,7 +48,7 @@ export const WORKSTATION: WorkstationArt = {
     // the terminal: a deep case, its riveted front, the bezel and the
     // phosphor rim round the glass, two orange knobs under it
     const g = GLASS;
-    k.box(2.55, 0.15, ZT, 3.9, g.n - 0.15, 3.95, C.teal, { round: 0.3 });
+    k.box(2.55, 0.15, ZT, 3.4, g.n - 0.15, 3.95, C.teal, { round: 0.3 });
     if (k.fine) {
       // vents along the case's top
       const vents: Array<[P3, P3]> = [];
@@ -57,10 +58,10 @@ export const WORKSTATION: WorkstationArt = {
     k.rect(g.u0 - 0.24, g.z0 - 0.22, g.u1 + 0.24, g.z1 + 0.2, g.n + 0.005, C.crtDark, k.thin);
     k.rect(g.u0 - 0.13, g.z0 - 0.12, g.u1 + 0.13, g.z1 + 0.11, g.n + 0.01, v.active ? C.crt : C.crtDim, 0);
     for (const u of [3.2, 3.6]) dot(k, u, g.n + 0.02, ZT + 0.3, 0.15, C.orange, k.thin * 0.7);
-    dot(k, 5.75, g.n + 0.02, ZT + 0.3, 0.1, v.active ? C.radar : C.crtDim, 0);
+    dot(k, 5.3, g.n + 0.02, ZT + 0.3, 0.1, v.active ? C.radar : C.crtDim, 0);
     if (k.fine) {
       const rv: P3[] = [];
-      for (const u of [2.72, 6.28]) for (const z of [ZT + 0.22, ZT + 3.75]) rv.push([u, g.n + 0.01, z]);
+      for (const u of [2.72, 5.78]) for (const z of [ZT + 0.22, ZT + 3.75]) rv.push([u, g.n + 0.01, z]);
       rivets(k, rv);
     }
     // the keyboard before the agent: a cream wedge with rows of keys
@@ -108,5 +109,5 @@ export const WORKSTATION: WorkstationArt = {
     [GLASS.u1, GLASS.n, GLASS.z1],
     [GLASS.u0, GLASS.n, GLASS.z1],
   ],
-  top: [1.1, 0.9, ZT],
+  top: [6.5, 0.6, ZT],
 };
