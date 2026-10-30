@@ -1927,7 +1927,7 @@ One task an agent, each in its grip's file only (`src/art/figure/tools/<grip>.ts
 | 18 | `search.ts` | search | lantern (miner, parka), geigerCounter (scientist, jumpsuit), glowStick (raver), flashlight (hacker), scanner (astronaut, exosuit), magnifier stays (casual, startup), glowingMushroom (forager), loupe (guard), crystalBall (demon), dowsingRod (drifter), torch (nord), spyglass (colonist) |
 | 19 | `web.ts` | web | crankRadio (miner), plasmaOrb (scientist), phone (raver, casual), laptop (hacker), holoProjector (astronaut, exosuit), sporeOrb (forager), radio (parka, drifter, jumpsuit, colonist), handset (guard), scryingMirror (demon), runeStone (nord); tablet stays (startup, wizard) |
 
-**What to build:** each tool is a `Tool` with the design's `name`, drawn with the sketch API (`sk.blob`, `sk.limb`, `sk.draw`, `sk.at`, shading with `{ dark, d }`) in the figure style, like today's tool in the same file: chunky, outlined by the renderer, readable at s = 4. It keeps inside the slot's `ENVELOPE` (`tools/tool.ts`). Use `back` where the back side differs (a book's cover, a phone's case, a laptop's lid). A tool may use `L.color` (the agent's colour) for a detail. No text, no brands. The file's record then maps each costume to its tool, for example:
+**What to build:** each tool is a `Tool` with the design's `name`, drawn with the sketch API (`sk.blob`, `sk.limb`, `sk.draw`, `sk.at`, shading with `{ dark, d }`) in the figure style, like today's tool in the same file: chunky, outlined by the renderer, readable at s = 4. It keeps inside the slot's `ENVELOPE` (`tools/tool.ts`). Seen from behind (at the desk, the main view) the rig holds the tool so its working face (pages, screen, glass) still shows over the shoulder; use `back` only for what really differs from behind. A tool may use `L.color` (the agent's colour) for a detail. No text, no brands. The file's record then maps each costume to its tool, for example:
 
 ```ts
 export const RUNS: Record<Costume, Tool> = { ...everyone(mallet), miner: pickaxe, scientist: flask, raver: drumstick, hacker: screwdriver, astronaut: wrench, jumpsuit: wrench, casual: whisk, forager: trowel, parka: iceAxe, guard: rubberStamp, demon: trident, drifter: spanner, nord: axe, exosuit: multitool, colonist: hammer, startup: pingPongPaddle };
@@ -1970,7 +1970,7 @@ const pickaxe: Tool = {
 
 (Check it against `ENVELOPE.run`: y stays within ±2.2, plus half a unit.)
 
-- [ ] **Step 1:** Run `node --test test/tools.test.ts` and read the `todo` test's output: the rows of your slot are the ones to make right.
+- [ ] **Step 1:** Run `node --test test/tools.test.ts` and read the `todo` test's output: the rows of your slot are the ones to make right. Other agents edit the other grip files at the same time; a failure that comes from a file you do not own is theirs, retry a little later.
 - [ ] **Step 2:** Draw the tools; map the costumes.
 - [ ] **Step 3:** Run `node --test test/tools.test.ts test/figure.test.ts`. Expected: every test passes; in the `todo` test's output no row of your slot is wrong and none of your tools "looks like" another.
 - [ ] **Step 4:** Look: a short script in the scratchpad that, for each costume, draws `figureSprite` (from `src/art/figure.ts`) of your pose at s = 8, front and back, two frames, onto one `Canvas`, and saves it with `encodeRgb(canvas, 0xf4f0e8)` from `src/art/png.ts`. Each tool reads as what it is, held, in its costume's world. Also `node scripts/scene-shot.ts mines <scratchpad>/tools.png --at 40 --zoom 4 --select 2`.
