@@ -138,7 +138,7 @@ export function buildFigure(sk: Sketch, r: Rig, L: Look, v: View): void {
   // ---- props
   for (const pr of r.props) {
     const at: V = pr.hand >= 0 ? [arms[pr.hand].h[0] + pr.x, arms[pr.hand].h[1] + pr.y] : [pr.x, pr.y];
-    add(propZ(pr, back), () => drawProp(sk, pr, at, L, v.item));
+    add(propZ(pr, back), () => drawProp(sk, pr, at, L, v.item, back));
   }
 
   parts.sort((a, b) => a[0] - b[0]);

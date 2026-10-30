@@ -34,6 +34,7 @@ export type Costume =
   | 'drifter' | 'nord' | 'exosuit' | 'jumpsuit' | 'colonist'
   | 'miner' | 'forager' | 'parka' | 'guard' | 'demon'
   | 'startup';
+export const COSTUMES: readonly Costume[] = ['wizard', 'scientist', 'raver', 'hacker', 'astronaut', 'casual', 'drifter', 'nord', 'exosuit', 'jumpsuit', 'colonist', 'miner', 'forager', 'parka', 'guard', 'demon', 'startup'];
 export type Species = 'human' | 'robot' | 'cat' | 'alien' | 'ghost';
 export type Accessory = 'none' | 'headset' | 'glasses' | 'lamp' | 'beret' | 'goggles' | 'hood' | 'bow';
 
