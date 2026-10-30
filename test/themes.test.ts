@@ -177,7 +177,9 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
         }
       }
     }
-  });  test(`world ${w.id}: what stands on its desks and what moves there keeps to its place: on the top, inside its box, clear of the screen, the upgrade and the agent at work`, () => {
+  });
+
+  test(`world ${w.id}: what stands on its desks and what moves there keeps to its place: on the top, inside its box, clear of the screen, the upgrade and the agent at work`, () => {
     const art = workstationOf(w);
     const items = art.clutter?.items ?? [];
     const spots = art.clutter?.spots ?? [];
