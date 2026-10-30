@@ -189,20 +189,21 @@ export function loopFrame(lp: DeskLoop, k: number, id: number, on: boolean, t: n
 // Workstation d's pictures as the scene places them at time t, back to
 // front: the body and the screen share its box, so they are drawn in this
 // order (see depth.ts); the loops are points at their anchors (`at`, in the
-// desk's frame) and sort among what stands on the desk. Each with its
+// desk's frame) and sort among what stands on the desk; `sortAs` says the
+// picture is sorted by the body's box and picture. Each with its
 // layer's id and whether it was drawn just now.
-export type DeskPicture = { id: string; sp: DeskSprite; fresh: boolean; at?: P3 };
+export type DeskPicture = { id: string; sp: DeskSprite; fresh: boolean; at?: P3; sortAs?: 'body' };
 export function deskPictures(world: WorldDef, d: DeskFrame, t: number, s: number, ink: string): DeskPicture[] {
   const out: DeskPicture[] = [];
-  const add = (id: string, make: () => DeskSprite, at?: P3) => {
+  const add = (id: string, make: () => DeskSprite, at?: P3, sortAs?: 'body') => {
     const m = deskStats.misses;
     const sp = make();
-    out.push({ id, sp, fresh: deskStats.misses > m, at });
+    out.push({ id, sp, fresh: deskStats.misses > m, at, sortAs });
   };
   add(`desk:${d.id}`, () => deskSprite(world, d, s, ink));
   if (popping(d.grow)) return out;
   const on = d.screen !== 'off';
-  add(`screen:${d.id}`, () => screenSprite(world, d, s, ink));
+  add(`screen:${d.id}`, () => screenSprite(world, d, s, ink), undefined, 'body');
   (workstationOf(world).loops ?? []).forEach((lp, k) => add(`loop:${d.id}:${k}`, () => loopSprite(world, k, loopFrame(lp, k, d.id, on, t), on, d.wall, s, ink), lp.at));
   return out;
 }

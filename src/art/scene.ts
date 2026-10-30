@@ -12,8 +12,8 @@
 //             light), contact shadows, the selection's ring and the hurt's
 //             pulsing one.
 //   depth     props, workstations (a body, its screen and its loops),
-//             builds, piles, figures, desk upgrades
-//             and the critter in depth order (see scene/depth.ts), each
+//             builds, piles, figures, desk upgrades and the critter in
+//             depth order (see scene/depth.ts), each
 //             particle slotted in
 //             among them: the particles of a slot drawn together, a picture
 //             per bunch of them, cropped to what it paints (drifting ones
@@ -708,6 +708,7 @@ export class Scene {
         made(sp.img, spriteStats.misses > m);
       };
     }
+    const warmed = new Set<string>();
     for (const d of f.desks ?? []) {
       if (d.grow <= 0) continue;
       yield () => {
@@ -717,6 +718,9 @@ export class Scene {
       // steps of a loop later are hits whatever the time.
       if (popping(d.grow)) continue;
       for (const [k, lp] of (workstationOf(f.world).loops ?? []).entries()) {
+        const mark = `${d.wall}|${k}`;
+        if (warmed.has(mark)) continue;
+        warmed.add(mark);
         for (let i = 0; i <= lp.frames; i++) {
           yield () => {
             const m = deskStats.misses;
@@ -871,6 +875,7 @@ export class Scene {
       if (sp.floor) floors.push(sprite(`floor:${i}`, sp.floor, box));
       if (sp.body) out.push(sprite(`prop:${i}`, sp.body, box));
     });
+    const bodies: Item[] = [];
     for (const d of f.desks ?? []) {
       // A workstation stands on the floor like a prop, as tall as it has
       // grown: its body, then its screen over it (one box, so in that
@@ -883,7 +888,8 @@ export class Scene {
       // The screen is as wide as the body for the depth (particles are
       // slotted by it): a bit of one at its edge does not slip under it.
       let body: DeskSprite | undefined;
-      for (const { id, sp, at } of deskPictures(f.world, d, f.t, s, ink)) {
+      let bodyItem: Item | undefined;
+      for (const { sp, at, sortAs, id } of deskPictures(f.world, d, f.t, s, ink)) {
         body ??= sp;
         const dx = Math.round(x) - sp.ax;
         const dy = Math.round(y) - sp.ay;
@@ -891,14 +897,18 @@ export class Scene {
         let it: Item;
         if (at) {
           const [px, py] = toWorld(d, at[0], at[1], 0);
-          it = { x0: px, y0: py, x1: px, y1: py, h: at[2], point: true, ...own, id, img: sp.img, x: dx, y: dy };
+          it = { x0: px, y0: py, x1: px, y1: py, h: at[2], point: true, ...own, on: bodyItem, id, img: sp.img, x: dx, y: dy };
         } else {
           const bx = Math.round(x) - body.ax;
           const by = Math.round(y) - body.ay;
           const sz = { sx0: bx, sy0: by, sx1: bx + body.img.width, sy1: by + body.img.height };
-          it = { ...box, ...(id.startsWith('screen:') ? sz : own), id, img: sp.img, x: dx, y: dy };
+          it = { ...box, ...(sortAs ? sz : own), id, img: sp.img, x: dx, y: dy };
         }
-        if (seen(it)) out.push(it);
+        if (seen(it)) {
+          out.push(it);
+          if (!at && !bodyItem) bodyItem = it;
+          if (!at && it.id === `desk:${d.id}`) bodies.push(it);
+        }
       }
     }
     f.builds.forEach((b, j) => {
@@ -934,7 +944,8 @@ export class Scene {
       const [x, y] = P(tk.x, tk.y, tk.z ?? 0);
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: tk.z ?? 0, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
+      const on = bodies.find((b) => tk.x >= b.x0 && tk.x <= b.x1 && tk.y >= b.y0 && tk.y <= b.y1);
+      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: tk.z ?? 0, point: true, on, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
       if (seen(it)) out.push(it);
     }
     const cr = f.critter;
