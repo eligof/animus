@@ -16,10 +16,10 @@ import type { Desk, Layout, Poi, Spot } from './types.ts';
 
 // A workstation's footprint (units: `len` along its frame's u, `dep` out
 // along v), how tall it may stand, and where its agent stands in its frame:
-// a step out from its front, left of its middle as the viewer sees it, so
-// the screen on its right stays in view.
+// a step out from its front, near its left end as the viewer sees it, so
+// the screen on its right stays in view past a big head of hair.
 export const DESK = { len: 7, dep: 3, height: 10 } as const;
-export const DESK_SPOT = { u: 2, v: DESK.dep + 2 } as const;
+export const DESK_SPOT = { u: 1, v: DESK.dep + 2 } as const;
 // Desk to desk along a row of a pod, and a pod's back row to its front
 // row: its back row's agents stand between them, in view over the front
 // row's desks (see covers).

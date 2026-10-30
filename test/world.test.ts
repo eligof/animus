@@ -489,7 +489,9 @@ test('the card keeps clear of its character wherever there is room, and spares i
 
 test('the card keeps its side while it fits there, until the selection changes', () => {
   const w = demoWorld(true);
-  let now = advance(w, 20);
+  // By 40 s some of the crew are done or waiting and walk about (at work
+  // they stand still at their workstations).
+  let now = advance(w, 40);
   w.handleKey(key('\t'));
   // Zoomed out the characters are small, so most have room on more than
   // one side as they walk about.

@@ -1,6 +1,6 @@
 import type { PropArt, WorldDef } from '../worlds/types.ts';
 import { supplyFor } from './build.ts';
-import { keepOut, planDesks } from './desks.ts';
+import { deskCap, keepOut, planDesks } from './desks.ts';
 import type { Rect } from './layout.ts';
 import { boxCount, buildSites, hub, keepClear, wallGaps, yard } from './layout.ts';
 import { NavGrid } from './path.ts';
@@ -149,7 +149,15 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   const nav = new NavGrid(L.T, L.T, W - 1, D - 1, NAV_CELL, (x, y) => (inside(x, y, 0.8) ? 2 : inside(x, y, NAV_PAD) ? 1 : 0));
   const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot)))
     .filter((p) => p.x > L.T && p.y > L.T && p.x < W - 1 && p.y < D - 1 && !inside(p.x, p.y, 1));
-  const desks = planDesks(L, [...all, ...supply], height, pois, seed);
+  // The places for workstations, their pods turned the room's own way; in
+  // a room too small for all of them, turned the other way if that fits
+  // more.
+  const plan = (s: number) => planDesks(L, [...all, ...supply], height, pois, s);
+  let desks = plan(seed);
+  if (desks.length < deskCap(L)) {
+    const other = plan(seed ^ 1);
+    if (other.length > desks.length) desks = other;
+  }
   return { L, props, desks, keepOut: keepOut(L, [...all, ...supply], pois), nav, pois, supply, height };
 }
 
