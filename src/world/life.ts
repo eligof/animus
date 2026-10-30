@@ -1231,10 +1231,11 @@ export class Life {
 
   // A standable spot `d` from `c` at angle `ang`, turning either way to find
   // one, APART from each spot `taken` already if it can be (in finer turns,
-  // all the way round, then a step further out); else the one furthest
+  // all the way round, then a step or two further out: half the way round
+  // may be off the floor or taken by workstations); else the one furthest
   // from them.
   private around(c: Spot, d: number, ang: number, taken: readonly Spot[] = []): Spot {
-    const [step, turns, rings] = taken.length ? [0.2, 32, [d, d + APART]] : [0.35, 12, [d]];
+    const [step, turns, rings] = taken.length ? [0.2, 32, [d, d + APART, d + 2 * APART]] : [0.35, 12, [d]];
     let best: Spot | null = null;
     let room = -1;
     for (const r of rings) {

@@ -1,3 +1,4 @@
+import { buildsOver } from './build.ts';
 import { FIGURE_H } from './frame.ts';
 import type { Rect } from './layout.ts';
 import { boxCount, buildSites, hub, slotRect, yard } from './layout.ts';
@@ -191,9 +192,12 @@ export function planDesks(L: Layout, taken: readonly Rect[], height: Float32Arra
   }
   for (const p of pois) hide(p);
   for (const b of buildSites(L)) hide(b);
-  // How tall what stands on the floor is so far, desks too: no desk's
-  // agent may be hidden.
+  // How tall what stands on the floor is so far, desks too, and the builds
+  // the crew will raise on the plazas: no desk's agent may be hidden.
   const stood = height.slice();
+  buildsOver(L).forEach((h, i) => {
+    stood[i] = Math.max(stood[i], h);
+  });
   const aisle = AISLE[0] + (AISLE[1] - AISLE[0]) * Math.max(0, Math.min(1, (W - 72) / 71));
   const out: Desk[] = [];
   const cap = deskCap(L);

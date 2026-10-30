@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { THEMES } from '../src/themes/index.ts';
 import { computeLayout } from '../src/ui/layout.ts';
+import { Construction, SHAPES, buildHeight } from '../src/world/build.ts';
 import { DESK, DESK_SPOT, deskCap, deskZone } from '../src/world/desks.ts';
 import { FIGURE_H } from '../src/world/frame.ts';
 import { buildSites, hub, planLayout, slotRect, yard } from '../src/world/layout.ts';
@@ -43,8 +44,8 @@ function inView(p: Spot, tall: (x: number, y: number) => number): boolean {
   return true;
 }
 
-test('a room plans places for workstations: half a dozen and more in the smallest room, two dozen and more in a 150 x 46 terminal', () => {
-  const want: Record<string, number> = { '80x24': 6, '100x30': 10, '120x36': 19, '150x46': 25, '200x60': 28 };
+test('a room plans places for workstations: five and more in the smallest room, two dozen and more in a 150 x 46 terminal', () => {
+  const want: Record<string, number> = { '80x24': 5, '100x30': 10, '120x36': 19, '150x46': 25, '200x60': 28 };
   for (const [cols, rows] of TERMS) {
     for (const w of THEMES) {
       const room = roomFor(w, cols, rows);
@@ -86,13 +87,28 @@ test('each place stands on the floor, clear of the props, the stations\' fronts,
   }
 });
 
-test('no place hides anyone: not its own agent, nor another\'s, nor a station\'s front, a spot idlers like or a plaza', () => {
+// How tall the tallest build of any shape stands over each floor cell
+// (index x + W * y) of the room, on every plaza.
+function builds(room: Room, w: WorldDef): Float32Array {
+  const { L } = room;
+  const out = new Float32Array(L.W * L.D);
+  for (const plaza of buildSites(L)) {
+    for (const shape of SHAPES) {
+      for (const b of new Construction(L, plaza, shape, w.build.colors, buildHeight(L)).blocks) out[b.x + L.W * b.y] = Math.max(out[b.x + L.W * b.y], b.z + 1);
+    }
+  }
+  return out;
+}
+
+test('no place hides anyone: not its own agent, nor another\'s, nor a station\'s front, a spot idlers like or a plaza; nor does a build hide a place\'s agent', () => {
   for (const [cols, rows] of TERMS) {
     for (const w of THEMES) {
       const room = roomFor(w, cols, rows);
       const feet = room.desks.map(footprint);
       const desks = (x: number, y: number) => (feet.some((r) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) ? DESK.height : 0);
-      const all = (x: number, y: number) => Math.max(heightAt(room, x, y), desks(x, y));
+      const built = builds(room, w);
+      const raised = (x: number, y: number) => (x >= 0 && y >= 0 && x < room.L.W && y < room.L.D ? built[Math.floor(x) + room.L.W * Math.floor(y)] : 0);
+      const all = (x: number, y: number) => Math.max(heightAt(room, x, y), desks(x, y), raised(x, y));
       const tag = `${w.id} ${cols}x${rows}`;
       for (const d of room.desks) assert.ok(inView(d.spot, all), `${tag}: the agent at place ${d.index} hidden`);
       for (const s of room.L.slots) {
