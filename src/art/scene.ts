@@ -11,7 +11,7 @@
 //   floor     what props lay on the floor round them (shadows, pools of
 //             light), contact shadows, the selection's ring and the hurt's
 //             pulsing one.
-//   depth     props, workstations, builds, piles, figures, desk upgrades
+//   depth     props, workstations (a body, its loops and its screen), builds, piles, figures, desk upgrades
 //             and the critter in depth order (see scene/depth.ts), each
 //             particle slotted in
 //             among them: the particles of a slot drawn together, a picture
@@ -57,7 +57,7 @@ import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
 import { buildSprite, pileSprite } from './scene/build.ts';
-import { POP_STEPS, deskSprite, deskStats, growth } from './scene/desk.ts';
+import { POP_STEPS, deskPictures, growth } from './scene/desk.ts';
 import type { Sprite } from './scene/build.ts';
 import { depthOrder, slotOf } from './scene/depth.ts';
 import type { Drawable } from './scene/depth.ts';
@@ -710,9 +710,7 @@ export class Scene {
     for (const d of f.desks ?? []) {
       if (d.grow <= 0) continue;
       yield () => {
-        const m = deskStats.misses;
-        const sp = deskSprite(f.world, d, s, ink);
-        made(sp.img, deskStats.misses > m);
+        for (const { sp, fresh } of deskPictures(f.world, d, f.t, s, ink)) made(sp.img, fresh);
       };
     }
     for (const tk of f.trinkets ?? []) {
@@ -861,15 +859,19 @@ export class Scene {
       if (sp.body) out.push(sprite(`prop:${i}`, sp.body, box));
     });
     for (const d of f.desks ?? []) {
-      // A workstation stands on the floor like a prop, as tall as it has grown.
+      // A workstation stands on the floor like a prop, as tall as it has
+      // grown: its body, then its loops and its screen over it (one box,
+      // so in that order).
       if (d.grow <= 0) continue;
-      const sp = deskSprite(f.world, d, s, ink);
       const [x, y] = P(d.x0, d.y0, 0);
-      const dx = Math.round(x) - sp.ax;
-      const dy = Math.round(y) - sp.ay;
       const r = footprint(d);
-      const it: Item = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: workstationOf(f.world).height * growth(d.grow), point: false, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `desk:${d.id}`, img: sp.img, x: dx, y: dy };
-      if (seen(it)) out.push(it);
+      const box = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: workstationOf(f.world).height * growth(d.grow), point: false };
+      for (const { id, sp } of deskPictures(f.world, d, f.t, s, ink)) {
+        const dx = Math.round(x) - sp.ax;
+        const dy = Math.round(y) - sp.ay;
+        const it: Item = { ...box, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id, img: sp.img, x: dx, y: dy };
+        if (seen(it)) out.push(it);
+      }
     }
     f.builds.forEach((b, j) => {
       if (b.blocks.length || b.pending.length) {
