@@ -221,8 +221,8 @@ export function bench(k: Kit, u0: number, u1: number, v0: number, v1: number, h:
 
 // A drinking horn along a centreline of frame points from its mouth to its
 // tip, r at the mouth; a gold band at the mouth, mead inside when it is
-// held mouth up.
-export function horn(k: Kit, line: ReadonlyArray<P3>, r: number, full = false): void {
+// held mouth up; `ink` its outline.
+export function horn(k: Kit, line: ReadonlyArray<P3>, r: number, full = false, ink = k.lw): void {
   const pts = line.map((p) => k.p(...p));
   const left: Pt[] = [];
   const right: Pt[] = [];
@@ -243,7 +243,7 @@ export function horn(k: Kit, line: ReadonlyArray<P3>, r: number, full = false): 
   g.addColorStop(0, shade(C.horn, 0.12));
   g.addColorStop(0.55, C.horn);
   g.addColorStop(1, '#b89c6a');
-  fillPts(k, body, g, k.lw);
+  fillPts(k, body, g, ink);
   // the tip darkens, the band at the mouth
   const tip = Math.max(1, Math.floor(n * 0.7));
   k.line(line.slice(tip), '#7a5a3a', Math.max(1, r * 0.55 * k.s));
@@ -251,8 +251,8 @@ export function horn(k: Kit, line: ReadonlyArray<P3>, r: number, full = false): 
   const dir: P3 = [m1[0] - m0[0], m1[1] - m0[1], m1[2] - m0[2]];
   const lb = Math.hypot(...dir) || 1;
   const band: P3 = [m0[0] + (dir[0] / lb) * r * 0.45, m0[1] + (dir[1] / lb) * r * 0.45, m0[2] + (dir[2] / lb) * r * 0.45];
-  fillPts(k, hull([...ring(k, m0, dir, r * 1.02, 14), ...ring(k, band, dir, r * 0.95, 14)]), C.gold, k.thin);
-  fillPts(k, ring(k, m0, dir, r, 16), full ? '#c98a2a' : '#3a2416', k.thin);
+  fillPts(k, hull([...ring(k, m0, dir, r * 1.02, 14), ...ring(k, band, dir, r * 0.95, 14)]), C.gold, Math.min(k.thin, ink));
+  fillPts(k, ring(k, m0, dir, r, 16), full ? '#c98a2a' : '#3a2416', Math.min(k.thin, ink));
   if (full) fillPts(k, ring(k, [m0[0], m0[1], m0[2] + 0.01], dir, r * 0.55, 12), '#e8b04a', 0);
 }
 
