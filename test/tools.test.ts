@@ -5,7 +5,7 @@ import { Canvas } from '../src/art/canvas.ts';
 import { buildFigure } from '../src/art/figure/body.ts';
 import { lookOf } from '../src/art/figure/look.ts';
 import { Sketch, render } from '../src/art/figure/paint.ts';
-import { LOOP, rigFor, type Rig } from '../src/art/figure/rig.ts';
+import { LOOP, NECK, rigFor, type Rig } from '../src/art/figure/rig.ts';
 import { ENVELOPE, SLOT_OF, toolOf, type Slot } from '../src/art/figure/tools/index.ts';
 import { COSTUMES, traitsFor, type Costume, type Pose, type Species, type Traits } from '../src/world/character.ts';
 
@@ -60,16 +60,6 @@ function figure(r: Rig, c: Costume, back: boolean, s: number, t: Traits = tr): C
   return cv;
 }
 
-// Pixels that differ between two pictures of one size.
-function differ(a: Canvas, b: Canvas): number {
-  let n = 0;
-  for (let o = 0; o < a.data.length; o += 4) {
-    const d = Math.abs(a.data[o] - b.data[o]) + Math.abs(a.data[o + 1] - b.data[o + 1]) + Math.abs(a.data[o + 2] - b.data[o + 2]);
-    if (d > 48 || Math.abs(a.data[o + 3] - b.data[o + 3]) > 32) n++;
-  }
-  return n;
-}
-
 // Opaque pixels (alpha 192 and up) of a picture.
 function solid(c: Canvas): number {
   let n = 0;
@@ -78,15 +68,30 @@ function solid(c: Canvas): number {
 }
 
 // Opaque pixels of a that differ from b (same size): what a shows that b
-// does not, not counting a glow.
-function opaqueChange(a: Canvas, b: Canvas): number {
+// does not, not counting a glow. With a mask, those inside it too.
+function opaqueChange(a: Canvas, b: Canvas, mask?: Uint8Array): number {
   let n = 0;
   for (let o = 0; o < a.data.length; o += 4) {
-    if (a.data[o + 3] < 192) continue;
+    if (a.data[o + 3] < 192 || (mask && !mask[o >> 2])) continue;
     const d = Math.abs(a.data[o] - b.data[o]) + Math.abs(a.data[o + 1] - b.data[o + 1]) + Math.abs(a.data[o + 2] - b.data[o + 2]);
     if (d > 48 || Math.abs(a.data[o + 3] - b.data[o + 3]) > 32) n++;
   }
   return n;
+}
+
+// Where the head is in a figure from behind drawn by figure() from rig r:
+// the opaque pixels above the neck with the hands empty and down at the
+// sides (the hair, a hat or a helmet with it).
+const BEHIND = { back: true, walking: false, walkU: 0, item: false, mug: false };
+function headOf(r: Rig, c: Costume, s: number, t: Traits): Uint8Array {
+  const cv = figure({ ...r, props: [], arms: rigFor('idle', 0, BEHIND).arms }, c, true, s, t);
+  const ny = NECK[1] - r.chest;
+  const neck = 28 * s + s * (r.pelvis[1] + Math.sin(r.lean) * NECK[0] + Math.cos(r.lean) * ny);
+  const m = new Uint8Array(cv.width * cv.height);
+  for (let y = 0; y < Math.min(cv.height, neck); y++) {
+    for (let x = 0; x < cv.width; x++) if (cv.data[(y * cv.width + x) * 4 + 3] >= 192) m[y * cv.width + x] = 1;
+  }
+  return m;
 }
 
 test('every costume holds a tool in each slot of the work poses; the wizard, the first five ever drawn', () => {
@@ -157,6 +162,26 @@ test("seen from behind at its desk, a figure at work shows each tool it holds, a
       }
     }
   }
+});
+
+test('seen from behind at its desk, a figure swinging raises its tool beside its head, not over it: in every frame, under 15% of the tool lies on the head', () => {
+  const s = 6;
+  const n = LOOP.run[1];
+  const over: string[] = [];
+  for (const sp of ['human', 'robot'] as const) {
+    const t = traitsFor(idOf(sp), 'sub');
+    for (const c of COSTUMES) {
+      for (let i = 0; i < n; i++) {
+        const r = rigFor('run', i, BEHIND);
+        const all = figure(r, c, true, s, t);
+        const bare = figure({ ...r, props: [] }, c, true, s, t);
+        const tool = opaqueChange(all, bare);
+        const onHead = opaqueChange(all, bare, headOf(r, c, s, t));
+        if (onHead > 0.15 * tool) over.push(`${sp} ${c} frame ${i}: ${onHead} of ${tool}`);
+      }
+    }
+  }
+  assert.deepEqual(over, []);
 });
 
 test("each world works with its own tools, as the design's table says, and tools of other names look other", () => {

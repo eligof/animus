@@ -523,6 +523,22 @@ test('no beat starts under an emote or over a high-five; a change of activity en
   assert.equal(pose(stage, w, now), 'read');
 });
 
+test('a worker sent walking mid-beat walks at once, and the beat is over', () => {
+  const stage = newStage();
+  stage.office = false;
+  let now = run(stage, () => [agent('w', 'write')], 10);
+  const w = byId(stage, 'w');
+  w.mind.gestures = [];
+  w.mind.micro = 0;
+  now = run(stage, () => [agent('w', 'write')], 0.3, now);
+  assert.ok(BEAT_POSES.has(pose(stage, w, now)), 'no beat to walk off from');
+  w.path = [{ x: w.x + 10, y: w.y + 10 }];
+  assert.equal(pose(stage, w, now), 'walk');
+  now = run(stage, () => [agent('w', 'write')], 0.05, now);
+  assert.equal(pose(stage, w, now), 'walk');
+  assert.ok(!w.mind.gestures.some((g) => g.beat), 'the beat kept for when it stops');
+});
+
 test('a scratch and a stretch at work turn to us', () => {
   const seen = new Set<Pose>();
   for (const b of beats(false)) if (b.pose === 'scratch' || b.pose === 'stretch') {

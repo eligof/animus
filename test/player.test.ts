@@ -10,6 +10,7 @@ import { getTheme } from '../src/themes/index.ts';
 import { World } from '../src/world/world.ts';
 import { StressSource } from '../src/demo/stress.ts';
 import type { WorldDef } from '../src/worlds/types.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import { looped } from './desk-fakes.ts';
 import { Term, same } from './kitty-term.ts';
 
@@ -107,11 +108,25 @@ function bytesAStep(theme: WorldDef): { bytes: number; loops: number } {
   return { bytes: bytes / (3 * rate), loops };
 }
 
+// `w` with no loops on its desks.
+const still = (w: WorldDef): WorldDef => ({ ...w, workstation: { ...workstationOf(w), loops: [] } });
+
 test('two loops on every one of twenty workstations cost at most 4 KiB a step more than none', () => {
   const cafe = getTheme('cafe')!;
-  const none = bytesAStep(cafe);
+  const none = bytesAStep(still(cafe));
   const two = bytesAStep(looped(cafe));
+  assert.equal(none.loops, 0);
   assert.equal(two.loops, 40, 'not two loops on each of twenty desks');
   assert.ok(two.bytes > none.bytes, 'the loops cost nothing: are they moving?');
   assert.ok(two.bytes <= none.bytes + 4096, `${two.bytes.toFixed(0)} bytes a step with loops, ${none.bytes.toFixed(0)} without`);
+});
+
+test("a world's own loops on twenty workstations, both at 8 frames a second (the shelter's), cost at most 4 KiB a step more than none", () => {
+  const shelter = getTheme('shelter')!;
+  const none = bytesAStep(still(shelter));
+  const own = bytesAStep(shelter);
+  assert.equal(none.loops, 0);
+  assert.equal(own.loops, 40, 'not two loops on each of twenty desks');
+  assert.ok(own.bytes > none.bytes, 'the loops cost nothing: are they moving?');
+  assert.ok(own.bytes <= none.bytes + 4096, `${own.bytes.toFixed(0)} bytes a step with loops, ${none.bytes.toFixed(0)} without`);
 });

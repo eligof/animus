@@ -20,7 +20,7 @@
 import type { DeskFrame } from '../../world/frame.ts';
 import { toWorld } from '../../world/room.ts';
 import type { DeskLoop, P3, PropView, WorkstationArt, WorldDef } from '../../worlds/types.ts';
-import { clutterOf, workstationOf } from '../../worlds/workstation.ts';
+import { clutterOf, workstationOf, type OnTop } from '../../worlds/workstation.ts';
 import { Canvas } from '../canvas.ts';
 import type { At } from '../iso.ts';
 import { drawScreen } from '../screen.ts';
@@ -120,6 +120,26 @@ function picture(art: WorkstationArt, wall: 'left' | 'right', g: number, s: numb
   return crop ? { img: crop.img, ax: ox - crop.x, ay: oy - crop.y } : { img: new Canvas(1, 1), ax: 0, ay: 0 };
 }
 
+// The clutter a place picked (see clutterOf) and its part of the body's
+// key, worked out once a place for each workstation art, not every frame.
+// The pick hangs on the world's id too, so that is kept to check (a test
+// may hand in one art under two ids). It keeps 256 places an art at most,
+// starting again past that.
+type Picked = { id: string; pick: OnTop[]; key: string };
+const NONE: Picked = { id: '', pick: [], key: '' };
+const picks = new WeakMap<WorkstationArt, Map<number, Picked>>();
+function pickedAt(world: WorldDef, art: WorkstationArt, place: number): Picked {
+  let m = picks.get(art);
+  if (!m) picks.set(art, (m = new Map()));
+  let p = m.get(place);
+  if (!p || p.id !== world.id) {
+    const pick = clutterOf(world, place);
+    if (m.size >= 256) m.clear();
+    m.set(place, (p = { id: world.id, pick, key: pick.map((c) => `${c.item.name}@${c.spot}`).join() }));
+  }
+  return p;
+}
+
 const viewOf = (art: WorkstationArt, pen: Canvas, at: At, s: number, wall: 'left' | 'right', active: boolean, seed: number): PropView => ({ pen, s, at, len: art.len, dep: art.dep, wall, island: true, t: 0, active, seed });
 
 // The body of workstation d of `world` at scale s in ink `ink` (popping,
@@ -129,8 +149,8 @@ export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | '
   const step = stepOf(d.grow);
   const pop = step < POP_STEPS;
   const on = d.screen !== 'off';
-  const pick = pop ? [] : clutterOf(world, d.id);
-  const key = `b|${artKey(art)}|${ink}|${d.wall}|${d.seed}|${pop ? d.screen : on ? 'on' : 'off'}|${pick.map((c) => `${c.item.name}@${c.spot}`).join()}|${step}|${s}`;
+  const { pick, key: pk } = pop ? NONE : pickedAt(world, art, d.id);
+  const key = `b|${artKey(art)}|${ink}|${d.wall}|${d.seed}|${pop ? d.screen : on ? 'on' : 'off'}|${pk}|${step}|${s}`;
   return kept(key, () => {
     const g = growth(d.grow);
     return picture(art, d.wall, g, s, (pen, at) => {

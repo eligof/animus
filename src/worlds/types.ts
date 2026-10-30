@@ -78,16 +78,16 @@ export type DeskLoop = { name: string; at: P3; r: number; h: number; frames: num
 // A world's workstation (see world/desks.ts): a prop DESK.len x DESK.dep
 // that stands at most DESK.height tall. Its own picture is never animated
 // (it is drawn once a scale, frame, look and pick of clutter, and kept; see
-// art/scene/desk.ts); its loops are pictures of their own. Its agent
-// stands at DESK_SPOT, in front. It names where its screen is (`screen`, upright on its body, to the right of
-// where its agent stands: the shared activity layer draws on it, see
-// art/screen.ts) and where a desk upgrade stands on it (`top`, on its top
-// surface). `v.active` is true while its screen is on; `v.seed` is 0, 1 or
-// 2: the world's few looks of it. `clutter`: things a place's desk picks a
-// few of (see clutterOf in ./workstation.ts) and the spots on the top they
-// may stand on, clear of the screen, the upgrade and the agent at work;
-// `loops`: one or two things that move on it while its agent works, clear
-// of the same and of the clutter's spots.
+// art/scene/desk.ts); its loops are pictures of their own. Its agent stands
+// at DESK_SPOT, in front. It names where its screen is (`screen`, upright on
+// its body, to the right of where its agent stands: the shared activity
+// layer draws on it, see art/screen.ts) and where a desk upgrade stands on
+// it (`top`, on its top surface). `v.active` is true while its screen is on;
+// `v.seed` is 0, 1 or 2: the world's few looks of it. `clutter`: things a
+// place's desk picks a few of (see clutterOf in ./workstation.ts) and the
+// spots on the top they may stand on, clear of the screen, the upgrade and
+// the agent at work; `loops`: one or two things that move on it while its
+// agent works, clear of the same and of the clutter's spots.
 export type WorkstationArt = PropArt & {
   screen: Quad;
   top: P3;

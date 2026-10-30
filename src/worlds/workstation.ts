@@ -56,9 +56,9 @@ export function workstationOf(w: WorldDef): WorkstationArt {
 
 // What stands on the top of place `place`'s workstation in world `w`: 2 to
 // 4 (fewer if it has fewer) of its clutter on as many of its spots
-// (`spot`: which), picked by the world's id and the place, so a desk keeps its things while it stands and
-// its neighbours have others; far to near (the order to draw them). None
-// where the world has none.
+// (`spot`: which), picked by the world's id and the place, so a desk keeps
+// its things while it stands and its neighbours have others; far to near
+// (the order to draw them). None where the world has none.
 export type OnTop = { item: Clutter; at: P3; spot: number };
 export function clutterOf(w: WorldDef, place: number): OnTop[] {
   const c = workstationOf(w).clutter;

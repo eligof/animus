@@ -7,15 +7,15 @@ import { Rng, hashString } from './rng.ts';
 import type { Actor } from './stage.ts';
 import type { Facing, Particle, Poi, Spot } from './types.ts';
 
-// The life between the work: idle characters wander between the spots
-// they like (a seat, a drink, a view, the dance floor, the fire, the
-// critter), chat with each other, pet the critter and help build; workers
-// keep at it with a beat now and then (a glance, a stretch, a scratch); everyone waves, flinches at a
-// bang and cheers a finish. And office life (the o key turns it off): a
-// kick-off huddle round a lead that has just started subagents, coffee
-// runs, a high-five when a subagent finishes, a stand-up when a crew waits.
-// Every choice comes from the character's own seeded Rng, so a scene plays
-// out the same way every time.
+// The life between the work: idle characters wander between the spots they
+// like (a seat, a drink, a view, the dance floor, the fire, the critter),
+// chat with each other, pet the critter and help build; workers keep at it
+// with a beat now and then (a glance, a stretch, a scratch); everyone waves,
+// flinches at a bang and cheers a finish. And office life (the o key turns
+// it off): a kick-off huddle round a lead that has just started subagents,
+// coffee runs, a high-five when a subagent finishes, a stand-up when a crew
+// waits. Every choice comes from the character's own seeded Rng, so a scene
+// plays out the same way every time.
 
 export type { Spot };
 
@@ -388,7 +388,8 @@ export class Life {
     this.byId = new Map(actors.map((a) => [a.info.id, a]));
     for (const a of actors) {
       const m = a.mind;
-      if (m.gestures.length) m.gestures = m.gestures.filter((g) => g.until > c);
+      // a beat is over once its worker is sent walking
+      if (m.gestures.length) m.gestures = m.gestures.filter((g) => g.until > c && !(g.beat && a.path.length));
       if (m.emote && m.emote.until <= c) m.emote = null;
     }
     for (const a of actors) {
@@ -1371,7 +1372,8 @@ export class Life {
 
   private looks(a: Actor, walking: boolean, base: Pose): Look {
     const c = this.clock;
-    const g = a.mind.gestures.find((q) => q.at <= c && c < q.until);
+    // a beat is work at the desk: none on the move (until update drops it)
+    const g = a.mind.gestures.find((q) => q.at <= c && c < q.until && !(walking && q.beat));
     if (g) {
       const out: Look = { pose: g.pose };
       if (g.face) out.face = g.face;

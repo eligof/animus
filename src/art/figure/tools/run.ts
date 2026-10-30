@@ -7,8 +7,8 @@ import { BRASS, METAL, METAL_D, SLATE, TAU, WHITE, WOOD, WOOD_D, everyone, type 
 // The run pose's tools: swung, the handle at the hand along +x, the head
 // out to about 3.2; `v` is 1 on the strike (marks of the blow, a spill, a
 // stamp's print). The swing comes down on the +y side, so the blow lands
-// there. Raised over the head it shows from behind. Each costume's own
-// below.
+// there. From behind it shows raised, out beside the head. Each costume's
+// own below.
 
 // ---- the strike's marks ------------------------------------------------------
 

@@ -247,11 +247,16 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.eyes = strike ? 'squeeze' : 'open';
       r.face.brows = 'focus';
       r.face.mouth = strike ? 'open' : 'flat';
-      const hx = 3.3 - 2.6 * k;
-      const hy = -1.6 - 5.0 * k;
-      r.arms[1] = arm([hx, hy], 1, { fwd: true, high: k > 0.5 });
       r.arms[0] = arm([1.6, -1.4], 1, { fwd: true });
-      r.props.push(prop('mallet', 1, 0, 0, 0.35 - 2.75 * k + (strike ? 0.2 : 0), strike ? 1 : 0, k < 0.5));
+      if (c.back) {
+        // from behind (at the desk): wound up out at the near side, beside
+        // the head; over it the tool would look stuck on
+        r.arms[1] = arm([3.3 + 1.6 * k, -1.6 - 2.6 * k], 1, { fwd: k < 0.5, high: k > 0.5 });
+        r.props.push(prop('mallet', 1, 0, 0, 0.35 - 1.45 * k + (strike ? 0.2 : 0), strike ? 1 : 0, k < 0.5));
+      } else {
+        r.arms[1] = arm([3.3 - 2.6 * k, -1.6 - 5.0 * k], 1, { fwd: true, high: k > 0.5 });
+        r.props.push(prop('mallet', 1, 0, 0, 0.35 - 2.75 * k + (strike ? 0.2 : 0), strike ? 1 : 0, k < 0.5));
+      }
       break;
     }
     case 'search': {

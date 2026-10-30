@@ -9,6 +9,7 @@ import { hexOf, mix, rgbOf } from '../src/art/iso.ts';
 import { budget } from './helpers.ts';
 import type { CritterFrame, FigureFrame } from '../src/world/frame.ts';
 import { figureTop } from '../src/world/frame.ts';
+import { BEATS } from '../src/world/life.ts';
 
 const INK = '#2b2233';
 const POSES = Object.keys(LOOP) as Pose[];
@@ -1261,7 +1262,7 @@ test('a carried mug gets a sprite of its own in every frame of every pose where 
 const atRest = { back: false, walking: false, walkU: 0, item: false, mug: false };
 
 test('the beats at work: each starts at rest and moves away from it mid-loop', () => {
-  for (const pose of ['glance', 'lean', 'scratch', 'tap'] as Pose[]) {
+  for (const [pose] of BEATS) {
     const [per, n] = LOOP[pose];
     const first = rigFor(pose, 0, atRest);
     assert.ok(Math.abs(first.lean) <= 0.03 && Math.abs(first.tilt) <= 0.05, `${pose}: not at rest at its start`);

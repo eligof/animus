@@ -346,7 +346,9 @@ test('twenty at their workstations: the stage\'s frame and the scene\'s plate st
     { runs: 5, calls: 20 },
   );
   // The plate: twenty figures, as many workstations with two loops each,
-  // labels; the workstations' pictures drawn once, then placed.
+  // labels; the workstations' pictures drawn once, then placed. The café's
+  // own loops are swapped for stand-ins at eight frames a second, as fast
+  // as any world's run: the worst case.
   const start = Date.UTC(2026, 9, 22, 21, 30, 0);
   const w = new World({ theme: looped(getTheme('cafe')!), live: new StressSource(4, 4, start), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start, images: true });
   w.full = true;

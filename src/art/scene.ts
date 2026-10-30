@@ -12,14 +12,13 @@
 //             light), contact shadows, the selection's ring and the hurt's
 //             pulsing one.
 //   depth     props, workstations (a body, its screen and its loops),
-//             builds, piles, figures, desk upgrades and the critter in
-//             depth order (see scene/depth.ts), each
-//             particle slotted in
-//             among them: the particles of a slot drawn together, a picture
-//             per bunch of them, cropped to what it paints (drifting ones
-//             again only per ambient step). Animated props are pictures of
-//             their own, drawn whole (body and floor) and again only per
-//             ambient step or when they are worked or left.
+//             builds, piles, figures, desk upgrades and the critter in depth
+//             order (see scene/depth.ts), each particle slotted in among
+//             them: the particles of a slot drawn together, a picture per
+//             bunch of them, cropped to what it paints (drifting ones again
+//             only per ambient step). Animated props are pictures of their
+//             own, drawn whole (body and floor) and again only per ambient
+//             step or when they are worked or left.
 //   emotes    over the heads, so no prop hides them.
 //   overlay   the room's (rain on the windows), drawn per ambient step in
 //             pieces round what it paints, laid out in small tiles on a grid
@@ -35,9 +34,8 @@
 // sits on whole pixels: the camera's origin is rounded, so a sprite placed
 // again is the same picture. Sprites (tiles, props, workstations, builds,
 // figures, desk upgrades, emotes, shadows, rings, halos, pills) are cached
-// and keyed by
-// what they show; what is drawn afresh (particles, animated props, the
-// overlay) gets a new key only when its pixels change.
+// and keyed by what they show; what is drawn afresh (particles, animated
+// props, the overlay) gets a new key only when its pixels change.
 
 import type { RGB } from '../term/color.ts';
 import { mix as mixRgb } from '../term/color.ts';
@@ -714,8 +712,10 @@ export class Scene {
       yield () => {
         for (const { sp, fresh } of deskPictures(f.world, d, f.t, s, ink)) made(sp.img, fresh);
       };
-      // Every frame of its loops, lit, and the still one unlit, so the
-      // steps of a loop later are hits whatever the time.
+      // Every frame of its loops at s, lit, and the still one unlit. This
+      // runs only at the scales of the cameras a key away (see chores), so
+      // a view moved to one finds every step of a loop kept; at a scale
+      // none of them has, a frame is drawn when it first shows.
       if (popping(d.grow)) continue;
       for (const [k, lp] of (workstationOf(f.world).loops ?? []).entries()) {
         const mark = `${d.wall}|${k}`;
