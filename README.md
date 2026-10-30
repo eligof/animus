@@ -260,6 +260,19 @@ screen shows what the agent is doing, the same in every world. When every
 place is taken (a small terminal holds fewer), a newcomer shares a
 teammate's workstation, standing at its side.
 
+![Desks close up in the mines and at the startup](docs/screenshots/desks.png)
+
+No two desks are dressed alike: each place picks a few things from its
+world's own pool and keeps them while it stands (ore with gold and a
+canary's cage in the mines, a brain in a jar in the lab, macarons in the
+café, a soul jar in hell, a rubber duck at the startup). While its agent
+works, something on the desk moves: a candle stub's flame, a lava lamp, a
+flask boiling, a desk fan, a holo planet turning, a Newton's cradle; it
+stands still and unlit while the agent waits or is away. Every few seconds
+at work an agent breaks off for a beat: it glances at its screen and nods,
+leans in, stretches, scratches its head or taps a foot (with office life
+off too).
+
 | activity | triggered by | on its screen |
 | --- | --- | --- |
 | write | `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | lines of code |
@@ -286,7 +299,13 @@ the caverns, a parka in the snows, a guard's uniform in the vault, a
 devil's robe in hell, a rawhide coat at the outpost, a fur mantle in the
 longhall, an exosuit at the base, a teal jumpsuit in the shelter, a
 duster in the colony and a zip hoodie, jeans and sneakers at the startup
-(where the critter is the office corgi). Leads wear a headset. Subagents
+(where the critter is the office corgi). And it hands them its own tools:
+a miner chalks on a slate, reads a folded claim map, swings a pickaxe,
+searches by lantern and listens to a crank radio; a demon writes with a
+quill on a scroll, reads a grimoire, wields a trident and looks into a
+crystal ball and a scrying mirror; a startup hand scribbles on sticky
+notes and swings a ping-pong paddle. At its desk an agent is seen from
+behind, so it holds its tool out at its side. Leads wear a headset. Subagents
 dress by type: reviewers wear glasses, explorers a miner's lamp, planners
 and architects a beret, testers goggles, security agents a hood (from ★2
 the world's level hat takes the place of the lamp, beret or hood). Species
@@ -454,14 +473,22 @@ Layout:
    the crew `build`s and, optionally, its `workstation` (a desk at the
    footprint `DESK` in `src/world/desks.ts` gives it, naming its `screen`
    and the `top` where a desk upgrade stands; without one it gets a plain
-   desk in its colours).
-2. Draw with the `Pen` (`src/art/types.ts`) and the helpers in
+   desk in its colours). A workstation may name `clutter` (8 to 12 small
+   things and the spots on its top they may stand on; each place picks a
+   few) and `loops` (one or two things that move while its agent works):
+   `node scripts/desk-spots.ts <id> <r> <h>` maps where a thing of a given
+   size may stand.
+2. A new costume holds a tool in each of the five grip files in
+   `src/art/figure/tools/` (`write.ts`, `read.ts`, `run.ts`, `search.ts`,
+   `web.ts`; today's for everyone until it gets its own) and a row in the
+   table in `test/tools.test.ts`.
+3. Draw with the `Pen` (`src/art/types.ts`) and the helpers in
    `src/art/iso.ts`, following the art direction in
    `docs/superpowers/specs/2026-10-24-illustrated-design.md`: one ink colour,
    light from the upper left, no text in the picture.
-3. Check it against the contract with
+4. Check it against the contract with
    `ANIMUS_THEME_FILE=src/worlds/<id>.ts node --test test/themes.test.ts`.
-4. Register it in `WORLDS` in `src/worlds/index.ts` (the order is the
+5. Register it in `WORLDS` in `src/worlds/index.ts` (the order is the
    picker's and the number keys'), add its id to the registry test in
    `test/themes.test.ts`, and look at it with
    `node scripts/scene-shot.ts <id> /tmp/<id>.png`.
