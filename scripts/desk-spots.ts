@@ -11,7 +11,7 @@
 // agent at work, `U` too near the desk upgrade, `X` off the top.
 import { fileURLToPath } from 'node:url';
 import { DESK } from '../src/world/desks.ts';
-import type { P3 } from '../src/worlds/types.ts';
+import type { P3, PropView } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { S, partCheck } from '../test/desk-contract.ts';
 import { loadWorld } from './scene-shot.ts';
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
     const p: P3 = [u, v, z];
     let found = '.';
     for (const wall of ['right', 'left'] as const) {
-      const draw = (view: Parameters<typeof partCheck>[2] extends (v: infer V) => void ? V : never): void => {
+      const draw = (view: PropView): void => {
         const [x, y] = view.at(u, v, z);
         const [, ty] = view.at(u, v, z + h);
         const rx = r * S * Math.SQRT2;
