@@ -9,12 +9,15 @@ export const SPRITE_H = 4;
 // Work poses follow the agent's activity; the rest are the little life in
 // between: sitting, carrying a block (and placing it on a build), cheering,
 // waving, sipping a drink, stretching, chatting face to face, flinching at a
-// bang, dancing, petting a critter; and office life's high-five and a sip
-// from a mug held in both hands.
+// bang, dancing, petting a critter; office life's high-five and a sip
+// from a mug held in both hands; and the beats at work (see BEATS in
+// life.ts): a glance at the screen with a nod, leaning in, a scratch of
+// the head, a tap of the foot.
 export type Pose =
   | 'idle' | 'walk' | 'write' | 'read' | 'think' | 'run' | 'search' | 'web' | 'delegate' | 'talk' | 'done' | 'error' | 'sleep'
   | 'sit' | 'carry' | 'place' | 'cheer' | 'wave' | 'drink' | 'stretch' | 'chat' | 'flinch' | 'dance' | 'pet'
-  | 'highfive' | 'sip';
+  | 'highfive' | 'sip'
+  | 'glance' | 'lean' | 'scratch' | 'tap';
 // Little pictures that pop up over a character's head (a speech mark: a
 // balloon of dots, no words).
 export type Emote = 'excl' | 'question' | 'heart' | 'note' | 'idea' | 'sweat' | 'zzz' | 'anger' | 'star' | 'cup' | 'speech';

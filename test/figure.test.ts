@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { clearSprites, critterSprite, emoteSprite, figureSprite, spriteCount, spriteStats, trinketSprite, type Sprite } from '../src/art/figure.ts';
 import { CLOAK, COAT, CREAM, FUR, GOLD, IRON, LEATHER, PRIZES, RAG, SHIRT, SLATE, STRIPE, SUIT_TEAL, TROUSERS, lookOf } from '../src/art/figure/look.ts';
 import { CLOTHES, STARTUP } from '../src/art/figure/look.ts';
-import { blinkAt, frameOf, LOOP, MUG_POSES } from '../src/art/figure/rig.ts';
+import { blinkAt, frameOf, LOOP, MUG_POSES, rigFor } from '../src/art/figure/rig.ts';
 import { traitsFor, type Costume, type Emote, type Feel, type Pose, type Species, type Traits, type Wear } from '../src/world/character.ts';
 import { hexOf, mix, rgbOf } from '../src/art/iso.ts';
 import { budget } from './helpers.ts';
@@ -1256,4 +1256,38 @@ test('a carried mug gets a sprite of its own in every frame of every pose where 
   assert.deepEqual(wrong, []);
   // in every frame of the poses that show one, for every species, both ways round
   assert.equal(shows, 2 * SPECIES.length * [...MUG_POSES].reduce((k, p) => k + LOOP[p][1], 0));
+});
+
+const atRest = { back: false, walking: false, walkU: 0, item: false, mug: false };
+
+test('the beats at work: each starts at rest and moves away from it mid-loop', () => {
+  for (const pose of ['glance', 'lean', 'scratch', 'tap'] as Pose[]) {
+    const [per, n] = LOOP[pose];
+    const first = rigFor(pose, 0, atRest);
+    assert.ok(Math.abs(first.lean) <= 0.03 && Math.abs(first.tilt) <= 0.05, `${pose}: not at rest at its start`);
+    const sprites = new Set(Array.from({ length: n }, (_, i) => hash(figureSprite(fig(who('human', 1), 'casual', pose, { poseT: ((i + 0.5) * per) / n, phase: 0 }), 4, INK))));
+    assert.ok(sprites.size >= 3, `${pose}: ${sprites.size} different frames`);
+  }
+  assert.ok(rigFor('lean', LOOP.lean[1] / 2, atRest).lean >= 0.2, 'a lean that does not lean in');
+  assert.ok(Math.max(...Array.from({ length: LOOP.glance[1] }, (_, i) => rigFor('glance', i, atRest).tilt)) >= 0.1, 'a glance with no nod');
+  const rest = rigFor('idle', 0, atRest).legs[1].foot[1];
+  assert.ok(Array.from({ length: LOOP.tap[1] }, (_, i) => rigFor('tap', i, atRest).legs[1].foot[1]).some((y) => y < rest - 0.3), 'a tap that never lifts the foot');
+});
+
+test('a scratch: a hand up by the side of the head mid-loop, down at its start, on every species', () => {
+  const s = 8;
+  const [per, n] = LOOP.scratch;
+  for (const sp of SPECIES) {
+    const tr = who(sp, 1);
+    const at = (i: number) => figureSprite(fig(tr, 'casual', 'scratch', { poseT: ((i + 0.5) * per) / n, phase: 0 }), s, INK);
+    assert.notEqual(hash(at(0)), hash(at(n / 2)), `${sp}: the scratch never moves`);
+    // The hand is the colour of the face on some species, so follow the
+    // sleeve instead. A ghost's sheet covers its arms, so it has none.
+    if (sp === 'ghost') continue;
+    const sleeve = lookOf(tr, 'casual').top;
+    const mid = highest(pixelsAt(at(n / 2), s, sleeve));
+    const start = highest(pixelsAt(at(0), s, sleeve));
+    assert.ok(mid > 8.8, `${sp}: the sleeve reaches ${mid} mid-scratch`);
+    assert.ok(start < 8.5, `${sp}: the arm already up at the start (${start})`);
+  }
 });
