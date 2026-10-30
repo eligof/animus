@@ -186,3 +186,10 @@ test('fungal room: the shell draws inside the canvas and it all stays in budget'
   // No overlay: the caverns' life is in their props and their spores.
   assert.equal(fungal.room.overlay, undefined);
 });
+
+test('Fungal Caverns\'s workstation: its own, still whatever the clock', () => {
+  const art = fungal.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});

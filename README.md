@@ -9,9 +9,11 @@ Your Claude Code agents as cartoon characters, living and working in an
 illustrated room in your terminal.
 
 Every running Claude Code session, and every subagent it starts, walks in
-as a character of its own, dressed for the world it is in. What it does
-follows what its agent is doing right now: editing at the desk, reading at
-the shelf, running commands at the machine. In between they live a little:
+as a character of its own, dressed for the world it is in, and a
+workstation of its own pops up for it beside its teammates'. Its screen
+follows what its agent is doing right now: code while it edits, an open
+page while it reads, a terminal while it runs commands. In between they
+live a little:
 they wander, sit, chat, pet the resident critter, build things together,
 huddle, fetch coffee, high-five and hold stand-ups, and nap. Select one to
 see its card (context, energy, health, mood), open a chat to read its
@@ -68,7 +70,8 @@ columns and rows, not its pixels, so a HiDPI screen shows the same room,
 only sharper, and on a very large terminal it stops growing instead of
 turning big and empty. The furniture between the stations stands along the
 back walls, in the corners and beside the stations, never loose at the
-front of the room. Names, speech bubbles, the card and the
+front of the room; the open floor in between is kept for workstations.
+Names, speech bubbles, the card and the
 chat are terminal text over the picture, so they stay crisp at any zoom.
 The picture goes out as a stack of sprites: each is sent once and the
 terminal keeps it, so a frame only moves what changed. It runs at 30 frames
@@ -213,7 +216,7 @@ style:
 | --- | --- | --- |
 | ★2 | 100 | a hat: a leather cap with a lamp in the mines, a mortarboard in the lab, a party hat in the club, a cap worn backwards in the den, an antenna on the station, a beanie in the café, a toadstool cap in the caverns, a trapper hat in the snows, a peaked guard's cap in the vault, curled gold horns in hell, a wide straw cone at the outpost, an iron helm in the longhall, a helmet with its visor up at the base, a newsboy cap in the shelter, a cowboy hat in the colony, a snapback worn backwards at the startup |
 | ★3 | 250 | a badge on the shirt |
-| ★5 | 1,000 | a desk upgrade (a plant, a steaming mug or a trophy) by its favourite station, the one it has worked at most since animus started |
+| ★5 | 1,000 | a desk upgrade (a plant, a steaming mug or a trophy) on its own workstation |
 | ★8 | 8,000 | its outfit in other colours |
 | ★10 | 32,000 | a soft aura |
 
@@ -248,26 +251,32 @@ header, ticker and keys are the same as in the scene.
 
 ## What the characters do
 
-Each world has a prop for each kind of work. A character walks to the one
-for what its agent is doing, and the prop comes alive while it is worked
-(in the café the espresso machine pulls shots, in the club the decks spin).
+Every agent works at a workstation of its own, drawn in its world's style:
+a laptop table in the café, a lantern-lit workbench in the mines, a
+scribe's desk in the longhall, a standing desk at the startup. It pops up
+out of the floor as its agent walks in, a lead's first and its subagents'
+round it in a pod, and goes a few seconds after its agent leaves. Its
+screen shows what the agent is doing, the same in every world. When every
+place is taken (a small terminal holds fewer), a newcomer shares a
+teammate's workstation, standing at its side.
 
-| activity | triggered by | in the room |
+| activity | triggered by | on its screen |
 | --- | --- | --- |
-| write | `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | at the write station |
-| read | `Read`, MCP resource reads | at the read station |
-| search | `Grep`, `Glob`, `LS`, `ToolSearch` | at the search station |
-| run | `Bash` and any other tool | at the run station |
-| web | `WebFetch`, `WebSearch`, MCP tools | at the web station |
-| think | thinking, planning, a new task | at the think station |
-| delegate | `Agent`/`Task`, `Skill`, `SendMessage`, `Workflow` | casting a bolt at its subagent, who waves back |
-| talk | a reply, a question for you | at the think station, glints round it |
+| write | `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | lines of code |
+| read | `Read`, MCP resource reads | an open page |
+| search | `Grep`, `Glob`, `LS`, `ToolSearch` | a magnifier over a list |
+| run | `Bash` and any other tool | a terminal with sparks |
+| web | `WebFetch`, `WebSearch`, MCP tools | a globe |
+| think | thinking, planning, a new task | a lightbulb |
+| delegate | `Agent`/`Task`, `Skill`, `SendMessage`, `Workflow` | speech marks; it casts a bolt at its subagent, who waves back |
+| talk | a reply, a question for you | speech marks, glints round it |
 | error | a failed tool call | a bang: sparks, smoke and `!`; those near flinch; it stays on show for 5 seconds |
 | done | a subagent finished | a high-five with its lead, then fireworks and the world's confetti, the crew cheers; it helps build, then leaves |
 | idle | the session waits for you | wandering, sitting, chatting, petting the critter, building, a coffee, a stand-up with its crew; after a while a nap with z's |
 
-Idle and finished agents fetch blocks and raise a build on the room's
-plazas: a hologram of the goal (a tower, house, pyramid, statue or machine,
+The room's own props for each kind of work stay as its scenery, and idle
+agents and office life still use the room round them. Idle and finished
+agents fetch blocks and raise a build on the room's plazas: a hologram of the goal (a tower, house, pyramid, statue or machine,
 by world) fills in block by block, and the crew cheers every quarter.
 
 Each world dresses its crew for its setting: overalls in the mines, lab
@@ -303,7 +312,7 @@ Between tasks the crew keeps a little office life, in every world:
   gather in a ring and take turns to talk.
 
 It is all for show: nothing is sent or changed, a working agent never
-leaves its station for it, and anyone given work drops it at once. `o`
+leaves its workstation for it, and anyone given work drops it at once. `o`
 turns office life off and on, for pure status, and is remembered.
 
 ## Keys
@@ -421,7 +430,7 @@ Layout:
   (characters, camera, labels, effects, level-ups), `life.ts` (what they do
   between work), room planning, paths, builds, the critter, particles.
 - `src/worlds/<id>.ts` and `src/worlds/<id>/`: one world each (room,
-  stations, decor); `types.ts` is the contract, `index.ts` the registry.
+  stations, decor, its workstation); `types.ts` is the contract, `index.ts` the registry.
 - `src/art`: the zero-dependency rasterizer (`canvas.ts`, a Canvas2D
   subset; `iso.ts`, shared isometric primitives; `png.ts`), `figure/` (the
   cartoon characters, critters, emotes and desk upgrades) and `scene.ts`
@@ -441,8 +450,11 @@ Layout:
    overlay), a prop for each station (`write`, `read`, `search`, `run`,
    `web`, `think`, `idle` and the `entrance`, each at the footprint
    `PROP_SIZE` in `src/world/layout.ts` gives it), optional decor and
-   ambient tint, the `costume`, the `critter`, the `finale` colours and
-   what the crew `build`s.
+   ambient tint, the `costume`, the `critter`, the `finale` colours, what
+   the crew `build`s and, optionally, its `workstation` (a desk at the
+   footprint `DESK` in `src/world/desks.ts` gives it, naming its `screen`
+   and the `top` where a desk upgrade stands; without one it gets a plain
+   desk in its colours).
 2. Draw with the `Pen` (`src/art/types.ts`) and the helpers in
    `src/art/iso.ts`, following the art direction in
    `docs/superpowers/specs/2026-10-24-illustrated-design.md`: one ink colour,

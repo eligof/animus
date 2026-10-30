@@ -11,8 +11,9 @@
 //   floor     what props lay on the floor round them (shadows, pools of
 //             light), contact shadows, the selection's ring and the hurt's
 //             pulsing one.
-//   depth     props, builds, piles, figures, desk upgrades and the critter
-//             in depth order (see scene/depth.ts), each particle slotted in
+//   depth     props, workstations, builds, piles, figures, desk upgrades
+//             and the critter in depth order (see scene/depth.ts), each
+//             particle slotted in
 //             among them: the particles of a slot drawn together, a picture
 //             per bunch of them, cropped to what it paints (drifting ones
 //             again only per ambient step). Animated props are pictures of
@@ -31,8 +32,9 @@
 // picture laid over: halos are matched to a mid ground (see haloSprite),
 // the rest is lifted off the base it is drawn on (see lift). Everything
 // sits on whole pixels: the camera's origin is rounded, so a sprite placed
-// again is the same picture. Sprites (tiles, props, builds, figures, desk
-// upgrades, emotes, shadows, rings, halos, pills) are cached and keyed by
+// again is the same picture. Sprites (tiles, props, workstations, builds,
+// figures, desk upgrades, emotes, shadows, rings, halos, pills) are cached
+// and keyed by
 // what they show; what is drawn afresh (particles, animated props, the
 // overlay) gets a new key only when its pixels change.
 
@@ -47,6 +49,7 @@ import type { PlacedProp } from '../world/room.ts';
 import { footprint, toWorld } from '../world/room.ts';
 import type { Particle } from '../world/types.ts';
 import type { CritterKind, RoomView, WorldDef } from '../worlds/types.ts';
+import { workstationOf } from '../worlds/workstation.ts';
 import { Canvas } from './canvas.ts';
 import { critterSprite, emoteSprite, figureSprite, spriteStats, trinketSprite } from './figure.ts';
 import { hexOf, ink as inkFrom, inkWidth } from './iso.ts';
@@ -54,6 +57,7 @@ import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
 import { buildSprite, pileSprite } from './scene/build.ts';
+import { POP_STEPS, deskSprite, deskStats, growth } from './scene/desk.ts';
 import type { Sprite } from './scene/build.ts';
 import { depthOrder, slotOf } from './scene/depth.ts';
 import type { Drawable } from './scene/depth.ts';
@@ -557,7 +561,9 @@ export class Scene {
     };
     let act = '';
     for (const a of f.active) act += a ? '1' : '0';
-    return `${scopeOf(f)}|${span(f.camera)}|${(f.next ?? []).map(span).join(';')}|${act}|${f.figures.length}|${f.builds.map((b) => b.blocks.length).join()}`;
+    let desks = '';
+    for (const d of f.desks ?? []) desks += `${d.id}${d.screen}${Math.round(d.grow * POP_STEPS)};`;
+    return `${scopeOf(f)}|${span(f.camera)}|${(f.next ?? []).map(span).join(';')}|${act}|${f.figures.length}|${f.builds.map((b) => b.blocks.length).join()}|${desks}`;
   }
 
   // The units of warming still to do, most likely needed first; each puts
@@ -666,7 +672,7 @@ export class Scene {
 
   // The figures and the critter as they stand, at scale s, with their
   // contact shadows, the ring each would have if picked, and their emotes;
-  // and the desk upgrades.
+  // the workstations and the desk upgrades.
   private *figureChores(f: SceneFrame, s: number, out: Pic[]): Generator<() => void> {
     const t = tintOf(f.world);
     const ink = inkOf(f.world);
@@ -699,6 +705,14 @@ export class Scene {
         const m = spriteStats.misses;
         const sp = critterSprite(cr, f.t, s, ink);
         made(sp.img, spriteStats.misses > m);
+      };
+    }
+    for (const d of f.desks ?? []) {
+      if (d.grow <= 0) continue;
+      yield () => {
+        const m = deskStats.misses;
+        const sp = deskSprite(f.world, d, s, ink);
+        made(sp.img, deskStats.misses > m);
       };
     }
     for (const tk of f.trinkets ?? []) {
@@ -846,6 +860,17 @@ export class Scene {
       if (sp.floor) floors.push(sprite(`floor:${i}`, sp.floor, box));
       if (sp.body) out.push(sprite(`prop:${i}`, sp.body, box));
     });
+    for (const d of f.desks ?? []) {
+      // A workstation stands on the floor like a prop, as tall as it has grown.
+      if (d.grow <= 0) continue;
+      const sp = deskSprite(f.world, d, s, ink);
+      const [x, y] = P(d.x0, d.y0, 0);
+      const dx = Math.round(x) - sp.ax;
+      const dy = Math.round(y) - sp.ay;
+      const r = footprint(d);
+      const it: Item = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: workstationOf(f.world).height * growth(d.grow), point: false, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `desk:${d.id}`, img: sp.img, x: dx, y: dy };
+      if (seen(it)) out.push(it);
+    }
     f.builds.forEach((b, j) => {
       if (b.blocks.length || b.pending.length) {
         const e = this.buildAt(l, b, ink);
@@ -873,12 +898,13 @@ export class Scene {
       if (seen(it)) out.push(it);
     }
     for (const tk of f.trinkets ?? []) {
-      // Desk upgrades stand on the floor, sorted like a figure.
+      // Desk upgrades stand on their workstation, sorted like a figure (on
+      // top of the desk it stands on).
       const sp = trinketSprite(tk.kind, tk.color, s, ink);
-      const [x, y] = P(tk.x, tk.y, 0);
+      const [x, y] = P(tk.x, tk.y, tk.z ?? 0);
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: 0, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
+      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: tk.z ?? 0, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
       if (seen(it)) out.push(it);
     }
     const cr = f.critter;

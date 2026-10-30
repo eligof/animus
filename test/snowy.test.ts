@@ -189,3 +189,10 @@ test('snowy room: the shell draws inside the canvas, the frost twinkles, and it 
   assert.ok(lit(a) < 1500 * 920 * 0.01, `the overlay paints ${lit(a)} pixels`);
   budget('the overlay a frame', (i) => snowy.room.overlay!(view(i / 12)), 3, { calls: 20 });
 });
+
+test('Snowy Depths\'s workstation: its own, still whatever the clock', () => {
+  const art = snowy.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});

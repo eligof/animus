@@ -1,18 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LANE, Stage, onScreen, stationKindFor } from '../src/world/stage.ts';
+import { LANE, Stage, WORK_APART, onScreen, screenFor, stationKindFor } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
 import { LIMITS, planLayout, slotRect } from '../src/world/layout.ts';
 import { computeLayout } from '../src/ui/layout.ts';
 import { THEMES } from '../src/themes/index.ts';
 import { footprint, heightAt, toWorld } from '../src/world/room.ts';
-import type { Layout, Slot } from '../src/world/types.ts';
+import type { Desk, Layout, Slot } from '../src/world/types.ts';
 import type { SceneFrame } from '../src/world/frame.ts';
 import { EMOTE, cellAt, figureBox, figureTop, project } from '../src/world/frame.ts';
 import { placeCard } from '../src/ui/card.ts';
 import { DEFAULT, Screen } from '../src/term/screen.ts';
 import { mines } from '../src/worlds/mines.ts';
 import { stubProp } from '../src/worlds/stub.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import type { WorldDef } from '../src/worlds/types.ts';
 import type { AgentInfo, Activity, Vitals } from '../src/agents.ts';
 import type { Pose } from '../src/world/character.ts';
@@ -46,7 +47,7 @@ function newStage(r = RECT, world: WorldDef = mines): Stage {
 
 const slot = (stage: Stage, kind: string) => stage.stations().find((s) => s.kind === kind)!;
 const layoutOf = (stage: Stage) => stage.room()!.L;
-const footprintOf = (p: Slot) => footprint(p);
+const footprintOf = (p: Slot | Desk) => footprint(p);
 
 // The frame's labels drawn over a blank scene, as text.
 function text(stage: Stage, now: number, sel: string | null = null): { s: Screen; f: SceneFrame } {
@@ -65,7 +66,7 @@ test('stationKindFor groups activities', () => {
   assert.equal(stationKindFor('error'), null);
 });
 
-test('a writer walks from the entrance to the desk and works', () => {
+test('a writer walks from the entrance to its own workstation, which went up as it came in, and works there', () => {
   const stage = newStage();
   const a = agent('w1', 'write');
   stage.sync([a], NOW);
@@ -73,19 +74,26 @@ test('a writer walks from the entrance to the desk and works', () => {
   const door = slot(stage, 'entrance');
   assert.equal(actor.state, 'enter');
   assert.ok(Math.hypot(actor.x - door.spot.x, actor.y - door.spot.y) < 1e-9, 'spawns at the entrance');
+  const [ws] = stage.workstations();
+  assert.equal(ws?.owner, 'w1', 'no workstation went up');
   run(stage, [a], 12);
-  const desk = slot(stage, 'write');
   assert.equal(actor.state, 'work');
-  assert.equal(actor.station, desk);
-  assert.ok(Math.hypot(actor.x - desk.spot.x, actor.y - desk.spot.y) < 1e-6);
+  assert.equal(actor.station, ws.desk);
+  assert.ok(Math.hypot(actor.x - ws.desk.spot.x, actor.y - ws.desk.spot.y) < 1e-6);
 });
 
-test('readers go to the left wall', () => {
+test('every kind of work is done at its own workstation: a new activity changes its screen, not its place', () => {
   const stage = newStage();
-  run(stage, [agent('r', 'read')], 12);
+  let now = run(stage, [agent('r', 'read')], 12);
   const actor = stage.actors()[0];
-  assert.equal(actor.station?.kind, 'read');
-  assert.equal(actor.station?.wall, 'left');
+  const desk = actor.station;
+  assert.equal(desk?.kind, 'desk');
+  for (const act of ['write', 'search', 'run', 'web', 'think', 'delegate', 'talk'] as Activity[]) {
+    now = run(stage, [agent('r', act, { since: now })], 6, now);
+    assert.equal(actor.station, desk, act);
+    assert.equal(actor.state, 'work', act);
+    assert.equal(stage.frame(now)!.desks![0].screen, screenFor(act), act);
+  }
 });
 
 test('agents at the props out on the floor stand on open floor, in view, backs to us, facing the prop', () => {
@@ -120,59 +128,58 @@ test('agents at the props out on the floor stand on open floor, in view, backs t
   }
 });
 
-test('agents sharing a prop stand apart', () => {
+test('three writers work at three workstations, apart', () => {
   const stage = newStage();
   run(stage, [agent('a', 'write'), agent('b', 'write'), agent('c', 'write')], 14);
+  assert.equal(new Set(stage.actors().map((a) => a.station)).size, 3);
   const xs = stage.actors().map((a) => [a.x, a.y]);
   for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) assert.ok(Math.hypot(xs[i][0] - xs[j][0], xs[i][1] - xs[j][1]) >= 4, 'crowded');
 });
 
-test('a crowd at a prop lines up a figure apart on screen, close by and turned to it', () => {
-  for (const kind of ['write', 'read', 'think', 'run'] as const) {
-    const stage = newStage(WIDE);
-    const crew = ['a', 'b', 'c'].map((id) => agent(`${kind}-${id}`, kind));
-    run(stage, crew, 20);
-    const st = slot(stage, kind);
-    const f = footprintOf(st);
-    const crowd = stage.actors();
-    let working = 0;
-    for (const a of crowd) {
-      const tag = `${kind}: ${a.info.id} at ${a.x.toFixed(0)},${a.y.toFixed(0)}`;
-      assert.equal(a.station, st, tag);
-      assert.equal(a.state, 'work', tag);
-      // Never more than 2.5 lane steps from the prop's own spot.
-      assert.ok(Math.hypot(a.x - st.spot.x, a.y - st.spot.y) <= 2.5 * LANE * Math.SQRT2, `${tag}: far from its prop`);
-      // At work (not mid-gesture), backs to us and turned the prop's way.
-      const look = stage.lookOf(a);
-      if (look.pose !== kind) continue;
-      working++;
-      assert.ok(look.facing.back, `${tag}: facing us`);
-      assert.equal(look.facing.flip, (f.x0 + f.x1 - f.y0 - f.y1) / 2 < a.x - a.y, `${tag}: turned away from the prop`);
-    }
-    assert.ok(working >= 2, `${kind}: ${working} at work`);
-    for (let i = 0; i < crowd.length; i++) {
-      for (let j = i + 1; j < crowd.length; j++) {
-        const d = onScreen(crowd[i], crowd[j]);
-        assert.ok(d >= LANE - 1e-9, `${kind}: ${crowd[i].info.id} and ${crowd[j].info.id} ${d.toFixed(1)} units apart on screen`);
-      }
-    }
+test('past every place, a newcomer shares a teammate\'s workstation, standing at its side apart from everyone, turned to it', () => {
+  // A small room: a lead and more subagents than there are places.
+  const stage = newStage({ x: 0, y: 1, w: 80, h: 21 });
+  const places = stage.room()!.desks.length;
+  const crew = [agent('L', 'write', { role: 'lead' }), ...Array.from({ length: places + 3 }, (_, i) => agent(`s${i}`, 'write', { parentId: 'L' }))];
+  run(stage, crew, 20);
+  const up = stage.workstations();
+  const all = stage.actors();
+  const sharers = all.filter((a) => !up.some((w) => w.owner === a.info.id));
+  assert.equal(sharers.length, 4);
+  let turned = 0;
+  for (const a of sharers) {
+    const at = up.find((w) => w.desk === a.station);
+    const tag = `${a.info.id} at ${a.x.toFixed(0)},${a.y.toFixed(0)}`;
+    assert.ok(at?.owner, `${tag}: at no workstation`);
+    assert.equal(a.state, 'work', tag);
+    assert.ok(a.lane > 0, tag);
+    assert.ok(Math.hypot(a.x - at.desk.spot.x, a.y - at.desk.spot.y) <= 12.5, `${tag}: far from the one it shares`);
+    const look = stage.lookOf(a);
+    if (look.pose !== 'write') continue;
+    turned++;
+    const f = footprint(at.desk);
+    assert.ok(look.facing.back, `${tag}: facing us`);
+    assert.equal(look.facing.flip, (f.x0 + f.x1 - f.y0 - f.y1) / 2 < a.x - a.y, `${tag}: turned away from it`);
+  }
+  assert.ok(turned >= 2, `${turned} sharers at work`);
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) assert.ok(Math.hypot(all[i].x - all[j].x, all[i].y - all[j].y) >= WORK_APART, `${all[i].info.id} and ${all[j].info.id} on top of each other`);
   }
 });
 
-test('a crowd too big for its lanes never doubles up on one spot', () => {
-  // Small rooms clamp lanes to the floor; seven or nine at one prop.
+test('those asleep at the idle prop, more than its lanes, never double up on one spot', () => {
+  // Small rooms clamp lanes to the floor; seven or nine asleep at one prop.
   for (const [r, n] of [[{ x: 0, y: 1, w: 80, h: 21 }, 7], [WIDE, 9]] as const) {
     const stage = newStage(r);
-    const crew = Array.from({ length: n }, (_, i) => agent(`d${i}`, i % 2 ? 'write' : 'read'));
+    const crew = Array.from({ length: n }, (_, i) => agent(`z${i}`, 'idle', { since: NOW - 3_600_000 }));
     run(stage, crew, 25);
-    for (const kind of ['write', 'read']) {
-      const there = stage.actors().filter((a) => a.station?.kind === kind);
-      assert.ok(there.every((a) => a.state === 'work'), `${r.w}x${r.h} ${kind}: still walking`);
-      for (let i = 0; i < there.length; i++) {
-        for (let j = i + 1; j < there.length; j++) {
-          const d = onScreen(there[i], there[j]);
-          assert.ok(d >= LANE / 2, `${r.w}x${r.h} ${kind}: ${there[i].info.id} and ${there[j].info.id} only ${d.toFixed(1)} units apart`);
-        }
+    const there = stage.actors().filter((a) => a.station?.kind === 'idle');
+    assert.equal(there.length, n, `${r.w}x${r.h}: not all at the idle prop`);
+    assert.ok(there.every((a) => a.state === 'work'), `${r.w}x${r.h}: still walking`);
+    for (let i = 0; i < there.length; i++) {
+      for (let j = i + 1; j < there.length; j++) {
+        const d = onScreen(there[i], there[j]);
+        assert.ok(d >= LANE / 2, `${r.w}x${r.h}: ${there[i].info.id} and ${there[j].info.id} only ${d.toFixed(1)} units apart`);
       }
     }
   }
@@ -240,14 +247,15 @@ test('a big room is crossed at a jog, and the strides keep up', () => {
   assert.ok(a.gait > 0, 'the strides did not quicken');
 });
 
-test('activity change shows a bubble and retargets', () => {
+test('activity change shows a bubble; its agent stays at its workstation', () => {
   const stage = newStage();
   let now = run(stage, [agent('a', 'write')], 10);
   const actor = stage.actors()[0];
+  const desk = actor.station;
   stage.sync([agent('a', 'run', { detail: '$ npm test' })], now + 50);
   assert.ok(actor.bubbleUntil > now + 50);
   now = run(stage, [agent('a', 'run', { detail: '$ npm test' })], 12, now + 50);
-  assert.equal(actor.station?.kind, 'run');
+  assert.equal(actor.station, desk);
   assert.equal(actor.state, 'work');
 });
 
@@ -530,7 +538,7 @@ test('an error goes bang beside the agent, once per error, and keeps smoking a w
   assert.ok(stage.frame(now + 2100)!.figures[0].hurt);
 });
 
-test('props at work are marked active in the frame, the entrance while someone comes through', () => {
+test('the entrance is marked active while someone comes through; with everyone at a workstation the room\'s stations stand idle', () => {
   const stage = newStage();
   stage.sync([agent('s', 'search')], NOW);
   const door = stage.room()!.props.findIndex((p) => p.slot?.kind === 'entrance');
@@ -538,7 +546,8 @@ test('props at work are marked active in the frame, the entrance while someone c
   assert.equal(stage.frame(NOW + 50)!.active[door], true, 'the entrance is not busy');
   const now = run(stage, [agent('s', 'search'), agent('r', 'run')], 20);
   const f = stage.frame(now)!;
-  f.room.props.forEach((p, i) => assert.equal(f.active[i], p.slot?.kind === 'search' || p.slot?.kind === 'run', p.slot?.kind ?? 'decor'));
+  f.room.props.forEach((p, i) => assert.equal(f.active[i], false, p.slot?.kind ?? 'decor'));
+  assert.deepEqual(f.desks!.map((d) => d.screen).sort(), ['run', 'search']);
 });
 
 test('finishing showers the world\'s confetti, which lies on the floor a moment and is gone', () => {
@@ -890,7 +899,7 @@ test('figures show how their meters say they feel, and what their level lets the
   assert.ok(hops.size >= 3 && Math.max(...hops) <= 9, `hops ${[...hops]}`);
 });
 
-test('at ★5 a crew role gets a desk upgrade by the station it worked at most; below, none', () => {
+test('at ★5 a crew role gets a desk upgrade, on its agent\'s workstation; below, none; it goes with its agent', () => {
   const stage = newStage(WIDE);
   const writer = agent('w', 'write', { crew: '/p', role: 'lead', level: 5 });
   const junior = agent('j', 'write', { crew: '/p', agentType: 'Explore', level: 4 });
@@ -900,22 +909,20 @@ test('at ★5 a crew role gets a desk upgrade by the station it worked at most; 
   const tk = f.trinkets![0];
   assert.equal(tk.id, '/p\nlead');
   assert.ok(['plant', 'mug', 'trophy'].includes(tk.kind));
-  const desk = slot(stage, 'write');
-  const r = footprintOf(desk);
-  const away = Math.max(r.x0 - tk.x, tk.x - r.x1, r.y0 - tk.y, tk.y - r.y1);
-  assert.ok(away > 0 && away < 12, `beside the desk (${away.toFixed(1)} units off it)`);
-  // Reading for longer than it wrote: the shelves are its favourite now.
-  now = run(stage, [{ ...writer, activity: 'read', since: now }, junior], 70, now);
+  const own = stage.workstations().find((w) => w.owner === 'w')!;
+  const r = footprint(own.desk);
+  assert.ok(tk.x > r.x0 && tk.x < r.x1 && tk.y > r.y0 && tk.y < r.y1, `at ${tk.x},${tk.y}, not on its workstation`);
+  assert.ok(tk.z! > 2 && tk.z! < workstationOf(mines).height, `${tk.z} up: not on its top`);
+  // Reading now: still on its own workstation.
+  now = run(stage, [{ ...writer, activity: 'read', since: now }, junior], 10, now);
   f = stage.frame(now)!;
-  const shelves = footprintOf(slot(stage, 'read'));
-  const t2 = f.trinkets![0];
-  assert.ok(Math.max(shelves.x0 - t2.x, t2.x - shelves.x1, shelves.y0 - t2.y, t2.y - shelves.y1) < 12, 'moved to the shelves');
+  assert.deepEqual(f.trinkets!.map((t) => [t.x, t.y]), [[tk.x, tk.y]]);
   // Gone with its agent.
   now = run(stage, [junior], 20, now);
   assert.deepEqual(stage.frame(now)!.trinkets, []);
 });
 
-test('two upgrades at one station stand apart; a mug steams', () => {
+test('two roles\' upgrades stand each on its own workstation; a mug steams', () => {
   const stage = newStage(WIDE);
   // Roles whose upgrade is a mug, and another.
   const roles = Array.from({ length: 40 }, (_, i) => `type-${i}`);
@@ -929,7 +936,7 @@ test('two upgrades at one station stand apart; a mug steams', () => {
   let steam = 0;
   for (let i = 0; i < 40; i++) {
     now = run(stage, crew, 0.05, now);
-    steam = Math.max(steam, particlesOf(stage).filter((p) => p.kind === 'steam' && Math.hypot(p.x - mug.x, p.y - mug.y) < 3).length);
+    steam = Math.max(steam, particlesOf(stage).filter((p) => p.kind === 'steam' && Math.hypot(p.x - mug.x, p.y - mug.y) < 3 && p.z >= mug.z!).length);
   }
   assert.ok(steam > 0, 'steam off the mug');
 });
@@ -1023,14 +1030,24 @@ const hatted = () => ['ada', 'bo', 'cy', 'di'].map((n, i) => agent(n, (['idle', 
 test('a close-up frames its agent from its feet to the top of its hat', () => {
   const stage = newStage(WIDE, THEMES.find((t) => t.id === 'club')!);
   const now = run(stage, hatted(), 15);
-  for (const id of ['bo', 'cy']) {
+  let centred = 0;
+  for (const id of ['ada', 'bo', 'cy', 'di']) {
     let f: SceneFrame | null = null;
     for (let i = 0; i < 80; i++) f = stage.frame(now, id);
+    const cam = f!.camera;
+    const L = f!.room.L;
     const g = f!.figures.find((x) => x.id === id)!;
-    const [, feet] = project(f!.camera, g.x, g.y, 0);
-    const [, top] = project(f!.camera, g.x, g.y, figureTop(g));
-    assert.ok(Math.abs((feet + top) / 2 - f!.camera.h / 2) < f!.camera.s, `${id}: its middle at ${((feet + top) / 2).toFixed(0)}, the view's at ${f!.camera.h / 2}`);
+    const [, feet] = project(cam, g.x, g.y, 0);
+    const [, top] = project(cam, g.x, g.y, figureTop(g));
+    // (A workstation by the front of the room: the view stops at the
+    // room's edge, a margin of 4 units past it, rather than show what is
+    // past it.)
+    const edge = Math.abs(project(cam, L.W, L.D, 0)[1] + 4 * cam.s - cam.h) < 1 || Math.abs(project(cam, 0, 0, L.H)[1] - 4 * cam.s) < 1;
+    if (edge) continue;
+    centred++;
+    assert.ok(Math.abs((feet + top) / 2 - cam.h / 2) < cam.s, `${id}: its middle at ${((feet + top) / 2).toFixed(0)}, the view's at ${cam.h / 2}`);
   }
+  assert.ok(centred >= 2, `${centred} close-ups away from the room's edges`);
 });
 
 test("close up, a figure whose hat reaches over the scene's top keeps its label, on the top rows", () => {
@@ -1060,57 +1077,27 @@ test("close up, a figure whose hat reaches over the scene's top keeps its label,
   }
 });
 
-// How far a spot is from a rect (0 inside it).
-const off = (p: { x: number; y: number }, r: { x0: number; y0: number; x1: number; y1: number }) => Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1));
-
-test('a desk upgrade stands by its own station, nearer it than any other, clear of the props and of the entrance, off where anyone works or stands; with no such spot, none', () => {
-  let shown = 0;
-  for (const id of ['snowy', 'cafe']) {
-    const w = THEMES.find((t) => t.id === id)!;
-    for (const act of ['write', 'read', 'search', 'run', 'web', 'think'] as Activity[]) {
-      // A 90x26 terminal's scene; four roles at one station, at ★5.
-      const stage = newStage({ x: 0, y: 1, w: 90, h: 23 }, w);
-      const crew = [0, 1, 2, 3].map((i) => agent(`a${i}`, act, { crew: '/p', agentType: `t${i}`, level: 5 }));
-      const now = run(stage, crew, 12);
-      const slots = stage.stations();
-      const own = slotRect(slots.find((s) => s.kind === stationKindFor(act))!);
-      const door = slots.find((s) => s.kind === 'entrance')!;
-      for (const tk of stage.frame(now)!.trinkets!) {
-        shown++;
-        const what = `${id}/${act}/${tk.id.split('\n')[1]} at ${tk.x.toFixed(1)},${tk.y.toFixed(1)}`;
-        for (const s of slots) if (s.kind !== stationKindFor(act)) assert.ok(off(tk, slotRect(s)) > off(tk, own), `${what}: nearer the ${s.kind}`);
-        for (const p of stage.room()!.props) assert.ok(off(tk, footprint(p)) >= 1, `${what}: in a prop`);
-        for (const p of [...slots.map((s) => s.spot), ...stage.pois()]) assert.ok(Math.hypot(p.x - tk.x, p.y - tk.y) >= 2, `${what}: on a spot someone stands at`);
-        assert.ok(off(tk, slotRect(door)) >= 4, `${what}: in the way in`);
-      }
-    }
-  }
-  assert.ok(shown >= 12, `${shown} desk upgrades`);
-});
-
-test('in a small room a desk upgrade stands nearer where anyone works rather than not at all, never on a spot or a lane, nor by the way in', () => {
-  let roles = 0;
+test('in every world, in a small room, each ★5 role whose agent has a workstation up has its upgrade on it, at the world\'s spot; one sharing has none', () => {
   let shown = 0;
   for (const w of THEMES) {
-    // An 80x24 terminal's scene; a role at each station, at ★5.
+    // An 80x24 terminal's scene; more roles at ★5 than places.
     const stage = newStage({ x: 0, y: 1, w: 80, h: 22 }, w);
-    const crew = (['write', 'read', 'search', 'run', 'web', 'think'] as Activity[]).map((act, i) => agent(`a${i}`, act, { crew: '/p', agentType: `t${i}`, level: 5, since: NOW - 60_000 }));
+    const places = stage.room()!.desks.length;
+    const crew = Array.from({ length: places + 2 }, (_, i) => agent(`a${i}`, (['write', 'read', 'search'] as Activity[])[i % 3], { crew: '/p', agentType: `t${i}`, level: 5, since: NOW - 60_000 }));
     const now = run(stage, crew, 15);
-    roles += crew.length;
-    const slots = stage.stations();
-    const door = slots.find((s) => s.kind === 'entrance')!;
-    // Where anyone stands: the spots idlers like, the way in, and a crowd's first lanes at each station.
-    const lanes = stage as unknown as { laneSpot(s: Slot, k: number): { x: number; y: number } };
-    const stands = [...stage.pois(), door.spot, ...slots.filter((s) => s !== door).flatMap((s) => [0, 1, 2, 3, 4].map((k) => lanes.laneSpot(s, k)))];
-    for (const tk of stage.frame(now)!.trinkets!) {
+    const top = workstationOf(w).top;
+    const trinkets = stage.frame(now)!.trinkets!;
+    for (const ws of stage.workstations()) {
+      const role = `/p\nt${ws.owner!.slice(1)}`;
+      const tk = trinkets.find((t) => t.id === role);
+      assert.ok(tk, `${w.id}: ${ws.owner} has no upgrade`);
+      const [x, y, z] = toWorld(ws.desk, ...top);
+      assert.deepEqual([tk.x, tk.y, tk.z], [x, y, z], `${w.id}: ${ws.owner}'s upgrade is not on its workstation`);
       shown++;
-      const what = `${w.id}/${tk.id.split('\n')[1]} at ${tk.x.toFixed(1)},${tk.y.toFixed(1)}`;
-      for (const p of stage.room()!.props) assert.ok(off(tk, footprint(p)) >= 1, `${what}: in a prop`);
-      for (const p of stands) assert.ok(Math.hypot(p.x - tk.x, p.y - tk.y) >= 2, `${what}: on a spot someone stands at`);
-      assert.ok(off(tk, slotRect(door)) >= 4, `${what}: in the way in`);
     }
+    assert.equal(trinkets.length, stage.workstations().length, `${w.id}: an upgrade with no workstation`);
   }
-  assert.ok(shown >= roles - 1, `${shown} of ${roles} roles have a desk upgrade`);
+  assert.ok(shown >= 16 * 3, `${shown} desk upgrades`);
 });
 
 test("a mug's steam leaves the rest of the stage's chance alone", () => {
@@ -1123,8 +1110,9 @@ test("a mug's steam leaves the rest of the stage's chance alone", () => {
   let now = run(a, crew(6, 'write'), 10);
   run(b, crew(4, 'write'), 10);
   assert.ok(particlesOf(a).some((p) => p.kind === 'steam'), 'steam');
-  run(a, crew(6, 'error', now), 1.5, now);
-  now = run(b, crew(4, 'error', now), 1.5, now);
+  // (just after the bang: its sparks are out)
+  run(a, crew(6, 'error', now), 0.3, now);
+  now = run(b, crew(4, 'error', now), 0.3, now);
   const rest = (s: Stage) => particlesOf(s).filter((p) => p.kind !== 'steam').map((p) => `${p.kind} ${p.x} ${p.y} ${p.z}`);
   assert.ok(rest(b).filter((p) => p.startsWith('spark')).length > 5, 'the bang');
   assert.deepEqual(rest(a), rest(b));

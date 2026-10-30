@@ -209,3 +209,10 @@ test('lab room: the shell draws inside the canvas, the overlay is sparse and mov
   const over = budget('the overlay a frame', (i) => lab.room.overlay!(view(i / 12)), 3, { calls: 20 });
   t.diagnostic(`overlay ${over.toFixed(2)} ms a frame`);
 });
+
+test('Mad Science Lab\'s workstation: its own, still whatever the clock', () => {
+  const art = lab.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});

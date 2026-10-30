@@ -1,15 +1,18 @@
 import type { PropArt, WorldDef } from '../worlds/types.ts';
 import { supplyFor } from './build.ts';
+import { deskCap, keepOut, planDesks } from './desks.ts';
 import type { Rect } from './layout.ts';
-import { buildSites, hub, keepClear, wallGaps, yard } from './layout.ts';
+import { boxCount, buildSites, hub, keepClear, wallGaps, yard } from './layout.ts';
 import { NavGrid } from './path.ts';
 import { Rng, hashString } from './rng.ts';
-import type { Layout, Poi, Slot, SlotKind, Spot } from './types.ts';
+import type { Desk, Layout, Poi, Slot, SlotKind, Spot } from './types.ts';
 
 // The furnished room: every station slot holding its world's prop, decor
 // along the walls and on the floor by them and by the stations (clear of
 // the walkways, plazas and the yard), the routing grid round all of it,
-// the spots idle characters like, and the supply piles builders fetch from.
+// the spots idle characters like, the supply piles builders fetch from,
+// and the places on the open floor left where workstations go up (see
+// desks.ts).
 
 // A prop placed in the room. Its frame is its wall's (see Slot): on the
 // right wall u runs +x along the wall and v +y out from it, on the left wall
@@ -30,6 +33,8 @@ export type PlacedProp = {
 export type Room = {
   L: Layout;
   props: PlacedProp[]; // the stations in slot order, then the decor
+  desks: Desk[]; // where workstations go up, pod by pod, each pod's lead's first
+  keepOut: Uint8Array; // floor nobody works on (x + W * y): the way in, the plazas, the yard, the spots idlers like, the stations' fronts
   nav: NavGrid; // routing round the props (builds are the stage's to add)
   pois: Poi[];
   supply: Rect[]; // each build plaza's pile (buildSites order)
@@ -39,10 +44,9 @@ export type Room = {
 export const NAV_CELL = 2; // units per routing cell
 export const NAV_PAD = 2; // routing keeps this far from props and builds
 
-// Where a station's desk upgrades may stand (see Stage.trinketSpot): a
-// step (DESK_GAP) out from either end, by its back and by its front, then
-// `steps` - 1 more steps of 3 units further along. The nearest of these
-// are kept clear of decor (see planRoom).
+// The floor by a station's ends: a step (DESK_GAP) out from either end, by
+// its back and by its front, then `steps` - 1 more steps of 3 units further
+// along. The nearest of these are kept clear of floor decor (see planRoom).
 const DESK_GAP = 2;
 export function deskSpots(s: Slot, steps = 3): Spot[] {
   const g = DESK_GAP;
@@ -102,7 +106,7 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   mark({ x0: yd.x - yd.r, y0: yd.y - yd.r, x1: yd.x + yd.r, y1: yd.y + yd.r }, 1);
   // Kept clear of floor decor too: the way in, across its width out past
   // where arrivals stand, and the floor a step from each station's ends
-  // for its desk upgrades (floor decor likes to stand by the stations).
+  // (floor decor likes to stand by the stations, not against them).
   const aside = new Uint8Array(W * D);
   for (const s of L.slots) {
     if (s.kind === 'entrance') {
@@ -145,7 +149,16 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   const nav = new NavGrid(L.T, L.T, W - 1, D - 1, NAV_CELL, (x, y) => (inside(x, y, 0.8) ? 2 : inside(x, y, NAV_PAD) ? 1 : 0));
   const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot)))
     .filter((p) => p.x > L.T && p.y > L.T && p.x < W - 1 && p.y < D - 1 && !inside(p.x, p.y, 1));
-  return { L, props, nav, pois, supply, height };
+  // The places for workstations, their pods turned the room's own way; in
+  // a room too small for all of them, turned the other way if that fits
+  // more.
+  const plan = (s: number) => planDesks(L, [...all, ...supply], height, pois, s);
+  let desks = plan(seed);
+  if (desks.length < deskCap(L)) {
+    const other = plan(seed ^ 1);
+    if (other.length > desks.length) desks = other;
+  }
+  return { L, props, desks, keepOut: keepOut(L, [...all, ...supply], pois), nav, pois, supply, height };
 }
 
 // Somewhere along a wall's free stretches for `art`, against the wall.
@@ -222,17 +235,6 @@ function onFloor(L: Layout, art: PropArt, keep: Uint8Array, free: (r: Rect) => b
 
 // Decor this many units apart or nearer crowds each other (see onFloor).
 const CROWD = 16;
-
-// How many of `mask`'s cells (x + W * y) a box covers, one look a box
-// (sums over every box from the corner).
-function boxCount(mask: Uint8Array, W: number, D: number): (r: Rect) => number {
-  const W1 = W + 1;
-  const sum = new Int32Array(W1 * (D + 1));
-  for (let y = 0; y < D; y++) {
-    for (let x = 0; x < W; x++) sum[x + 1 + W1 * (y + 1)] = mask[x + W * y] + sum[x + W1 * (y + 1)] + sum[x + 1 + W1 * y] - sum[x + W1 * y];
-  }
-  return (r) => sum[r.x1 + W1 * r.y1] - sum[r.x0 + W1 * r.y1] - sum[r.x1 + W1 * r.y0] + sum[r.x0 + W1 * r.y0];
-}
 
 // Units between two footprints (0 if they touch or overlap).
 const gap = (a: Rect, b: Rect) => Math.hypot(Math.max(0, b.x0 - a.x1, a.x0 - b.x1), Math.max(0, b.y0 - a.y1, a.y0 - b.y1));

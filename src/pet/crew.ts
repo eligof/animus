@@ -28,7 +28,7 @@ export function levelOf(xp: number): number {
 }
 
 // What a level unlocks, each kept from then on: a hat from the world's
-// costume set, a badge on the shirt, an upgrade at its favourite station
+// costume set, a badge on the shirt, an upgrade on its own workstation
 // (a plant, a steaming mug or a trophy), its outfit in other colours, a
 // soft aura.
 export type Unlocks = { hat: boolean; badge: boolean; desk: boolean; outfit: boolean; aura: boolean };

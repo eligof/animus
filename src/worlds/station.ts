@@ -5,6 +5,7 @@ import { DECOR } from './station/decor.ts';
 import { INK } from './station/kit.ts';
 import { room, stationPois } from './station/room.ts';
 import { STATIONS } from './station/stations.ts';
+import { WORKSTATION } from './station/workstation.ts';
 
 // Orbital Station: a cosy deck in orbit, a planet turning past the glass.
 // A crew deck in outlined cartoon (deep navy ink): the shell in
@@ -43,6 +44,7 @@ export const station: WorldDef = {
   pois: stationPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'astronaut',
   critter: { kind: 'drone', body: hex('#d8dee6') }, // a maintenance drone
   finale: { colors: [[160, 230, 255], [240, 250, 255], [255, 210, 140]] }, // sparks drifting in low gravity

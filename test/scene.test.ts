@@ -89,7 +89,7 @@ const world: WorldDef = {
 };
 
 const place = (art: PropArt, wall: 'left' | 'right', island: boolean, x0: number, y0: number): PlacedProp => ({ art, wall, island, x0, y0, len: art.len, dep: art.dep, seed: 1 });
-const room = (props: PlacedProp[]): Room => ({ L: { W, D, H, T, slots: [] }, props, nav: null as unknown as NavGrid, pois: [], supply: [], height: new Float32Array(0) });
+const room = (props: PlacedProp[]): Room => ({ L: { W, D, H, T, slots: [] }, props, desks: [], keepOut: new Uint8Array(0), nav: null as unknown as NavGrid, pois: [], supply: [], height: new Float32Array(0) });
 
 function figure(id: string, x: number, y: number, o: Partial<FigureFrame> = {}): FigureFrame {
   return { id, x, y, z: 0, traits: traitsFor(id, 'lead'), costume: 'casual', pose: 'idle', poseT: 0, phase: 0, facing: { back: false, flip: false }, selected: false, hurt: false, sleeping: false, walking: false, ...o };
@@ -349,6 +349,14 @@ test('the screenshot script renders the demo crew to a PNG of the scene', async 
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [640, 384]);
 });
 
+test('the screenshot script renders a stress crew instead, if asked: leads and their subagents, all at work', async () => {
+  const { shot } = await import('../scripts/scene-shot.ts');
+  const o = { world: 'cafe', at: 6, cols: 80, rows: 24, cell: { w: 8, h: 16 }, zoom: 0, select: -1, full: true, dark: false };
+  const crew = shot({ ...o, crew: [2, 3] }).png;
+  assert.equal(crew.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.notDeepEqual(crew, shot(o).png);
+});
+
 test('the screenshot script takes a world by its id or by its module file, so a world not registered yet can be looked at', async () => {
   const { loadWorld, shot } = await import('../scripts/scene-shot.ts');
   const cafe = await loadWorld('cafe');
@@ -555,6 +563,17 @@ test('a plate of the café at 1500 x 920 with 9 figures and 80 bits fits the bud
   assert.ok(Math.min(...times) < 16, `best of 5: ${Math.min(...times).toFixed(1)} ms`);
 });
 
+
+test('a workstation is a picture of its own in the plate, under a figure working at it; none before it grows', () => {
+  const r = room([]);
+  const d = { id: 0, wall: 'right' as const, x0: 30, y0: 30, len: 7, dep: 3, screen: 'write' as const, grow: 1, seed: 0 };
+  const g = figure('w', 32, 35, { pose: 'write', facing: { back: true, flip: false } });
+  const ids = new Scene().plate(frame(r, { desks: [d], figures: [g] })).layers.map((l) => l.id);
+  assert.ok(ids.includes('desk:0'), 'no picture of the workstation');
+  assert.ok(ids.indexOf('desk:0') < ids.indexOf('fig:w'), 'the figure is under its workstation');
+  const none = new Scene().plate(frame(r, { desks: [{ ...d, grow: 0 }] })).layers;
+  assert.ok(!none.some((l) => l.id.startsWith('desk:')), 'a workstation not yet grown');
+});
 
 test('a desk upgrade stands on the floor, in front of a prop or hidden behind it like a figure', () => {
   const isle = place(flat(10, 6, 8, '#00ff00'), 'right', true, 30, 30);

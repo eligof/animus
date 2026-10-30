@@ -272,7 +272,7 @@ export class Construction {
     this.cap = capOf(colors);
     const cx = Math.round(plaza.x);
     const cy = Math.round(plaza.y);
-    const R = Math.max(3, plaza.r - 1.5);
+    const R = buildReach(plaza);
     this.blocks = blueprint(shape, colors.length, R, H)
       .map((b) => ({ x: cx + b.x, y: cy + b.y, z: b.z, c: b.c }))
       .filter((b) => b.x >= L.T && b.y >= L.T && b.x < L.W && b.y < L.D && b.z < L.H);
@@ -373,6 +373,33 @@ export function supplyFor(L: Layout, plaza: Plaza, clear: (r: Rect) => boolean =
 // Every build in a room: one per plaza at most, started one at a time when
 // someone wants to build, rebuilt oldest-first once all stand for a while,
 // so a long session keeps building without the room filling up.
+// About how tall a build stands in room L (taller in a bigger room; a cap
+// may stand a little higher), and how far round its plaza's centre it
+// reaches.
+export function buildHeight(L: Layout): number {
+  return Math.min(L.H - 6, 12 + Math.round(12 * clamp((L.W - 72) / 98, 0, 1)));
+}
+const buildReach = (plaza: Plaza): number => Math.max(3, plaza.r - 1.5);
+
+// How tall the tallest build of any shape would stand over each floor cell
+// (x + W * y) of room L, on every plaza (where a build goes up, what it may
+// hide; the colours change none of it).
+export function buildsOver(L: Layout): Float32Array {
+  const out = new Float32Array(L.W * L.D);
+  const H = buildHeight(L);
+  for (const plaza of buildSites(L)) {
+    const cx = Math.round(plaza.x);
+    const cy = Math.round(plaza.y);
+    for (const shape of SHAPES) {
+      for (const b of blueprint(shape, 1, buildReach(plaza), H)) {
+        const [x, y] = [cx + b.x, cy + b.y];
+        if (x >= L.T && y >= L.T && x < L.W && y < L.D && b.z < L.H) out[x + L.W * y] = Math.max(out[x + L.W * y], b.z + 1);
+      }
+    }
+  }
+  return out;
+}
+
 export class Works {
   readonly plazas: Plaza[];
   readonly sites: Array<Construction | null>;
@@ -396,8 +423,7 @@ export class Works {
     this.supply = supply ?? this.plazas.map((p) => supplyFor(L, p));
     this.sites = this.plazas.map(() => null);
     this.finished = this.plazas.map(() => -Infinity);
-    const g = clamp((L.W - 72) / 98, 0, 1);
-    this.H = Math.min(L.H - 6, 12 + Math.round(12 * g));
+    this.H = buildHeight(L);
   }
 
   get builds(): Construction[] {

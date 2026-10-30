@@ -4,6 +4,7 @@ import { DECOR } from './fungal/decor.ts';
 import { INK } from './fungal/kit.ts';
 import { fungalPois, room } from './fungal/room.ts';
 import { STATIONS } from './fungal/stations.ts';
+import { WORKSTATION } from './fungal/workstation.ts';
 import type { WorldDef } from './types.ts';
 
 // Fungal Caverns: giant mushrooms, glowing spores and a pit of toxic sludge.
@@ -39,6 +40,7 @@ export const fungal: WorldDef = {
   pois: fungalPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'forager',
   critter: { kind: 'slime', body: hex('#4fd8a8') }, // a glowing slime
   finale: { colors: [[255, 211, 74]] }, // gold dust

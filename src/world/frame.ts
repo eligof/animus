@@ -136,12 +136,22 @@ export type BuildFrame = {
 export type LabelFrame = { col: number; row: number; w: number; kind: 'name' | 'bubble' | 'error' | 'glyph' | 'word'; color: RGB; alpha: number; text: string; ink: RGB; bold: boolean; mark?: { col: number; ch: string; ink: RGB } };
 
 // A desk upgrade (★5; see Stage.trinkets): a plant, a steaming mug or a
-// trophy standing on the floor by its owner's favourite station, in its
-// owner's colour.
+// trophy standing on its owner's workstation, `z` up (on the floor without
+// one), in its owner's colour.
 export type Trinket = 'plant' | 'mug' | 'trophy';
-// Steam rises off a mug's rim this high (units).
-export const MUG_TOP = 3.7;
-export type TrinketFrame = { id: string; kind: Trinket; x: number; y: number; color: RGB };
+// Steam rises off a mug's rim this high (units) over where it stands.
+export const MUG_TOP = 1.75;
+export type TrinketFrame = { id: string; kind: Trinket; x: number; y: number; z?: number; color: RGB };
+
+// What a workstation's screen shows (the shared activity layer, see
+// art/screen.ts): the work of the agent at it, or dim ('off') while it
+// waits or is away and once it is left empty.
+export type Screen = 'write' | 'read' | 'search' | 'run' | 'web' | 'think' | 'talk' | 'off';
+// A workstation standing in the room (see Stage): its desk's place and
+// frame, what its screen shows, how far it has grown out of the floor (0
+// to 1: popping up, or shrinking away once left) and which of the world's
+// few looks of it (0 to 2) it wears.
+export type DeskFrame = { id: number; wall: 'left' | 'right'; x0: number; y0: number; len: number; dep: number; screen: Screen; grow: number; seed: number };
 
 export type SceneFrame = {
   world: WorldDef;
@@ -153,6 +163,7 @@ export type SceneFrame = {
   figures: FigureFrame[]; // far to near (by x + y)
   critter: CritterFrame | null;
   trinkets?: TrinketFrame[];
+  desks?: DeskFrame[]; // the workstations, by desk index
   builds: BuildFrame[];
   particles: readonly Particle[];
   labels: LabelFrame[];

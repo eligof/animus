@@ -231,7 +231,8 @@ export function emoteSprite(kind: Emote, t: number, s: number, ink: string): Spr
 
 // ---- desk upgrades -------------------------------------------------------------
 
-const TRINKET_BOX = { x0: -3, x1: 3, y0: -7, y1: 1 };
+// Room round a desk upgrade (x, y in units round its foot).
+export const TRINKET_BOX = { x0: -3, x1: 3, y0: -7, y1: 1 };
 
 export function trinketSprite(kind: Trinket, color: RGB, s: number, ink: string): Sprite {
   const q = quant(s);

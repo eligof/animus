@@ -5,6 +5,7 @@ import { DECOR } from './shelter/decor.ts';
 import { INK } from './shelter/kit.ts';
 import { shelterPois, room } from './shelter/room.ts';
 import { STATIONS } from './shelter/stations.ts';
+import { WORKSTATION } from './shelter/workstation.ts';
 
 // Atomic Shelter: a retro-atomic bunker under the wasteland in 1950s paint,
 // teal and orange and cream over riveted steel and an ochre deck: a diner's
@@ -44,6 +45,7 @@ export const shelter: WorldDef = {
   pois: shelterPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'jumpsuit',
   critter: { kind: 'rat', body: hex('#8f857a') }, // a shelter rat
   finale: { colors: [[63, 176, 168], [240, 137, 46], [239, 230, 204]] }, // teal, orange and cream confetti

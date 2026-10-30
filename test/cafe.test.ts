@@ -165,3 +165,10 @@ test('café room: the shell draws inside the canvas, the rain moves, and it all 
   assert.ok(!same(a, z), 'the overlay does not move');
   budget('the overlay a frame', (i) => cafe.room.overlay!(view(i / 12)), 3, { calls: 20 });
 });
+
+test('Cozy Café\'s workstation: its own, still whatever the clock', () => {
+  const art = cafe.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});

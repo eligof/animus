@@ -30,10 +30,11 @@ const CHAT_EMOTES: readonly Emote[] = ['note', 'heart', 'idea', 'question'];
 const APART = 3; // units between two standing in a ring or round a lead, at least (see around)
 // Office life. A huddle: subagents a lead starts within HUDDLE_JOIN seconds
 // of the first gather round it (at most one a lead every HUDDLE_EVERY),
-// HUDDLE_R units out; it starts once they are all there (or HUDDLE_WAIT
-// after the first got there, HUDDLE_GATHER at most after one there set
-// out) and lasts HUDDLE_S; anyone not there within HUDDLE_GATHER gives up.
-// So none is in one longer than HUDDLE_GATHER + HUDDLE_S.
+// HUDDLE_R units out; it starts once they are all there and no more can
+// join (or HUDDLE_WAIT after the first got there, HUDDLE_GATHER at most
+// after one there set out) and lasts HUDDLE_S; anyone not there within
+// HUDDLE_GATHER gives up. So none is in one longer than HUDDLE_GATHER +
+// HUDDLE_S.
 const HUDDLE_JOIN = 4;
 export const HUDDLE_EVERY = 30;
 const HUDDLE_R = 4.5;
@@ -407,8 +408,10 @@ export class Life {
     const e = m.errand;
     const idleFor = this.host.idleFor(a);
     if (idleFor >= SLEEP_AFTER) {
-      // Up for a moment, or a block to lay first; then back to bed.
+      // Up for a moment, a block to lay first, or a subagent on its way to
+      // high-five it; then back to bed.
       if (this.clock < m.up || this.carrying(a)) return;
+      if (e?.kind !== 'nap' && this.awaited(a)) return;
       if (e?.kind === 'nap') {
         if (this.clock >= e.wake && !a.path.length) this.rise(a);
         return;
@@ -756,7 +759,8 @@ export class Life {
             this.emote(a, 'cup', 1.6, COFFEE_POUR - 1.6);
           } else if (c - e.since > COFFEE_LEG) this.end(a);
         } else if (e.step === 'pour') {
-          if (c < e.until) return;
+          // poured, it waits there for a subagent on its way to high-five it
+          if (c < e.until || this.awaited(a)) return;
           m.mug = c + m.rng.range(...MUG);
           m.sip = c + m.rng.range(2, 4);
           e.step = 'back';
@@ -852,8 +856,9 @@ export class Life {
     return spot;
   }
 
-  // Each huddle starts once its members are all there (or HUDDLE_WAIT after
-  // the first got there, HUDDLE_GATHER at most after one there set out):
+  // Each huddle starts once its members are all there and no more can join
+  // (or HUDDLE_WAIT after the first got there, HUDDLE_GATHER at most after
+  // one there set out):
   // they stand round the lead, nodding along, a
   // speech mark over it, an idle lead talking to them; HUDDLE_S later each
   // goes to its station. Members gone or given work drop out; with none
@@ -891,7 +896,7 @@ export class Life {
       const errands = h.members.map((m) => this.byId.get(m)!.mind.errand as Extract<Errand, { kind: 'huddle' }>);
       // (one there that set out HUDDLE_GATHER ago waits no longer)
       const due = errands.some((e) => e.arrived && c - e.since >= HUDDLE_GATHER);
-      if (!errands.every((e) => e.arrived) && !due && c - h.firstHere < HUDDLE_WAIT) continue;
+      if ((!errands.every((e) => e.arrived) || c - h.opened <= HUDDLE_JOIN) && !due && c - h.firstHere < HUDDLE_WAIT) continue;
       h.until = c + HUDDLE_S;
       this.emote(lead, 'speech', HUDDLE_S);
       if (!working(lead)) {
@@ -976,7 +981,8 @@ export class Life {
   }
 
   // Someone a finished subagent is on its way to high-five: it holds still
-  // (no new wanderings) until it has been.
+  // (no new wanderings, no nap, not back from the coffee yet) until it has
+  // been.
   private awaited(lead: Actor): boolean {
     for (const o of this.byId.values()) {
       const e = o.mind.errand;
@@ -1225,10 +1231,11 @@ export class Life {
 
   // A standable spot `d` from `c` at angle `ang`, turning either way to find
   // one, APART from each spot `taken` already if it can be (in finer turns,
-  // all the way round, then a step further out); else the one furthest
+  // all the way round, then a step or two further out: half the way round
+  // may be off the floor or taken by workstations); else the one furthest
   // from them.
   private around(c: Spot, d: number, ang: number, taken: readonly Spot[] = []): Spot {
-    const [step, turns, rings] = taken.length ? [0.2, 32, [d, d + APART]] : [0.35, 12, [d]];
+    const [step, turns, rings] = taken.length ? [0.2, 32, [d, d + APART, d + 2 * APART]] : [0.35, 12, [d]];
     let best: Spot | null = null;
     let room = -1;
     for (const r of rings) {

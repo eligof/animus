@@ -213,3 +213,10 @@ test('vault room: the shell draws inside the canvas, the cameras blink, and it a
   assert.ok(frames.some((f, i) => i > 0 && !same(f, frames[0])), 'the overlay does not move');
   budget('the overlay a frame', (i) => vault.room.overlay!(view(i / 12)), 3, { calls: 20 });
 });
+
+test('The Vault\'s workstation: its own, still whatever the clock', () => {
+  const art = vault.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});

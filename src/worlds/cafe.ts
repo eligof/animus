@@ -5,6 +5,7 @@ import { DECOR } from './cafe/decor.ts';
 import { INK } from './cafe/kit.ts';
 import { cafePois, room } from './cafe/room.ts';
 import { STATIONS } from './cafe/stations.ts';
+import { WORKSTATION } from './cafe/workstation.ts';
 
 // Cozy Café: rain on the windows, espresso and a cat by the fire. A corner
 // café on a wet evening in outlined cartoon (espresso-brown ink): the shell
@@ -42,6 +43,7 @@ export const cafe: WorldDef = {
   pois: cafePois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'casual',
   critter: { kind: 'cat', body: hex('#e8913a') }, // a ginger cat
   finale: { colors: [[244, 236, 220], [226, 204, 170], [250, 250, 244]] }, // paper confetti

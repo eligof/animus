@@ -5,6 +5,7 @@ import { DECOR } from './dunes/decor.ts';
 import { INK } from './dunes/kit.ts';
 import { dunesPois, room } from './dunes/room.ts';
 import { STATIONS } from './dunes/stations.ts';
+import { WORKSTATION } from './dunes/workstation.ts';
 
 // Dust Outpost: a drifters' bar and workshop in a drum of poured adobe
 // under a ribbed steel dome, on a deck of sun-bleached planks; hard white
@@ -46,6 +47,7 @@ export const dunes: WorldDef = {
   pois: dunesPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'drifter',
   critter: { kind: 'beetle', body: hex('#b4682c') }, // a sand beetle
   finale: { colors: [[226, 196, 140], [192, 88, 46], [63, 184, 168]] }, // sand, rust and turquoise confetti

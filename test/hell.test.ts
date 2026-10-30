@@ -204,3 +204,10 @@ test('hell room: the shell draws inside the canvas, the torches flicker, and it 
   assert.ok(marked && n < a.width * a.height * 0.01, `the overlay paints ${n} px`);
   budget('the overlay a frame', (i) => hell.room.overlay!(view(i / 12)), 3, { calls: 20 });
 });
+
+test('Hell\'s workstation: its own, still whatever the clock', () => {
+  const art = hell.workstation;
+  assert.ok(art, 'no workstation of its own');
+  const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
+  for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});

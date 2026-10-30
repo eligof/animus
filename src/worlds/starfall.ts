@@ -5,6 +5,7 @@ import { DECOR } from './starfall/decor.ts';
 import { INK } from './starfall/kit.ts';
 import { starfallPois, room } from './starfall/room.ts';
 import { STATIONS } from './starfall/stations.ts';
+import { WORKSTATION } from './starfall/workstation.ts';
 
 // Starfall Base: a prefab base on a bright strange planet, grey modules
 // with orange trim and blue lights, one wall glass onto a pink sky with two
@@ -44,6 +45,7 @@ export const starfall: WorldDef = {
   pois: starfallPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'exosuit',
   critter: { kind: 'hopper', body: hex('#b07ef0') }, // a fluffy hopper
   finale: { colors: [[255, 79, 163], [56, 217, 232], [255, 200, 74]] }, // magenta, cyan and gold confetti

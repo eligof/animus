@@ -6,6 +6,7 @@ import { INK } from './club/kit.ts';
 import { clubPois } from './club/plan.ts';
 import { room } from './club/room.ts';
 import { STATIONS } from './club/stations.ts';
+import { WORKSTATION } from './club/workstation.ts';
 
 // Underground Club: neon on brick, a floor that lights up and 128 BPM till
 // dawn. A brick basement in outlined cartoon (aubergine ink): the shell in
@@ -44,6 +45,7 @@ export const club: WorldDef = {
   pois: clubPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'raver',
   critter: { kind: 'cat', body: hex('#8a7aa8') }, // a grey cat
   finale: { colors: [[255, 60, 190], [60, 240, 255], [120, 255, 120], [190, 110, 255]] }, // confetti

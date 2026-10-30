@@ -908,13 +908,13 @@ test('a figure with every cosmetic and face state draws within the figure budget
 });
 
 
-test("desk upgrades: a plant, a mug on a stool and a trophy, standing on their foot, in their owner's colour", () => {
+test("desk upgrades: a plant, a mug on a saucer and a trophy, standing on their foot, in their owner's colour", () => {
   for (const kind of ['plant', 'mug', 'trophy'] as const) {
     for (const s of [3, 6, 14]) {
       const spr = trinketSprite(kind, [200, 40, 160], s, INK);
       const { width: w, height: h } = spr.img;
       assert.ok(borderClear(spr), `${kind} at ${s}: clipped`);
-      assert.ok(h >= 4 * s && h <= 7 * s + 6, `${kind} at ${s}: height ${h}`);
+      assert.ok(h >= (kind === 'mug' ? 2 : 4) * s && h <= 7 * s + 6, `${kind} at ${s}: height ${h}`);
       assert.ok(w >= 2 * s && w <= 6 * s + 6, `${kind} at ${s}: width ${w}`);
       let foot = false;
       for (let x = 0; x < w && !foot; x++) foot = alphaAt(spr, x, spr.ay - 1) > 0;

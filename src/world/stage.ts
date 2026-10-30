@@ -9,12 +9,13 @@ import type { Rect, Screen } from '../term/screen.ts';
 import { BOLD } from '../term/screen.ts';
 import { activityColor, activityGlyph } from '../ui/chrome.ts';
 import type { WorldDef } from '../worlds/types.ts';
+import { workstationOf } from '../worlds/workstation.ts';
 import { Works } from './build.ts';
 import type { Construction, Disc } from './build.ts';
 import { poseFor, traitsFor } from './character.ts';
 import type { Feel, Pose, Traits, Wear } from './character.ts';
 import { Critter } from './critter.ts';
-import type { BuildFrame, Camera, FigureFrame, LabelFrame, SceneFrame, Trinket, TrinketFrame } from './frame.ts';
+import type { BuildFrame, Camera, DeskFrame, FigureFrame, LabelFrame, SceneFrame, Screen as DeskScreen, Trinket, TrinketFrame } from './frame.ts';
 import { EMOTE, FIGURE_H, HOP, MUG_TOP, figureTop, project } from './frame.ts';
 import { hub, planLayout, slotRect, yard } from './layout.ts';
 import type { Rect as Box } from './layout.ts';
@@ -23,9 +24,9 @@ import type { Look, Mind } from './life.ts';
 import { smoke, updateParticles } from './particles.ts';
 import { NavGrid, smooth } from './path.ts';
 import { Rng, hashString } from './rng.ts';
-import { NAV_CELL, NAV_PAD, deskSpots, footprint, heightAt, planRoom, toWorld } from './room.ts';
+import { NAV_CELL, NAV_PAD, footprint, heightAt, planRoom, toWorld } from './room.ts';
 import type { Room } from './room.ts';
-import type { Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
+import type { Desk, Facing, Layout, Particle, Poi, Slot, Spot, StationKind } from './types.ts';
 
 // A terminal cell in pixels when the terminal has not said (common sizes);
 // also the nominal cell rooms are planned for (see layout).
@@ -66,17 +67,37 @@ const CROWD = { cols: 9, rows: 4 };
 const BAND = { cols: 8, rows: 4, max: 3 };
 const ERROR_MS = 5000; // an error stays on show this long, whatever comes next
 const SMOKE_MS = 4000;
-// A new activity sends its agent to another prop only once it has lasted
-// this long, and never before the agent has worked at its prop a while; in
-// between the pose changes in place.
+// A working activity sends a roaming agent to its workstation only once it
+// has lasted this long; in between the pose changes in place.
 const SETTLE_MS = 3000;
-const DWELL_MS = 9000;
-// Where a crowd at one prop stands: (along the wall, further out), in lane
-// steps. A line along the wall (across the screen in front of a prop out
-// on the floor), the middle and then out to either side; then a row a step
-// further out, in the gaps of the first; then a third. All within 2.5
-// steps of the prop's spot, so everyone still reads as working there: past
-// these, a crowd overlaps a little.
+// A workstation grows out of the floor, or shrinks back into it, this long
+// (seconds); one left empty stands this long before it goes.
+export const POP_S = 0.5;
+export const EMPTY_S = 4;
+// Where one sharing a workstation stands (every place taken): (along it,
+// out from it) off its owner's spot, in units, the first free one; a step
+// past either end (halfway to the next desk of a row), then half a step
+// further out, in front of the gaps, then further out again; all those
+// taken, on rings round it further out, the front half first. Free: on
+// the floor, in view and WORK_APART from where anyone else stands or is
+// going (see share).
+const RING = (r: number, from: number, to: number) =>
+  Array.from({ length: 9 }, (_, i) => {
+    const a = from + ((to - from) * i) / 8;
+    return [Math.round(r * Math.cos(a) * 10) / 10, Math.round(r * Math.sin(a) * 10) / 10] as const;
+  });
+const SIDES: ReadonlyArray<readonly [number, number]> = [
+  [5, 0], [-5, 0], [2.5, 4], [-2.5, 4], [7.5, 4], [-7.5, 4], [0, 8], [5, 8], [-5, 8],
+  ...[6, 8, 10, 12].flatMap((r) => RING(r, 0, Math.PI)),
+  ...[8, 10, 12].flatMap((r) => RING(r, Math.PI, 2 * Math.PI).slice(1, -1)),
+];
+export const WORK_APART = 4;
+// Where a crowd at one prop stands (those asleep at the idle prop): (along
+// the wall, further out), in lane steps. A line along the wall (across the
+// screen in front of a prop out on the floor), the middle and then out to
+// either side; then a row a step further out, in the gaps of the first;
+// then a third. All within 2.5 steps of the prop's spot, so everyone still
+// reads as there: past these, a crowd overlaps a little.
 const LANES: ReadonlyArray<readonly [number, number]> = [[0, 0], [1, 0], [-1, 0], [2, 0], [-2, 0], [0.5, 1], [-0.5, 1], [1.5, 1], [-1.5, 1], [1, 2], [-1, 2]];
 // A lane step: about a figure's width on screen, in units.
 export const LANE = 10;
@@ -93,17 +114,10 @@ const MAX_EMOTES = 3; // shown at once
 // one every HOP_IDLE seconds standing about.
 const HOP_WALK = 0.25;
 const HOP_IDLE = 0.5;
-// Desk upgrades by role (picked by a hash of crew and role); how far it
-// keeps from where anyone works or stands (the first of these it can, so
-// a small room's crowded station still gets one, never on such a spot)
-// and from the entrance; how often they are worked out again (seconds)
-// when nothing says so sooner; crew roles whose time at each station is
-// kept, at most. Where one may stand by its station: see deskSpots.
+// Desk upgrades by role (picked by a hash of crew and role), and how often
+// they are worked out again (seconds) when nothing says so sooner.
 const TRINKETS: readonly Trinket[] = ['plant', 'mug', 'trophy'];
-const TRINKET_CLEAR = [4, 3, 2];
-const TRINKET_DOOR = 4;
 const TRINKETS_EVERY = 0.5;
-const MAX_WORKED = 200;
 // A level-up's ★N! rises this long (seconds), its figure's emotes kept
 // down meanwhile; how opaque its pill is.
 const WORD_S = 3;
@@ -119,8 +133,8 @@ export type Actor = {
   x: number;
   y: number;
   path: Spot[];
-  station: Slot | null;
-  lane: number;
+  station: Slot | Desk | null; // where it works: a station of the room's (asleep at the idle prop), or a workstation
+  lane: number; // which spot there (see LANES; at a workstation, 0 its own, k the k-th of SIDES)
   state: 'enter' | 'walk' | 'work' | 'leave';
   facing: Facing;
   bornAt: number;
@@ -131,7 +145,6 @@ export type Actor = {
   boomed: number; // `since` of the error that last went bang
   error: { until: number; text: string; x: number; y: number } | null; // the last error, on show for a while
   cheered: number; // `since` of the finish last celebrated
-  settledAt: number; // when it last arrived at its prop
   gait: number; // seconds its strides have run ahead of the clock (jogging)
   mind: Mind; // what it is up to between the work (see life.ts)
   hush: number; // no emote shows over it until then (stage clock: a level-up's word rises)
@@ -144,6 +157,33 @@ type Glyph = { x: number; y: number; z: number; vz: number; ch: string; color: R
 // A crew role's key: its crew and role (see pet/crew.ts).
 const roleKey = (a: AgentInfo) => `${a.crew}\n${roleOf(a)}`;
 
+// The team an agent is in: its lead's id (its own for a lead, or for one
+// whose lead is not known).
+const teamOf = (a: AgentInfo) => (a.role === 'lead' ? a.id : (a.parentId ?? a.id));
+
+// A workstation up on a desk (see desks.ts): whose it is (null once left
+// empty), who had it last, when it went up and when it was left (stage
+// clock; Infinity while it is someone's).
+export type Workstation = { desk: Desk; owner: string | null; was: string; born: number; left: number };
+
+// What a workstation's screen shows for its agent's activity.
+export function screenFor(a: Activity): DeskScreen {
+  switch (a) {
+    case 'write':
+    case 'read':
+    case 'search':
+    case 'run':
+    case 'web':
+    case 'think':
+      return a;
+    case 'talk':
+    case 'delegate':
+      return 'talk';
+    default:
+      return 'off';
+  }
+}
+
 // What a level lets one wear (nothing at ★1), one object a level.
 const wears = new Map<number, Wear | undefined>();
 function wearAt(level: number): Wear | undefined {
@@ -153,9 +193,6 @@ function wearAt(level: number): Wear | undefined {
   }
   return wears.get(level);
 }
-
-// How far a spot is from a rect (0 inside it).
-const off = (p: Spot, r: Box) => Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1));
 
 export function stationKindFor(a: Activity): StationKind | null {
   switch (a) {
@@ -170,10 +207,13 @@ export function stationKindFor(a: Activity): StationKind | null {
   }
 }
 
-// The scene's model: an illustrated room with agents as characters walking
-// to the prop for their current activity and living a little in between
-// (see life.ts): wandering, chatting, building. Nothing is drawn here but
-// the labels (terminal text); `frame` hands a renderer everything else.
+// The scene's model: an illustrated room with agents as characters, each
+// with a workstation of its own that pops up when it walks in (on a place
+// the room planned, see desks.ts; at a teammate's side when every place is
+// taken), where it does all its work, living a little in between (see
+// life.ts): wandering, chatting, building, napping at the idle prop.
+// Nothing is drawn here but the labels (terminal text); `frame` hands a
+// renderer everything else.
 export class Stage {
   private world: WorldDef;
   private rect: Rect = { x: 0, y: 0, w: 0, h: 0 };
@@ -208,9 +248,12 @@ export class Stage {
   readonly life: Life;
   private works: Works | null = null;
   private critter: Critter | null = null;
-  // Seconds each crew role (see roleKey) worked at each station this run,
-  // and the desk upgrades as they stand.
-  private worked = new Map<string, Map<StationKind, number>>();
+  // The workstations up, by desk index, and a count that moves on whenever
+  // one goes up or down (walkers re-plan round it).
+  private desks = new Map<number, Workstation>();
+  private desksVer = 0;
+  private desksSeen = 0;
+  // The desk upgrades as they stand.
   private trinkets: TrinketFrame[] = [];
   // The upgrades are due to be worked out again (the cast, a level or the
   // room changed), and when they last were.
@@ -282,6 +325,11 @@ export class Stage {
     return this.L?.slots ?? [];
   }
 
+  // The workstations up, in desk order.
+  workstations(): Workstation[] {
+    return [...this.desks.values()].sort((a, b) => a.desk.index - b.desk.index);
+  }
+
   // The furnished room (for renderers, tests and tools).
   room(): Room | null {
     return this.plan;
@@ -345,7 +393,12 @@ export class Stage {
     // a 2x screen got a room twice the size, too big and empty.
     const L = planLayout((r.w * CELL.w) / PX_PER_UNIT, (r.h * CELL.h) / PX_PER_UNIT, this.world.id);
     const key = `${this.world.id}:${L.W}x${L.D}x${L.H}`;
-    if (key !== this.worldKey) this.build(L, key);
+    if (key !== this.worldKey) {
+      this.build(L, key);
+      // A new room: everyone's workstation is up in it already, in order
+      // of arrival.
+      for (const a of [...this.cast.values()].sort((p, q) => p.order - q.order)) if (a.state !== 'leave') this.claim(a, true);
+    }
     this.trinketsDue = true;
     this.cam.set = false;
     this.camera = this.aim([], null, false);
@@ -371,6 +424,8 @@ export class Stage {
     this.works = new Works(L, { colors: this.world.build.colors, shape: this.world.build.shape }, new Rng(seed ^ 0xb111d), this.plan.supply);
     this.blocksAt = -1;
     this.nav = null;
+    this.desks.clear();
+    this.desksVer++;
     this.spots = this.plan.pois;
     const home = this.spots.find((p) => p.kind === 'pet');
     const g = Math.max(0, Math.min(1, (L.W - 72) / 98));
@@ -398,11 +453,15 @@ export class Stage {
     return this.blocks;
   }
 
-  // Inside some prop's footprint (a station or decor), a build or a pile
-  // (grown by `margin`).
+  // Inside some prop's footprint (a station or decor), a workstation, a
+  // build or a pile (grown by `margin`).
   private inside(s: Spot, margin: number): boolean {
     for (const p of this.plan?.props ?? []) {
       const r = footprint(p);
+      if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
+    }
+    for (const w of this.desks.values()) {
+      const r = slotRect(w.desk);
       if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
     }
     const o = this.obstacles();
@@ -411,15 +470,18 @@ export class Stage {
     return false;
   }
 
-  // A build or pile appeared (or went): walkers re-plan round it, and anyone
-  // standing where it now is steps out of the way.
+  // A build, a pile or a workstation appeared (or went): walkers re-plan
+  // round it (one bound for where it now stands stops beside it), those
+  // still coming in too (a crowd in one poll set off before the last of
+  // their workstations went up), and anyone standing where it now is
+  // steps out of the way.
   private makeWay(): void {
+    this.desksSeen = this.desksVer;
     for (const a of this.cast.values()) {
-      if (a.state === 'enter') continue;
       if (a.path.length) {
         const to = a.path[a.path.length - 1];
-        this.walkTo(a, to);
-      } else if (this.inside(a, 0.3)) {
+        this.walkTo(a, this.inside(to, 0.3) ? (this.nearestStandable(to) ?? to) : to);
+      } else if (a.state !== 'enter' && this.inside(a, 0.3)) {
         const out = this.nearestStandable(a);
         if (out) a.path = [out];
       }
@@ -455,10 +517,20 @@ export class Stage {
       for (let dx = dy ? 0 : 1; dx <= FIGURE_H; dx++) {
         // Across the middle of the figure, taller than a third of it.
         if (Math.abs(dx - dy) > 3) continue;
-        if (heightAt(room, s.x + dx, s.y + dy) > (dx + dy) / 2 + 5) return false;
+        if (this.tall(s.x + dx, s.y + dy) > (dx + dy) / 2 + 5) return false;
       }
     }
     return true;
+  }
+
+  // How tall what stands over (x, y) is: a prop, or a workstation.
+  private tall(x: number, y: number): number {
+    let h = heightAt(this.plan!, x, y);
+    for (const w of this.desks.values()) {
+      const r = slotRect(w.desk);
+      if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) h = Math.max(h, workstationOf(this.world).height);
+    }
+    return h;
   }
 
   private idleFor(a: Actor): number {
@@ -474,20 +546,25 @@ export class Stage {
     return false;
   }
 
-  // Due at another prop: the activity wants a different one, has lasted a
-  // moment, and the agent has worked at its current one a while.
+  // Due at its workstation: at work a moment (the activity has lasted),
+  // and not at a workstation (its own, or a teammate's) nor on its way.
   private moving(a: Actor, now: number): boolean {
     if (a.state === 'leave' || !this.L || this.life.huddled(a)) return false;
     const kind = stationKindFor(a.info.activity);
-    if (!kind || kind === 'idle' || a.station?.kind === kind) return false;
-    if (now - a.info.since < SETTLE_MS) return false;
-    return !a.station || a.state !== 'work' || now - a.settledAt >= DWELL_MS;
+    if (!kind || kind === 'idle' || a.station?.kind === 'desk') return false;
+    return now - a.info.since >= SETTLE_MS;
   }
 
+  // Where the activity takes it: at work, to its workstation; waiting,
+  // free to roam, or once asleep to the idle prop.
   private retarget(a: Actor): void {
     const kind = stationKindFor(a.info.activity);
     if (!kind || !this.L) return;
-    if (kind === 'idle' && this.idleFor(a) < SLEEP_AFTER) {
+    if (kind !== 'idle') {
+      this.toDesk(a);
+      return;
+    }
+    if (this.idleFor(a) < SLEEP_AFTER) {
       // Awake and waiting: free to roam (life.ts decides where).
       if (a.station) {
         a.station = null;
@@ -534,6 +611,233 @@ export class Stage {
     a.lane = pick.k;
     this.walkTo(a, pick.s);
     if (a.state === 'work') a.state = 'walk';
+  }
+
+  // ── workstations ──────────────────────────────────────────────────────
+  // Whether desk d is free to take: no workstation on it, or one left
+  // empty that has not begun to go.
+  private open(d: Desk): boolean {
+    const w = this.desks.get(d.index);
+    return !w || (w.owner === null && this.clock - w.left < EMPTY_S);
+  }
+
+  private ownDesk(a: Actor): Workstation | null {
+    for (const w of this.desks.values()) if (w.owner === a.info.id) return w;
+    return null;
+  }
+
+  // A place for a's workstation (see claim): the one it left a moment ago
+  // if it is still there; for a lead (or a subagent whose lead is not in
+  // the room), the lead's place of a pod nobody is in (with more in the
+  // room than places, one with room in front for its team to share it
+  // first, see roomy), else of any pod, else the free place nearest the
+  // way in; for a subagent, the place in its lead's pod nearest its
+  // lead's, else the free place nearest its lead's (sparing the lead's
+  // places of pods nobody is in); null when every place is taken.
+  private placeFor(a: Actor): Desk | null {
+    const all = this.plan?.desks ?? [];
+    const free = all.filter((d) => this.open(d));
+    if (!free.length) return null;
+    const back = free.find((d) => this.desks.get(d.index)?.was === a.info.id);
+    if (back) return back;
+    const empty = (pod: number) => all.every((d) => d.pod !== pod || this.open(d));
+    const by = (p: Spot) => (x: Desk, y: Desk) => Math.hypot(x.spot.x - p.x, x.spot.y - p.y) - Math.hypot(y.spot.x - p.x, y.spot.y - p.y);
+    const door = this.door()?.spot ?? { x: 0, y: 0 };
+    const lead = this.cast.get(teamOf(a.info));
+    if (!lead || lead === a) {
+      const pods = free.filter((d) => d.lead && empty(d.pod));
+      const short = [...this.cast.values()].filter((o) => o.state !== 'leave' && !o.gone).length > all.length;
+      return (short ? pods.find((d) => this.roomy(d)) : undefined) ?? pods[0] ?? free.find((d) => d.lead) ?? [...free].sort(by(door))[0];
+    }
+    const home = this.ownDesk(lead)?.desk;
+    const from: Spot = home?.spot ?? lead;
+    const pod = home ? free.filter((d) => d.pod === home.pod) : [];
+    if (pod.length) return [...pod].sort(by(from))[0];
+    const spare = free.filter((d) => !(d.lead && empty(d.pod)));
+    return [...(spare.length ? spare : free)].sort(by(from))[0];
+  }
+
+  // Whether desk d leaves room in front for those sharing it: the first
+  // row out beside it (see SIDES) on the floor, not past the front cut (a
+  // place right at the front has only its ends).
+  private roomy(d: Desk): boolean {
+    const L = this.L!;
+    const [, out] = SIDES[2];
+    return d.wall === 'right' ? d.spot.y + out <= L.D - 2 : d.spot.x + out <= L.W - 2;
+  }
+
+  // Puts up a workstation for `a` on a free place, if it has none and there
+  // is one: it pops up out of the floor with a puff (at once if `quick`).
+  // Its own, or null.
+  private claim(a: Actor, quick = false): Workstation | null {
+    const had = this.ownDesk(a);
+    if (had || !this.plan) return had;
+    const d = this.placeFor(a);
+    if (!d) return null;
+    let w = this.desks.get(d.index);
+    if (!w) {
+      w = { desk: d, owner: null, was: '', born: quick ? -Infinity : this.clock, left: Infinity };
+      this.desks.set(d.index, w);
+      this.deskMoved(d);
+      if (!quick) this.poof(d);
+    }
+    w.owner = a.info.id;
+    w.left = Infinity;
+    this.trinketsDue = true;
+    return w;
+  }
+
+  // A workstation went up or down: routes round it again (only its cells).
+  private deskMoved(d: Desk): void {
+    this.desksVer++;
+    const r = slotRect(d);
+    const pad = NAV_PAD + NAV_CELL;
+    this.nav?.rerate(r.x0 - pad, r.y0 - pad, r.x1 + pad, r.y1 + pad, (x, y) => this.rate(x, y));
+  }
+
+  // Workstations follow their agents: one whose agent is leaving or gone
+  // is left empty; one left empty for EMPTY_S shrinks away with a puff and
+  // is gone POP_S later. Those without one of their own then take a place
+  // come free (a sharer walks over to its own); those sharing one whose
+  // agent left find another.
+  private upkeep(dt: number): void {
+    let freed = false;
+    for (const [i, w] of this.desks) {
+      if (w.owner) {
+        const o = this.cast.get(w.owner);
+        if (o && o.state !== 'leave' && !o.gone) continue;
+        w.was = w.owner;
+        w.owner = null;
+        w.left = this.clock;
+        this.trinketsDue = true;
+        freed = true;
+        continue;
+      }
+      const t = this.clock - w.left;
+      if (t >= EMPTY_S && t - dt < EMPTY_S) this.poof(w.desk);
+      if (t >= EMPTY_S + POP_S) {
+        this.desks.delete(i);
+        this.deskMoved(w.desk);
+        freed = true;
+      }
+    }
+    if (!freed) return;
+    for (const a of [...this.cast.values()].sort((p, q) => p.order - q.order)) {
+      if (a.state === 'leave' || a.gone) continue;
+      const own = this.ownDesk(a) ?? this.claim(a);
+      const at = a.station?.kind === 'desk' ? this.desks.get(a.station.index) : undefined;
+      // working elsewhere than its own, or at one nobody has now
+      if (a.station?.kind === 'desk' && (own ? a.station !== own.desk : !at?.owner)) this.retarget(a);
+    }
+  }
+
+  // To its workstation: its own (put up now if a place is free), else at a
+  // teammate's side (see share).
+  private toDesk(a: Actor): void {
+    const own = this.ownDesk(a) ?? this.claim(a);
+    const to = own ? { desk: own.desk, spot: own.desk.spot, lane: 0 } : this.share(a);
+    if (!to) return;
+    if (a.station === to.desk && a.lane === to.lane && (a.path.length || a.state === 'work')) return;
+    a.station = to.desk;
+    a.lane = to.lane;
+    this.walkTo(a, to.spot);
+    if (a.state === 'work') a.state = 'walk';
+  }
+
+  // Where `a` stands sharing a workstation: beside a teammate's (the one
+  // with the fewest at its side, nearest its lead) on the first of SIDES
+  // free there in view, else out of view (see beside); else the same by
+  // anyone's; where it shares already, while that still holds; with none
+  // free at all, the workable one furthest from everyone. Null when no
+  // workstation is up.
+  private share(a: Actor): { desk: Desk; spot: Spot; lane: number } | null {
+    const team = teamOf(a.info);
+    const up = [...this.desks.values()].filter((w) => w.owner && w.owner !== a.info.id);
+    if (!up.length) return null;
+    const teamAt = (w: Workstation) => {
+      const o = this.cast.get(w.owner!);
+      return o ? teamOf(o.info) : w.owner;
+    };
+    const sharers = (w: Workstation) => [...this.cast.values()].filter((o) => o !== a && o.station === w.desk && o.lane > 0).length;
+    const lead = this.cast.get(team) ?? a;
+    const far = (w: Workstation) => Math.hypot(w.desk.spot.x - lead.x, w.desk.spot.y - lead.y);
+    const by = (p: Workstation, q: Workstation) => sharers(p) - sharers(q) || far(p) - far(q);
+    const mates = up.filter((w) => teamAt(w) === team).sort(by);
+    const others = up.filter((w) => teamAt(w) !== team).sort(by);
+    const now = a.station?.kind === 'desk' ? up.find((w) => w.desk === a.station) : undefined;
+    if (now && a.lane > 0 && this.beside(now.desk, a, a.lane, true)) return { desk: now.desk, spot: this.sideSpot(now.desk, a.lane), lane: a.lane };
+    for (const pool of [mates, others]) {
+      for (const seen of [true, false]) {
+        for (const w of pool) {
+          for (let k = 1; k <= SIDES.length; k++) if (this.beside(w.desk, a, k, seen)) return { desk: w.desk, spot: this.sideSpot(w.desk, k), lane: k };
+        }
+      }
+    }
+    // None free: the workable spot furthest from everyone, by a
+    // teammate's if there is one there.
+    for (const pool of [mates, others]) {
+      let best: { desk: Desk; k: number; clear: number } | null = null;
+      for (const w of pool) {
+        for (let k = 1; k <= SIDES.length; k++) {
+          if (!this.workable(w.desk, k)) continue;
+          const clear = this.clearance(this.sideSpot(w.desk, k), a);
+          if (!best || clear > best.clear) best = { desk: w.desk, k, clear };
+        }
+      }
+      if (best) return { desk: best.desk, spot: this.sideSpot(best.desk, best.k), lane: best.k };
+    }
+    const first = mates[0] ?? others[0];
+    return { desk: first.desk, spot: this.sideSpot(first.desk, 1), lane: 1 };
+  }
+
+  // The k-th spot beside workstation d (see SIDES), on the floor.
+  private sideSpot(d: Desk, k: number): Spot {
+    const [du, dv] = SIDES[k - 1];
+    return this.clampToFloor(d.wall === 'right' ? { x: d.spot.x + du, y: d.spot.y + dv } : { x: d.spot.x + dv, y: d.spot.y + du });
+  }
+
+  // Whether `a` may stand at the k-th spot beside d: workable (see below), in
+  // view (if `seen`), and WORK_APART from where anyone else stands or is
+  // going.
+  private beside(d: Desk, a: Actor, k: number, seen: boolean): boolean {
+    const p = this.sideSpot(d, k);
+    return this.workable(d, k) && (!seen || this.level(p)) && this.clearance(p, a) >= WORK_APART;
+  }
+
+  // Whether the k-th spot beside d is somewhere to work: clear of
+  // everything, and not on the floor nobody works on (the way in, the
+  // plazas, the yard, the spots idlers like, the stations' fronts: see
+  // Room.keepOut).
+  private workable(d: Desk, k: number): boolean {
+    const p = this.sideSpot(d, k);
+    const L = this.L!;
+    return this.standable(p) && !this.plan!.keepOut[Math.floor(p.x) + L.W * Math.floor(p.y)];
+  }
+
+  // How far from `p` the nearest of the others stands, or is going.
+  private clearance(p: Spot, a: Actor): number {
+    let near = Infinity;
+    for (const o of this.cast.values()) {
+      if (o === a || o.state === 'leave' || o.gone) continue;
+      const at = o.path[o.path.length - 1] ?? o;
+      near = Math.min(near, Math.hypot(at.x - p.x, at.y - p.y));
+    }
+    return near;
+  }
+
+  // A puff of dust and a few sparkles where a workstation pops up or goes.
+  private poof(d: Desk): void {
+    const r = slotRect(d);
+    const cx = (r.x0 + r.x1) / 2;
+    const cy = (r.y0 + r.y1) / 2;
+    const rng = this.rng;
+    for (let i = 0; i < 8; i++) {
+      this.add({ ...smoke(cx + rng.range(-3, 3), cy + rng.range(-1.5, 1.5), 0.5 + rng.next(), rng, [214, 206, 196]), life: 0.6 + rng.next() * 0.4 });
+    }
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2;
+      this.add({ kind: 'glint', x: cx + Math.cos(ang) * 2, y: cy + Math.sin(ang) * 2, z: 3 + rng.next() * 4, vx: Math.cos(ang) * 3, vy: Math.sin(ang) * 3, vz: 3 + rng.next() * 3, life: 0.5 + rng.next() * 0.3, color: [255, 241, 184], glow: true, gravity: 0 });
+    }
   }
 
   // Where the k-th of a crowd at `st` stands (see LANES and retarget).
@@ -593,34 +897,46 @@ export class Stage {
     return false;
   }
 
-  // Round the props on the room's own grid; once builds or piles stand, on
-  // one that has them too (rebuilt when they change).
+  // Round the props, the workstations, the builds and the piles, on a grid
+  // of the room's floor built afresh when the builds change and re-rated
+  // round a workstation as it goes up or down (see deskMoved).
   private route(from: Spot, to: Spot): Spot[] | null {
     const L = this.L;
     if (!L || !this.plan) return null;
-    const o = this.obstacles();
-    let nav = this.plan.nav;
-    if (o.discs.length || o.rects.length) {
-      const key = `${this.worldKey}:${this.works?.version ?? 0}`;
-      if (!this.nav || this.navKey !== key) {
-        this.navKey = key;
-        this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => (this.inside({ x, y }, 0.8) ? 2 : this.inside({ x, y }, NAV_PAD) ? 1 : 0));
-      }
-      nav = this.nav;
+    this.obstacles();
+    const key = `${this.worldKey}:${this.works?.version ?? 0}`;
+    if (!this.nav || this.navKey !== key) {
+      this.navKey = key;
+      this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => this.rate(x, y));
     }
-    const cells = nav.find(from, to);
+    const cells = this.nav.find(from, to);
     if (!cells) return null;
     return smooth(from, [...cells.slice(1, -1), to], (p, q) => !this.clips(p, q));
+  }
+
+  // A routing cell's rating (see NavGrid): inside something, near it, or open.
+  private rate(x: number, y: number): number {
+    return this.inside({ x, y }, 0.8) ? 2 : this.inside({ x, y }, NAV_PAD) ? 1 : 0;
   }
 
   sync(agents: AgentInfo[], now: number): void {
     this.now = now;
     const ids = new Set<string>();
+    // Newcomers in order of arrival, leads before their subagents (a lead's
+    // workstation goes up first, its team's round it); subagents that come
+    // in together, a team at a time in turn (the first of each team, then
+    // the second, ...), so where places run short each team has some. All
+    // are in before any workstation goes up (see placeFor), and all theirs
+    // are up before any of them sets off, so none plans its way (or a spot
+    // at a teammate's side) where the next one's is about to stand.
+    const fresh: Actor[] = [];
+    for (const info of agents) if (!this.cast.has(info.id) && info.role === 'lead') fresh.push(this.spawn(info, now));
+    const teams = new Map<string, AgentInfo[]>();
     for (const info of agents) {
       ids.add(info.id);
       const a = this.cast.get(info.id);
       if (!a) {
-        this.spawn(info, now);
+        teams.set(teamOf(info), [...(teams.get(teamOf(info)) ?? []), info]);
         continue;
       }
       if (a.info.agentType !== info.agentType || a.info.role !== info.role) {
@@ -635,8 +951,11 @@ export class Stage {
       a.mind.exit = 0;
       if (changed) a.bubbleUntil = now + BUBBLE_MS;
       if (a.state === 'leave') {
+        // Back after all: its workstation again (the one it left, if it
+        // still stands).
         a.state = 'walk';
         this.life.end(a);
+        this.claim(a);
         this.retarget(a);
         continue;
       }
@@ -645,6 +964,10 @@ export class Stage {
       // Off to the new prop once the change has lasted (see update).
       if (kindChanged && stationKindFor(info.activity) === 'idle') this.retarget(a);
     }
+    const each = [...teams.values()];
+    for (let k = 0; each.some((t) => k < t.length); k++) for (const t of each) if (k < t.length) fresh.push(this.spawn(t[k], now));
+    for (const a of fresh) this.claim(a);
+    for (const a of fresh) this.welcome(a);
     for (const a of this.cast.values()) {
       if (!ids.has(a.info.id) && a.state !== 'leave') {
         // Someone carrying a block sets it down before going.
@@ -656,7 +979,8 @@ export class Stage {
     }
   }
 
-  private spawn(info: AgentInfo, now: number): void {
+  // A newcomer at the door.
+  private spawn(info: AgentInfo, now: number): Actor {
     const at = this.door()?.spot ?? { x: 12, y: 12 };
     const a: Actor = {
       info,
@@ -677,13 +1001,18 @@ export class Stage {
       boomed: -1,
       error: null,
       cheered: -1,
-      settledAt: now,
       gait: 0,
       mind: newMind(info.id, this.life.clock),
       hush: 0,
     };
     this.cast.set(info.id, a);
     this.trinketsDue = true;
+    return a;
+  }
+
+  // A newcomer sets off (its workstation up, if a place was free), with a
+  // sparkle at the door.
+  private welcome(a: Actor): void {
     this.retarget(a);
     this.sparkle(a, 16, a.traits.color);
     this.life.arrived(a, this.cast.values());
@@ -703,7 +1032,6 @@ export class Stage {
           this.sparkle(a, 16, a.traits.color);
         } else if (a.state === 'walk') {
           a.state = 'work';
-          a.settledAt = now;
         }
       } else if (a.state === 'work') {
         a.state = 'walk';
@@ -711,8 +1039,10 @@ export class Stage {
       this.effects(a, dt, now);
     }
     this.life.update([...this.cast.values()], dt);
-    this.tally(dt);
-    if ((this.works?.version ?? -1) !== this.blocksAt) this.makeWay();
+    this.upkeep(dt);
+    this.tally();
+    this.steamUp(dt);
+    if ((this.works?.version ?? -1) !== this.blocksAt || this.desksVer !== this.desksSeen) this.makeWay();
     for (const [id, a] of this.cast) {
       if (!a.gone) continue;
       this.cast.delete(id);
@@ -727,92 +1057,45 @@ export class Stage {
     updateParticles(this.particles, dt, this.L ?? undefined);
   }
 
-  // Time at work at each station, by crew role, and the desk upgrades it
-  // earns (worked out again when the cast or a level changes, else now and
-  // then: a favourite station shifts slowly); a mug steams.
-  private tally(dt: number): void {
-    for (const a of this.cast.values()) {
-      const k = a.station?.kind;
-      if (a.state !== 'work' || !k || k === 'entrance' || !a.info.crew) continue;
-      const key = roleKey(a.info);
-      let m = this.worked.get(key);
-      if (!m) {
-        if (this.worked.size >= MAX_WORKED) this.worked.delete(this.worked.keys().next().value!);
-        this.worked.set(key, (m = new Map()));
-      }
-      m.set(k, (m.get(k) ?? 0) + dt);
-    }
-    if (this.trinketsDue || this.clock >= this.trinketsAt + TRINKETS_EVERY) {
+  // The desk upgrades (worked out again when the cast, a level or the room
+  // changed, else now and then), and a mug's steam.
+  private tally(): void {
+    const dt = this.clock - this.trinketsAt;
+    if (this.trinketsDue || dt >= TRINKETS_EVERY) {
       this.trinkets = this.placeTrinkets();
       this.trinketsDue = false;
       this.trinketsAt = this.clock;
     }
-    const r = this.steam;
-    for (const tk of this.trinkets) {
-      if (tk.kind === 'mug' && r.next() < dt / 0.45) this.add({ ...smoke(tk.x, tk.y, MUG_TOP, r, [236, 232, 228], 'steam'), vz: 2.5, life: 1.3 });
-    }
   }
 
-  // The desk upgrades (★5): one for each crew role here at that level, at
-  // the station it worked most this run, a plant, a mug or a trophy by
-  // its role, in the colour of one of its agents.
+  // The desk upgrades (★5): one for each crew role here at that level, on
+  // the workstation of the first of its agents that has one up (where the
+  // world's workstation says, see WorkstationArt.top), a plant, a mug or a
+  // trophy by its role, in that agent's colour.
   private placeTrinkets(): TrinketFrame[] {
-    const L = this.L;
-    if (!L || this.worked.size === 0) return [];
+    if (!this.L) return [];
     const out: TrinketFrame[] = [];
     const done = new Set<string>();
+    const top = workstationOf(this.world).top;
     for (const a of this.actors()) {
       if (!a.info.crew || !unlocks(a.info.level ?? 1).desk) continue;
       const key = roleKey(a.info);
-      const m = this.worked.get(key);
-      if (done.has(key) || !m) continue;
-      let best: StationKind | null = null;
-      let most = 0;
-      for (const [k, secs] of m) {
-        if (secs > most) {
-          best = k;
-          most = secs;
-        }
-      }
-      const slot = L.slots.find((s) => s.kind === best);
-      if (!slot) continue;
+      const w = this.ownDesk(a);
+      if (done.has(key) || !w || this.clock - w.born < POP_S) continue;
       done.add(key);
-      const at = this.trinketSpot(slot, out);
-      if (at) out.push({ id: key, kind: TRINKETS[hashString(key) % TRINKETS.length], ...at, color: a.traits.color });
+      const [x, y, z] = toWorld(w.desk, top[0], top[1], top[2]);
+      out.push({ id: key, kind: TRINKETS[hashString(key) % TRINKETS.length], x, y, z, color: a.traits.color });
     }
     return out;
   }
 
-  // Where a desk upgrade stands by `slot`: a step out from one of its
-  // corners, or further along the wall, the nearest such to it. On the
-  // floor clear of every prop, of the entrance and of the upgrades already
-  // placed, nearer this station than any other, and as far as it can be
-  // from where anyone works (a station's spot and the lanes along it) or
-  // likes to stand (see TRINKET_CLEAR); null where there is no such spot.
-  private trinketSpot(slot: Slot, placed: readonly Spot[]): Spot | null {
-    const L = this.L!;
-    const spots = deskSpots(slot);
-    const own = slotRect(slot);
-    const others = L.slots.filter((s) => s !== slot);
-    const stands: Spot[] = [...this.spots];
-    for (const s of L.slots) {
-      if (s.kind === 'entrance') stands.push(s.spot);
-      else for (let k = 0; k < 5; k++) stands.push(this.laneSpot(s, k));
+  // Steam off the mugs (on their own chance, so whether one stands shifts
+  // nothing else the stage draws).
+  private steamUp(dt: number): void {
+    const r = this.steam;
+    for (const tk of this.trinkets) {
+      if (tk.kind === 'mug' && r.next() < dt / 0.45) this.add({ ...smoke(tk.x, tk.y, (tk.z ?? 0) + MUG_TOP, r, [236, 232, 228], 'steam'), vz: 2.5, life: 1.3 });
     }
-    const free = (p: Spot) =>
-      this.standable(p) &&
-      placed.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= 3) &&
-      others.every((s) => off(p, slotRect(s)) > off(p, own) && (s.kind !== 'entrance' || off(p, slotRect(s)) >= TRINKET_DOOR));
-    // Each free spot, nearest the station first, with how close it comes to where anyone stands.
-    const fit = spots
-      .filter(free)
-      .sort((p, q) => off(p, own) - off(q, own))
-      .map((p) => ({ p, clear: Math.min(...stands.map((q) => Math.hypot(q.x - p.x, q.y - p.y))) }));
-    for (const clear of TRINKET_CLEAR) {
-      const f = fit.find((s) => s.clear >= clear);
-      if (f) return f.p;
-    }
-    return null;
   }
 
   // Each prop that gives off bits (steam off a cup, sparks while worked)
@@ -1099,6 +1382,7 @@ export class Stage {
       figures,
       critter,
       trinkets: this.trinkets,
+      desks: this.workstations().map((w) => this.deskFrame(w)),
       builds,
       particles: this.particles,
       labels: [],
@@ -1107,6 +1391,17 @@ export class Stage {
     };
     this.place(f, actors, emoting, tops, now, selectedId, opts.card ?? false);
     return f;
+  }
+
+  // A workstation as the frame shows it: its screen (its agent's activity,
+  // dim once left) and how far it has grown out of the floor (popping up,
+  // or shrinking away once left empty a while).
+  private deskFrame(w: Workstation): DeskFrame {
+    const d = w.desk;
+    const o = w.owner ? this.cast.get(w.owner) : undefined;
+    const gone = this.clock - w.left - EMPTY_S;
+    const grow = gone > 0 ? Math.max(0, 1 - gone / POP_S) : Math.min(1, (this.clock - w.born) / POP_S);
+    return { id: d.index, wall: d.wall, x0: d.x0, y0: d.y0, len: d.len, dep: d.dep, screen: o ? screenFor(o.info.activity) : 'off', grow, seed: d.index % 3 };
   }
 
   // The ghost's hue: cyan where the world is warm (its floor and backdrop

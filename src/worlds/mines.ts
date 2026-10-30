@@ -5,6 +5,7 @@ import { DECOR } from './mines/decor.ts';
 import { INK } from './mines/kit.ts';
 import { minesPois, room } from './mines/room.ts';
 import { STATIONS } from './mines/stations.ts';
+import { WORKSTATION } from './mines/workstation.ts';
 
 // The Mines: timbered shafts, coal seams and the glint of gold. A gallery
 // cut from layered rock in outlined cartoon (coal-dust umber ink): the
@@ -43,6 +44,7 @@ export const mines: WorldDef = {
   pois: minesPois,
   stations: STATIONS,
   decor: DECOR,
+  workstation: WORKSTATION,
   costume: 'miner',
   critter: { kind: 'rat', body: hex('#8a7462') }, // a mine rat
   finale: { colors: [[255, 211, 74]] }, // gold dust
