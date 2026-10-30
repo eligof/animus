@@ -7,18 +7,19 @@
 //            lit while its screen is on: placed again for free while it
 //            stands;
 //   screen   what the shared activity layer paints on its screen (see
-//            art/screen.ts), one an activity for every desk of the world:
-//            a change of activity sends only this;
+//            art/screen.ts), one per activity, shared by every desk: a
+//            change of activity sends only this;
 //   loop     a frame of something that moves while its agent works (see
-//            WorkstationArt.loops), one a frame for every desk.
+//            WorkstationArt.loops), one per frame, shared by every desk.
 //
 // Popping up or shrinking away it grows out of the floor in POP_STEPS
 // steps, each one picture of all of it (body, screen and its loops' still
-// frames).
+// frames), without its clutter (it comes with the full size), so the steps
+// are shared by every desk of the world.
 
 import type { DeskFrame } from '../../world/frame.ts';
 import { toWorld } from '../../world/room.ts';
-import type { DeskLoop, PropView, WorkstationArt, WorldDef } from '../../worlds/types.ts';
+import type { DeskLoop, P3, PropView, WorkstationArt, WorldDef } from '../../worlds/types.ts';
 import { clutterOf, workstationOf } from '../../worlds/workstation.ts';
 import { Canvas } from '../canvas.ts';
 import type { At } from '../iso.ts';
@@ -42,7 +43,8 @@ export const popping = (grow: number) => stepOf(grow) < POP_STEPS;
 
 // Room round the box for its shadow and its ink, in units.
 const PAD = 2;
-// Pictures kept, least recently used out first past either bound.
+// Pictures kept, least recently used out first past either bound. (In
+// tinted worlds the scene also keeps a tinted copy of each picture.)
 const MAX = 1024;
 const MAX_BYTES = 48 << 20;
 const cache = new Map<string, DeskSprite>();
@@ -59,6 +61,7 @@ function artKey(a: WorkstationArt): number {
   return n;
 }
 
+// A picture by its key: kept, or drawn by `make` and kept.
 function kept(key: string, make: () => DeskSprite): DeskSprite {
   const hit = cache.get(key);
   if (hit) {
@@ -126,7 +129,7 @@ export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | '
   const step = stepOf(d.grow);
   const pop = step < POP_STEPS;
   const on = d.screen !== 'off';
-  const pick = clutterOf(world, d.id);
+  const pick = pop ? [] : clutterOf(world, d.id);
   const key = `b|${artKey(art)}|${ink}|${d.wall}|${d.seed}|${pop ? d.screen : on ? 'on' : 'off'}|${pick.map((c) => `${c.item.name}@${c.spot}`).join()}|${step}|${s}`;
   return kept(key, () => {
     const g = growth(d.grow);
@@ -144,7 +147,7 @@ export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | '
       if (!pop) return;
       for (const lp of art.loops ?? []) {
         pen.save();
-        lp.draw(v, 0);
+        lp.draw({ ...v, seed: 0 }, 0);
         pen.restore();
       }
       drawScreen(pen, at, art.screen, d.screen, ink);
@@ -184,20 +187,22 @@ export function loopFrame(lp: DeskLoop, k: number, id: number, on: boolean, t: n
 }
 
 // Workstation d's pictures as the scene places them at time t, back to
-// front (they share its box, so they are drawn in this order: see
-// depth.ts), with their layers' ids and whether each was drawn just now.
-export type DeskPicture = { id: string; sp: DeskSprite; fresh: boolean };
+// front: the body and the screen share its box, so they are drawn in this
+// order (see depth.ts); the loops are points at their anchors (`at`, in the
+// desk's frame) and sort among what stands on the desk. Each with its
+// layer's id and whether it was drawn just now.
+export type DeskPicture = { id: string; sp: DeskSprite; fresh: boolean; at?: P3 };
 export function deskPictures(world: WorldDef, d: DeskFrame, t: number, s: number, ink: string): DeskPicture[] {
   const out: DeskPicture[] = [];
-  const add = (id: string, make: () => DeskSprite) => {
+  const add = (id: string, make: () => DeskSprite, at?: P3) => {
     const m = deskStats.misses;
     const sp = make();
-    out.push({ id, sp, fresh: deskStats.misses > m });
+    out.push({ id, sp, fresh: deskStats.misses > m, at });
   };
   add(`desk:${d.id}`, () => deskSprite(world, d, s, ink));
   if (popping(d.grow)) return out;
   const on = d.screen !== 'off';
-  (workstationOf(world).loops ?? []).forEach((lp, k) => add(`loop:${d.id}:${k}`, () => loopSprite(world, k, loopFrame(lp, k, d.id, on, t), on, d.wall, s, ink)));
   add(`screen:${d.id}`, () => screenSprite(world, d, s, ink));
+  (workstationOf(world).loops ?? []).forEach((lp, k) => add(`loop:${d.id}:${k}`, () => loopSprite(world, k, loopFrame(lp, k, d.id, on, t), on, d.wall, s, ink), lp.at));
   return out;
 }

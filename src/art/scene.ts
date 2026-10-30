@@ -11,7 +11,8 @@
 //   floor     what props lay on the floor round them (shadows, pools of
 //             light), contact shadows, the selection's ring and the hurt's
 //             pulsing one.
-//   depth     props, workstations (a body, its loops and its screen), builds, piles, figures, desk upgrades
+//   depth     props, workstations (a body, its screen and its loops),
+//             builds, piles, figures, desk upgrades
 //             and the critter in depth order (see scene/depth.ts), each
 //             particle slotted in
 //             among them: the particles of a slot drawn together, a picture
@@ -57,7 +58,7 @@ import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
 import { buildSprite, pileSprite } from './scene/build.ts';
-import { POP_STEPS, deskPictures, growth } from './scene/desk.ts';
+import { POP_STEPS, type DeskSprite, deskPictures, deskStats, growth, loopSprite, popping } from './scene/desk.ts';
 import type { Sprite } from './scene/build.ts';
 import { depthOrder, slotOf } from './scene/depth.ts';
 import type { Drawable } from './scene/depth.ts';
@@ -712,6 +713,18 @@ export class Scene {
       yield () => {
         for (const { sp, fresh } of deskPictures(f.world, d, f.t, s, ink)) made(sp.img, fresh);
       };
+      // Every frame of its loops, lit, and the still one unlit, so the
+      // steps of a loop later are hits whatever the time.
+      if (popping(d.grow)) continue;
+      for (const [k, lp] of (workstationOf(f.world).loops ?? []).entries()) {
+        for (let i = 0; i <= lp.frames; i++) {
+          yield () => {
+            const m = deskStats.misses;
+            const sp = loopSprite(f.world, k, i % lp.frames, i < lp.frames, d.wall, s, ink);
+            made(sp.img, deskStats.misses > m);
+          };
+        }
+      }
     }
     for (const tk of f.trinkets ?? []) {
       yield () => {
@@ -860,16 +873,31 @@ export class Scene {
     });
     for (const d of f.desks ?? []) {
       // A workstation stands on the floor like a prop, as tall as it has
-      // grown: its body, then its loops and its screen over it (one box,
-      // so in that order).
+      // grown: its body, then its screen over it (one box, so in that
+      // order), and its loops as points at their anchors, sorted among
+      // what stands on it.
       if (d.grow <= 0) continue;
       const [x, y] = P(d.x0, d.y0, 0);
       const r = footprint(d);
       const box = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: workstationOf(f.world).height * growth(d.grow), point: false };
-      for (const { id, sp } of deskPictures(f.world, d, f.t, s, ink)) {
+      // The screen is as wide as the body for the depth (particles are
+      // slotted by it): a bit of one at its edge does not slip under it.
+      let body: DeskSprite | undefined;
+      for (const { id, sp, at } of deskPictures(f.world, d, f.t, s, ink)) {
+        body ??= sp;
         const dx = Math.round(x) - sp.ax;
         const dy = Math.round(y) - sp.ay;
-        const it: Item = { ...box, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id, img: sp.img, x: dx, y: dy };
+        const own = { sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height };
+        let it: Item;
+        if (at) {
+          const [px, py] = toWorld(d, at[0], at[1], 0);
+          it = { x0: px, y0: py, x1: px, y1: py, h: at[2], point: true, ...own, id, img: sp.img, x: dx, y: dy };
+        } else {
+          const bx = Math.round(x) - body.ax;
+          const by = Math.round(y) - body.ay;
+          const sz = { sx0: bx, sy0: by, sx1: bx + body.img.width, sy1: by + body.img.height };
+          it = { ...box, ...(id.startsWith('screen:') ? sz : own), id, img: sp.img, x: dx, y: dy };
+        }
         if (seen(it)) out.push(it);
       }
     }

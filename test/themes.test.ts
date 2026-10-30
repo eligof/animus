@@ -14,7 +14,7 @@ import { DESK, DESK_SPOT } from '../src/world/desks.ts';
 import { FIGURE_H, FIGURE_HALF_W, project } from '../src/world/frame.ts';
 import type { P3, PropView } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
-import { S, partCheck, viewOf } from './desk-contract.ts';
+import { S, canvasBox, partCheck, viewOf } from './desk-contract.ts';
 import { recordingPen } from './helpers.ts';
 
 // Contract every world must meet. ANIMUS_THEME_FILE=src/worlds/x.ts also
@@ -209,6 +209,18 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
           assert.ok(n > 0, `${what}: nothing drawn`);
           assert.ok(over <= S, `${what}: ${over} pixels over the screen`);
           assert.ok(behind <= 0.1 * n, `${what}: ${Math.round((100 * behind) / n)}% of it behind its agent`);
+        }
+      }
+      // A loop is sorted as a point at its anchor, so it is drawn over what
+      // is nearer it only if their pictures overlap: they must not, for
+      // every spot nearer than the loop and the largest thing on it.
+      const maxH = Math.max(0, ...items.map((i) => i.h));
+      for (const lp of loops) {
+        for (const p of spots) {
+          if (p[0] + p[1] <= lp.at[0] + lp.at[1]) continue;
+          const a = canvasBox(art, wall, [lp.at, lp.r, lp.h]);
+          const b = canvasBox(art, wall, [p, maxR, maxH]);
+          assert.ok(!(a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1), `${wall}: ${lp.name} would paint over a thing at ${p}`);
         }
       }
       // What is drawn does not depend on the clock.

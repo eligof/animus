@@ -78,6 +78,8 @@ test('a workstation is pictures kept for what they show: its body (its clutter, 
   assert.ok(Math.max(...steps.map((p) => p.img.height)) > body.img.height, 'it does not grow past its size');
   assert.equal(new Set(steps).size, POP_STEPS);
   assert.equal(deskSprite(cafe, { ...d, grow: 0.21 }, 4, ink), steps[0], 'a step between steps');
+  // A popping picture holds the screen, so it changes with the activity.
+  assert.notEqual(deskSprite(cafe, { ...d, grow: 0.6 }, 4, ink), deskSprite(cafe, { ...d, grow: 0.6, screen: 'run' }, 4, ink));
 });
 
 test("a desk's body carries its place's clutter: places with other picks, other pictures", () => {
@@ -100,6 +102,7 @@ test("a desk's loops run while its agent works, a step apart from desk to desk, 
   const a = loopSprite(w, 0, 2, true, 'right', 4, ink);
   assert.equal(loopSprite(w, 0, 2, true, 'right', 4, ink), a, 'drawn again');
   assert.notEqual(hash(loopSprite(w, 0, 3, true, 'right', 4, ink).img), hash(a.img), 'two frames alike');
+  assert.notEqual(hash(loopSprite(w, 0, 0, true, 'right', 4, ink).img), hash(loopSprite(w, 0, 0, false, 'right', 4, ink).img), 'lit and unlit alike');
 });
 
 // The mines with two at work on each of two leads' teams, settled.
@@ -135,6 +138,16 @@ test('in the plate each desk shows its loops, their pictures moving on with time
   assert.equal(now.size, 2 * g.desks!.length);
   const later = keys({ ...g, t: g.t + 1 / 8 });
   for (const d of g.desks!) for (const k of [0, 1]) assert.equal(later.get(`loop:${d.id}:${k}`) !== now.get(`loop:${d.id}:${k}`), d.screen !== 'off', `desk ${d.id} loop ${k}`);
+  // One desk's screen turned off: its loops stand still, the others' move.
+  const on = g.desks!.filter((x) => x.screen !== 'off');
+  assert.ok(on.length >= 2, 'two at work');
+  const off = (fr: typeof g) => ({ ...fr, desks: fr.desks!.map((x) => (x === on[0] ? { ...x, screen: 'off' as Screen } : x)) });
+  const a = keys(off(g));
+  const b = keys(off({ ...g, t: g.t + 1 / 8 }));
+  for (const k of [0, 1]) {
+    assert.equal(b.get(`loop:${on[0].id}:${k}`), a.get(`loop:${on[0].id}:${k}`), 'a loop moves with its screen off');
+    assert.notEqual(b.get(`loop:${on[1].id}:${k}`), a.get(`loop:${on[1].id}:${k}`), 'a loop stopped with its screen on');
+  }
 });
 
 test('the plain workstation, for a world with none of its own, takes the world\'s colours', () => {

@@ -31,6 +31,18 @@ export function viewOf(art: WorkstationArt, wall: 'left' | 'right', c: Canvas, a
   return { pen: c, s: S, at, len: art.len, dep: art.dep, wall, island: true, t, active, seed };
 }
 
+// The canvas box (x0, y0, x1, y1) of a thing's box (centre, radius, height)
+// at scale S in `wall`'s frame.
+export function canvasBox(art: WorkstationArt, wall: 'left' | 'right', [[u, w, z], r, h]: [P3, number, number]): { x0: number; y0: number; x1: number; y1: number } {
+  const at = viewOf(art, wall, new Canvas(1, 1), false).at;
+  let b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  for (const du of [-r, r]) for (const dv of [-r, r]) for (const dz of [0, h]) {
+    const [x, y] = at(u + du, w + dv, z + dz);
+    b = { x0: Math.min(b.x0, x), y0: Math.min(b.y0, y), x1: Math.max(b.x1, x), y1: Math.max(b.y1, y) };
+  }
+  return b;
+}
+
 // Draws a part with `draw` on a fresh canvas and counts its painted pixels
 // (`n`), those over the screen (`over`), those inside the agent's figure
 // (`behind`), and the first painted pixel outside `box` (centre, radius,

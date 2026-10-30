@@ -23,6 +23,9 @@ import type { PlacedProp, Room } from '../src/world/room.ts';
 import type { Particle } from '../src/world/types.ts';
 import { World } from '../src/world/world.ts';
 import type { PropArt, WorldDef } from '../src/worlds/types.ts';
+import { toWorld } from '../src/world/room.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
+import { looped } from './desk-fakes.ts';
 import { budget } from './helpers.ts';
 
 // A test room: a flat grey floor in a 60 x 60 room, props filled flat in
@@ -571,6 +574,16 @@ test('a workstation is a picture of its own in the plate, under a figure working
   const ids = new Scene().plate(frame(r, { desks: [d], figures: [g] })).layers.map((l) => l.id);
   assert.ok(ids.includes('desk:0'), 'no picture of the workstation');
   assert.ok(ids.indexOf('desk:0') < ids.indexOf('fig:w'), 'the figure is under its workstation');
+  // Its pictures in order: body, screen, then its loops; the figure over
+  // them all, and a desk upgrade on its top over its screen.
+  const lw = looped(world);
+  const [tu, tv, tz] = workstationOf(lw).top;
+  const [tx, ty] = toWorld(d, tu, tv, 0);
+  const full = new Scene().plate(frame(r, { world: lw, desks: [d], figures: [g], trinkets: [{ id: 'up', kind: 'trophy', x: tx, y: ty, z: tz, color: [200, 40, 160] }] })).layers.map((l) => l.id);
+  const at = (id: string) => full.indexOf(id);
+  assert.ok(at('desk:0') >= 0 && at('desk:0') < at('screen:0') && at('screen:0') < at('loop:0:0'), 'the body, the screen, then the loops');
+  assert.ok(at('loop:0:0') >= 0 && at('loop:0:1') >= 0 && at('loop:0:1') < at('fig:w'), 'the figure in front of its desk, after all of it');
+  assert.ok(at('trinket:up') > at('screen:0'), 'the desk upgrade is over the screen');
   const none = new Scene().plate(frame(r, { desks: [{ ...d, grow: 0 }] })).layers;
   assert.ok(!none.some((l) => l.id.startsWith('desk:')), 'a workstation not yet grown');
 });
