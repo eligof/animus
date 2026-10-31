@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
 import { ACTS } from '../src/art/npc/acts.ts';
+import { getTheme, themeIds } from '../src/themes/index.ts';
 import { hub } from '../src/world/layout.ts';
 import { COFFEE_LEG } from '../src/world/life.ts';
 import { NPC_R } from '../src/world/npc-place.ts';
-import { NATTER_EVERY, NATTER_S, SERVE_S, SERVE_WAIT, SHOW_EVERY } from '../src/world/npcs.ts';
+import { NATTER_EVERY, NATTER_S, SERVE_S, SERVE_WAIT, SHOW_EVERY, type Local } from '../src/world/npcs.ts';
 import { toWorld } from '../src/world/room.ts';
 import { Stage, WORK_APART } from '../src/world/stage.ts';
 import type { Actor } from '../src/world/stage.ts';
@@ -18,10 +19,11 @@ import { trio } from './npc-fakes.ts';
 // order, served one at a time, the next beckoned up and waiting beside,
 // patient from its turn and never cut off mid-serve; a reaction waits for
 // a serve, a serve for no more than the act under way; a word keeps the
-// counter shut; a show (every 2 to 4 minutes, with two idle agents awake,
-// on a local with nothing on) draws a ring of the idle, clear of the
-// workers and the other locals, a spot left free taken again, and lets
-// them go with a cheer for the host, never one at work; a word now and
+// counter shut; a show (every 2 to 4 minutes, with two idle agents free
+// for it, on a local with nothing on) draws a ring of the idle in every
+// world, clear of the workers and the other locals, a spot left free
+// taken again, a stand-up waiting for it, and lets them go with a cheer
+// for the host, never one at work; a word now and
 // then with a local passed; n off ends it all and leaves nobody stuck; o
 // off stops only the coffee runs; the same run plays the same.
 
@@ -446,6 +448,95 @@ test('a show needs two idle agents awake: none with one, one with two', () => {
     if (L.all.some((l) => l.show)) shown = true;
   });
   assert.ok(shown, 'no show for two');
+});
+
+// Those in local l's show's ring at their spots in it now.
+const ringed = (stage: Stage, l: Local): number =>
+  l.show?.crowd.filter((id, k) => {
+    const a = id === null ? undefined : byId(stage, id);
+    const e = a?.mind.errand;
+    return !!a && e?.kind === 'watch' && e.arrived && near(a, l.show!.ring[k]) < 1.5;
+  }).length ?? 0;
+
+test("in every world, a show with idle agents free for it draws a ring: two or more at their spots in it by 12 s in", () => {
+  // (a scene where every world's show local has its place)
+  const rect = { x: 0, y: 1, w: 150, h: 42 };
+  for (const id of themeIds()) {
+    const stage = newStage(getTheme(id)!, rect);
+    stage.office = false;
+    const crew = (n: number) => [...['i1', 'i2', 'i3', 'i4'].map((q) => awake(q, n)), agent('w1', 'write')];
+    let now = run(stage, crew, 6);
+    const L = stage.life.locals!;
+    L.nextShow = stage.life.clock;
+    let host: Local | undefined;
+    let from = 0;
+    let most = 0;
+    for (let i = 0; i < 40 * 20; i++) {
+      now = run(stage, crew, 0.05, now);
+      if (!host) {
+        host = L.all.find((l) => l.show);
+        from = stage.life.clock;
+      }
+      if (!host?.show) continue;
+      if (stage.life.clock - from > 12) break;
+      most = Math.max(most, ringed(stage, host));
+    }
+    assert.ok(host, `${id}: no show`);
+    assert.ok(most >= 2, `${id}: ${most} at their spots round the ${host.art.name} 12 s into its show`);
+  }
+});
+
+test('a show waits for two idle agents free for it: none while they are all in a stand-up, one with a ring once it is over', () => {
+  const stage = newStage();
+  const crew = (n: number) => ['c1', 'c2', 'c3', 'c4'].map((id) => awake(id, n, { crew: 'c' }));
+  const kind = (a: Actor) => a.mind.errand?.kind;
+  let now = NOW;
+  for (let i = 0; i < 20 * 20 && !stage.actors().every((a) => kind(a) === 'standup'); i++) now = run(stage, crew, 0.05, now);
+  assert.ok(stage.actors().every((a) => kind(a) === 'standup'), 'no stand-up');
+  const L = stage.life.locals!;
+  L.nextShow = stage.life.clock;
+  let host: Local | undefined;
+  let most = 0;
+  run(stage, crew, 50, now, () => {
+    const up = stage.actors().filter((a) => kind(a) === 'standup').length;
+    host ??= L.all.find((l) => l.show);
+    if (!host) return;
+    assert.ok(up <= 2, `a show with ${up} of the four in a stand-up`);
+    most = Math.max(most, ringed(stage, host));
+  });
+  assert.ok(host, 'no show once the stand-up was over');
+  assert.ok(most >= 2, `${most} at their spots in the ring`);
+});
+
+test('a stand-up waits for a show: it takes nobody watching one, and the crew stands up once it is over', () => {
+  const stage = newStage();
+  const crew = (n: number) => ['c1', 'c2', 'c3', 'c4'].map((id) => awake(id, n, { crew: 'c' }));
+  const kind = (a: Actor) => a.mind.errand?.kind;
+  // no stand-up yet: one only just over
+  const last = (stage.life as unknown as { lastStandup: Map<string, number> }).lastStandup;
+  last.set('c', stage.life.clock);
+  let now = run(stage, crew, 6);
+  const L = stage.life.locals!;
+  L.nextShow = stage.life.clock;
+  let host: Local | undefined;
+  for (let i = 0; i < 20 * 20 && !host; i++) {
+    now = run(stage, crew, 0.05, now);
+    host = L.all.find((l) => l.show);
+  }
+  assert.ok(host, 'no show');
+  // a stand-up due now
+  last.delete('c');
+  let most = 0;
+  let after = false;
+  run(stage, crew, 40, now, () => {
+    const up = stage.actors().filter((a) => kind(a) === 'standup');
+    if (host!.show) {
+      for (const a of up) assert.fail(`${a.info.id} off to a stand-up from the show`);
+      most = Math.max(most, ringed(stage, host!));
+    } else if (up.length) after = true;
+  });
+  assert.ok(most >= 2, `${most} at their spots in the ring`);
+  assert.ok(after, 'no stand-up once the show was over');
 });
 
 test('shows come every 2 to 4 minutes', () => {

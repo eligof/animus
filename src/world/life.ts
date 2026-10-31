@@ -421,13 +421,28 @@ export class Life {
     return this.byId.get(id);
   }
 
-  // Free to join something a local puts on (a show): idle and awake, in
-  // the room, hands free, nothing holding it, not about to be high-fived,
-  // and doing nothing much (wandering, or at a spot).
-  spare(a: Actor): boolean {
-    if (a.info.activity !== 'idle' || !present(a) || a.mind.exit || this.sleeping(a) || this.carrying(a) || this.awaited(a) || this.held(a)) return false;
+  // Free for a local (a word, a show): idle and awake, in the room, hands
+  // free, nothing holding it, not about to be high-fived, and doing
+  // nothing much (wandering, or at a spot); for a show (see
+  // Locals.perform), out of anything else that can wait for one too: a
+  // chat, the critter, a haul between trips (idle agents are seldom doing
+  // nothing at all, and a show is over in SHOW_S).
+  spare(a: Actor, show = false): boolean {
+    return !this.held(a) && this.loose(a, show);
+  }
+
+  // Free for a show, or will be in a moment (a gesture holding it is soon
+  // over): those a local counts on before it starts one (see
+  // Locals.perform).
+  audience(a: Actor): boolean {
+    return this.loose(a, true);
+  }
+
+  // As spare, a gesture holding it or not.
+  private loose(a: Actor, show: boolean): boolean {
+    if (a.info.activity !== 'idle' || !present(a) || a.mind.exit || this.sleeping(a) || this.carrying(a) || this.awaited(a)) return false;
     const e = a.mind.errand;
-    return !e || e.kind === 'visit';
+    return !e || e.kind === 'visit' || (show && (e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul'));
   }
 
   // Off to local k's counter for what it serves (see Locals.join): false
@@ -1202,11 +1217,13 @@ export class Life {
   }
 
   // Free for a stand-up: idle, awake, in the room, not leaving, not hauling
-  // a block, not about to be high-fived (a coffee run can wait).
+  // a block, not about to be high-fived, not watching a local's show (a
+  // coffee run, an order or a word can wait; a show is over in SHOW_S, and
+  // its ring would empty the moment it formed: see Locals.perform).
   private waiting(a: Actor): boolean {
     const e = a.mind.errand;
     if (a.info.activity !== 'idle' || !present(a) || a.mind.exit || this.sleeping(a) || this.carrying(a) || this.awaited(a)) return false;
-    return !e || e.kind === 'visit' || e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul' || e.kind === 'coffee' || LOCAL.has(e.kind);
+    return !e || e.kind === 'visit' || e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul' || e.kind === 'coffee' || (LOCAL.has(e.kind) && e.kind !== 'watch');
   }
 
   // Stand-ups: a crew with STANDUP_N or more agents waiting gathers in a

@@ -12,9 +12,9 @@ import { CUP, standIn, trio } from './npc-fakes.ts';
 
 // The locals' puppet: the shared acts start and end at rest, their last
 // frame shown the end, and move what they should; a puppet records its
-// parts back to front for the view; a place says where a local is cut and
-// which way it faces; the stand-ins meet the contract every world's locals
-// are held to.
+// parts back to front for the view, and a seated one keeps its seat in
+// the shared acts; a place says where a local is cut and which way it
+// faces; the stand-ins meet the contract every world's locals are held to.
 
 const SHARED = Object.keys(ACTS) as SharedAct[];
 type Pose = Omit<Puppet, 'act' | 'u'>;
@@ -109,6 +109,78 @@ test('a puppet records its parts back to front for the view: the near arm over e
   assert.equal(order(0.12, true), 'upper0 fore0 body head upper1 fore1');
   assert.equal(order(1.2, true), 'upper1 fore1 upper0 fore0 body head');
   assert.equal(order(0.12, false, true), 'upper1 fore1 body head upper0 fore0 cup', 'what it serves, in its near hand');
+});
+
+test('a seated local keeps its seat in every shared act, from in front and behind: its seat and feet stay put, its head and arms lean; its own loops still move all of it', () => {
+  // A stand-in on a seat: where its seat (under it) and a foot (hanging
+  // off the seat, forward) are drawn, and the top of its head.
+  const base = standIn('sitter', 'write', { mode: 'seated', u: 5, v: 3, z: 2 });
+  let at: { seat: number[]; foot: number[]; top: number[] } = { seat: [], foot: [], top: [] };
+  const sitter: Npc = {
+    ...base,
+    parts: {
+      ...base.parts,
+      body(sk, p, back) {
+        base.parts.body(sk, p, back);
+        at.seat = sk.where(-0.4, -1.2);
+        at.foot = sk.where(2.5, 2.4);
+      },
+      head(sk, p, back) {
+        base.parts.head(sk, p, back);
+        at.top = sk.where(0.1, -6.2);
+      },
+    },
+  };
+  const draw = (n: Npc, p: Puppet, back = false) => {
+    at = { seat: [], foot: [], top: [] };
+    buildNpc(new Sketch(), n, p, back);
+    return at;
+  };
+  const off = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  for (const back of [false, true]) {
+    const still = draw(sitter, { ...rest(), act: 'work', u: 0 }, back);
+    // the shared acts, and the shared cheer for one with no way of its own
+    for (const a of [...SHARED, 'celebrate'] as const) {
+      const lp = loopOf(sitter, a);
+      for (let i = 0; i < lp.frames; i++) {
+        const now = draw(sitter, puppetOf(sitter, a, i), back);
+        assert.ok(off(now.seat, still.seat) < 1e-9, `${a} ${i}${back ? ' from behind' : ''}: its seat moved ${off(now.seat, still.seat).toFixed(2)}`);
+        assert.ok(off(now.foot, still.foot) < 1e-9, `${a} ${i}${back ? ' from behind' : ''}: its feet moved ${off(now.foot, still.foot).toFixed(2)}`);
+      }
+    }
+    // a flinch still shrinks back: its head goes back (to -x), over its seat
+    const most = Math.min(...Array.from({ length: ACTS.flinch.frames }, (_, i) => draw(sitter, puppetOf(sitter, 'flinch', i), back).top[0]));
+    assert.ok(most < still.top[0] - 0.5, `a flinch${back ? ' from behind' : ''} with its head ${(still.top[0] - most).toFixed(2)} back`);
+  }
+  // Standing, a flinch leans all of it, about its feet: its body goes back.
+  const stander = { ...sitter, place: { mode: 'standing' as const, u: -3, v: 2 } };
+  const upright = draw(stander, { ...rest(), act: 'work', u: 0 }).seat;
+  const leant = Array.from({ length: ACTS.flinch.frames }, (_, i) => draw(stander, puppetOf(stander, 'flinch', i)).seat);
+  assert.ok(leant.some((s) => off(s, upright) > 0.1), 'one standing does not lean back in a flinch');
+  // Its own loops are its world's to pose: a lean there moves all of it.
+  const rocker: Npc = { ...sitter, work: { secs: 1, frames: 4, pose: () => ({ ...rest(), lean: 0.2 }) } };
+  assert.ok(off(draw(rocker, puppetOf(rocker, 'work', 1)).foot, draw(sitter, { ...rest(), act: 'work', u: 0 }).foot) > 0.1, 'its own lean held back');
+});
+
+test("every world's seated locals keep their seats in every shared act: their bodies drawn where they sit, the head and arms leaning alone", () => {
+  let seated = 0;
+  for (const id of themeIds()) {
+    for (const n of getTheme(id)!.npcs ?? []) {
+      if (n.place.mode !== 'seated') continue;
+      seated++;
+      const ms: Array<readonly number[]> = [];
+      const m: Npc = { ...n, parts: { ...n.parts, body: (sk) => void ms.push(sk.m) } };
+      for (const a of [...SHARED, 'celebrate'] as const) {
+        if (a === 'celebrate' && n.celebrate) continue;
+        for (let i = 0; i < loopOf(n, a).frames; i++) {
+          ms.length = 0;
+          buildNpc(new Sketch(), m, puppetOf(n, a, i), n.place.look === 'back');
+          assert.deepEqual(ms, [[1, 0, 0, 1, 0, 0]], `${id} ${n.name}: ${a} ${i} moves its body off its seat`);
+        }
+      }
+    }
+  }
+  assert.ok(seated > 0, 'no seated local');
 });
 
 test("what a local serves stands upright in its hand all through the hand-over, whatever the arm's angle, in every world, from in front and behind", () => {

@@ -42,10 +42,10 @@ export const NATTER_LOOK = 8;
 export const NATTER_EVERY = 60;
 export const NATTER_S = 5;
 // Shows: one every SHOW_EVERY seconds (the first as long in) while at
-// least SHOW_MIN idle agents are awake (else a look again SHOW_RETRY
-// later); it lasts SHOW_S; up to SHOW_MAX stand round it, APART from each
-// other, joining as they come free (see Life.spare) until SHOW_JOIN before
-// it ends.
+// least SHOW_MIN idle agents are free to come (else a look again
+// SHOW_RETRY later); it lasts SHOW_S; up to SHOW_MAX stand round it,
+// APART from each other, joining as they come free (see Life.spare) until
+// SHOW_JOIN before it ends.
 export const SHOW_EVERY: readonly [number, number] = [120, 240];
 export const SHOW_S = 20;
 export const SHOW_MIN = 2;
@@ -321,18 +321,20 @@ export class Locals {
     l.serving = { id: n.id, until: c + SERVE_S };
   }
 
-  // A show (see SHOW_EVERY): with SHOW_MIN idle agents awake, a local with
-  // a show and nothing on (nobody served or waiting, no word, no act under
+  // A show (see SHOW_EVERY): with SHOW_MIN idle agents free for it (see
+  // Life.audience: awake is not enough, one in a stand-up or on a coffee
+  // run would leave the ring empty for its first seconds), a local with a
+  // show and nothing on (nobody served or waiting, no word, no act under
   // way or lined up) starts it, and those free for it gather round (see
-  // gather). Nobody to give one, too few awake or no room for a ring: it
-  // looks again a little later.
+  // gather). Nobody to give one, too few free or room for fewer than
+  // SHOW_MIN in its ring: it looks again a little later.
   private perform(life: Life, actors: readonly Actor[], c: number): void {
-    const awake = actors.filter((a) => a.info.activity === 'idle' && a.state !== 'enter' && a.state !== 'leave' && !a.gone && !life.sleeping(a));
+    const free = actors.filter((a) => life.audience(a));
     const cast = this.all.filter((l) => l.art.show && !l.queue.length && !l.serving && !l.natter && !l.acts.length);
-    const l = awake.length >= SHOW_MIN && cast.length ? this.rng.pick(cast) : null;
+    const l = free.length >= SHOW_MIN && cast.length ? this.rng.pick(cast) : null;
     const show = l?.art.show;
     const ring = l ? ringRound(l.at.ring, l.at, SHOW_MAX, (s) => this.host.watchable(s) && this.offDuty(s, l)) : [];
-    if (!l || !show || !ring.length) {
+    if (!l || !show || ring.length < SHOW_MIN) {
       this.nextShow = c + SHOW_RETRY;
       return;
     }
@@ -363,7 +365,7 @@ export class Locals {
     const show = l.show;
     if (!show || c > show.until - SHOW_JOIN || !show.crowd.includes(null)) return;
     const far = (a: Actor) => dist(a, l.at.ring);
-    const free = actors.filter((a) => !show.crowd.includes(a.info.id) && life.spare(a)).sort((p, q) => far(p) - far(q));
+    const free = actors.filter((a) => !show.crowd.includes(a.info.id) && life.spare(a, true)).sort((p, q) => far(p) - far(q));
     for (const a of free) {
       const i = show.crowd.indexOf(null);
       if (i < 0) break;

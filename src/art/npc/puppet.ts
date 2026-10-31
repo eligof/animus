@@ -1,11 +1,15 @@
-import type { Npc, Puppet } from '../../worlds/types.ts';
-import { move, mul, turn, type Sketch } from '../figure/paint.ts';
+import type { Npc, NpcLoop, Puppet } from '../../worlds/types.ts';
+import { ID, move, mul, turn, type Mat, type Sketch } from '../figure/paint.ts';
+import { ACTS, loopOf } from './acts.ts';
 
 // A local from its parts and its puppet (see Npc in worlds/types.ts), in
 // the figures' units (see art/figure/rig.ts): origin between its feet on
 // the floor, x toward where it faces, y down. Its body bobs and leans about
 // its feet; its head turns about its neck; each arm swings at the shoulder
-// and bends at the elbow; the near hand holds out what it serves, upright. Parts
+// and bends at the elbow; the near hand holds out what it serves, upright.
+// A seated local in a shared act (see art/npc/acts.ts) keeps its seat: its
+// body (its legs, on the seat) stays put, and only its head and arms lean,
+// about the middle of its shoulders, and duck (never hop: see upper). Parts
 // are recorded back to front for the view, then painted by the sprites'
 // painter (see art/figure/paint.ts): from the front the near arm (0) goes
 // over everything, the far one (1) behind the body while it hangs, over it
@@ -19,26 +23,43 @@ import { move, mul, turn, type Sketch } from '../figure/paint.ts';
 export const NPC_BOX = { x0: -10, x1: 10, y0: -21, y1: 4 } as const;
 const FORE = 0.6;
 const HIGH = 2.2;
+const SHARED: ReadonlySet<NpcLoop> = new Set(Object.values(ACTS));
+
+// Where local n's head and arms go in a shared act while it sits (its body
+// left where it is): leaning about the middle of its shoulders, and down
+// as far as it bobs down (a duck), never up (a hop would lift its
+// shoulders off its body). Null for one not seated or in its own loops,
+// whose lean and bob move all of it.
+export function upper(n: Npc, p: Puppet): Mat | null {
+  if (n.place.mode !== 'seated' || !SHARED.has(loopOf(n, p.act))) return null;
+  const [[x0, y0], [x1, y1]] = n.bones.shoulders;
+  const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+  return mul(move(cx, cy - Math.min(0, p.bob)), mul(turn(p.lean), move(-cx, -cy)));
+}
 
 export function buildNpc(sk: Sketch, n: Npc, p: Puppet, back: boolean): void {
   const b = n.bones;
   const parts = n.parts;
   const held = p.hold ? n.serve : undefined;
-  sk.push(mul(move(0, -p.bob), turn(p.lean)));
-  const arm = (k: 0 | 1) => {
-    const [sx, sy] = b.shoulders[k];
-    sk.at(mul(move(sx, sy), turn(-p.arms[k].sh)), () => {
-      parts.upper(sk, p, k, back);
-      sk.at(mul(move(0, b.upper), turn(-p.arms[k].el)), () => {
-        parts.fore(sk, p, k, back);
-        // what it serves stands upright in the hand, whatever the arm's
-        // angle: turned back by the lean, the shoulder and the elbow
-        if (k === 0 && held) sk.at(mul(move(0, b.fore), turn(p.arms[0].sh + p.arms[0].el - p.lean)), () => held.draw(sk));
+  const top = upper(n, p);
+  sk.push(top ? ID : mul(move(0, -p.bob), turn(p.lean)));
+  // the head and arms: over the body's lean, or their own (see upper)
+  const up = (fn: () => void) => (top ? sk.at(top, fn) : fn());
+  const arm = (k: 0 | 1) =>
+    up(() => {
+      const [sx, sy] = b.shoulders[k];
+      sk.at(mul(move(sx, sy), turn(-p.arms[k].sh)), () => {
+        parts.upper(sk, p, k, back);
+        sk.at(mul(move(0, b.upper), turn(-p.arms[k].el)), () => {
+          parts.fore(sk, p, k, back);
+          // what it serves stands upright in the hand, whatever the arm's
+          // angle: turned back by the lean, the shoulder and the elbow
+          if (k === 0 && held) sk.at(mul(move(0, b.fore), turn(p.arms[0].sh + p.arms[0].el - p.lean)), () => held.draw(sk));
+        });
       });
     });
-  };
   const body = () => parts.body(sk, p, back);
-  const head = () => sk.at(mul(move(b.neck[0], b.neck[1]), turn(p.tilt)), () => parts.head(sk, p, back));
+  const head = () => up(() => sk.at(mul(move(b.neck[0], b.neck[1]), turn(p.tilt)), () => parts.head(sk, p, back)));
   const far = p.arms[1].sh;
   if (back) {
     // arm 0 is the far one from behind: under the body, forward or not

@@ -106,7 +106,7 @@ Fully custom characters on a shared puppet:
   walks back with it as today. Idle agents may also choose to order:
   walk over, get the local's item (carried if a drink, a heart if not). A
   local serves one at a time; a second waits beside.
-- **Shows.** Every 2 to 4 minutes, with at least two idle agents awake,
+- **Shows.** Every 2 to 4 minutes, with at least two idle agents free to come,
   one local with a show starts it for about 20 seconds; free idle agents
   walk over and stand in a ring in front (dancing at the club, watching
   elsewhere), applaud at the end and drift off.
