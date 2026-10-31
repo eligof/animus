@@ -436,7 +436,7 @@ const engineer: Npc = {
   // on the floor off the plinth's end, outside the hazard ring painted
   // round the reactor (see room.ts), the riser at arm's (and wrench's)
   // length in front of it on screen
-  place: { mode: 'standing', u: 13.2, v: 7.3 },
+  place: { mode: 'standing', u: 12.5, v: 7.3 },
   tall: 15,
   bones: ENG_BONES,
   parts: engParts,

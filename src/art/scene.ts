@@ -81,7 +81,7 @@ export const AMBIENT_FPS = 6;
 // motion is seen as that 2 s loop, so it should repeat within 2 s (its
 // beats and turns; see PropArt.animated).
 export const CYCLE = 12;
-export const cycleStep = (t: number, i: number) => Math.floor(t * AMBIENT_FPS + phaseOf(i)) % CYCLE;
+const cycleStep = (t: number, i: number) => Math.floor(t * AMBIENT_FPS + phaseOf(i)) % CYCLE;
 
 // Room round a prop's box for what it paints past it (its shadow, a pool of
 // lamp light), in units; the sprite is cropped to what was drawn.

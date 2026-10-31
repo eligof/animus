@@ -10,6 +10,7 @@ import { fillPts, hazard, hull, mote, rivets, wheel } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, softDot, withAlpha } from './kit.ts';
+import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The shelter's shell, deep under the wasteland, in 1950s paint: an ochre
@@ -151,12 +152,12 @@ function features(L: Layout): Feature[] {
 }
 
 // Where the kitchen stands (the stage furnishes the room with planRoom
-// seeded by the world's id, so the shell can find the decor as it finds the
-// stations): its wall's band is the diner's for a few units either side,
-// within the free stretch it stands in.
+// seeded by the world's id, its locals in, so the shell can find the decor
+// as it finds the stations): its wall's band is the diner's for a few units
+// either side, within the free stretch it stands in.
 function diner(L: Layout): Zone | null {
   if (!L.slots.length) return null;
-  const room = planRoom({ id: 'shelter', stations: STATIONS, decor: DECOR } as unknown as WorldDef, L, hashString('shelter'));
+  const room = planRoom({ id: 'shelter', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('shelter'));
   const p = room.props.find((q) => q.art === DECOR_ART.kitchen && !q.island);
   if (!p) return null;
   const end = p.wall === 'right' ? L.W : L.D;

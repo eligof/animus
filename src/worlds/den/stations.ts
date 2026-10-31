@@ -337,8 +337,8 @@ const search: PropArt = {
       // glass door's sheen on the second rack's edge
       k.poly([[6.3, RF + 0.02, 1.0], [6.9, RF + 0.02, 1.0], [8.6, RF + 0.02, 17.8], [8.0, RF + 0.02, 17.8]], '#ffffff0a', 0);
     });
-    // the lights: idle in slow steps, searching fast
-    const t = v.active ? Math.floor(v.t * 8) : Math.floor(v.t * 0.8);
+    // the lights: idle in slow steps, searching fast (round in two seconds)
+    const t = v.active ? Math.floor(v.t * 8) % 16 : Math.floor(v.t * 0.8);
     const leds = ledsOf();
     const groups = new Map<Color, P3[]>();
     for (const l of leds) {

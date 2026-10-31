@@ -84,7 +84,7 @@ hands it back. `l` turns the lamp light and glows off and on.
 | | |
 | --- | --- |
 | ![The Mines](docs/screenshots/mines.png)<br>**The Mines** `mines`<br>Timbered shafts, coal seams and the glint of gold | ![Mad Science Lab](docs/screenshots/lab.png)<br>**Mad Science Lab** `lab`<br>Bubbling flasks, a tesla coil and a very busy chalkboard |
-| ![Underground Club](docs/screenshots/club.png)<br>**Underground Club** `club`<br>Neon on brick, a floor that lights up and 128 BPM till dawn | ![Hacker's Den](docs/screenshots/den.png)<br>**Hacker's Den** `den`<br>Green rain on the walls, servers humming, pizza going cold |
+| ![Underground Club](docs/screenshots/club.png)<br>**Underground Club** `club`<br>Neon on brick, a floor that lights up and 120 BPM till dawn | ![Hacker's Den](docs/screenshots/den.png)<br>**Hacker's Den** `den`<br>Green rain on the walls, servers humming, pizza going cold |
 | ![Orbital Station](docs/screenshots/station.png)<br>**Orbital Station** `station`<br>A cosy deck in orbit, a planet turning past the glass | ![Cozy Café](docs/screenshots/cafe.png)<br>**Cozy Café** `cafe`<br>Rain on the windows, espresso and a cat by the fire |
 | ![Fungal Caverns](docs/screenshots/fungal.png)<br>**Fungal Caverns** `fungal`<br>Giant mushrooms, glowing spores and a pit of toxic sludge | ![Snowy Depths](docs/screenshots/snowy.png)<br>**Snowy Depths** `snowy`<br>Frozen falls, drifted snow and a pond iced over |
 | ![The Vault](docs/screenshots/vault.png)<br>**The Vault** `vault`<br>Deposit boxes, gold under amber lamps and acid in the pit | ![Hell](docs/screenshots/hell.png)<br>**Hell** `hell`<br>Lava lakes, brimstone and the bones of the damned |

@@ -83,11 +83,13 @@ const write: PropArt = {
     });
     const t = v.t;
     const act = v.active;
-    const b = beatOf(t);
+    // (the bars of the music: a bar of four beats, over and over)
+    const b = beatOf(t) % 4;
     const kk = act ? kick(t) : 0;
-    // the records: a sheen turning while they play, the tone arms
+    // the records: a sheen turning while they play (a turn in 2 s), the
+    // tone arms
     for (const [i, u] of decks.entries()) {
-      const spin = act ? t * 3.4 + i : 0.8 + i;
+      const spin = act ? t * Math.PI + i : 0.8 + i;
       const sh: P3[] = [[u, dv, z + 0.67]];
       for (let j = 0; j <= 5; j++) {
         const a = spin + (j / 5) * 0.8;

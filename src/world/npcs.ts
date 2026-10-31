@@ -169,6 +169,13 @@ export class Locals {
     return !!this.of(k)?.art.serve?.drink;
   }
 
+  // Whether s is within APART of where one that serves (but `but`) has
+  // whoever it serves stand or wait: taken for a sleeper (see
+  // Stage.retarget) and for a show's crowd (see offDuty).
+  byCounter(s: Spot, but?: Local): boolean {
+    return this.all.some((o) => o !== but && !!o.art.serve && [o.at.front, o.at.wait].some((q) => q && dist(q, s) < APART));
+  }
+
   // ── shows and words ───────────────────────────────────────────────────
   // The nearest local free for a word (nothing under way or lined up,
   // nobody served or waiting, no show, no word on) whose counter (or
@@ -350,12 +357,8 @@ export class Locals {
   // APART from where each serves (one that does) and from where one
   // standing stands.
   private offDuty(s: Spot, l: Local): boolean {
-    for (const o of this.all) {
-      if (o === l) continue;
-      if (o.art.serve && [o.at.front, o.at.wait].some((q) => q && dist(q, s) < APART)) return false;
-      if (o.at.mode === 'standing' && dist(o.at, s) < NPC_R + APART) return false;
-    }
-    return true;
+    if (this.byCounter(s, l)) return false;
+    return this.all.every((o) => o === l || o.at.mode !== 'standing' || dist(o.at, s) >= NPC_R + APART);
   }
 
   // The idle agents free for it (see Life.spare) join local l's show, the

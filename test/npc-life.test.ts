@@ -4,7 +4,7 @@ import type { Activity, AgentInfo } from '../src/agents.ts';
 import { ACTS } from '../src/art/npc/acts.ts';
 import { getTheme, themeIds } from '../src/themes/index.ts';
 import { hub } from '../src/world/layout.ts';
-import { COFFEE_LEG } from '../src/world/life.ts';
+import { COFFEE_LEG, SLEEP_AFTER } from '../src/world/life.ts';
 import { NPC_R } from '../src/world/npc-place.ts';
 import { NATTER_EVERY, NATTER_S, SERVE_S, SERVE_WAIT, SHOW_EVERY, type Local } from '../src/world/npcs.ts';
 import { toWorld } from '../src/world/room.ts';
@@ -430,6 +430,20 @@ test("a show's ring keeps clear of the agents at their workstations, of where th
     for (const p of at) assert.ok(near(s, p) >= WORK_APART - 1e-9, `a watcher ${near(s, p).toFixed(2)} from an agent at work`);
     assert.ok(near(s, clerk.at.front!) >= 3 - 1e-9, `a watcher ${near(s, clerk.at.front!).toFixed(2)} from where the clerk serves`);
     assert.ok(near(s, smith.at) >= NPC_R + 3 - 1e-9, `a watcher ${near(s, smith.at).toFixed(2)} from the smith standing`);
+  }
+});
+
+test('a sleeper lies clear of where a local serves: off the counters at the idle stations of the office and the colony', () => {
+  // (the idle station's first spot is beside where the office manager's
+  // customer stands and the colony cook's waits)
+  for (const id of ['office', 'colony']) {
+    const stage = newStage(getTheme(id)!);
+    run(stage, () => [agent('z', 'idle', { since: NOW - (SLEEP_AFTER + 5) * 1000 })], 30);
+    const a = byId(stage, 'z');
+    assert.ok(stage.life.sleeping(a) && a.station?.kind === 'idle', `${id}: not asleep at the idle station`);
+    for (const l of stage.life.locals!.all) {
+      for (const s of [l.at.front, l.at.wait]) if (l.art.serve && s) assert.ok(near(dest(a), s) >= 3, `${id}: asleep ${near(dest(a), s).toFixed(2)} from where ${l.art.name} serves`);
+    }
   }
 });
 

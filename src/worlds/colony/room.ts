@@ -13,6 +13,7 @@ import { dusk } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, withAlpha } from './kit.ts';
+import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The colony's shell at dusk, after the frontier colony games: the walls
@@ -88,11 +89,11 @@ function windowZ(H: number): { z0: number; z1: number } {
 
 // ── the floor's zones ────────────────────────────────────────────────────────
 // Where the stage furnishes the room (planRoom, seeded by the world's id,
-// with the colony's stations and decor), and so which floor goes where:
-// white tile under the research bench and the sick bay (one stretch of it
-// when they stand near each other on a wall), stone slabs under the smithy
-// and the tailoring bench, a stockpile outline round the stores and each
-// stack; and where the standing lamps stand, for their light.
+// with the colony's stations, decor and locals), and so which floor goes
+// where: white tile under the research bench and the sick bay (one stretch
+// of it when they stand near each other on a wall), stone slabs under the
+// smithy and the tailoring bench, a stockpile outline round the stores and
+// each stack; and where the standing lamps stand, for their light.
 
 export type ZoneKind = 'tile' | 'stone' | 'carpet' | 'stock';
 export type Zone = Rect & { kind: ZoneKind };
@@ -114,7 +115,7 @@ function furnished(v: { W: number; D: number; H: number; T: number }): Furnished
   const out: Furnished = { zones: [], lamps: [] };
   FURNISHED.set(key, out);
   if (!L.slots.length) return out;
-  const world = { id: 'colony', stations: STATIONS, decor: DECOR } as unknown as WorldDef;
+  const world = { id: 'colony', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef;
   const room = planRoom(world, L, hashString('colony'));
   const decor = (name: string) => room.props.filter((p) => !p.slot && NAMES.get(p.art) === name);
   const slot = (k: SlotKind) => room.props.find((p) => p.slot?.kind === k);

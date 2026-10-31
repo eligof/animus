@@ -11,6 +11,7 @@ import { barStack, cageLamp, dial, fillPts, hull, rivets, ring } from './bits.ts
 import type { P3 } from './kit.ts';
 import { DECOR } from './decor.ts';
 import { C, INK, Kit, circle, hash, withAlpha } from './kit.ts';
+import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The vault's shell: polished stone underfoot in a quiet checker with a
@@ -360,12 +361,12 @@ const RUN = { u0: 3.6, u1: 15 - 3.6, v0: 4 - 0.6 };
 
 // How far out the runner reaches (up to 26 units) before it would run
 // under a station or a piece of decor. The stage furnishes the room with
-// planRoom seeded by the world's id, so the shell can find where the decor
-// stands too (as it finds the stations).
+// planRoom seeded by the world's id, its locals in, so the shell can find
+// where the decor stands too (as it finds the stations).
 function runnerLength(L: Layout): number {
   const ent = L.slots.find((q) => q.kind === 'entrance');
   if (!ent) return 0;
-  const room = planRoom({ id: 'vault', stations: STATIONS, decor: DECOR } as unknown as WorldDef, L, hashString('vault'));
+  const room = planRoom({ id: 'vault', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('vault'));
   const others = room.props.filter((p) => p.slot !== ent).map(footprint);
   let len = 0;
   for (let l = 1; l <= 26; l++) {

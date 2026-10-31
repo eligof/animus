@@ -1058,7 +1058,7 @@ test('a close-up frames its agent from its feet to the top of its hat', () => {
 });
 
 test("close up, a figure whose hat reaches over the scene's top keeps its label, on the top rows", () => {
-  for (const [id, r] of [['vault', RECT], ['snowy', { x: 0, y: 1, w: 80, h: 22 }]] as const) {
+  for (const [id, r] of [['vault', RECT], ['meadhall', { x: 0, y: 1, w: 80, h: 22 }]] as const) {
     const stage = newStage(r, THEMES.find((t) => t.id === id)!);
     const crew = hatted();
     let now = run(stage, crew, 15);

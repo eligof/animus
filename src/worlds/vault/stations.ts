@@ -397,10 +397,11 @@ const search: PropArt = {
       k.wash(4.6, v1 + 0.05, 6.4, 2.8, 2.6, '#ffe7b0', 0.42);
       k.halo(lc[0] + dir[0] * 1.0, lc[1] + dir[1] * 1.0, lc[2] + dir[2] * 1.0, 2.2, '#ffe2a0', 0.5);
     }
-    // the dial: worked back and forth, a pause at each number
+    // the dial: worked back and forth, a pause at each of three numbers
+    // (round in two seconds)
     const t = v.t;
-    const step = Math.floor(t * 1.3);
-    const turn = lit ? hash(step, 3) * 6.28 + (hash(step, 4) - 0.5) * 1.6 * Math.min(1, (t * 1.3 - step) * 3) : 0.7;
+    const step = Math.floor(t * 1.5);
+    const turn = lit ? hash(step % 3, 3) * 6.28 + (hash(step % 3, 4) - 0.5) * 1.6 * Math.min(1, (t * 1.5 - step) * 3) : 0.7;
     dial(k, DIAL[0], DIAL[1], DIAL[2], 1.25, turn, '#efe6cf', C.brass);
     // the pointer mark over the dial
     k.poly([[DIAL[0] - 0.15, DIAL[1] + 0.02, DIAL[2] + 1.4], [DIAL[0] + 0.15, DIAL[1] + 0.02, DIAL[2] + 1.4], [DIAL[0], DIAL[1] + 0.02, DIAL[2] + 1.15]], C.gold, Math.max(0.6, k.thin * 0.6));

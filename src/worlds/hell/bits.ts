@@ -202,7 +202,8 @@ export function flame(k: Kit, u: number, v: number, z: number, w: number, h: num
 }
 
 // A bed of fire across a bowl round (cu, cv) on z, r units across, its
-// tongues h tall; `phase` sets their sway (0 for a still picture).
+// tongues h tall; `phase` sets their sway, a turn a second (0 for a still
+// picture).
 export function fire(k: Kit, cu: number, cv: number, z: number, r: number, h: number, phase: number, seed = 0, hot?: readonly [Color, Color, Color]): void {
   const n = Math.max(3, Math.round(r * 2.2));
   const order: Array<{ d: number; i: number }> = [];
@@ -212,8 +213,8 @@ export function fire(k: Kit, cu: number, cv: number, z: number, r: number, h: nu
     const f = (i + 0.5) / n;
     const du = (f - 0.5) * 2 * r * 0.75;
     const mid = 1 - Math.abs(f - 0.5) * 1.3;
-    const hh = h * (0.5 + 0.5 * mid) * (0.85 + 0.3 * hash(seed, i, 12)) * (1 + 0.12 * Math.sin(phase * 7 + i * 2.1));
-    const sway = Math.sin(phase * 5.3 + i * 1.7) * 0.25 * h * 0.3;
+    const hh = h * (0.5 + 0.5 * mid) * (0.85 + 0.3 * hash(seed, i, 12)) * (1 + 0.12 * Math.sin(phase * Math.PI * 2 + i * 2.1));
+    const sway = Math.sin(phase * Math.PI * 2 + i * 1.7) * 0.25 * h * 0.3;
     flame(k, cu + du * 0.7, cv - du * 0.7 - 0.2, z, r * 0.42, hh, sway, hot);
   }
 }

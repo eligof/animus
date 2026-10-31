@@ -108,7 +108,7 @@ const write: PropArt = {
     }
     // the buttons: a steady few, or blinking while worked
     const pen = k.pen;
-    const tick = Math.floor(v.t * 3);
+    const tick = Math.floor(v.t * 3) % 6;
     for (const c of new Set(KEYS.map((q) => q[2]))) {
       pen.beginPath();
       let any = false;
@@ -601,7 +601,7 @@ const web: PropArt = {
     if (!lit) return;
     // rings of signal off the dish
     for (let i = 0; i < 3; i++) {
-      const f = (v.t + i / 3) % 1;
+      const f = ((v.t * 3 + i) % 3) / 3;
       const cc: P3 = [feed[0] + nrm[0] * f * 2.4, feed[1] + nrm[1] * f * 2.4, feed[2] + nrm[2] * f * 2.4];
       fillPts(k, ring(k, cc, nrm, 0.5 + f * 1.6, 18), null, 0);
       pen.strokeStyle = withAlpha('#8ff6ff', 0.8 * (1 - f));

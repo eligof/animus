@@ -9,7 +9,7 @@ import { STATIONS } from './club/stations.ts';
 import { NPCS } from './club/npcs.ts';
 import { WORKSTATION } from './club/workstation.ts';
 
-// Underground Club: neon on brick, a floor that lights up and 128 BPM till
+// Underground Club: neon on brick, a floor that lights up and 120 BPM till
 // dawn. A brick basement in outlined cartoon (aubergine ink): the shell in
 // club/room.ts and club/walls.ts (signs in club/signs.ts), what goes where
 // in club/plan.ts, the stations in club/stations.ts, the furniture in
@@ -38,7 +38,7 @@ const PALETTE: Palette = {
 export const club: WorldDef = {
   id: 'club',
   name: 'Underground Club',
-  tagline: 'Neon on brick, a floor that lights up and 128 BPM till dawn',
+  tagline: 'Neon on brick, a floor that lights up and 120 BPM till dawn',
   palette: PALETTE,
   backdrop: hex('#07040c'),
   ink: INK,

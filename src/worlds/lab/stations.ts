@@ -22,15 +22,17 @@ const on = (q: readonly [P3, P3, P3, P3], fu: number, fz: number): P3 => {
 
 const quad = (u0: number, u1: number, n: number, z0: number, z1: number): readonly [P3, P3, P3, P3] => [[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]];
 
-// Lines of text that scroll up a screen quad: rows of coloured dashes.
-function codeRows(k: Kit, scr: readonly [P3, P3, P3, P3], t: number, colors: readonly Color[], rows = 7, speed = 2.4): void {
+// Lines of text that scroll up a screen quad: rows of coloured dashes,
+// `speed` rows a second (a multiple of 0.5, so they repeat in 2 s).
+function codeRows(k: Kit, scr: readonly [P3, P3, P3, P3], t: number, colors: readonly Color[], rows = 7, speed = 2.5): void {
   const pen = k.pen;
   const roll = t * speed;
   const base = Math.floor(roll);
+  const m = 2 * speed;
   for (const [ci, c] of colors.entries()) {
     pen.beginPath();
     for (let i = 0; i < rows + 1; i++) {
-      const row = base - i;
+      const row = (((base - i) % m) + m) % m;
       if (Math.floor(hash(row, 3) * colors.length) !== ci) continue;
       const fz = 0.1 + (i + roll - base) * (0.82 / rows);
       if (fz > 0.88) continue;
@@ -165,7 +167,7 @@ const write: PropArt = {
     codeRows(k, CRT, v.t, ['#7dffb0', '#c8ffd8', '#4fd88a']);
     k.halo(1.6, 6.9, ZT + 1.3, 2.6, C.screen, 0.3);
     // the burner lit, the flask boiling, the distillate dripping
-    const fl = 0.85 + 0.15 * Math.sin(v.t * 21);
+    const fl = 0.85 + 0.15 * Math.sin(v.t * Math.PI * 7);
     flame(k, FLASK.u, FLASK.v, ZT + 1.55, 0.75 * fl);
     k.halo(FLASK.u, FLASK.v, FLASK.z + 0.8, 2.6, C.greenGlow, 0.3);
     bubbles(k, FLASK.u, FLASK.v + 0.6, FLASK.z + 0.25, FLASK.z + 0.95, 1.1, v.t, 7, 17, '#eaffd8e0', 1.6);
@@ -792,7 +794,7 @@ const run: PropArt = {
       k.face(0.5, 1.95, v1 + 0.02, 0.55, 1.6, '#20292d', k.thin, 0.1);
     });
     // the console's needle and lights, the lever up or thrown
-    needle(k, 2.75, CONSOLE.v1 + 0.05, 1.2, 0.55, v.active ? 1.0 + Math.sin(v.t * 17) * 0.25 : -1.6);
+    needle(k, 2.75, CONSOLE.v1 + 0.05, 1.2, 0.55, v.active ? 1.0 + Math.sin(v.t * Math.PI * 5) * 0.25 : -1.6);
     for (let i = 0; i < 3; i++) pilot(k, 0.75 + i * 0.47, CONSOLE.v1 + 0.04, 1.15, 0.13, [C.red, C.amber, C.green][i], v.active ? i === 2 || (Math.floor(v.t * 6) + i) % 3 === 0 : i === 0);
     // the lever: pushed away, or pulled back toward the assistant (-u)
     const th = v.active ? 0.72 : -0.65;
@@ -800,8 +802,8 @@ const run: PropArt = {
     k.rod([[LEVER.u, LEVER.v, LEVER.z], top], C.chrome, 0.16);
     k.dot(top[0], top[1], top[2], Math.max(1.5, 0.32 * k.s), C.red, k.thin);
     if (!v.active) return;
-    // the arcs, re-struck several times a second
-    const tick = Math.floor(v.t * 12);
+    // the arcs, re-struck several times a second (the same ones every 2 s)
+    const tick = Math.floor(v.t * 12) % 24;
     const rim = (a: number): P3 => [TC.u + Math.cos(a) * (TC.R + TC.r * 0.8), TC.v + Math.sin(a) * (TC.R + TC.r * 0.8), TC.top + 0.1];
     k.halo(TC.u, TC.v, TC.top + 0.4, 4.2, C.violet, 0.5);
     const toBall = zigzag(rim(-0.55), [BALL[0] - 0.4, BALL[1], BALL[2] + 0.3], 8, 0.7, tick);
@@ -1114,7 +1116,7 @@ const think: PropArt = {
       k.pen.strokeStyle = '#c9b0ff';
       k.pen.lineWidth = Math.max(0.6, 0.08 * k.s);
       k.pen.stroke();
-      const j = Math.floor((((t * (1.2 + i * 0.4) + i * 0.33) % 1) + 1) % 1 * pr.length);
+      const j = Math.floor((((t * (1 + i * 0.5) + i * 0.33) % 1) + 1) % 1 * pr.length);
       const [ex, ey] = pr[j];
       k.pen.beginPath();
       k.pen.arc(ex, ey, Math.max(1.2, 0.2 * k.s), 0, Math.PI * 2);

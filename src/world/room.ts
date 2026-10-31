@@ -144,11 +144,27 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   const rects = () => props.map(footprint);
   const supply = buildSites(L).map((p) => supplyFor(L, p, (r) => !rects().some((q) => clash(q, r, 1))));
   for (const r of supply) mark(r, 1);
+  // The locals, before the decor and the spots idlers like, which keep off
+  // the floor where one stands and where whoever one serves stands and
+  // waits (`held`), as off a station's lanes. Workstations keep off it too,
+  // and routing goes round one standing. A piece of decor that would stand
+  // there goes to the next place it likes (see onWall and onFloor).
+  const arts = world.npcs ?? [];
+  const npcs = placeNpcs(world, L, props, supply);
+  const stands = npcs.filter((n) => n.mode === 'standing').map((n) => cells(n, NPC_R));
+  const served = npcs.filter((n) => arts[n.k].serve).flatMap((n) => [n.front, n.wait]).filter((s): s is Spot => !!s);
+  const held = new Uint8Array(W * D);
+  for (const r of stands) mark(r, 0, held);
+  for (const s of served) mark(cells(s, SERVE_M), 0, held);
+  const clearOf = (mask: Uint8Array, r: Rect) => {
+    for (let y = r.y0; y < r.y1; y++) for (let x = r.x0; x < r.x1; x++) if (mask[x + W * y]) return false;
+    return true;
+  };
   const free = (r: Rect) => {
     if (r.x0 < L.T || r.y0 < L.T || r.x1 > W - 2 || r.y1 > D - 2) return false;
-    for (let y = r.y0; y < r.y1; y++) for (let x = r.x0; x < r.x1; x++) if (keep[x + W * y]) return false;
-    return !rects().some((q) => clash(q, r, 1));
+    return clearOf(keep, r) && !rects().some((q) => clash(q, r, 1));
   };
+  const open = (r: Rect) => clearOf(held, r);
   // Who tall floor decor must not stand in front of.
   const watched: Array<Spot & { r: number }> = [...L.slots.filter((s) => s.kind !== 'entrance').map((s) => ({ ...s.spot, r: 4 })), ...buildSites(L)];
   const hides = (r: Rect) => watched.some((p) => r.x0 - r.y1 < p.x - p.y + p.r + 6 && p.x - p.y - p.r - 6 < r.x1 - r.y0 && r.x0 + r.y0 > p.x + p.y && r.x0 + r.y0 - (p.x + p.y) < 40);
@@ -156,7 +172,7 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   for (const d of world.decor ?? []) {
     for (let n = 0; n < d.count; n++, k++) {
       const pseed = hashString(`${world.id}:decor:${k}`);
-      const placed = d.place === 'wall' ? onWall(L, d.art, free, rng, k) : onFloor(L, d.art, keep.map((c, i) => c | aside[i]), free, d.art.height > TALL ? hides : () => false, props, rng);
+      const placed = d.place === 'wall' ? onWall(L, d.art, free, open, rng, k) : onFloor(L, d.art, keep.map((c, i) => c | aside[i]), free, open, d.art.height > TALL ? hides : () => false, props, rng);
       if (!placed) continue;
       const p: PlacedProp = { art: d.art, ...placed, len: d.art.len, dep: d.art.dep, seed: pseed };
       props.push(p);
@@ -172,14 +188,30 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   }
   const all = props.map(footprint);
   const inside = (x: number, y: number, m: number) => all.some((r) => within(r, x, y, m));
-  const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot)))
-    .filter((p) => p.x > L.T && p.y > L.T && p.x < W - 1 && p.y < D - 1 && !inside(p.x, p.y, 1));
-  // The locals, after the decor (a world's shell plans its furniture
-  // without them and finds the same): routing goes round a standing one;
-  // workstations keep off it and off where each serves.
-  const npcs = placeNpcs(world, L, props, pois, supply);
-  const stands = npcs.filter((n) => n.mode === 'standing').map((n) => cells(n, NPC_R));
-  const serves = npcs.flatMap((n) => [n.front, n.wait]).filter((s): s is Spot => !!s).map((s) => cells(s, 0));
+  // Where one that serves nobody is come up to for a word (see Locals.near)
+  // is not kept clear: none where the decor took it.
+  for (const n of npcs) {
+    if (arts[n.k].serve) continue;
+    if (n.wait && inside(n.wait.x, n.wait.y, SERVE_M)) n.wait = null;
+    if (n.front && inside(n.front.x, n.front.y, SERVE_M)) {
+      n.front = null;
+      n.wait = null;
+    }
+  }
+  // The spots idlers like, on open floor off the props, IDLE_APART from a
+  // standing local and off the floor (SERVE_M round each) where whoever one
+  // serves stands and waits; the critter's home kept whatever.
+  const apart = (p: Spot, s: Spot, d: number) => Math.hypot(p.x - s.x, p.y - s.y) >= d;
+  const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot))).filter(
+    (p) =>
+      p.x > L.T &&
+      p.y > L.T &&
+      p.x < W - 1 &&
+      p.y < D - 1 &&
+      !inside(p.x, p.y, 1) &&
+      (p.kind === 'pet' || (npcs.every((n) => n.mode !== 'standing' || apart(p, n, IDLE_APART)) && served.every((s) => apart(p, s, 2 * SERVE_M)))),
+  );
+  const serves = served.map((s) => cells(s, 0));
   const blocks = [...all, ...stands];
   const blocked = (x: number, y: number, m: number) => blocks.some((r) => within(r, x, y, m));
   const nav = new NavGrid(L.T, L.T, W - 1, D - 1, NAV_CELL, (x, y) => (blocked(x, y, 0.8) ? 2 : blocked(x, y, NAV_PAD) ? 1 : 0));
@@ -206,34 +238,40 @@ const RING_OUT = 7;
 // NPC_R and this from a standing local: the stage's floor to stand on
 // (see Stage.standable).
 const SERVE_M = 1.2;
+// The spots idlers like keep this far from a standing local, as agents keep
+// from each other.
+const IDLE_APART = 3;
 
-// Where each of the world's locals stands (see WorldDef.npcs): one behind
-// its counter or seated, inside its station where its art says; one
-// standing, where its art says if that floor is free (NPC_R clear of every
-// prop and supply pile and off the plazas, 3 from the stations' spots (8
-// from the way in's), 3 from the spots idlers like, out of the yard, 5 off
-// the hub, apart from the other standing ones and off where those placed
-// before it serve), else left out, as decor is. Whoever it serves stands a
+// Where each of the world's locals stands (see WorldDef.npcs), in the room
+// with only its stations and supply piles in (the decor goes round them):
+// one behind its counter or seated, inside its station where its art
+// says; one standing, where its art says if that floor is free (on the
+// floor NPC_R in from its front cut, NPC_R clear of every station and
+// supply pile and off the plazas, 3 from the stations' spots (8 from the
+// way in's), no more than NPC_R into the yard (a station may stand at its
+// edge), 5 off the hub, apart from the other standing ones and off where
+// those placed before it serve), else left out. Whoever it serves stands a
 // step out in front of it (past its station's front for one inside it),
 // the next a step along, each where the floor is free and off every
 // standing local placed before it (else none): no local's counter is
 // blocked by another's. A show's crowd rings a point further out.
-function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], pois: readonly Poi[], supply: readonly Rect[]): PlacedNpc[] {
+function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], supply: readonly Rect[]): PlacedNpc[] {
   const rects = [...props.map(footprint), ...supply];
   const plazas = buildSites(L);
   const h = hub(L);
   const yd = yard(L);
   const arts = world.npcs ?? [];
-  const clear = (s: Spot, m: number, plaza: number) =>
-    s.x >= L.T + 1 && s.y >= L.T + 1 && s.x <= L.W - 2 && s.y <= L.D - 2 && !rects.some((r) => within(r, s.x, s.y, m)) && plazas.every((b) => Math.hypot(b.x - s.x, b.y - s.y) >= b.r + plaza);
+  // On the floor, `edge` in from its front cut, m clear of every station
+  // and pile and `plaza` off the plazas.
+  const clear = (s: Spot, m: number, plaza: number, edge: number) =>
+    s.x >= L.T + 1 && s.y >= L.T + 1 && s.x <= L.W - edge && s.y <= L.D - edge && !rects.some((r) => within(r, s.x, s.y, m)) && plazas.every((b) => Math.hypot(b.x - s.x, b.y - s.y) >= b.r + plaza);
   const out: PlacedNpc[] = [];
   // Where those placed so far serve (those that do).
   const serves = () => out.filter((o) => arts[o.k].serve).flatMap((o) => [o.front, o.wait]).filter((s): s is Spot => !!s);
   const free = (s: Spot) =>
-    clear(s, NPC_R, 2) &&
+    clear(s, NPC_R, 2, NPC_R) &&
     L.slots.every((q) => Math.hypot(q.spot.x - s.x, q.spot.y - s.y) >= (q.kind === 'entrance' ? 8 : 3)) &&
-    pois.every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= 3) &&
-    Math.hypot(yd.x - s.x, yd.y - s.y) >= yd.r + 1 &&
+    Math.hypot(yd.x - s.x, yd.y - s.y) >= yd.r - NPC_R &&
     Math.hypot(h.x - s.x, h.y - s.y) >= 5 &&
     out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - s.x, o.y - s.y) >= 2 * NPC_R + 1) &&
     serves().every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= NPC_R + SERVE_M);
@@ -248,10 +286,13 @@ function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], poi
     const spot = (u: number): Spot | null => {
       const [sx, sy] = toWorld(p, u, fv, 0);
       const s = { x: sx, y: sy };
-      return clear(s, SERVE_M, 1) && out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - sx, o.y - sy) >= NPC_R + SERVE_M) ? s : null;
+      return clear(s, SERVE_M, 1, 2) && out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - sx, o.y - sy) >= NPC_R + SERVE_M) ? s : null;
     };
-    const front = spot(pl.u);
-    const wait = front && (spot(pl.u + 4) ?? spot(pl.u - 4));
+    // (a step along toward its station's middle where in front of it is
+    // not free: past a station's end by the room's front cut, say)
+    const fu = [pl.u, pl.u + (pl.u > p.len / 2 ? -4 : 4)].find((u) => spot(u));
+    const front = fu === undefined ? null : spot(fu);
+    const wait = fu === undefined ? null : (spot(fu + 4) ?? spot(fu - 4));
     const [rx, ry] = toWorld(p, pl.u, fv + RING_OUT, 0);
     const placed: PlacedNpc = { k, station: n.station, prop, mode: pl.mode, wall: p.wall, x, y, z: pl.mode === 'seated' ? pl.z : 0, facing: facingOf(p.wall, pl.look), front, wait, ring: { x: rx, y: ry } };
     const cut = cutOf(pl);
@@ -263,8 +304,9 @@ function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], poi
 
 // Somewhere along a wall's free stretches for `art`, against the wall.
 // Walls alternate piece by piece; the place is picked at random among those
-// that fit, preferring the middle of a stretch.
-function onWall(L: Layout, art: PropArt, free: (r: Rect) => boolean, rng: Rng, k: number): { wall: 'left' | 'right'; island: boolean; x0: number; y0: number } | null {
+// that fit and are `open`, preferring the middle of a stretch (one that
+// fits takes its draw, open or not).
+function onWall(L: Layout, art: PropArt, free: (r: Rect) => boolean, open: (r: Rect) => boolean, rng: Rng, k: number): { wall: 'left' | 'right'; island: boolean; x0: number; y0: number } | null {
   const first: 'left' | 'right' = (k + (rng.chance(0.5) ? 1 : 0)) % 2 ? 'left' : 'right';
   for (const wall of [first, first === 'left' ? 'right' : 'left'] as const) {
     const fits: Array<{ at: number; c: number }> = [];
@@ -272,7 +314,8 @@ function onWall(L: Layout, art: PropArt, free: (r: Rect) => boolean, rng: Rng, k
       for (let at = a0 + 1; at + art.len <= a1 - 1; at++) {
         const p = { wall, x0: wall === 'right' ? at : L.T, y0: wall === 'right' ? L.T : at, len: art.len, dep: art.dep };
         if (!free(footprint(p))) continue;
-        fits.push({ at, c: Math.abs(at + art.len / 2 - (a0 + a1) / 2) / (a1 - a0) + rng.next() * 0.6 });
+        const c = Math.abs(at + art.len / 2 - (a0 + a1) / 2) / (a1 - a0) + rng.next() * 0.6;
+        if (open(footprint(p))) fits.push({ at, c });
       }
     }
     if (!fits.length) continue;
@@ -285,9 +328,9 @@ function onWall(L: Layout, art: PropArt, free: (r: Rect) => boolean, rng: Rng, k
 // Somewhere on the floor for `art` by a back wall or a prop (see NEAR and
 // FRONT_BAND), turned toward the middle line of the screen like the
 // islands; tall pieces out of the view of the crowds and plazas. Snug
-// places win, away from the decor already down, give or take; null if
-// none fits.
-function onFloor(L: Layout, art: PropArt, keep: Uint8Array, free: (r: Rect) => boolean, hides: (r: Rect) => boolean, props: readonly PlacedProp[], rng: Rng): { wall: 'left' | 'right'; island: boolean; x0: number; y0: number } | null {
+// places win, away from the decor already down, give or take, among those
+// `open`; null if none fits.
+function onFloor(L: Layout, art: PropArt, keep: Uint8Array, free: (r: Rect) => boolean, open: (r: Rect) => boolean, hides: (r: Rect) => boolean, props: readonly PlacedProp[], rng: Rng): { wall: 'left' | 'right'; island: boolean; x0: number; y0: number } | null {
   const { W, D, T } = L;
   const rects = props.map(footprint);
   const kept = boxCount(keep, W, D);
@@ -323,7 +366,7 @@ function onFloor(L: Layout, art: PropArt, keep: Uint8Array, free: (r: Rect) => b
         let crowd = 0;
         for (const o of decor) crowd += Math.max(0, 1 - Math.hypot(o.x - cx, o.y - cy) / CROWD);
         const c = snug / NEAR + crowd * 3 + rng.next() * 2;
-        if (c < cost && free(r) && !hides(r)) {
+        if (c < cost && free(r) && open(r) && !hides(r)) {
           cost = c;
           best = { wall, island: true, x0, y0 };
         }

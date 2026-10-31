@@ -640,17 +640,18 @@ export class Stage {
     // one stands beside or behind it.
     const spotFor = (k: number): Spot => this.laneSpot(st, k);
     const gap = (s: Spot, to: Spot[]) => Math.min(Infinity, ...to.map((o) => onScreen(s, o)));
-    // The first free lane on bare floor clear of every prop that keeps a
-    // step from everyone round it and off the other props' own spots; then
-    // the first a step from the others there and off those spots; then a
-    // step from the others there; then one not on top of them (LANE_APART:
-    // clamping to the floor lands lanes together); then the one furthest
-    // from them, clear if any is. With every lane taken, any.
+    // The first free lane on bare floor clear of every prop and off where
+    // a local serves that keeps a step from everyone round it and off the
+    // other props' own spots; then the first a step from the others there
+    // and off those spots; then a step from the others there; then one not
+    // on top of them (LANE_APART: clamping to the floor lands lanes
+    // together); then the one furthest from them, clear if any is. With
+    // every lane taken, any.
     const free = [...LANES.keys()].filter((k) => !taken.has(k));
     const lanes = (free.length ? free : [...LANES.keys()]).map((k) => ({ k, s: spotFor(k) }));
     // (Clamped to the floor, an island's lane can end up beside it.)
     const before = (s: Spot) => !st.island || s.x + s.y >= st.spot.x + st.spot.y - 1;
-    const clear = lanes.filter((l) => !this.inside(l.s, 1.5) && this.level(l.s) && before(l.s));
+    const clear = lanes.filter((l) => !this.inside(l.s, 1.5) && this.level(l.s) && before(l.s) && !this.life.locals?.byCounter(l.s));
     const props = this.L.slots.filter((p) => p !== st).map((p) => p.spot);
     const mates = (l: { k: number; s: Spot }) => gap(l.s, there) >= LANE;
     const own = (l: { k: number; s: Spot }) => l.k === 0 || gap(l.s, props) >= LANE;

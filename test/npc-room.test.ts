@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getTheme } from '../src/themes/index.ts';
+import { THEMES, getTheme } from '../src/themes/index.ts';
 import { deskZone } from '../src/world/desks.ts';
 import { PROP_SIZE, buildSites, hub, planLayout, yard } from '../src/world/layout.ts';
 import type { Rect } from '../src/world/layout.ts';
@@ -15,8 +15,9 @@ import { CUP, TICKET, standIn, standers, trio, withLocals } from './npc-fakes.ts
 // seated inside its station where its art says, facing where it says; one
 // standing on floor kept clear (desks, decor and routing keep off it) or
 // left out; whoever one serves in front of its station, the next beside,
-// both reachable, never where one standing blocks them; a world's own
-// furniture the same with locals or without.
+// both reachable, never where one standing blocks them, the decor off
+// them too; a world's shell finding the stage's furniture, locals and
+// all.
 
 const mines = getTheme('mines')!;
 // The smallest room, and a big one (a 200 x 60 terminal's).
@@ -96,12 +97,36 @@ test('whoever a local serves stands in front of its station, the next beside, on
   assert.ok(pairs >= 1, 'nowhere to wait beside a counter');
 });
 
-test("a world's shell finds the same furniture with its locals as without: they are placed after the decor", () => {
-  for (const id of ['club', 'office', 'vault', 'meadhall']) {
+test("a world's shell finds the same furniture with its locals: it plans the room from the world's id, stations, decor and locals, as the stage does", () => {
+  // (the shells that find their furniture: see club/plan.ts, office/room.ts,
+  // vault/room.ts, meadhall/room.ts, shelter/room.ts, colony/room.ts); the
+  // locals move the decor in some rooms, so a shell without them would not
+  let moved = 0;
+  for (const id of ['club', 'office', 'vault', 'meadhall', 'shelter', 'colony']) {
     const w = getTheme(id)!;
-    const L = planLayout(375, 200, id);
-    const bare = planRoom({ ...w, npcs: [] }, L, hashString(id)).props.map(footprint);
-    assert.deepEqual(planRoom(trio(w), L, hashString(id)).props.map(footprint), bare, id);
+    for (const side of [80, 97, 108, 125, 132, 150, 160]) {
+      const L = planLayout(2 * side + 12, 1000, id);
+      const stage = planRoom(w, L, hashString(id)).props.map(footprint);
+      const shell = { id, stations: w.stations, decor: w.decor, npcs: w.npcs } as WorldDef;
+      assert.deepEqual(planRoom(shell, L, hashString(id)).props.map(footprint), stage, `${id} ${side}`);
+      if (JSON.stringify(planRoom({ ...w, npcs: [] }, L, hashString(id)).props.map(footprint)) !== JSON.stringify(stage)) moved++;
+    }
+  }
+  assert.ok(moved > 0, 'the locals moved no decor');
+});
+
+test('the decor keeps off the locals: where one stands, and where whoever one serves stands and waits', () => {
+  for (const w of THEMES) {
+    for (const side of [97, 108, 144]) {
+      const room = planRoom(w, planLayout(2 * side + 12, 1000, w.id), hashString(w.id));
+      const decor = room.props.filter((p) => !p.slot).map(footprint);
+      for (const n of room.npcs) {
+        const name = `${w.id} ${side}: ${w.npcs![n.k].name}`;
+        if (n.mode === 'standing') for (const r of decor) assert.ok(!near(r, n, NPC_R), `${name}: decor where it stands`);
+        if (!w.npcs![n.k].serve) continue;
+        for (const s of [n.front, n.wait]) if (s) for (const r of decor) assert.ok(!near(r, s, 1.2), `${name}: decor where whoever it serves stands`);
+      }
+    }
   }
 });
 

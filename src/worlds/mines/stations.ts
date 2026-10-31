@@ -89,13 +89,13 @@ const write: PropArt = {
     });
     // the coals: glowing, brighter while worked, small flames licking up
     const t = v.t;
-    const flick = 0.5 + 0.5 * (0.6 * Math.sin(t * 7.3) + 0.4 * Math.sin(t * 12.9 + 1.3));
+    const flick = 0.5 + 0.5 * (0.6 * Math.sin(t * Math.PI * 2) + 0.4 * Math.sin(t * Math.PI * 4 + 1.3));
     const hot = v.active ? 0.75 + 0.25 * flick : 0.35 + 0.1 * flick;
     k.pool(3.5, 2.25, 2.3, 1.4, '#ff7a2a', 0.55 * hot, 3.42);
-    flames(k, 3.5, 2.4, 3.45, v.active ? 0.42 : 0.28, t * (v.active ? 2.2 : 1.2));
+    flames(k, 3.5, 2.4, 3.45, v.active ? 0.42 : 0.28, t * (v.active ? Math.PI : 1.2));
     k.halo(3.5, 2.4, 4.6, v.active ? 4.5 : 3.2, '#ff9a48', 0.42 * hot);
     // the bellows breathing
-    const lift = v.active ? 0.55 + 0.45 * Math.sin(t * 3.2) : 0.75;
+    const lift = v.active ? 0.55 + 0.45 * Math.sin(t * Math.PI) : 0.75;
     bellowsTop(k, 2.9, lift);
     // the anvil glowing under the smith's hot bar, or the hammer resting
     if (v.active) k.halo(ANVIL.u - 0.2, ANVIL.v, ANVIL.z + 0.2, 1.8, '#ff9a48', 0.42 + 0.08 * Math.sin(t * Math.PI * 2));
@@ -401,17 +401,18 @@ const search: PropArt = {
       k.rod([[5.6, 1.3, 12.6], [5.6, 1.8, 12.6]], C.iron, 0.08);
     });
     part(v, `search-lamp-${v.active}`, [4.6, 6.6, 0.8, 2.8, 9.2, 12.8], 0, 0, 0, (k) => hangLantern(k, 5.6, 1.8, 12.6, 0.3, v.active ? 1 : 0.7));
-    // glitter along the vein: one glint idling, several while worked
+    // glitter along the vein: one glint idling, several while worked (the
+    // same ones every 2 s)
     const rate = v.active ? 5 : 1.2;
     const n = v.active ? 4 : 1;
     for (let i = 0; i < n; i++) {
-      const tick = Math.floor(v.t * rate) + i * 7;
+      const tick = (Math.floor(v.t * rate) % 10) + i * 7;
       const j = Math.floor(hash(tick, 3) * FACE_VEIN.length);
       const a = Math.sin(((v.t * rate) % 1) * Math.PI);
       const [u, w, z] = FACE_VEIN[j];
       sparkle(k, u + (hash(tick, 4) - 0.5) * 0.8, w + 0.2, z + (hash(tick, 5) - 0.5) * 0.6, 0.45 + 0.4 * a, a);
     }
-    if (v.active) k.halo(6, 2.6, 6, 6, '#ffd36a', 0.16 + 0.06 * Math.sin(v.t * 5));
+    if (v.active) k.halo(6, 2.6, 6, 6, '#ffd36a', 0.16 + 0.06 * Math.sin(v.t * Math.PI * 2));
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;

@@ -137,7 +137,7 @@ export const once = (act: NpcAct): boolean => act !== 'work' && act !== 'show';
 // How far into `act` frame `frame` of its loop lp is: round a loop, frame i
 // at i / frames; played once, i / (frames - 1), so its last frame is its
 // end and it is seen back at rest.
-export function uOf(act: NpcAct, lp: NpcLoop, frame: number): number {
+function uOf(act: NpcAct, lp: NpcLoop, frame: number): number {
   return once(act) ? (lp.frames > 1 ? frame / (lp.frames - 1) : 0) : frame / lp.frames;
 }
 

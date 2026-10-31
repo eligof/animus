@@ -167,13 +167,13 @@ export type NpcLook = 'out' | 'along' | 'back';
 // v = `edge`) hiding its legs (its picture is cut there: see cutOf in
 // world/npc-place.ts); `seated` on a seat that is part of its station,
 // inside its footprint, its frame lifted `z` (and cut as one behind is,
-// if something of its station stands in front: `top`, `edge`); `standing`
-// on the floor beside its station, outside every footprint, on floor the
-// room planner keeps clear (or leaves it out where it cannot, as decor
-// is: see placeNpcs in world/room.ts).
+// if something of its station stands in front: `top` and `edge` both, or
+// neither); `standing` on the floor beside its station, outside every
+// footprint, on floor the room planner keeps clear (or leaves it out where
+// the room is too small for it: see placeNpcs in world/room.ts).
 export type NpcPlace =
   | { mode: 'behind'; u: number; v: number; top: number; edge: number; look?: NpcLook }
-  | { mode: 'seated'; u: number; v: number; z: number; top?: number; edge?: number; look?: NpcLook }
+  | ({ mode: 'seated'; u: number; v: number; z: number; look?: NpcLook } & ({ top: number; edge: number } | { top?: undefined; edge?: undefined }))
   | { mode: 'standing'; u: number; v: number; look?: NpcLook };
 
 // What a local hands over (see the handOver act), drawn upright at its

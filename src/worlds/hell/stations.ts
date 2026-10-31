@@ -806,7 +806,7 @@ const think: PropArt = {
     // the braziers' fire
     for (const [i, [bu, bv]] of BRAZIERS.entries()) {
       const h = on ? 2.6 + 0.5 * Math.sin(t * 6 + i * 2) : 1.6;
-      fire(k, bu, bv, 5.3, 0.95, h, on ? t + i : 0, i);
+      fire(k, bu, bv, 5.3, 0.95, h, on ? t + i / 2 : 0, i);
       k.halo(bu, bv, 6.2, on ? 4.5 : 3.2, '#ff8a3a', on ? 0.42 : 0.3);
     }
     // the crown skull's eyes, burning while someone broods

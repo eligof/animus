@@ -332,7 +332,7 @@ const cook: Npc = {
   name: 'cook',
   station: 'run',
   // past the stove's far end, turned along to the pot on its top
-  place: { mode: 'standing', u: -1.6, v: STOVE.v + 0.8, look: 'along' },
+  place: { mode: 'standing', u: -1.5, v: STOVE.v + 0.8, look: 'along' },
   tall: 16,
   bones: COOK_BONES,
   parts: cookParts,

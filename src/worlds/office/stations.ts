@@ -319,9 +319,9 @@ const search: PropArt = {
 // of units with small status lights in green and amber, patch cables in
 // one. Beside it a 3D printer on a little cart: an open black frame, a bed
 // with a half-printed shape on it, the print head on its gantry, spools of
-// filament on the shelf below. At work the lights blink fast, the head
-// runs back and forth and the print grows; idle, the lights hold steady
-// and the head is parked.
+// filament on the shelf below. At work the lights blink fast and the head
+// runs back and forth over the print, laying it down; idle, the lights
+// hold steady and the head is parked.
 
 export const RACK = { u0: 5.4, u1: 10.4, v0: 0.8, v1: 6.3, h: 19.2 };
 const UNITS: ReadonlyArray<readonly [number, number]> = (() => {
@@ -415,7 +415,7 @@ const run: PropArt = {
     for (const [i, [z, uh]] of UNITS.entries()) {
       if (uh >= 2) continue;
       for (let j = 0; j < 3; j++) {
-        const lit = v.active ? hash(i, j, Math.floor(v.t * 9 + hash(i, j) * 9)) < 0.6 : hash(i, j, 3) < 0.75;
+        const lit = v.active ? hash(i, j, Math.floor(v.t * 9 + hash(i, j) * 9) % 18) < 0.6 : hash(i, j, 3) < 0.75;
         if (!lit) continue;
         const u = u0 + 0.85 + j * 0.42;
         const dot: P3[] = quad(u, z + uh / 2 - 0.13, u + 0.24, z + uh / 2 + 0.13, n);
@@ -429,15 +429,14 @@ const run: PropArt = {
       k.pen.fill();
     }
     if (v.active) k.halo((u0 + u1) / 2, n + 0.4, h / 2, 3.6, '#7ad97a', 0.1);
-    // the print: a stepped teal shape growing on the bed
+    // the print: a stepped teal shape on the bed, half done
     const { u0: p0, u1: p1, v0: q0, v1: q1, z1: pz1, bed } = PR;
     const cu = (p0 + p1) / 2;
     const cw = (q0 + q1) / 2;
-    const grown = v.active ? 0.5 + 1.1 * ((v.t * 0.05) % 1) : 1.0;
-    k.cyl(cu, cw, bed, 0.75, Math.min(grown, 0.9), C.noteTeal, { line: k.thin });
-    if (grown > 0.9) k.cyl(cu, cw, bed + 0.9, 0.5, grown - 0.9, C.noteTeal, { line: k.thin });
+    k.cyl(cu, cw, bed, 0.75, 0.9, C.noteTeal, { line: k.thin });
+    k.cyl(cu, cw, bed + 0.9, 0.5, 0.1, C.noteTeal, { line: k.thin });
     // the gantry and the head
-    const hu = v.active ? cu + Math.sin(v.t * 3.1) * 1.1 : p0 + 0.7;
+    const hu = v.active ? cu + Math.sin(v.t * Math.PI) * 1.1 : p0 + 0.7;
     const gz = pz1 - 0.9;
     k.rod([[p0 + 0.15, cw, gz], [p1 - 0.15, cw, gz]], C.chrome, 0.14);
     k.box(hu - 0.35, cw - 0.35, gz - 0.5, 0.7, 0.7, 0.9, C.chartHot, { line: k.thin });

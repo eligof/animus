@@ -7,11 +7,13 @@ import type { Layout, Poi } from '../../world/types.ts';
 import type { WorldDef } from '../types.ts';
 import { DECOR } from './decor.ts';
 import { hash } from './kit.ts';
+import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // Where the club's shell puts things, from the room's size alone (so the
 // shell, the overlay and the points of interest agree with the stage): the
-// stations (planLayout), the furniture (planRoom, with the stage's seed),
+// stations (planLayout), the furniture (planRoom, with the stage's seed
+// and the club's locals, which it goes round),
 // the light-up dance floor on the open floor round the hub, and what goes
 // on the free stretches of wall: a mural, a fire exit, and bays of a neon
 // sign over posters, a tag or a fuse box.
@@ -38,8 +40,8 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   if (hit) return hit;
   let L = planLayout(2 * W + 12, W + H + 12, 'club');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
-  // The stage plans the room with the world's id as the seed.
-  const decor = L.slots.length ? planRoom({ id: 'club', stations: STATIONS, decor: DECOR } as WorldDef, L, hashString('club')).props.filter((p) => !p.slot) : [];
+  // The stage plans the room with the world's id as the seed, its locals in.
+  const decor = L.slots.length ? planRoom({ id: 'club', stations: STATIONS, decor: DECOR, npcs: NPCS } as WorldDef, L, hashString('club')).props.filter((p) => !p.slot) : [];
   const r = Math.max(3, Math.min(6, 3 + (H - 34) * 0.08));
   const sign = { r, z: STRIP + 3 + r + Math.min(6, Math.max(0, (H - 34) * 0.25)) };
   const plan: Plan = { L, features: [], dance: null, decor, sign };

@@ -2,7 +2,7 @@ import { shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
 import type { PropArt, PropView } from '../types.ts';
-import { ball, bookRow, chair, crate, dusk, fillPts, flames, hull, logU, logV, ring, rock, sack, sprout, stool, wheel } from './bits.ts';
+import { bookRow, chair, crate, dusk, fillPts, flames, hull, logU, logV, ring, rock, sack, sprout, wheel } from './bits.ts';
 import type { Kit, P3 } from './kit.ts';
 import { C, INK, due, hash, kitOf, still, withAlpha } from './kit.ts';
 
@@ -108,14 +108,14 @@ const write: PropArt = {
     });
     // the cloth's stripes, fed on under the needle while sewing; the needle
     // bobbing
-    const feed = v.active ? (v.t * 0.6) % 0.6 : 0;
+    const feed = v.active ? (v.t % 1) * 0.6 : 0;
     const seam: Array<[P3, P3]> = [];
     for (let u = 5.35 + feed; u < 8.25; u += 0.6) seam.push([[Math.max(5.55, u), 1.45, ZT + 0.38], [Math.min(8.25, u + 0.3), 1.45, ZT + 0.38]]);
     k.segs(seam, C.cloth, Math.max(0.8, 0.14 * k.s));
     const stripes: Array<[P3, P3]> = [];
     for (let u = 5.6 + feed * 1.5; u < 8.2; u += 0.9) stripes.push([[u, 0.8, ZT + 0.38], [u, 2.1, ZT + 0.38]]);
     k.segs(stripes, '#7aa0c8', Math.max(0.7, 0.12 * k.s));
-    const bob = v.active ? 0.35 + 0.35 * Math.sin(v.t * 18) : 0.7;
+    const bob = v.active ? 0.35 + 0.35 * Math.sin(v.t * Math.PI * 6) : 0.7;
     k.rod([[NEEDLE.u, NEEDLE.v, ZT + 1.2], [NEEDLE.u, NEEDLE.v, ZT + 0.4 + bob]], C.steel, 0.1);
     k.box(NEEDLE.u - 0.25, NEEDLE.v - 0.25, ZT + 0.95 + bob * 0.3, 0.5, 0.45, 0.35, C.steel, { line: k.thin });
   },
@@ -350,7 +350,7 @@ const run: PropArt = {
     });
     // the fire: glowing orange while idle, white-hot and pulsing while worked
     const t = v.t;
-    const n = v.active ? 0.5 + 0.5 * Math.sin(t * 6.1) * Math.sin(t * 2.3 + 1) : 0;
+    const n = v.active ? 0.5 + 0.5 * Math.sin(t * Math.PI * 2 + 0.5) * Math.sin(t * Math.PI + 1) : 0;
     const open = arch(MOUTH.u0, MOUTH.u1, MOUTH.z0, MOUTH.z1, MOUTH.v + 0.02);
     const hot = v.active ? [[0, '#fff2b0'], [0.45, n > 0.5 ? '#ffd060' : '#ffb040'], [1, '#e85a1a']] as const : [[0, '#ffb040'], [0.5, '#e8702a'], [1, '#8a2a12']] as const;
     k.poly(open, k.vgrad(3.5, MOUTH.v, MOUTH.z0, MOUTH.z1, hot), k.lw);
@@ -629,9 +629,9 @@ const idle: PropArt = {
     // the fire itself, always burning, and the torch's flame
     const t = v.t;
     k.halo(TORCH.u, TORCH.v, TORCH.z + 0.6, 1.7, '#ffb040', 0.5);
-    flames(k, TORCH.u, TORCH.v, TORCH.z - 0.05, 0.28, t * 2.7 + 1.1);
-    k.halo(FIRE.u, FIRE.v, 1.6, 6.0, '#ff8a3a', 0.5 + 0.1 * Math.sin(t * 7.3));
-    flames(k, FIRE.u, FIRE.v, 0.5, 0.78, t * 1.9);
+    flames(k, TORCH.u, TORCH.v, TORCH.z - 0.05, 0.28, t * Math.PI + 1.1);
+    k.halo(FIRE.u, FIRE.v, 1.6, 6.0, '#ff8a3a', 0.5 + 0.1 * Math.sin(t * Math.PI * 2));
+    flames(k, FIRE.u, FIRE.v, 0.5, 0.78, t * Math.PI / 2);
     k.halo(FIRE.u, FIRE.v, 1.2, 2.4, '#ffe0a0', 0.45);
     // the pot over it, the front stones, the right seat and the mug
     still(v, 'idle-front', 8, (k) => {

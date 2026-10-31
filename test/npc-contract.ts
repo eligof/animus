@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { Canvas } from '../src/art/canvas.ts';
 import { render, Sketch } from '../src/art/figure/paint.ts';
+import { frame, project } from '../src/art/iso.ts';
 import { ACTS, loopOf, puppetOf } from '../src/art/npc/acts.ts';
 import { NPC_BOX, buildNpc } from '../src/art/npc/puppet.ts';
+import { AMBIENT_FPS, CYCLE } from '../src/art/scene.ts';
 import { PROP_SIZE } from '../src/world/layout.ts';
 import { NPC_R, cutOf } from '../src/world/npc-place.ts';
-import type { Npc, NpcAct, NpcLoop, WorldDef } from '../src/worlds/types.ts';
+import { hashString } from '../src/world/rng.ts';
+import type { Npc, NpcAct, NpcLoop, PropArt, WorldDef } from '../src/worlds/types.ts';
 
 // What every world's locals are held to (see Npc in src/worlds/types.ts):
 // the world test runs it on each world's, the puppet test on the
@@ -44,6 +47,40 @@ export function painted(c: Canvas): { n: number; edge: boolean; top: number } {
   return { n, edge, top: (-B.y0 * S - row) / S };
 }
 
+// Station art worked at time t, backed onto `wall`, seeded as the room
+// planner seeds world w's (see planRoom), at scale S on a canvas round its
+// box.
+export function stationPicture(w: WorldDef, art: PropArt, kind: string, wall: 'left' | 'right', t: number): Canvas {
+  const pad = 8 * S;
+  const at0 = frame(project(0, 0, S), wall, 0, 0);
+  let box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  for (const u of [0, art.len]) for (const v of [0, art.dep]) for (const z of [0, art.height]) {
+    const [x, y] = at0(u, v, z);
+    box = { x0: Math.min(box.x0, x), y0: Math.min(box.y0, y), x1: Math.max(box.x1, x), y1: Math.max(box.y1, y) };
+  }
+  const c = new Canvas(Math.ceil(box.x1 - box.x0 + 2 * pad), Math.ceil(box.y1 - box.y0 + 2 * pad));
+  const at = frame(project(pad - box.x0, pad - box.y0, S), wall, 0, 0);
+  art.draw({ pen: c, s: S, at, len: art.len, dep: art.dep, wall, island: true, t, active: true, seed: hashString(`${w.id}:${kind}`) });
+  return c;
+}
+
+// A world's station a local works, worked, is shown as a loop of two
+// seconds (see CYCLE in art/scene.ts): what moves on it repeats within 2 s
+// (flicker too: seeded and periodic), so the loop has no jump where it
+// comes round. The way in is not worked.
+export function stationLoops(w: WorldDef, n: Npc): void {
+  const art = w.stations[n.station];
+  if (n.station === 'entrance' || !art.animated) return;
+  for (const wall of ['right', 'left'] as const) {
+    for (let i = 0; i < CYCLE; i++) {
+      const t = i / AMBIENT_FPS;
+      const a = stationPicture(w, art, n.station, wall, t);
+      const d = differ(a, stationPicture(w, art, n.station, wall, t + 2));
+      assert.ok(d <= Math.max(6, 0.002 * painted(a).n), `${w.id} ${n.name}: its ${n.station} worked (${wall} wall) ${d} pixels off at ${t.toFixed(2)} s and 2 s on`);
+    }
+  }
+}
+
 // Pixels that differ between two pictures of one size.
 export function differ(a: Canvas, b: Canvas): number {
   let n = 0;
@@ -76,7 +113,10 @@ export function npcContract(w: WorldDef, n: Npc): void {
   } else {
     assert.ok(pl.u >= 0.5 && pl.u <= len - 0.5 && pl.v >= 0.3 && pl.v <= dep - 0.3, `${what}: at ${pl.u}, ${pl.v}, not inside its station`);
   }
-  if (pl.mode === 'seated') assert.ok(pl.z >= 0 && pl.z <= 8, `${what}: seated ${pl.z} up`);
+  if (pl.mode === 'seated') {
+    assert.ok(pl.z >= 0 && pl.z <= 8, `${what}: seated ${pl.z} up`);
+    assert.equal(pl.top === undefined, pl.edge === undefined, `${what}: seated with a counter's top or its edge, not both`);
+  }
   const cut = cutOf(pl);
   if (pl.mode === 'behind') assert.ok(cut !== undefined, `${what}: behind nothing`);
   if (cut !== undefined && pl.mode !== 'standing') {

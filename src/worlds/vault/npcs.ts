@@ -553,8 +553,7 @@ const GLOVE_D = '#cfcabd';
 const MOUSTACHE = '#d9d6cf';
 const MOUSTACHE_D = '#a8a49a';
 
-// His body stands LIFT higher than the seated sketch it was drawn as, on
-// short legs under the coat.
+// His coat, head and arms stand LIFT up, on short legs under the coat.
 const LIFT = 1.0;
 const GUARD_BONES: Bones = { neck: [0.15, -6.85 - LIFT], shoulders: [[-2.2, -6.2 - LIFT], [2.35, -6.2 - LIFT]], upper: 2.0, fore: 1.85 };
 

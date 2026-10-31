@@ -384,7 +384,7 @@ const search: PropArt = {
     const n = Math.floor(v.t / per);
     const f = (v.t / per) % 1;
     const out = 1.4 * ease(Math.min(1, f * 4) - Math.max(0, f * 4 - 3));
-    const idx = Math.floor(hash(n, 9) * ROWS * COLS);
+    const idx = Math.floor(hash(n % 2, 9) * ROWS * COLS);
     const r = idx % ROWS;
     const c = Math.floor(idx / ROWS);
     if (out <= 0.02) return;
@@ -408,7 +408,7 @@ const search: PropArt = {
     if (!v.active) return;
     const n = due(v.t, dt, 2.2, v.seed);
     const per = 1;
-    const idx = Math.floor(hash(Math.floor(v.t / per), 9) * ROWS * COLS);
+    const idx = Math.floor(hash(Math.floor(v.t / per) % 2, 9) * ROWS * COLS);
     const q = drawer(idx % ROWS, Math.floor(idx / ROWS), 0.7);
     const m = on(q, 0.5, 1);
     for (let i = 0; i < n; i++) spawn(spore(m[0], m[1], m[2], Math.floor(v.t * 10), i, [150, 255, 220], 0.5));
