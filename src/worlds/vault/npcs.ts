@@ -1,7 +1,8 @@
-import { apply, mul, move, turn, type Mat, type Sketch } from '../../art/figure/paint.ts';
+import { apply, mul, move, turn, type Sketch } from '../../art/figure/paint.ts';
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, HANG, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, invert, reach, upright } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet, Swing } from '../types.ts';
 import { C } from './kit.ts';
@@ -34,39 +35,14 @@ function stroke(sk: Sketch, pts: readonly number[], w: number, color: string, ca
   });
 }
 
-// The inverse of a sketch frame: a point of the local's own frame in the
-// part's.
-function inverse(m: Mat): Mat {
-  const det = m[0] * m[3] - m[1] * m[2];
-  return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det, (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det];
-}
-
 // Where a point of the head (its frame: origin at the neck) stands in the
 // local's own frame, for puppet p: what the near hand holds can reach it.
 function headPoint(b: Bones, p: Puppet, x: number, y: number): [number, number] {
   return apply(mul(mul(move(0, -p.bob), turn(p.lean)), mul(move(b.neck[0], b.neck[1]), turn(p.tilt))), x, y);
 }
 
-// The turn that sets arm k's forearm frame back upright on screen, for
-// what a hand holds level (a stamp, a bag).
-const upright = (p: Puppet, k: 0 | 1): Mat => turn(p.arms[k].sh + p.arms[k].el - p.lean);
-
 // An arm k of the way from a to b.
 const mix = (a: Swing, b: Swing, k: number): Swing => ({ sh: a.sh + (b.sh - a.sh) * k, el: a.el + (b.el - a.el) * k });
-
-// The swing that puts arm k's hand at (x, y) in a local's frame (its feet
-// at the origin, x toward where it faces, y down), as near as the arm
-// reaches, the elbow bent forward under the line to the hand.
-function reach(b: Bones, k: 0 | 1, x: number, y: number): Swing {
-  const [sx, sy] = b.shoulders[k];
-  const dx = x - sx;
-  const dy = y - sy;
-  const a = b.upper;
-  const f = b.fore;
-  const d = Math.max(Math.abs(a - f) + 1e-3, Math.min(Math.hypot(dx, dy), a + f - 1e-3));
-  const cos = (q: number) => Math.acos(Math.max(-1, Math.min(1, q)));
-  return { sh: Math.atan2(dx, dy) - cos((a * a + d * d - f * f) / (2 * a * d)), el: Math.PI - cos((a * a + f * f - d * d) / (2 * a * f)) };
-}
 
 // ── the teller ───────────────────────────────────────────────────────────
 // In her leather chair behind the counting desk: auburn hair in a bun, a
@@ -190,7 +166,7 @@ const tellerParts: NpcParts = {
     // desk's edge while she counts, lying long-ways: a note fanned forward
     // off its top by her thumb every other frame, never up past her chin
     if (k === 0 && work) {
-      sk.at(mul(move(0, f), upright(p, 0)), () => {
+      atHand(sk, p, 0, f, () => {
         if (Math.floor(p.u * 12) % 2 === 1) {
           sk.blob((q) => {
             q.moveTo(-0.35, -1.2);
@@ -210,7 +186,7 @@ const tellerParts: NpcParts = {
     // the stamp in the far hand, brought down on the ledger: a turned
     // wooden knob, its red rubber foot
     if (k === 1 && work && p.u >= 0.58 && p.u < 0.96) {
-      sk.at(mul(move(0, f), upright(p, 1)), () => {
+      atHand(sk, p, 1, f, () => {
         sk.blob((q) => q.roundRect(-0.65, 0.3, 1.3, 0.42, 0.08), C.red, { dark: shade(C.red, -0.25), d: 0.1 });
         sk.blob((q) => q.roundRect(-0.55, 0.0, 1.1, 0.35, 0.06), C.walnut, { line: 0.5 });
         sk.limb([0, 0.0, 0, -0.55], 0.4, C.walnut, { dark: shade(C.walnut, -0.25) });
@@ -436,7 +412,7 @@ const safeParts: NpcParts = {
     }
     // the stethoscope's bell in the near hand, its tube back to his chin
     if (k === 0 && (p.act === 'work' || (p.act === 'show' && p.u < 0.45))) {
-      const [jx, jy] = apply(inverse(sk.m), ...headPoint(SAFE_BONES, p, JOIN[0], JOIN[1]));
+      const [jx, jy] = apply(invert(sk.m), ...headPoint(SAFE_BONES, p, JOIN[0], JOIN[1]));
       stroke(sk, [0, f + 0.2, (jx + 0) / 2 - 0.6, (jy + f) / 2 + 0.9, jx, jy], 0.2, TUBE);
       sk.blob(circ(0.2, f + 0.35, 0.5), C.chrome, { dark: '#9aa4ad', d: 0.12 });
     }
@@ -494,7 +470,7 @@ const safeShow: NpcLoop & { crowd: 'watch' } = {
       bob: 0.12 * hold + 0.45 * click + 0.35 * bounce,
       lean: 0.16 * hold * (1 - lift) - 0.05 * lift,
       tilt: 0.26 * hold - 0.12 * lift,
-      arms: [mix(mix(S_BELL, { sh: -0.8, el: -0.9 }, sprung), { sh: 0.12 - 1.7 - 0.2 * bounce, el: 0.2 - 1.0 }, lift), mix(mix(dial, { sh: 0.9, el: 1.2 }, click), { sh: 2.15 + 0.2 * bounce, el: -0.25 }, lift)],
+      arms: [mix(mix(S_BELL, { sh: -0.8, el: -0.9 }, sprung), { sh: HANG.sh - 1.7 - 0.2 * bounce, el: HANG.el - 1.0 }, lift), mix(mix(dial, { sh: 0.9, el: 1.2 }, click), { sh: 2.15 + 0.2 * bounce, el: -0.25 }, lift)],
       eyes: hold > 0.5 ? 'shut' : click > 0.3 ? 'open' : 'happy',
       mouth: hold > 0.5 ? 'closed' : click > 0.3 ? 'o' : 'open',
     };
@@ -514,7 +490,7 @@ const safeCelebrate: NpcLoop = {
       ...rest(),
       bob: 0.5 * pump / 0.2,
       tilt: -0.08 * k,
-      arms: [{ sh: 0.12 - 1.85 * k, el: 0.2 - (1.05 + pump) * k }, { sh: 0.12 + 1.65 * k, el: 0.2 + (0.65 + pump) * k }],
+      arms: [swing(-1.85 * k, -(1.05 + pump) * k), swing(1.65 * k, (0.65 + pump) * k)],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'closed',
     };
@@ -769,7 +745,7 @@ const guardCelebrate: NpcLoop = {
       ...rest(),
       bob: 0.3 * bump(u, 0.2, 0.7),
       tilt: -0.1 * k,
-      arms: [{ sh: 0.12 - 1.9 * k, el: 0.2 - (1.0 + pump) * k }, { sh: 0.12 + 1.7 * k, el: 0.2 + (0.7 + pump) * k }],
+      arms: [swing(-1.9 * k, -(1.0 + pump) * k), swing(1.7 * k, (0.7 + pump) * k)],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'smile',
     };

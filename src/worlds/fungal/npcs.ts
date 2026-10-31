@@ -1,7 +1,8 @@
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
-import { move, mul, turn, type Sketch } from '../../art/figure/paint.ts';
+import { atHand } from '../../art/npc/helpers.ts';
+import { turn, type Sketch } from '../../art/figure/paint.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet } from '../types.ts';
 import { C, withAlpha } from './kit.ts';
@@ -15,11 +16,6 @@ import { POT, RING } from './stations.ts';
 
 const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => (p: Pen) => p.ellipse(cx, cy, rx, ry, rot, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
-
-// In arm k's forearm frame: a frame at the hand turned back upright (as
-// the local stands, whatever its arm and lean do), for what it holds
-// level.
-const upright = (p: Puppet, k: 0 | 1, at: number) => mul(move(0, at), turn(p.arms[k].sh + p.arms[k].el - p.lean));
 
 // A soft glowing dot (a spore), r units across its glow.
 function glowDot(sk: Sketch, x: number, y: number, r: number, a: number, color: string = C.glow): void {
@@ -188,7 +184,7 @@ const herbParts: NpcParts = {
     const work = p.act === 'work';
     if (k === 1 && work) {
       // the mortar, cradled level in the far hand, herbs in it
-      sk.at(upright(p, 1, f), () => {
+      atHand(sk, p, 1, f, () => {
         sk.blob((q) => {
           q.moveTo(-1.85, -0.75);
           q.lineTo(0.75, -0.75);
@@ -205,7 +201,7 @@ const herbParts: NpcParts = {
       // the pestle slanting down into the mortar, or a sprig to sniff (or
       // to wave): swapped halfway up to the nose and halfway back down
       const sniff = p.act === 'celebrate' || herbSniff(p.u) > 0.5;
-      sk.at(upright(p, 0, f), () => {
+      atHand(sk, p, 0, f, () => {
         if (sniff) sprig(sk, 0.15, 0.2, 1.9, 0.5);
         else {
           sk.limb([-0.45, -0.75, 1.15, 1.45], 0.38, '#d8d0e0', { dark: '#aaa2b8' });
@@ -258,7 +254,7 @@ const herbCelebrate: NpcLoop = {
       bob: 0.35 * hop * k,
       lean: 0.06 * Math.sin(u * TAU * 2) * k,
       tilt: -0.08 * k,
-      arms: [{ sh: 0.12 - (2.1 + 0.15 * hop) * k, el: 0.2 - 0.85 * k }, { sh: 0.12 + 0.35 * k, el: 0.2 + 1.6 * k }],
+      arms: [swing(-(2.1 + 0.15 * hop) * k, -0.85 * k), swing(0.35 * k, 1.6 * k)],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'smile',
     };
@@ -495,7 +491,7 @@ const witchParts: NpcParts = {
       // the long ladle: its handle up past the fist, the bowl down in the
       // pot (stirring) or held high (a cackle)
       const tip = p.act === 'work' ? 0.55 : 0.55 + (Math.PI - 0.25) * env(p.u, 0.18, 0.82);
-      sk.at(upright(p, 0, f + 0.05), () => {
+      atHand(sk, p, 0, f + 0.05, () => {
         sk.at(turn(-tip), () => {
           sk.limb([0, -1.1, 0, 4.0], 0.32, LADLE, { dark: LADLE_D });
           sk.blob((q) => {
@@ -550,8 +546,8 @@ const witchCelebrate: NpcLoop = {
       lean: -0.1 * k,
       tilt: -0.22 * k + 0.05 * shake * k,
       arms: [
-        { sh: 0.12 - 1.95 * k, el: 0.2 - 0.95 * k },
-        { sh: 0.12 + 1.7 * k, el: 0.2 + 0.7 * k },
+        swing(-1.95 * k, -0.95 * k),
+        swing(1.7 * k, 0.7 * k),
       ],
       eyes: k > 0.35 ? 'happy' : 'open',
       mouth: k > 0.35 ? 'open' : 'smile',
@@ -782,7 +778,7 @@ const mycCelebrate: NpcLoop = {
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
-    return { ...rest(), bob: 0.9 * bump(u, 0.15, 0.6), tilt: -0.1 * k, arms: [{ sh: 0.12 - 1.9 * k, el: 0.2 - 0.9 * k }, { sh: 0.12 + 1.7 * k, el: 0.2 + 0.7 * k }], eyes: k > 0.3 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.9 * bump(u, 0.15, 0.6), tilt: -0.1 * k, arms: [swing(-1.9 * k, -0.9 * k), swing(1.7 * k, 0.7 * k)], eyes: k > 0.3 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'smile' };
   },
 };
 

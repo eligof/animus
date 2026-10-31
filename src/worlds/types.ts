@@ -120,8 +120,9 @@ export type NpcMouth = 'closed' | 'open' | 'smile' | 'o';
 // the elbow the same way. Never changed once made: puppets share them.
 export type Swing = { readonly sh: number; readonly el: number };
 
-// A local's puppet in one frame: which act and how far into it (`u`, 0 to
-// 1), its body lifted (`bob`, units) and leaning about its feet (`lean`,
+// A local's puppet in one frame: which act it plays (a celebration with
+// none of its own plays the shared cheer, so is 'cheer') and how far into
+// it (`u`, 0 to 1), its body lifted (`bob`, units) and leaning about its feet (`lean`,
 // radians, + toward where it faces), its head tilted about the neck
 // (`tilt`, + a nod forward), its arms (0 the near one, on the side away
 // from where it faces: it hands things over; 1 the far one: it waves and
@@ -142,6 +143,12 @@ export type Bones = { neck: readonly [number, number]; shoulders: readonly [read
 // arm k's upper arm and forearm, origin at the shoulder and at the elbow,
 // the arm along +y (the hand at (0, fore)). A part may read the puppet's
 // act and `u` for what moves in it (a page turning, a record spinning).
+// Its hands hold its tools (what it works with: a pot, a hammer, a quill)
+// only in its own loops, its work, its show and its celebration, which
+// hold what they show (see own in art/npc/acts.ts). In a shared act (a
+// wave, a cheer, a flinch, applause, a word, a nod, a beckon) its hands
+// are empty, and in the hand-over the near one holds only what it serves,
+// which the puppet draws (see Npc.serve).
 export type NpcParts = {
   body(sk: Sketch, p: Puppet, back: boolean): void;
   head(sk: Sketch, p: Puppet, back: boolean): void;

@@ -1,10 +1,11 @@
 import type { Sketch } from '../../art/figure/paint.ts';
 import { move, mul, turn, zoom } from '../../art/figure/paint.ts';
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, HANG, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, fromHand, reach, toward } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet, Swing } from '../types.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, NpcServe } from '../types.ts';
 import { BEAT, C } from './kit.ts';
 import { BAR, DJ, HATCH } from './stations.ts';
 
@@ -16,6 +17,7 @@ import { BAR, DJ, HATCH } from './stations.ts';
 
 const ell = (cx: number, cy: number, rx: number, ry: number) => (p: Pen) => p.ellipse(cx, cy, rx, ry, 0, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
+const mix = (a: number, b: number, k: number) => a + (b - a) * k;
 
 const SKIN = '#c98a5e';
 const SKIN_D = '#a06a45';
@@ -142,8 +144,8 @@ const djCelebrate: NpcLoop = {
   pose(u) {
     const k = env(u, 0.25, 0.75);
     const pump = Math.abs(Math.sin(u * TAU * 2)) * k;
-    const near = { sh: 0.12 - 1.95 * k - 0.15 * pump, el: 0.2 - 1.1 * k - 0.2 * pump };
-    const far = { sh: 0.12 + 1.65 * k + 0.15 * pump, el: 0.2 + 0.7 * k + 0.15 * pump };
+    const near = { sh: HANG.sh - 1.95 * k - 0.15 * pump, el: HANG.el - 1.1 * k - 0.2 * pump };
+    const far = { sh: HANG.sh + 1.65 * k + 0.15 * pump, el: HANG.el + 0.7 * k + 0.15 * pump };
     return { ...rest(), bob: 0.3 * pump, tilt: -0.1 * k, arms: [near, far], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
@@ -160,36 +162,6 @@ const dj: Npc = {
   show: djShow,
   celebrate: djCelebrate,
 };
-
-// ── arms and hands ───────────────────────────────────────────────────────
-// A hand's place in the body's frame (see buildNpc in art/npc/puppet.ts):
-// its shoulder, swung `sh` there and bent `el` at the elbow. What a hand
-// holds is drawn in its `fore`, upright in the room, under its fingers.
-
-function handOf(b: Bones, p: Puppet, k: 0 | 1): [number, number] {
-  const [sx, sy] = b.shoulders[k];
-  const { sh, el } = p.arms[k];
-  return [sx + Math.sin(sh) * b.upper + Math.sin(sh + el) * b.fore, sy + Math.cos(sh) * b.upper + Math.cos(sh + el) * b.fore];
-}
-
-// Arm k's swing that puts its hand at (x, y) in the body's frame (as near
-// as it reaches), its elbow bent down and forward.
-function reach(b: Bones, k: 0 | 1, x: number, y: number): Swing {
-  const [sx, sy] = b.shoulders[k];
-  const U = b.upper;
-  const F = b.fore;
-  const d = Math.max(Math.abs(U - F) + 1e-3, Math.min(Math.hypot(x - sx, y - sy), U + F - 1e-3));
-  const a = Math.atan2(x - sx, y - sy);
-  const at = Math.acos((U * U + d * d - F * F) / (2 * U * d));
-  const el = Math.acos((U * U + F * F - d * d) / (2 * U * F));
-  return { sh: a - at, el: Math.PI - el };
-}
-
-// A swing `k` of the way from hanging at rest (see rest in art/npc/acts.ts)
-// to `to`: for one-shot acts, which start and end at rest.
-const toward = (k: number, to: Swing): Swing => ({ sh: 0.12 + (to.sh - 0.12) * k, el: 0.2 + (to.el - 0.2) * k });
-
-const mix = (a: number, b: number, k: number) => a + (b - a) * k;
 
 // ── the bartender ────────────────────────────────────────────────────────
 // Behind the neon bar: a slick black pompadour with a violet sheen, a
@@ -389,24 +361,20 @@ const bartenderParts: NpcParts = {
   },
   fore(sk, p, k) {
     const f = BT_BONES.fore;
-    const { sh, el } = p.arms[k];
     // rolled to the elbow, the forearm bare
     sk.limb([0, 0.2, 0, f - 0.25], 0.95, k ? BT_SKIN_D : BT_SKIN, { dark: k ? null : BT_SKIN_D });
     sk.blob((q) => q.roundRect(-0.7, -0.2, 1.4, 0.65, 0.3), k ? SHIRT_D : SHIRT, { dark: k ? null : SHIRT_D, d: 0.15 });
     // what the hand holds, upright in the room, under its fingers: at work
     // the shaker in the far hand, shaken, then tipped over the glass on the
     // bar; in a flip, the shaker spinning up over its head
-    sk.at(mul(move(0, f), turn(sh + el - p.lean)), () => {
+    atHand(sk, p, k, f, () => {
       if (p.act === 'work' && k === 1) {
         const pour = pourOf(p.u);
         const tip = mix(0.25 + 0.12 * shakeOf(p.u), TIP, pour);
         sk.at(turn(tip), () => shaker(sk));
         if (pour > 0.95) {
           // the pour, from the strainer down into the glass
-          const h1 = handOf(BT_BONES, p, 1);
-          const [rx, ry] = [RIM.x - h1[0], RIM.y - h1[1]];
-          const tx = Math.cos(p.lean) * rx - Math.sin(p.lean) * ry;
-          const ty = Math.sin(p.lean) * rx + Math.cos(p.lean) * ry;
+          const [tx, ty] = fromHand(BT_BONES, p, 1, RIM.x, RIM.y);
           const [mx, my] = [Math.sin(tip) * MOUTH, -Math.cos(tip) * MOUTH];
           sk.limb([mx, my, mx + 0.1, (my + ty) / 2, tx, ty], 0.24, C.pink, { line: 0.4, sil: false });
         }
@@ -458,8 +426,8 @@ const bartenderCelebrate: NpcLoop = {
       bob: 0.4 * bump(u, 0.75, 0.98),
       tilt: -0.25 * fly,
       arms: [
-        { sh: 0.12 + 0.8 * k, el: 0.2 + 0.7 * k },
-        { sh: 0.12 + 2.1 * k, el: 0.2 + 0.4 * k },
+        swing(0.8 * k, 0.7 * k),
+        swing(2.1 * k, 0.4 * k),
       ],
       eyes: u > 0.78 && k > 0.3 ? 'happy' : 'open',
       mouth: fly > 0.4 ? 'o' : k > 0.3 ? 'open' : 'smile',
@@ -675,11 +643,10 @@ const coatCheckParts: NpcParts = {
   },
   fore(sk, p, k) {
     const f = CC_BONES.fore;
-    const { sh, el } = p.arms[k];
     sk.limb([0, 0, 0, f - 0.3], 1.05, k ? JACKET_D : JACKET, { dark: k ? null : JACKET_D });
     // a brass cuff, then the white glove
     sk.blob((q) => q.roundRect(-0.6, f - 0.75, 1.2, 0.32, 0.12), C.brass, { line: 0.45 });
-    sk.at(mul(move(0, f), turn(sh + el - p.lean)), () => {
+    atHand(sk, p, k, f, () => {
       if (p.act === 'work' && k === 1 && liftOf(p.u) > 0.02) coatOnHanger(sk, 0.12 * Math.sin(p.u * TAU * 2));
       // the ticket, whole between the hands, then torn: the stub in the
       // near hand
@@ -742,7 +709,7 @@ const coatCheckCelebrate: NpcLoop = {
     const k = env(u, 0.15, 0.85);
     const ring = Math.abs(Math.sin(u * TAU * 2));
     const far = toward(k, reach(CC_BONES, 1, BELL.x, BELL.y + 0.3 - 0.9 * (1 - ring)));
-    return { ...rest(), bob: 0.35 * bump(u, 0.3, 0.7), tilt: 0.1 * k * ring, arms: [{ sh: 0.12 - 2.15 * k, el: 0.2 - 1.02 * k - 0.15 * ring * k }, far], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.35 * bump(u, 0.3, 0.7), tilt: 0.1 * k * ring, arms: [{ sh: HANG.sh - 2.15 * k, el: HANG.el - 1.02 * k - 0.15 * ring * k }, far], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 

@@ -1,7 +1,8 @@
 import { move, mul, turn } from '../../art/figure/paint.ts';
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, HANG, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe } from '../types.ts';
 import { C } from './kit.ts';
@@ -165,7 +166,7 @@ const capParts: NpcParts = {
       // a flat hand, upright in the room as the arm comes up, its
       // fingertips to the visor's tip, beside the face
       const a = capSalute(p.u) * (Math.PI + 0.2);
-      sk.at(mul(move(0, f - 0.2), turn(p.arms[1].sh + p.arms[1].el - p.lean)), () =>
+      atHand(sk, p, 1, f - 0.2, () =>
         sk.blob((q) => q.ellipse(0.9 * Math.sin(a), 0.9 * Math.cos(a), 0.36, 1.0, -a, 0, TAU), CAP.skin, { dark: CAP.skinD, d: 0.12 }),
       );
       return;
@@ -208,7 +209,7 @@ const capCelebrate: NpcLoop = {
   frames: 8,
   pose(u) {
     const k = capSalute(u);
-    return { ...rest(), tilt: -0.1 * k, arms: [{ sh: 0.3, el: 1.0 }, { sh: 0.12 + 2.03 * k, el: 0.2 + 0.15 * k }], mouth: k > 0.5 ? 'closed' : 'smile' };
+    return { ...rest(), tilt: -0.1 * k, arms: [{ sh: 0.3, el: 1.0 }, swing(2.03 * k, 0.15 * k)], mouth: k > 0.5 ? 'closed' : 'smile' };
   },
 };
 
@@ -421,8 +422,8 @@ const engShow: NpcLoop & { crowd: 'watch' } = {
       bob: -0.1 * Math.abs(heave) + 0.15 * thumb,
       tilt: 0.1 * crank - 0.14 * steam,
       arms: [
-        { sh: 0.12 + (0.55 + 0.25 * heave) * crank - 1.6 * steam - 0.5 * thumb, el: 0.2 - 0.1 * steam + 1.1 * thumb },
-        { sh: 0.12 + 0.2 * crank + 1.9 * steam + 1.75 * thumb, el: 0.2 + 0.9 * crank + 0.2 * steam + 1.25 * thumb },
+        { sh: HANG.sh + (0.55 + 0.25 * heave) * crank - 1.6 * steam - 0.5 * thumb, el: HANG.el - 0.1 * steam + 1.1 * thumb },
+        { sh: HANG.sh + 0.2 * crank + 1.9 * steam + 1.75 * thumb, el: HANG.el + 0.9 * crank + 0.2 * steam + 1.25 * thumb },
       ],
       eyes: steam > 0.4 ? 'shut' : thumb > 0.4 ? 'happy' : 'open',
       mouth: steam > 0.4 ? 'o' : thumb > 0.4 ? 'open' : crank > 0.5 ? 'closed' : 'smile',

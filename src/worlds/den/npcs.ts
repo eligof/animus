@@ -1,7 +1,7 @@
-import { move, mul, turn } from '../../art/figure/paint.ts';
 import { mix, shade } from '../../art/iso.ts';
-import { bump, ease, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, HANG, rest, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Swing } from '../types.ts';
 import { C, withAlpha } from './kit.ts';
@@ -186,7 +186,7 @@ const sysParts: NpcParts = {
     // the far hand holding a cable's plug up beside its glasses, upright
     // whatever the arm does, the cable hanging from its fist
     if (k === 1 && p.act === 'work' && sysCable(p.u) > 0.4) {
-      sk.at(mul(move(0, f), turn(p.arms[1].sh + p.arms[1].el - p.lean)), () => {
+      atHand(sk, p, 1, f, () => {
         sk.limb([0.1, 0.2, 0.75, 1.3, 0.55, 2.4, 0.95, 3.3], 0.34, '#ffd23e', { line: 0.5 });
         sk.blob((q) => q.roundRect(-0.38, -1.45, 0.76, 1.05, 0.12), '#cfd6d3', { dark: '#9aa5a1', d: 0.15 });
         sk.blob((q) => q.rect(-0.2, -1.85, 0.4, 0.42), '#e8b04a', { line: 0.4 });
@@ -437,7 +437,6 @@ const ocParts: NpcParts = {
 // The far glove on the fan controller's knob (high on the rig's far post,
 // over the bench), the near one on the bench's edge.
 const OC_KNOB = { sh: 1.3, el: 1.4 };
-const HANG = rest().arms[0];
 const OC_EDGE = { sh: 0.8, el: 0.85 };
 
 // At the bench: turning the knob a notch up and back, eyes down on the fans
@@ -650,7 +649,7 @@ const crParts: NpcParts = {
     // the phone in the far hand, its screen lit
     if (k === 1 && p.act === 'work') {
       // held upright whatever the arm does, tipped back toward its face
-      sk.at(mul(move(0, f), turn(p.arms[1].sh + p.arms[1].el - p.lean - 0.25)), () => {
+      atHand(sk, p, 1, f, () => {
         sk.blob((q) => q.roundRect(-0.6, -2.15, 1.2, 2.0, 0.25), '#2a2f33', { line: 0.6 });
         sk.blob((q) => q.roundRect(-0.42, -1.97, 0.84, 1.62, 0.12), '#7fe8ff', { line: 0, sil: false });
         sk.draw((q, c) => {
@@ -665,7 +664,7 @@ const crParts: NpcParts = {
           q.strokeStyle = '#1f6a8a';
           q.stroke();
         });
-      });
+      }, p.lean + 0.25);
     }
     sk.blob(circ(0, f, 0.62), k ? CR.skinD : CR.skin, { dark: CR.skinD, d: 0.2 });
   },

@@ -1,6 +1,7 @@
 import type { Npc, NpcLoop, Puppet } from '../../worlds/types.ts';
 import { ID, move, mul, turn, type Mat, type Sketch } from '../figure/paint.ts';
 import { ACTS, loopOf } from './acts.ts';
+import { atHand } from './helpers.ts';
 
 // A local from its parts and its puppet (see Npc in worlds/types.ts), in
 // the figures' units (see art/figure/rig.ts): origin between its feet on
@@ -54,7 +55,7 @@ export function buildNpc(sk: Sketch, n: Npc, p: Puppet, back: boolean): void {
           parts.fore(sk, p, k, back);
           // what it serves stands upright in the hand, whatever the arm's
           // angle: turned back by the lean, the shoulder and the elbow
-          if (k === 0 && held) sk.at(mul(move(0, b.fore), turn(p.arms[0].sh + p.arms[0].el - p.lean)), () => held.draw(sk));
+          if (k === 0 && held) atHand(sk, p, 0, b.fore, () => held.draw(sk));
         });
       });
     });

@@ -1,9 +1,10 @@
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
-import { move, mul, turn, zoom, type Sketch } from '../../art/figure/paint.ts';
+import { atHand } from '../../art/npc/helpers.ts';
+import { mul, turn, zoom, type Sketch } from '../../art/figure/paint.ts';
 import type { Color, Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet } from '../types.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, NpcServe } from '../types.ts';
 import { C } from './kit.ts';
 import { ASSISTANT, CHEMIST } from './stations.ts';
 
@@ -21,12 +22,6 @@ const poly = (pts: readonly number[]) => (p: Pen) => {
   for (let i = 2; i < pts.length; i += 2) p.lineTo(pts[i], pts[i + 1]);
   p.closePath();
 };
-
-// Draws `fn` in a frame turned back level at the end of arm k's forearm
-// (the hand), whatever the arm and the lean: for what is held upright.
-function level(sk: Sketch, p: Puppet, k: 0 | 1, f: number, fn: () => void): void {
-  sk.at(mul(move(0, f), turn(p.arms[k].sh + p.arms[k].el - p.lean)), fn);
-}
 
 // A few round bubbles about (x, y), rising `rise` with t.
 function fizz(sk: Sketch, x: number, y: number, t: number, color: Color, rise = 1.3): void {
@@ -322,7 +317,7 @@ const professorParts: NpcParts = {
     sk.limb([0, f - 0.45, 0, f - 0.3], 1.1, PF.shirt, { line: 0.5 });
     if (k === 1 && p.act === 'work') {
       // a short pointer, its tip to the board
-      level(sk, p, 1, f, () => {
+      atHand(sk, p, 1, f, () => {
         sk.limb([-0.25, 0.2, 1.35, -1.05], 0.2, C.wood, { dark: C.woodDark });
         sk.limb([1.15, -0.89, 1.4, -1.09], 0.22, C.iron, { line: 0.4 });
       });
@@ -330,7 +325,7 @@ const professorParts: NpcParts = {
     sk.blob(circ(0, f, 0.55), k ? PF.skinD : PF.skin, { dark: PF.skinD, d: 0.2 });
     if (k === 1 && p.act === 'celebrate' && p.arms[1].sh > 1.5) {
       // the finger up: eureka
-      level(sk, p, 1, f, () => sk.limb([0.1, -0.35, 0.15, -1.25], 0.3, PF.skin, { line: 0.5 }));
+      atHand(sk, p, 1, f, () => sk.limb([0.1, -0.35, 0.15, -1.25], 0.3, PF.skin, { line: 0.5 }));
     }
   },
 };
@@ -373,7 +368,7 @@ const professorCelebrate: NpcLoop = {
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
-    return { ...rest(), bob: 0.4 * bump(u, 0.25, 0.6), lean: -0.04 * k, tilt: -0.15 * k, arms: [{ sh: 0.12 + 0.3 * k, el: 0.2 + 1.2 * k }, { sh: 0.12 + 1.75 * k, el: 0.2 + 0.55 * k }], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'o' };
+    return { ...rest(), bob: 0.4 * bump(u, 0.25, 0.6), lean: -0.04 * k, tilt: -0.15 * k, arms: [swing(0.3 * k, 1.2 * k), swing(1.75 * k, 0.55 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'o' };
   },
 };
 
@@ -509,7 +504,7 @@ const chemistParts: NpcParts = {
     if (k === 1 && p.act === 'work') {
       // swirled: rocked a little on her palm
       const rock = 0.18 * Math.sin(p.u * TAU * 4) * (1 - ease(p.u, 0.33, 0.5));
-      level(sk, p, 1, f, () => sk.at(mul(turn(rock), zoom(1.3)), () => flask(sk, p.u, bump(p.u, 0.7, 0.9))));
+      atHand(sk, p, 1, f, () => sk.at(mul(turn(rock), zoom(1.3)), () => flask(sk, p.u, bump(p.u, 0.7, 0.9))));
     }
     sk.blob(circ(0, f, 0.58), k ? CH.gloveD : CH.glove, { dark: CH.gloveD, d: 0.2 });
   },

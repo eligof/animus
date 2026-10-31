@@ -3,13 +3,13 @@ import { createHash } from 'node:crypto';
 import { Canvas } from '../src/art/canvas.ts';
 import { render, Sketch } from '../src/art/figure/paint.ts';
 import { frame, project } from '../src/art/iso.ts';
-import { ACTS, loopOf, puppetOf } from '../src/art/npc/acts.ts';
+import { ACTS, loopOf, puppetOf, type SharedAct } from '../src/art/npc/acts.ts';
 import { NPC_BOX, buildNpc } from '../src/art/npc/puppet.ts';
 import { AMBIENT_FPS, CYCLE } from '../src/art/scene.ts';
 import { PROP_SIZE } from '../src/world/layout.ts';
 import { NPC_R, cutOf } from '../src/world/npc-place.ts';
 import { hashString } from '../src/world/rng.ts';
-import type { Npc, NpcAct, NpcLoop, PropArt, WorldDef } from '../src/worlds/types.ts';
+import type { Npc, NpcAct, NpcLoop, PropArt, Puppet, WorldDef } from '../src/worlds/types.ts';
 
 // What every world's locals are held to (see Npc in src/worlds/types.ts):
 // the world test runs it on each world's, the puppet test on the
@@ -20,14 +20,40 @@ const INK = '#2b2233';
 const B = NPC_BOX;
 export const hashOf = (c: Canvas) => createHash('sha256').update(c.data).digest('hex');
 
-// Local n in `act` at `frame`, from behind or not, drawn at scale S on a
-// canvas exactly NPC_BOX in size, its feet at the box's origin.
-export function npcPicture(n: Npc, act: NpcAct, frame: number, back: boolean): Canvas {
+// Local n posed as puppet p, from behind or not, drawn at scale S on a
+// canvas exactly NPC_BOX in size, its feet at the box's origin; and in
+// `act` at `frame`.
+export function puppetPicture(n: Npc, p: Puppet, back: boolean): Canvas {
   const sk = new Sketch();
-  buildNpc(sk, n, puppetOf(n, act, frame), back);
+  buildNpc(sk, n, p, back);
   const c = new Canvas((B.x1 - B.x0) * S, (B.y1 - B.y0) * S);
   render(c, sk, [S, 0, 0, S, -B.x0 * S, -B.y0 * S], Math.max(1.5, 0.28 * S), INK);
   return c;
+}
+export const npcPicture = (n: Npc, act: NpcAct, frame: number, back: boolean): Canvas => puppetPicture(n, puppetOf(n, act, frame), back);
+
+// How far a hand reaches out round its forearm (a fist, a mitten, a
+// cuff), units: what an arm paints past that is held in it.
+const HAND = 1.5;
+
+// How far arm k's fore part, drawn alone in its own frame for puppet p,
+// paints out from the forearm (the line from the elbow to the hand), units.
+function foreReach(n: Npc, p: Puppet, k: 0 | 1, back: boolean): number {
+  const f = n.bones.fore;
+  const R = 6;
+  const sk = new Sketch();
+  n.parts.fore(sk, p, k, back);
+  const c = new Canvas(2 * R * S, (2 * R + f) * S);
+  render(c, sk, [S, 0, 0, S, R * S, R * S], Math.max(1.5, 0.28 * S), INK);
+  let out = 0;
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (c.data[(y * c.width + x) * 4 + 3] < 16) continue;
+      const [u, v] = [(x + 0.5) / S - R, (y + 0.5) / S - R];
+      out = Math.max(out, Math.hypot(u, v - Math.max(0, Math.min(f, v))));
+    }
+  }
+  return out;
 }
 
 // Its painted pixels, whether any lies on the canvas's edge (the box was
@@ -81,6 +107,15 @@ export function stationLoops(w: WorldDef, n: Npc): void {
   }
 }
 
+// Pixels not the same in two pictures of one size.
+function unlike(a: Canvas, b: Canvas): number {
+  let n = 0;
+  for (let o = 0; o < a.data.length; o += 4) {
+    if (a.data[o] !== b.data[o] || a.data[o + 1] !== b.data[o + 1] || a.data[o + 2] !== b.data[o + 2] || a.data[o + 3] !== b.data[o + 3]) n++;
+  }
+  return n;
+}
+
 // Pixels that differ between two pictures of one size.
 export function differ(a: Canvas, b: Canvas): number {
   let n = 0;
@@ -97,6 +132,26 @@ export function actsOf(n: Npc): NpcAct[] {
   if (n.show) own.push('show');
   if (n.celebrate) own.push('celebrate');
   return [...own, ...(Object.keys(ACTS) as NpcAct[])];
+}
+
+// In a shared act a local's hands are empty of its tools (see NpcParts in
+// src/worlds/types.ts). Frame i of `act` (`pic`) draws as its pose does
+// handed over (whose near hand holds only what it serves, which the puppet
+// draws from `hold`), so nothing in a hand comes and goes with the act; and
+// each forearm paints no more than a hand round it, so nothing stays in one
+// either. A heuristic: a thing no bigger than a hand, drawn in every act,
+// gets past both.
+function emptyHanded(what: string, n: Npc, act: SharedAct, i: number, back: boolean, pic: Canvas): void {
+  const p = puppetOf(n, act, i);
+  const at = `${act} ${i}${back ? ' from behind' : ''}`;
+  if (act !== 'handOver') {
+    const d = unlike(pic, puppetPicture(n, { ...p, act: 'handOver' }, back));
+    assert.equal(d, 0, `${what}: ${at} draws ${d} pixels unlike its pose handed over (a tool in a hand?)`);
+  }
+  for (const k of [0, 1] as const) {
+    const r = foreReach(n, p, k, back);
+    assert.ok(r <= HAND, `${what}: ${at}, arm ${k} paints ${r.toFixed(2)} out from its forearm (a tool in its hand?)`);
+  }
 }
 
 export function npcContract(w: WorldDef, n: Npc): void {
@@ -140,16 +195,27 @@ export function npcContract(w: WorldDef, n: Npc): void {
     const [p, q] = [puppetOf(n, 'celebrate', 0), puppetOf(n, 'celebrate', n.celebrate.frames - 1)];
     const off = Math.abs(p.bob - q.bob) + Math.abs(p.lean - q.lean) + Math.abs(p.tilt - q.tilt) + p.arms.reduce((s, a, k) => s + Math.abs(a.sh - q.arms[k].sh) + Math.abs(a.el - q.arms[k].el), 0);
     assert.ok(off < 0.05, `${what}: its celebration ends ${off.toFixed(2)} off where it starts`);
+  } else {
+    // with none of its own it cheers as everyone does, empty-handed
+    for (const back of pl.look === 'back' ? [false, true] : [false]) {
+      for (let i = 0; i < ACTS.cheer.frames; i++) {
+        const d = unlike(npcPicture(n, 'celebrate', i, back), npcPicture(n, 'cheer', i, back));
+        assert.equal(d, 0, `${what}: celebrate ${i}${back ? ' from behind' : ''} draws ${d} pixels unlike its cheer (a tool in a hand?)`);
+      }
+    }
   }
   // Every frame of every act inside its box, as it is seen (from behind
-  // too if it faces away; the other way round is the mirror image).
+  // too if it faces away; the other way round is the mirror image); in a
+  // shared act, empty-handed.
   for (const back of pl.look === 'back' ? [false, true] : [false]) {
     for (const act of actsOf(n)) {
       const lp = loopOf(n, act);
       for (let i = 0; i < lp.frames; i++) {
-        const p = painted(npcPicture(n, act, i, back));
+        const pic = npcPicture(n, act, i, back);
+        const p = painted(pic);
         assert.ok(p.n > 0, `${what}: ${act} ${i}${back ? ' from behind' : ''} draws nothing`);
         assert.ok(!p.edge, `${what}: ${act} ${i}${back ? ' from behind' : ''} reaches out of its box`);
+        if (act in ACTS) emptyHanded(what, n, act as SharedAct, i, back, pic);
       }
     }
   }

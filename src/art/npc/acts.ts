@@ -15,9 +15,10 @@ export const TAU = Math.PI * 2;
 export type SharedAct = Exclude<NpcAct, 'work' | 'show' | 'celebrate'>;
 
 // Arms hanging easy, a soft bend at the elbow (shared by every puppet at
-// rest: a Swing is never changed).
-const HANG: Swing = Object.freeze({ sh: 0.12, el: 0.2 });
-const swing = (sh: number, el: number): Swing => ({ sh: HANG.sh + sh, el: HANG.el + el });
+// rest: a Swing is never changed); and an arm swung on from there, `sh` at
+// the shoulder and `el` at the elbow.
+export const HANG: Swing = Object.freeze({ sh: 0.12, el: 0.2 });
+export const swing = (sh: number, el: number): Swing => ({ sh: HANG.sh + sh, el: HANG.el + el });
 const TALK: ReadonlyArray<Puppet['mouth']> = ['open', 'smile', 'o', 'open', 'closed'];
 
 // A local at rest: standing easy, eyes open, a small smile.
@@ -134,6 +135,11 @@ export function loopOf(n: Npc, act: NpcAct): NpcLoop {
 // round).
 export const once = (act: NpcAct): boolean => act !== 'work' && act !== 'show';
 
+// Whether `act` is one of a local's own (its work, its show, its
+// celebration), not a shared one: only then do its hands hold its tools
+// (see NpcParts in worlds/types.ts).
+export const own = (act: NpcAct): boolean => act === 'work' || act === 'show' || act === 'celebrate';
+
 // How far into `act` frame `frame` of its loop lp is: round a loop, frame i
 // at i / frames; played once, i / (frames - 1), so its last frame is its
 // end and it is seen back at rest.
@@ -141,9 +147,10 @@ function uOf(act: NpcAct, lp: NpcLoop, frame: number): number {
   return once(act) ? (lp.frames > 1 ? frame / (lp.frames - 1) : 0) : frame / lp.frames;
 }
 
-// Local n's puppet in frame `frame` of `act`.
+// Local n's puppet in frame `frame` of `act`, named for the loop it plays:
+// a celebration with none of its own is the shared cheer, empty-handed.
 export function puppetOf(n: Npc, act: NpcAct, frame: number): Puppet {
   const lp = loopOf(n, act);
   const u = uOf(act, lp, frame);
-  return { ...lp.pose(u), act, u };
+  return { ...lp.pose(u), act: act === 'celebrate' && !n.celebrate ? 'cheer' : act, u };
 }
