@@ -1,3 +1,4 @@
+import { LOOP } from '../art/figure/rig.ts';
 import type { Activity, AgentInfo } from '../agents.ts';
 import type { Pen } from '../art/types.ts';
 import { clip } from '../claude/activity.ts';
@@ -107,8 +108,18 @@ const LANE_APART = 5;
 // Walkers detouring through the hub keep this many units to one side of it
 // (which side hashed from the id), so the traffic forms two lanes.
 const HUB_LANE = 3;
-// Poses done with the back to the viewer, facing the prop.
-const FACES_STATION = new Set<Pose>(['write', 'read', 'search', 'web', 'run', 'think']);
+// How far into its loop a beat is `t` seconds after it began: the loop
+// starts at its first frame whatever the character's phase (see frameOf in
+// art/figure/rig.ts), which still desyncs its blinks.
+function beatT(pose: Pose, t: number, phase: number): number {
+  const f = phase * 0.618;
+  return t - (f - Math.floor(f)) * LOOP[pose][0];
+}
+
+// Poses done with the back to the viewer, facing the prop: the work, and
+// the beats at it that look its way (a glance, a lean, a tap; a scratch
+// and a stretch turn to us).
+const FACES_STATION = new Set<Pose>(['write', 'read', 'search', 'web', 'run', 'think', 'glance', 'lean', 'tap']);
 const MAX_EMOTES = 3; // shown at once
 // A happy agent's bounce: HOP high (units), a hop a step while walking,
 // one every HOP_IDLE seconds standing about.
@@ -1324,6 +1335,7 @@ export class Stage {
       // Fading in at the door: shown once the entrance flash is over.
       if (a.state === 'enter' && now - a.bornAt <= ENTER_MS * 0.5) continue;
       const look = this.lookOf(a, now);
+      // A beat's pose runs from its first frame (see Look.since).
       const fig: FigureFrame = {
         id: a.info.id,
         x: a.x,
@@ -1332,7 +1344,7 @@ export class Stage {
         traits: a.traits,
         costume: this.world.costume,
         pose: look.pose,
-        poseT: t + a.gait,
+        poseT: look.since !== undefined ? beatT(look.pose, c - look.since, a.phase / 997) : t + a.gait,
         phase: a.phase / 997,
         facing: look.facing,
         selected: a === sel,

@@ -11,14 +11,14 @@
 //   floor     what props lay on the floor round them (shadows, pools of
 //             light), contact shadows, the selection's ring and the hurt's
 //             pulsing one.
-//   depth     props, workstations, builds, piles, figures, desk upgrades
-//             and the critter in depth order (see scene/depth.ts), each
-//             particle slotted in
-//             among them: the particles of a slot drawn together, a picture
-//             per bunch of them, cropped to what it paints (drifting ones
-//             again only per ambient step). Animated props are pictures of
-//             their own, drawn whole (body and floor) and again only per
-//             ambient step or when they are worked or left.
+//   depth     props, workstations (a body, its screen and its loops),
+//             builds, piles, figures, desk upgrades and the critter in depth
+//             order (see scene/depth.ts), each particle slotted in among
+//             them: the particles of a slot drawn together, a picture per
+//             bunch of them, cropped to what it paints (drifting ones again
+//             only per ambient step). Animated props are pictures of their
+//             own, drawn whole (body and floor) and again only per ambient
+//             step or when they are worked or left.
 //   emotes    over the heads, so no prop hides them.
 //   overlay   the room's (rain on the windows), drawn per ambient step in
 //             pieces round what it paints, laid out in small tiles on a grid
@@ -34,9 +34,8 @@
 // sits on whole pixels: the camera's origin is rounded, so a sprite placed
 // again is the same picture. Sprites (tiles, props, workstations, builds,
 // figures, desk upgrades, emotes, shadows, rings, halos, pills) are cached
-// and keyed by
-// what they show; what is drawn afresh (particles, animated props, the
-// overlay) gets a new key only when its pixels change.
+// and keyed by what they show; what is drawn afresh (particles, animated
+// props, the overlay) gets a new key only when its pixels change.
 
 import type { RGB } from '../term/color.ts';
 import { mix as mixRgb } from '../term/color.ts';
@@ -57,7 +56,7 @@ import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
 import { buildSprite, pileSprite } from './scene/build.ts';
-import { POP_STEPS, deskSprite, deskStats, growth } from './scene/desk.ts';
+import { POP_STEPS, type DeskSprite, deskPictures, deskStats, growth, loopSprite, popping } from './scene/desk.ts';
 import type { Sprite } from './scene/build.ts';
 import { depthOrder, slotOf } from './scene/depth.ts';
 import type { Drawable } from './scene/depth.ts';
@@ -707,13 +706,29 @@ export class Scene {
         made(sp.img, spriteStats.misses > m);
       };
     }
+    const warmed = new Set<string>();
     for (const d of f.desks ?? []) {
       if (d.grow <= 0) continue;
       yield () => {
-        const m = deskStats.misses;
-        const sp = deskSprite(f.world, d, s, ink);
-        made(sp.img, deskStats.misses > m);
+        for (const { sp, fresh } of deskPictures(f.world, d, f.t, s, ink)) made(sp.img, fresh);
       };
+      // Every frame of its loops at s, lit, and the still one unlit. This
+      // runs only at the scales of the cameras a key away (see chores), so
+      // a view moved to one finds every step of a loop kept; at a scale
+      // none of them has, a frame is drawn when it first shows.
+      if (popping(d.grow)) continue;
+      for (const [k, lp] of (workstationOf(f.world).loops ?? []).entries()) {
+        const mark = `${d.wall}|${k}`;
+        if (warmed.has(mark)) continue;
+        warmed.add(mark);
+        for (let i = 0; i <= lp.frames; i++) {
+          yield () => {
+            const m = deskStats.misses;
+            const sp = loopSprite(f.world, k, i % lp.frames, i < lp.frames, d.wall, s, ink);
+            made(sp.img, deskStats.misses > m);
+          };
+        }
+      }
     }
     for (const tk of f.trinkets ?? []) {
       yield () => {
@@ -860,16 +875,41 @@ export class Scene {
       if (sp.floor) floors.push(sprite(`floor:${i}`, sp.floor, box));
       if (sp.body) out.push(sprite(`prop:${i}`, sp.body, box));
     });
+    const bodies: Item[] = [];
     for (const d of f.desks ?? []) {
-      // A workstation stands on the floor like a prop, as tall as it has grown.
+      // A workstation stands on the floor like a prop, as tall as it has
+      // grown: its body, then its screen over it (one box, so in that
+      // order), and its loops as points at their anchors, sorted among
+      // what stands on it.
       if (d.grow <= 0) continue;
-      const sp = deskSprite(f.world, d, s, ink);
       const [x, y] = P(d.x0, d.y0, 0);
-      const dx = Math.round(x) - sp.ax;
-      const dy = Math.round(y) - sp.ay;
       const r = footprint(d);
-      const it: Item = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: workstationOf(f.world).height * growth(d.grow), point: false, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `desk:${d.id}`, img: sp.img, x: dx, y: dy };
-      if (seen(it)) out.push(it);
+      const box = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: workstationOf(f.world).height * growth(d.grow), point: false };
+      // The screen is as wide as the body for the depth (particles are
+      // slotted by it): a bit of one at its edge does not slip under it.
+      let body: DeskSprite | undefined;
+      let bodyItem: Item | undefined;
+      for (const { sp, at, sortAs, id } of deskPictures(f.world, d, f.t, s, ink)) {
+        body ??= sp;
+        const dx = Math.round(x) - sp.ax;
+        const dy = Math.round(y) - sp.ay;
+        const own = { sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height };
+        let it: Item;
+        if (at) {
+          const [px, py] = toWorld(d, at[0], at[1], 0);
+          it = { x0: px, y0: py, x1: px, y1: py, h: at[2], point: true, ...own, on: bodyItem, id, img: sp.img, x: dx, y: dy };
+        } else {
+          const bx = Math.round(x) - body.ax;
+          const by = Math.round(y) - body.ay;
+          const sz = { sx0: bx, sy0: by, sx1: bx + body.img.width, sy1: by + body.img.height };
+          it = { ...box, ...(sortAs ? sz : own), id, img: sp.img, x: dx, y: dy };
+        }
+        if (seen(it)) {
+          out.push(it);
+          if (!at && !bodyItem) bodyItem = it;
+          if (!at && it.id === `desk:${d.id}`) bodies.push(it);
+        }
+      }
     }
     f.builds.forEach((b, j) => {
       if (b.blocks.length || b.pending.length) {
@@ -904,7 +944,8 @@ export class Scene {
       const [x, y] = P(tk.x, tk.y, tk.z ?? 0);
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: tk.z ?? 0, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
+      const on = bodies.find((b) => tk.x >= b.x0 && tk.x <= b.x1 && tk.y >= b.y0 && tk.y <= b.y1);
+      const it: Item = { x0: tk.x, y0: tk.y, x1: tk.x, y1: tk.y, h: tk.z ?? 0, point: true, on, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `trinket:${tk.id}`, img: sp.img, x: dx, y: dy };
       if (seen(it)) out.push(it);
     }
     const cr = f.critter;

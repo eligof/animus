@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { loadWorld } from '../scripts/scene-shot.ts';
 import { Canvas } from '../src/art/canvas.ts';
@@ -11,7 +12,9 @@ import { planRoom, toWorld } from '../src/world/room.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { DESK, DESK_SPOT } from '../src/world/desks.ts';
 import { FIGURE_H, FIGURE_HALF_W, project } from '../src/world/frame.ts';
+import type { P3, PropView } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
+import { S, canvasBox, partCheck, viewOf } from './desk-contract.ts';
 import { recordingPen } from './helpers.ts';
 
 // Contract every world must meet. ANIMUS_THEME_FILE=src/worlds/x.ts also
@@ -162,4 +165,88 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
       }
     }
   });
+
+  test(`world ${w.id}: what stands on its desks and what moves there keeps to its place: on the top, inside its box, clear of the screen, the upgrade and the agent at work`, () => {
+    const art = workstationOf(w);
+    const items = art.clutter?.items ?? [];
+    const spots = art.clutter?.spots ?? [];
+    const loops = art.loops ?? [];
+    if (art.clutter) {
+      assert.ok(items.length >= 8 && items.length <= 12, `${items.length} things to pick from`);
+      assert.ok(spots.length >= 4, `${spots.length} spots`);
+      assert.equal(new Set(items.map((i) => i.name)).size, items.length, 'two things of one name');
+    }
+    for (const it of items) assert.ok(it.r > 0 && it.r <= 0.5 && it.h > 0 && it.h <= 1.5, `${it.name}: ${it.r} round, ${it.h} tall`);
+    const maxR = Math.max(0, ...items.map((i) => i.r));
+    spots.forEach((p, k) => {
+      assert.ok(p[0] >= 0.75 && p[0] <= DESK.len - 0.75 && p[1] >= 0.75 && p[1] <= DESK.dep - 0.75 && p[2] >= 2 && p[2] <= art.height - 1, `spot ${p} is not on its top`);
+      assert.ok(Math.hypot(p[0] - art.top[0], p[1] - art.top[1]) >= 1.75, `spot ${p} is on the upgrade's`);
+      for (const q of spots.slice(k + 1)) assert.ok(Math.hypot(p[0] - q[0], p[1] - q[1]) >= 2 * maxR + 0.2, `spots ${p} and ${q} are too close`);
+    });
+    assert.ok(loops.length <= 2, `${loops.length} loops`);
+    assert.equal(new Set(loops.map((l) => l.name)).size, loops.length, 'two loops of one name');
+    loops.forEach((lp, k) => {
+      const [u, v, z] = lp.at;
+      assert.ok(Number.isInteger(lp.frames) && lp.frames >= 4 && lp.frames <= 8, `${lp.name}: ${lp.frames} frames`);
+      assert.ok(lp.fps > 0 && lp.fps <= 8, `${lp.name}: ${lp.fps} a second`);
+      assert.ok(lp.r > 0 && lp.r <= 1.5 && lp.h > 0 && u - lp.r >= 0 && u + lp.r <= DESK.len && v - lp.r >= 0 && v + lp.r <= DESK.dep && z >= 0 && z + lp.h <= art.height + 0.5, `${lp.name} at ${lp.at} is not on its desk`);
+      assert.ok(Math.hypot(u - art.top[0], v - art.top[1]) >= lp.r + 1, `${lp.name} is on the upgrade's spot`);
+      for (const p of spots) assert.ok(Math.hypot(u - p[0], v - p[1]) >= lp.r + maxR, `${lp.name} is on the spot ${p}`);
+      for (const o of loops.slice(k + 1)) assert.ok(Math.hypot(u - o.at[0], v - o.at[1]) >= lp.r + o.r, `${lp.name} and ${o.name} overlap`);
+    });
+    // On the canvas at scale S, in either frame: each thing on each spot,
+    // each loop's every frame, lit and not.
+    const hashOf = (c: Canvas) => createHash('sha256').update(c.data).digest('hex');
+    for (const wall of ['right', 'left'] as const) {
+      const parts: Array<{ what: string; box: [P3, number, number]; draw: (v: PropView) => void }> = [];
+      for (const it of items) for (const p of spots) parts.push({ what: `${it.name} at ${p}`, box: [p, it.r, it.h], draw: (v) => it.draw(v, p) });
+      for (const lp of loops) for (let i = 0; i < lp.frames; i++) parts.push({ what: `${lp.name} frame ${i}`, box: [lp.at, lp.r, lp.h], draw: (v) => lp.draw(v, i) });
+      for (const part of parts) {
+        for (const active of [false, true]) {
+          const what = `${wall}${active ? ' (on)' : ''}: ${part.what}`;
+          const { n, over, behind, outside } = partCheck(art, wall, part.draw, part.box, active);
+          assert.ok(!outside, `${what}: painted at ${outside}, outside its box`);
+          assert.ok(n > 0, `${what}: nothing drawn`);
+          assert.ok(over <= S, `${what}: ${over} pixels over the screen`);
+          assert.ok(behind <= 0.1 * n, `${what}: ${Math.round((100 * behind) / n)}% of it behind its agent`);
+        }
+      }
+      // A loop is sorted as a point at its anchor, so it is drawn over what
+      // is nearer it only if their pictures overlap: they must not, for
+      // every spot nearer than the loop and the largest thing on it.
+      const maxH = Math.max(0, ...items.map((i) => i.h));
+      for (const lp of loops) {
+        for (const p of spots) {
+          if (p[0] + p[1] <= lp.at[0] + lp.at[1]) continue;
+          const a = canvasBox(art, wall, [lp.at, lp.r, lp.h]);
+          const b = canvasBox(art, wall, [p, maxR, maxH]);
+          assert.ok(!(a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1), `${wall}: ${lp.name} would paint over a thing at ${p}`);
+        }
+      }
+      // What is drawn does not depend on the clock.
+      const atTime = (draw: (v: PropView) => void, t: number) => {
+        const c = new Canvas(160, 160);
+        draw(viewOf(art, wall, c, true, t));
+        return hashOf(c);
+      };
+      for (const it of items.slice(0, 12)) if (spots[0]) assert.equal(atTime((v) => it.draw(v, spots[0]), 0), atTime((v) => it.draw(v, spots[0]), 7.3), `${wall}: ${it.name} draws with the clock`);
+      for (const lp of loops) for (let i = 0; i < lp.frames; i++) assert.equal(atTime((v) => lp.draw(v, i), 0), atTime((v) => lp.draw(v, i), 7.3), `${wall}: ${lp.name} frame ${i} draws with the clock`);
+      // A loop's frame is the same picture every time; lit, its frames differ.
+      for (const lp of loops) {
+        const shot = (i: number) => {
+          const c = new Canvas(160, 160);
+          lp.draw(viewOf(art, wall, c, true), i);
+          return hashOf(c);
+        };
+        const frames = Array.from({ length: lp.frames }, (_, i) => shot(i));
+        assert.deepEqual(Array.from({ length: lp.frames }, (_, i) => shot(i)), frames, `${wall}: ${lp.name} drew a frame two ways`);
+        assert.ok(new Set(frames).size >= 2, `${wall}: ${lp.name} does not move`);
+      }
+    }
+  });
 }
+
+test('every world dresses its desks: things to pick from, and something that moves', () => {
+  const bare = THEMES.filter((w) => !workstationOf(w).clutter || !workstationOf(w).loops?.length).map((w) => w.id);
+  assert.deepEqual(bare, []);
+});

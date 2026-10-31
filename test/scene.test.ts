@@ -6,7 +6,7 @@ import { join, relative } from 'node:path';
 import { clearSprites, spriteStats } from '../src/art/figure.ts';
 import { Scene } from '../src/art/scene.ts';
 import { buildSprite } from '../src/art/scene/build.ts';
-import { compare, depthOrder } from '../src/art/scene/depth.ts';
+import { compare, depthOrder, pointVsBox } from '../src/art/scene/depth.ts';
 import type { Drawable } from '../src/art/scene/depth.ts';
 import { Canvas } from '../src/art/canvas.ts';
 import { isoBox } from '../src/art/iso.ts';
@@ -23,6 +23,9 @@ import type { PlacedProp, Room } from '../src/world/room.ts';
 import type { Particle } from '../src/world/types.ts';
 import { World } from '../src/world/world.ts';
 import type { PropArt, WorldDef } from '../src/worlds/types.ts';
+import { toWorld } from '../src/world/room.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
+import { blink, looped } from './desk-fakes.ts';
 import { budget } from './helpers.ts';
 
 // A test room: a flat grey floor in a 60 x 60 room, props filled flat in
@@ -279,6 +282,38 @@ test('depth order follows the floor, not one point per thing', () => {
   const order = depthOrder(items);
   assert.ok(order.indexOf(2) < order.indexOf(0) && order.indexOf(0) < order.indexOf(1), `order ${order}`);
   assert.ok(order.indexOf(3) < order.indexOf(2));
+});
+
+test('a point standing on a box is drawn after it, and a point behind that box before it, with no cycle between the three', () => {
+  const box: Drawable = { x0: 20, y0: 20, x1: 27, y1: 23, h: 8, point: false, sx0: 0, sy0: 0, sx1: 100, sy1: 100 };
+  const pt = (x: number, y: number, on?: Drawable): Drawable => ({ x0: x, y0: y, x1: x, y1: y, h: 0, point: true, sx0: 0, sy0: 0, sx1: 100, sy1: 100, on });
+  // A loop on the desk, a figure past its end: behind the box, yet nearer
+  // than the loop by x + y.
+  const loop = pt(20.2, 20.2, box);
+  const fig = pt(15, 27);
+  assert.ok(fig.x0 + fig.y0 > loop.x0 + loop.y0 && pointVsBox(fig.x0, fig.y0, box) < 0);
+  for (const items of [[box, loop, fig], [fig, loop, box], [loop, box, fig]]) {
+    const order = depthOrder(items).map((k) => items[k]);
+    assert.deepEqual(order, [fig, box, loop]);
+  }
+  assert.equal(compare(loop, fig), 1);
+  assert.equal(compare(fig, loop), -1);
+  // Two on one box, or none on any: by x + y.
+  assert.equal(compare(pt(21, 21, box), pt(22, 22, box)), -1);
+  assert.equal(compare(pt(22, 22), pt(15, 27)), 1);
+});
+
+test('a loop at the back of a desk stays over its body and screen with a figure just past the desk\'s end', () => {
+  const r = room([]);
+  const d = { id: 0, wall: 'right' as const, x0: 30, y0: 30, len: 7, dep: 3, screen: 'write' as const, grow: 1, seed: 0 };
+  const ws = workstationOf(world);
+  const w = { ...world, workstation: { ...ws, loops: [blink('a', [0.8, 0.8, ws.top[2]])] } };
+  const [fx, fy] = toWorld(d, -1.5, 3.25, 0);
+  const g = figure('w', fx, fy, { pose: 'write', facing: { back: true, flip: false } });
+  const ids = new Scene().plate(frame(r, { world: w, desks: [d], figures: [g] })).layers.map((l) => l.id);
+  const at = (id: string) => ids.indexOf(id);
+  assert.ok(at('desk:0') >= 0 && at('desk:0') < at('screen:0') && at('screen:0') < at('loop:0:0'), `the loop under its desk: ${ids}`);
+  assert.ok(at('fig:w') >= 0 && at('fig:w') < at('desk:0'), `the figure, behind the desk, before it: ${ids}`);
 });
 
 test('an emote shows over a prop that hides its figure', () => {
@@ -571,6 +606,16 @@ test('a workstation is a picture of its own in the plate, under a figure working
   const ids = new Scene().plate(frame(r, { desks: [d], figures: [g] })).layers.map((l) => l.id);
   assert.ok(ids.includes('desk:0'), 'no picture of the workstation');
   assert.ok(ids.indexOf('desk:0') < ids.indexOf('fig:w'), 'the figure is under its workstation');
+  // Its pictures in order: body, screen, then its loops; the figure over
+  // them all, and a desk upgrade on its top over its screen.
+  const lw = looped(world);
+  const [tu, tv, tz] = workstationOf(lw).top;
+  const [tx, ty] = toWorld(d, tu, tv, 0);
+  const full = new Scene().plate(frame(r, { world: lw, desks: [d], figures: [g], trinkets: [{ id: 'up', kind: 'trophy', x: tx, y: ty, z: tz, color: [200, 40, 160] }] })).layers.map((l) => l.id);
+  const at = (id: string) => full.indexOf(id);
+  assert.ok(at('desk:0') >= 0 && at('desk:0') < at('screen:0') && at('screen:0') < at('loop:0:0'), 'the body, the screen, then the loops');
+  assert.ok(at('loop:0:0') >= 0 && at('loop:0:1') >= 0 && at('loop:0:1') < at('fig:w'), 'the figure in front of its desk, after all of it');
+  assert.ok(at('trinket:up') > at('screen:0'), 'the desk upgrade is over the screen');
   const none = new Scene().plate(frame(r, { desks: [{ ...d, grow: 0 }] })).layers;
   assert.ok(!none.some((l) => l.id.startsWith('desk:')), 'a workstation not yet grown');
 });

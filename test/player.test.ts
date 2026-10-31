@@ -8,6 +8,10 @@ import { encodeRgba } from '../src/art/scene/front.ts';
 import { Screen } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
 import { World } from '../src/world/world.ts';
+import { StressSource } from '../src/demo/stress.ts';
+import type { WorldDef } from '../src/worlds/types.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
+import { looped } from './desk-fakes.ts';
 import { Term, same } from './kitty-term.ts';
 
 const START = Date.UTC(2026, 9, 22, 21, 30, 0);
@@ -78,4 +82,51 @@ test('leaving the scene takes the pictures off, and coming back places the kept 
   const back = step();
   assert.ok(back.plate && back.term.spots.size > 0);
   assert.ok(back.term.sent < back.plate.layers.length / 2, `${back.term.sent} pictures sent again for ${back.plate.layers.length} layers`);
+});
+
+// Twenty at work in a world, played into the terminal: the bytes a step
+// once every workstation is up (after 15 seconds, over the next 3), and
+// how many loop pictures the last step placed.
+function bytesAStep(theme: WorldDef): { bytes: number; loops: number } {
+  const rate = 18;
+  const world = new World({ theme, live: new StressSource(4, 4, START), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start: START, images: true, view: 'scene' });
+  world.setCell(8, 16);
+  world.resize(150, 46);
+  const screen = new Screen(150, 46);
+  const player = new ScenePlayer({ encode: (b, opaque) => (opaque ? encodeRgb(b, 0, 1) : encodeRgba(b, 1)) });
+  let last: Plate | null = null;
+  const build = player.scene.plate.bind(player.scene);
+  player.scene.plate = (f) => (last = build(f));
+  let bytes = 0;
+  for (let k = 0; k < 18 * rate; k++) {
+    const now = START + (k * 1000) / rate;
+    world.tick(now);
+    const out = player.step(world, screen, now);
+    if (k >= 15 * rate) bytes += out.length;
+  }
+  const loops = (last as Plate | null)?.layers.filter((l) => l.id.startsWith('loop:')).length ?? 0;
+  return { bytes: bytes / (3 * rate), loops };
+}
+
+// `w` with no loops on its desks.
+const still = (w: WorldDef): WorldDef => ({ ...w, workstation: { ...workstationOf(w), loops: [] } });
+
+test('two loops on every one of twenty workstations cost at most 4 KiB a step more than none', () => {
+  const cafe = getTheme('cafe')!;
+  const none = bytesAStep(still(cafe));
+  const two = bytesAStep(looped(cafe));
+  assert.equal(none.loops, 0);
+  assert.equal(two.loops, 40, 'not two loops on each of twenty desks');
+  assert.ok(two.bytes > none.bytes, 'the loops cost nothing: are they moving?');
+  assert.ok(two.bytes <= none.bytes + 4096, `${two.bytes.toFixed(0)} bytes a step with loops, ${none.bytes.toFixed(0)} without`);
+});
+
+test("a world's own loops on twenty workstations, both at 8 frames a second (the shelter's), cost at most 4 KiB a step more than none", () => {
+  const shelter = getTheme('shelter')!;
+  const none = bytesAStep(still(shelter));
+  const own = bytesAStep(shelter);
+  assert.equal(none.loops, 0);
+  assert.equal(own.loops, 40, 'not two loops on each of twenty desks');
+  assert.ok(own.bytes > none.bytes, 'the loops cost nothing: are they moving?');
+  assert.ok(own.bytes <= none.bytes + 4096, `${own.bytes.toFixed(0)} bytes a step with loops, ${none.bytes.toFixed(0)} without`);
 });

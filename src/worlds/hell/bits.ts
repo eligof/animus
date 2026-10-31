@@ -427,8 +427,9 @@ export function ring(k: Kit, c: P3, n: P3, r: number, steps = 20): Pt[] {
 }
 
 // An upright cone frustum (a bowl, a pot's flare): radius r0 at z0, r1 at
-// z1, shaded across, its top opening in `inside` (null: leave it open).
-export function frustum(k: Kit, cu: number, cv: number, z0: number, r0: number, z1: number, r1: number, base: Color, inside: Color | Gradient | null): void {
+// z1, shaded across, its top opening in `inside` (null: leave it open),
+// `line` its outline.
+export function frustum(k: Kit, cu: number, cv: number, z0: number, r0: number, z1: number, r1: number, base: Color, inside: Color | Gradient | null, line = k.lw): void {
   const bot = ring(k, [cu, cv, z0], [0, 0, 1], r0, 24);
   const top = ring(k, [cu, cv, z1], [0, 0, 1], r1, 24);
   const sil = hull([...bot, ...top]);
@@ -440,14 +441,14 @@ export function frustum(k: Kit, cu: number, cv: number, z0: number, r0: number, 
   g.addColorStop(0.7, base);
   g.addColorStop(1, shade(base, -0.24));
   k.fill(sil, g, 0);
-  if (inside) k.fill(top, inside, k.thin);
-  k.fill(sil, null, k.lw);
+  if (inside) k.fill(top, inside, Math.min(k.thin, line));
+  k.fill(sil, null, line);
 }
 
 // A shard of crystal (brimstone, obsidian) from (u, v, z), h tall and w
 // across, leaning `lean` units toward +u: two faces, lit and shaded, a
-// glint down the lit one.
-export function crystal(k: Kit, u: number, v: number, z: number, h: number, w: number, lean: number, base: Color): void {
+// glint down the lit one; `line` its outline.
+export function crystal(k: Kit, u: number, v: number, z: number, h: number, w: number, lean: number, base: Color, line = k.lw): void {
   const b0 = k.p(u - w / 2, v + w * 0.3, z);
   const b1 = k.p(u, v + w * 0.55, z);
   const b2 = k.p(u + w / 2, v + w * 0.3, z);
@@ -474,7 +475,7 @@ export function crystal(k: Kit, u: number, v: number, z: number, h: number, w: n
   pen.strokeStyle = withAlpha(shade(base, 0.6), 0.8);
   pen.lineWidth = Math.max(0.8, w * 0.12 * k.s);
   pen.stroke();
-  k.fill([b0, b1, b2, t2, tip, t0], null, k.lw);
+  k.fill([b0, b1, b2, t2, tip, t0], null, line);
 }
 
 // An upright spike (a spear point, a finial) from (u, v, z), h tall, w
@@ -487,8 +488,8 @@ export function spike(k: Kit, u: number, v: number, z: number, h: number, w: num
   k.fill([[x, y], [x, y - H], [x + W * 0.35, y - H * 0.35], [x + W, y]], withAlpha(shade(color, -0.4), 0.6), 0);
 }
 
-// A lumpy rock on z round (cu, cv): rx across, h tall.
-export function rock(k: Kit, cu: number, cv: number, z: number, rx: number, h: number, base: Color, seed: number): void {
+// A lumpy rock on z round (cu, cv): rx across, h tall, `line` its outline.
+export function rock(k: Kit, cu: number, cv: number, z: number, rx: number, h: number, base: Color, seed: number, line = k.lw): void {
   const e = k.ell(cu, cv, z, rx);
   const [, ty] = k.p(cu, cv, z + h);
   const pts: Pt[] = [];
@@ -508,5 +509,5 @@ export function rock(k: Kit, cu: number, cv: number, z: number, rx: number, h: n
   g.addColorStop(0, shade(base, 0.18));
   g.addColorStop(0.5, base);
   g.addColorStop(1, shade(base, -0.3));
-  k.fill(pts, g, k.lw);
+  k.fill(pts, g, line);
 }

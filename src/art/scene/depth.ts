@@ -10,7 +10,12 @@
 //                   point of the box's footprint (beyond a front face, or
 //                   round a corner further out than back), else behind; a
 //                   point inside the footprint stands on top (in front);
-//   point vs point: by x + y.
+//   point vs point: by x + y, except that a point standing on a box (`on`:
+//                   a loop or an upgrade on its desk) is in front of a
+//                   point behind that box, whatever their x + y: the other
+//                   was drawn before the box, so this one must come after
+//                   both (else the three go round in a cycle). Two on one
+//                   box keep x + y.
 // The order is a topological sort of those constraints, nearest-last, the
 // shallowest item first among the free ones; a cycle (rare: overlapping
 // footprints) is broken by depth.
@@ -28,6 +33,8 @@ export type Drawable = {
   sy0: number;
   sx1: number;
   sy1: number;
+  // For a point: the box it stands on, if it is a part of one's top.
+  on?: Drawable;
 };
 
 const EPS = 1e-6;
@@ -55,7 +62,13 @@ export function compare(a: Drawable, b: Drawable): number {
     if (b.x1 <= a.x0 + EPS || b.y1 <= a.y0 + EPS) return 1;
     return Math.sign(depthOf(a) - depthOf(b)) || -1;
   }
-  if (a.point && b.point) return Math.sign(a.x0 + a.y0 - (b.x0 + b.y0)) || Math.sign(a.h - b.h);
+  if (a.point && b.point) {
+    if (a.on !== b.on) {
+      if (a.on && pointVsBox(b.x0, b.y0, a.on) < 0) return 1;
+      if (b.on && pointVsBox(a.x0, a.y0, b.on) < 0) return -1;
+    }
+    return Math.sign(a.x0 + a.y0 - (b.x0 + b.y0)) || Math.sign(a.h - b.h);
+  }
   return a.point ? (pointVsBox(a.x0, a.y0, b) > 0 ? 1 : -1) : pointVsBox(b.x0, b.y0, a) > 0 ? -1 : 1;
 }
 

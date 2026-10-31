@@ -64,6 +64,7 @@ export const LOOP: Record<Pose, readonly [number, number]> = {
   sleep: [3.2, 8], sit: [3.2, 8], carry: [1, 6], place: [1.6, 12], cheer: [0.6, 8], wave: [0.6, 6],
   drink: [2.4, 12], stretch: [2.4, 12], chat: [1.6, 16], flinch: [0.4, 4], dance: [0.9, 12], pet: [1.2, 12],
   highfive: [0.8, 8], sip: [2, 12],
+  glance: [1.6, 12], lean: [2.2, 12], scratch: [1.2, 12], tap: [0.9, 9],
 };
 
 // The poses a carried mug of coffee shows in (see FigureFrame.mug), always
@@ -186,11 +187,13 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.eyes = 'down';
       r.face.mouth = 'small';
       if (c.back) {
-        // typing: hands peck in turn, elbows bobbing
-        const a = Math.max(0, Math.sin(u * TAU));
-        const b = Math.max(0, -Math.sin(u * TAU));
-        r.arms[0] = arm([1.0, -2.55 - 0.45 * a], 1, { fwd: true });
-        r.arms[1] = arm([2.7, -2.55 - 0.45 * b], 1, { fwd: true });
+        // from behind (at the desk): the surface held out at the near side,
+        // the writer going over it, both past the body
+        const w = Math.sin(u * TAU * 2);
+        r.arms[1] = arm([3.75 + 0.15 * w, -3.0], 1, { fwd: true });
+        r.arms[0] = arm([1.4 + 0.2 * w, -2.75 + 0.12 * c1], 1, { fwd: true });
+        r.props.push(prop('notepad', -1, 3.7, -1.8, 0.25));
+        r.props.push(prop('pencil', 1, -0.1, 0.1, Math.PI - 1.1));
       } else {
         // scribbling in a notepad
         const w = Math.sin(u * TAU * 2);
@@ -209,9 +212,17 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.look = [0.25 - 0.5 * ease(u, 0.25, 0.95), 0];
       r.face.mouth = 'small';
       r.chest = 0.08 * (0.5 - 0.5 * c1);
-      r.arms[0] = arm([0.5, -2.35], 1, { fwd: true });
-      r.arms[1] = arm([3.05, -2.45], 1, { fwd: true });
-      r.props.push(prop('book', -1, 1.8, -3.05, -0.08, turnV < 1 && u < 0.22 ? turnV : 0));
+      const turning = turnV < 1 && u < 0.22 ? turnV : 0;
+      if (c.back) {
+        // from behind: held open at the near side
+        r.arms[0] = arm([1.8, -2.6], 1, { fwd: true });
+        r.arms[1] = arm([4.0, -2.75], 1, { fwd: true });
+        r.props.push(prop('book', -1, 4.4, -3.2, 0.22, turning));
+      } else {
+        r.arms[0] = arm([0.5, -2.35], 1, { fwd: true });
+        r.arms[1] = arm([3.05, -2.45], 1, { fwd: true });
+        r.props.push(prop('book', -1, 1.8, -3.05, -0.08, turning));
+      }
       break;
     }
     case 'think': {
@@ -236,11 +247,16 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.eyes = strike ? 'squeeze' : 'open';
       r.face.brows = 'focus';
       r.face.mouth = strike ? 'open' : 'flat';
-      const hx = 3.3 - 2.6 * k;
-      const hy = -1.6 - 5.0 * k;
-      r.arms[1] = arm([hx, hy], 1, { fwd: true, high: k > 0.5 });
       r.arms[0] = arm([1.6, -1.4], 1, { fwd: true });
-      r.props.push(prop('mallet', 1, 0, 0, 0.35 - 2.75 * k + (strike ? 0.2 : 0), strike ? 1 : 0, k < 0.5));
+      if (c.back) {
+        // from behind (at the desk): wound up out at the near side, beside
+        // the head; over it the tool would look stuck on
+        r.arms[1] = arm([3.3 + 1.6 * k, -1.6 - 2.6 * k], 1, { fwd: k < 0.5, high: k > 0.5 });
+        r.props.push(prop('mallet', 1, 0, 0, 0.35 - 1.45 * k + (strike ? 0.2 : 0), strike ? 1 : 0, k < 0.5));
+      } else {
+        r.arms[1] = arm([3.3 - 2.6 * k, -1.6 - 5.0 * k], 1, { fwd: true, high: k > 0.5 });
+        r.props.push(prop('mallet', 1, 0, 0, 0.35 - 2.75 * k + (strike ? 0.2 : 0), strike ? 1 : 0, k < 0.5));
+      }
       break;
     }
     case 'search': {
@@ -262,9 +278,17 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.eyes = 'down';
       r.face.mouth = 'smile';
       r.face.look = [0.3, 0];
-      r.arms[0] = arm([1.0 + 0.55 * swipe, -2.85 - 0.2 * swipe], 1, { fwd: true });
-      r.arms[1] = arm([3.55, -2.95], 1, { fwd: true });
-      r.props.push(prop('tablet', -1, 2.3, -3.0, 0.08, Math.floor(u * 2)));
+      if (c.back) {
+        // from behind: held up and out at the near side, the hand bobbing
+        // with each swipe
+        r.arms[1] = arm([3.55, -3.9 + 0.15 * swipe], 1, { fwd: true });
+        r.arms[0] = arm([1.3, -3.0], 1, { fwd: true });
+        r.props.push(prop('tablet', 1, 1.2, -0.4, -0.2, Math.floor(u * 2)));
+      } else {
+        r.arms[0] = arm([1.0 + 0.55 * swipe, -2.85 - 0.2 * swipe], 1, { fwd: true });
+        r.arms[1] = arm([3.55, -2.95], 1, { fwd: true });
+        r.props.push(prop('tablet', -1, 2.3, -3.0, 0.08, Math.floor(u * 2)));
+      }
       break;
     }
     case 'delegate': {
@@ -478,6 +502,56 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.face.mouth = k > 0.6 ? 'small' : 'smile';
       r.face.blush = k > 0.6;
       r.props.push(prop('mug', 1, 0.3, -0.15, -0.4 * k, u));
+      break;
+    }
+    case 'glance': {
+      // a look over at the screen, two nods, and back
+      const k = ease(u, 0, 0.2) - ease(u, 0.8, 1);
+      const nod = Math.max(0, Math.sin(u * TAU * 2)) * k;
+      r.face.look = [0.8 * k, 0.1 * k];
+      r.tilt = 0.2 * nod;
+      r.lean = 0.12 * k;
+      r.pelvis[0] += 0.35 * k;
+      r.face.mouth = nod > 0.5 ? 'smile' : 'small';
+      r.arms[0] = arm([0.9, -2.4], 1, { fwd: true });
+      r.arms[1] = arm([2.6, -2.45], 1, { fwd: true });
+      break;
+    }
+    case 'lean': {
+      // leaning in at the screen, chin on a hand, and back
+      const k = ease(u, 0, 0.3) - ease(u, 0.75, 1);
+      r.lean = 0.3 * k;
+      r.tilt = 0.1 * k;
+      r.pelvis[1] += 0.25 * k;
+      r.face.eyes = k > 0.5 ? 'wide' : 'open';
+      r.face.brows = 'focus';
+      r.face.mouth = 'small';
+      r.arms[1] = arm([2.2 + 0.4 * k, -2.4 - 2.2 * k], 1, { fwd: true, high: k > 0.6 });
+      r.arms[0] = arm([1.2, -2.3], 1, { fwd: true });
+      break;
+    }
+    case 'scratch': {
+      // a hand up to the side of the head, scratching, puzzled
+      const k = ease(u, 0, 0.2) - ease(u, 0.75, 1);
+      const w = Math.sin(u * TAU * 4) * k;
+      r.arms[1] = arm([2.8 + 0.2 * w, -2.4 - 5.4 * k + 0.25 * Math.abs(w)], 1, { high: k > 0.5, grip: 'open' });
+      r.tilt = -0.08 * k;
+      r.face.eyes = k > 0.3 ? 'up' : 'open';
+      r.face.look = [0.3 * k, -0.3 * k];
+      r.face.mouth = k > 0.3 ? 'wavy' : 'small';
+      r.face.brows = k > 0.3 ? 'worried' : 'none';
+      break;
+    }
+    case 'tap': {
+      // arms folded, a foot tapping three times, waiting on something
+      const tap = Math.max(0, Math.sin(u * TAU * 3));
+      r.legs[1] = { foot: [FEET[1][0] + 0.3, FEET[1][1] - 0.7 * tap], ang: -0.35 * tap, bend: -1 };
+      r.arms[0] = arm([1.6, -2.9], 1, { fwd: true });
+      r.arms[1] = arm([0.4, -2.75], 1, { fwd: true });
+      r.face.mouth = 'flat';
+      r.face.look = [0.3, 0];
+      r.pelvis[1] -= 0.08 * tap;
+      r.chest = 0.06 * tap;
       break;
     }
   }

@@ -9,6 +9,7 @@ import { footprint, planRoom, toWorld } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import type { PropArt } from '../src/worlds/types.ts';
 import { colony } from '../src/worlds/colony.ts';
+import { workstationOf } from '../src/worlds/workstation.ts';
 import { DECOR_ART } from '../src/worlds/colony/decor.ts';
 import { planFor, zonesFor } from '../src/worlds/colony/room.ts';
 import { budget } from './helpers.ts';
@@ -347,4 +348,10 @@ test('Frontier Colony\'s workstation: its own, still whatever the clock', () => 
   assert.ok(art, 'no workstation of its own');
   const at = (t: number, active: boolean): Canvas => render(art, 8, 'right', true, t, active).c;
   for (const active of [false, true]) assert.ok(same(at(0, active), at(7.3, active)), `it changed with the clock${active ? ' (on)' : ''}`);
+});
+
+test('Frontier Colony: its desks have things of their own to pick from, and something that moves', () => {
+  const art = workstationOf(colony);
+  assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
+  assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });

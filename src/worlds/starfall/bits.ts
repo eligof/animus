@@ -278,10 +278,11 @@ export function holoGlobe(k: Kit, cu: number, cv: number, cz: number, r: number,
 
 // ── small things ────────────────────────────────────────────────────────────
 
-// A mug standing on z, handle toward +u, a coloured band round it.
-export function mug(k: Kit, u: number, v: number, z: number, color: Color = C.white, r = 0.42, bandC: Color = C.magenta): void {
+// A mug standing on z, handle toward +u, a coloured band round it, ink
+// round it `line` px.
+export function mug(k: Kit, u: number, v: number, z: number, color: Color = C.white, r = 0.42, bandC: Color = C.magenta, line = k.lw): void {
   k.rod([[u + r * 0.9, v, z + r * 1.7], [u + r * 1.55, v, z + r * 1.3], [u + r * 0.9, v, z + r * 0.6]], color, Math.max(0.07, r * 0.2));
-  k.cyl(u, v, z, r, r * 2.1, color);
+  k.cyl(u, v, z, r, r * 2.1, color, { line });
   band(k, u, v, r, z + r * 0.9, z + r * 1.35);
   k.paint(bandC, 0);
   k.disc(u, v, z + r * 2.1 - 0.04, r * 0.78, '#6a3a2a', 0);
@@ -478,8 +479,8 @@ export function puffPlant(k: Kit, a: number, n: number, z: number, h: number, r:
 
 // An upright capsule standing on z0, h tall and r round: rounded ends, a
 // coloured lid band from bz0 to bz1 (heights over z0), shaded across, ink
-// round it and along the band's edges.
-export function capsule(k: Kit, cu: number, cv: number, z0: number, r: number, h: number, body: Color, bandC: Color, bz0: number, bz1: number): void {
+// round it (`line` px) and along the band's edges.
+export function capsule(k: Kit, cu: number, cv: number, z0: number, r: number, h: number, body: Color, bandC: Color, bz0: number, bz1: number, line = k.lw): void {
   const e = r * 0.42; // how far each rounded end reaches
   const prof: Array<{ z: number; r: number }> = [];
   for (let i = 0; i <= 4; i++) {
@@ -498,9 +499,9 @@ export function capsule(k: Kit, cu: number, cv: number, z0: number, r: number, h
     const el = k.ell(cu, cv, z, r);
     k.pen.beginPath();
     k.pen.ellipse(el.cx, el.cy, el.rx, el.ry, el.rot, 0, Math.PI);
-    k.paint(null, k.thin * 0.8);
+    k.paint(null, Math.min(line, k.thin) * 0.8);
   }
-  fillPts(k, sil, null, k.lw);
+  fillPts(k, sil, null, line);
 }
 
 // A big paddle leaf from screen point (x, y) toward angle a, L px long and

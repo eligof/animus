@@ -1,6 +1,7 @@
 import { contactShadow, hexOf, ink as inkFrom, inkWidth, isoBox, mix, shade } from '../art/iso.ts';
 import { DESK } from '../world/desks.ts';
-import type { PropView, WorkstationArt, WorldDef } from './types.ts';
+import { hashString, Rng } from '../world/rng.ts';
+import type { Clutter, P3, PropView, WorkstationArt, WorldDef } from './types.ts';
 
 // The plain workstation, for a world that has not drawn its own (see
 // WorldDef.workstation): a desk on four legs with a monitor and a
@@ -51,4 +52,28 @@ export function workstationOf(w: WorldDef): WorkstationArt {
   let art = plain.get(w);
   if (!art) plain.set(w, (art = plainWorkstation(w)));
   return art;
+}
+
+// What stands on the top of place `place`'s workstation in world `w`: 2 to
+// 4 (fewer if it has fewer) of its clutter on as many of its spots
+// (`spot`: which), picked by the world's id and the place, so a desk keeps
+// its things while it stands and its neighbours have others; far to near
+// (the order to draw them). None where the world has none.
+export type OnTop = { item: Clutter; at: P3; spot: number };
+export function clutterOf(w: WorldDef, place: number): OnTop[] {
+  const c = workstationOf(w).clutter;
+  if (!c || !c.items.length || !c.spots.length) return [];
+  const rng = new Rng(hashString(`${w.id}#${place}`));
+  const n = Math.min(rng.int(2, 4), c.items.length, c.spots.length);
+  const items = shuffle(c.items.map((_, k) => k), rng).slice(0, n);
+  const spots = shuffle(c.spots.map((_, k) => k), rng).slice(0, n);
+  return items.map((k, j) => ({ item: c.items[k], at: c.spots[spots[j]], spot: spots[j] })).sort((a, b) => a.at[0] + a.at[1] - (b.at[0] + b.at[1]));
+}
+
+function shuffle<T>(a: T[], rng: Rng): T[] {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
