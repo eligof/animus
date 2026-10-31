@@ -191,8 +191,8 @@ const tailorParts: NpcParts = {
 };
 
 // Feeding cloth under the needle, both hands on it, head bent to the seam:
-// two pushes, then a look up at the work (the head raised over three
-// frames and lowered over three) and back.
+// two pushes, then a look up at the work (the head raised over a quarter
+// of the loop and lowered over the last quarter) and back.
 const tailorWork: NpcLoop = {
   secs: 2.4,
   pose(u) {
@@ -321,7 +321,8 @@ const smithParts: NpcParts = {
       q.ellipse(1.6, -6.0, 0.55, 0.3, 0.3, 0, TAU);
       q.fill();
     });
-    // sparks off the work during the show's flurry
+    // sparks off the work during the show's flurry, each flying out once a
+    // blow, a seventh of a blow apart
     if (p.act === 'show' && p.u < FLURRY) {
       sk.draw((q, c) => {
         const [ax, ay] = toBody(p, ANVIL_DX, -ANVIL_DY);
@@ -331,7 +332,7 @@ const smithParts: NpcParts = {
         q.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = -0.4 - i * 0.45 + p.u * 9;
-          const r0 = 0.7 + ((i * 37 + Math.floor(p.u * 16) * 11) % 7) * 0.12;
+          const r0 = 0.7 + ((((i * 37) % 7) / 7 + (p.u / FLURRY) * 3) % 1) * 0.72;
           q.moveTo(ax + Math.cos(a) * r0, ay - Math.abs(Math.sin(a)) * r0);
           q.lineTo(ax + Math.cos(a) * (r0 + 0.6), ay - Math.abs(Math.sin(a)) * (r0 + 0.6));
         }
@@ -476,9 +477,9 @@ const smithWork: NpcLoop = {
   },
 };
 
-// How high the show has the new horseshoe at u: lifted in the tongs over
-// three frames once the flurry is done, held up, lowered back to the anvil
-// over three as the loop comes round.
+// How high the show has the new horseshoe at u: lifted in the tongs over a
+// sixth of the loop once the flurry is done, held up, lowered back to the
+// anvil over the last sixth as the loop comes round.
 const showHigh = (u: number): number => ease(u, FLURRY - 0.02, FLURRY + 0.16) - ease(u, 0.82, 1);
 
 // A horseshoe forged: a flurry of three quick blows, then the shoe lifted
@@ -685,8 +686,8 @@ const cookParts: NpcParts = {
 };
 
 // How far the cook has the spoon up for a taste at u round her work:
-// lifted out of the pot over three frames, a blow on it and a hum, lowered
-// back into it over three.
+// lifted out of the pot over a quarter of the loop, a blow on it and a
+// hum, lowered back into it over the last fifth.
 const cookTaste = (u: number): number => ease(u, 0.47, 0.72) - ease(u, 0.78, 1);
 
 // Stirring the pot, round and round, then the spoon up for a taste, a

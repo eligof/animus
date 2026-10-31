@@ -54,6 +54,7 @@ const speakers: PropArt = {
   dep: 5,
   height: 12,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'speakers', 12, (k) => {
       k.shadow(2.5, 2.5, 2.6, 2.4, 0.34);
@@ -120,6 +121,7 @@ const totem: PropArt = {
   dep: 3,
   height: 11,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const N = 8;
     const k = still(v, 'totem', 11, (k) => {

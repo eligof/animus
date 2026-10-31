@@ -196,8 +196,8 @@ const sysParts: NpcParts = {
   },
 };
 
-// How far into holding up the cable it is, at u of its work: up over three
-// frames, down over two.
+// How far into holding up the cable it is, at u of its work: up over a
+// quarter of the loop (from 0.42), held, down over its last sixth.
 const sysCable = (u: number) => ease(u, 0.42, 0.66) - ease(u, 0.83, 1);
 
 // Typing at the console, a key tapped with each hand by turns; then the far

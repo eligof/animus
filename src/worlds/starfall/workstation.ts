@@ -372,7 +372,7 @@ const CLUTTER: readonly Clutter[] = [foodCubes, sampleTubes, crystal, energyCell
 // The holo emitter at the front of the right end: a white puck banded
 // orange with a lens on top; while the desk is worked its beam throws up
 // a wire globe that turns (its three meridians come round to where they
-// were every sixth of a turn, so eight steps make it seamless) with a
+// were every sixth of a turn, so a sixth a loop is seamless) with a
 // little moon going round it.
 const HOLO_AT: P3 = [6.35, 2.35, TOP];
 const HOLO: DeskLoop = {
@@ -382,8 +382,7 @@ const HOLO: DeskLoop = {
   h: 1.35,
   secs: 8 / 6,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = HOLO_AT;
     k.cyl(u, w, z, 0.3, 0.16, C.white, { line: edge(k) });
     band(k, u, w, 0.3, z + 0.04, z + 0.1);
@@ -393,9 +392,9 @@ const k = kitOf(v);
     const zc = z + 0.86;
     const R = 0.36;
     k.poly([[u - 0.12, w, z + 0.17], [u + 0.12, w, z + 0.17], [u + 0.26, w, zc - 0.2], [u - 0.26, w, zc - 0.2]], withAlpha(C.holo, 0.28), 0);
-    holoGlobe(k, u, w, zc, R, 0.95, (i / 8) * (Math.PI / 3));
+    holoGlobe(k, u, w, zc, R, 0.95, phase * (Math.PI / 3));
     // the moon, round the globe once a loop
-    const a = (i / 8) * Math.PI * 2;
+    const a = phase * Math.PI * 2;
     const [x, y] = k.p(u, w, zc);
     const pen = k.pen;
     pen.beginPath();

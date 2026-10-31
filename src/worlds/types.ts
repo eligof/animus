@@ -50,6 +50,11 @@ export type PropArt = {
   // seconds, its pictures drawn once and kept (see CYCLE in art/scene.ts):
   // what moves on it while worked (beats, turns) should repeat within 2 s.
   animated?: boolean;
+  // An animated prop that moves while nobody works it (`v.active` false: a
+  // lava pool, a hearth, a cabinet's attract screen), so it is drawn again
+  // every ambient step. Without it, one idle draws the same whatever the
+  // clock, and is drawn once until it is worked.
+  movesIdle?: boolean;
   draw(v: PropView): void;
   emit?(v: PropView, dt: number, spawn: (p: Particle) => void): void;
 };

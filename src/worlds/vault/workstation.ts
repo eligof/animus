@@ -287,7 +287,7 @@ const SPOTS: readonly P3[] = [
 
 // A mahogany desk clock at the front of the right end, a brass-rimmed
 // face over a glass door, its pendulum swinging behind the glass while the
-// desk is worked (eight steps a beat, 1.3 s), still while it is not.
+// desk is worked (to and fro in 1.3 s), still while it is not.
 const CLOCK: P3 = [6.35, 2.35, TOP];
 const clock: DeskLoop = {
   name: 'clock',
@@ -296,8 +296,7 @@ const clock: DeskLoop = {
   h: 1.6,
   secs: 8 / 6,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = smallKitOf(v);
+    const k = smallKitOf(v);
     const f = fineKit(k);
     const [u, w, z] = CLOCK;
     const n = w + 0.18;
@@ -313,7 +312,7 @@ const k = smallKitOf(v);
     const zw0 = z + 0.2;
     const zw1 = z + 0.7;
     k.rect(u - 0.2, zw0, u + 0.2, zw1, n + 0.01, '#2e2218', k.thin);
-    const swing = v.active ? 0.3 * Math.sin((i / 8) * Math.PI * 2) : 0;
+    const swing = v.active ? 0.3 * Math.sin(phase * Math.PI * 2) : 0;
     const L = 0.34;
     const pivot: P3 = [u, n + 0.02, zw1 - 0.04];
     const bob: P3 = [u + L * Math.sin(swing), n + 0.02, zw1 - 0.04 - L * Math.cos(swing)];

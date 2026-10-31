@@ -52,16 +52,28 @@ with the sprite cache thrashing). 15 divides 30 and 60, so at the default
   (`Math.floor(t * k)`, a table indexed by frame) is made smooth where it
   is movement (a lever, a bob, a swing, a flame's sway); flicker and
   blinking lights stay stepped.
-- **The sprite cache** holds about three times as many pictures (3000,
-  128 MiB): at 15 a second twenty busy agents need about 5000 in two
-  minutes, and at 1000 they were drawn again and again.
+- **Idle props drawn once.** An animated prop that holds still while
+  nobody works it is drawn once, not every ambient step (it was drawn 6
+  times a second for nothing; at 15 it was a quarter of the cost). The
+  few that move idle (a lava pool, a hearth, an arcade's attract screen,
+  some stations) say so (`PropArt.movesIdle`); a contract test holds
+  every world to it both ways.
+- **The sprite cache** holds three times as many pictures (3000, 128
+  MiB). A bigger one did not help: the demo crew keeps showing frames it
+  has not shown yet.
 
 ## Cost
 
-Measured in a stress room (twenty agents, the locals, 150 x 46 at the
-user's 19 x 42 cell, 30 fps): about twice the bytes a step of today
-(the cafe 17.5 to about 41 KiB, hell 30.5 to about 57), the slowest step
-under 20 ms. Checked in a real Ghostty before it ships.
+Measured against main, 150 x 46 at a 19 x 42 cell, 30 fps:
+
+- **Bytes a step**, twenty busy agents and the locals: about 2.4 times
+  (the cafe 17.5 to 42.7 KiB, hell 31.2 to 75.0, the club 25.9 to 60.4);
+  the slowest step (p99) under 20 ms.
+- **Time a step**, the demo crew after a minute: hell 8.1 to 9.9 ms, the
+  cafe 6.6 to 8.7.
+- **In a real Ghostty**, the demo crew's first 40 s: Ghostty 11-12% of a
+  core to 13-14%; animus 28-37% to 49-54% (most of it drawing poses'
+  new frames the first time round).
 
 ## Tests
 

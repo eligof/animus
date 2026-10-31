@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { COAT } from '../src/art/figure/look.ts';
 import { frame, project, rgbOf } from '../src/art/iso.ts';
+import { framesFor } from '../src/art/motion.ts';
+import { DESK } from '../src/world/desks.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
 import { hashString } from '../src/world/rng.ts';
 import { planRoom, toWorld } from '../src/world/room.ts';
@@ -255,6 +257,22 @@ test('Dust Outpost: its desks have things of their own to pick from, and somethi
   const art = workstationOf(dunes);
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
+});
+
+test("Dust Outpost's desk fan: its blades turn on every picture of its loop, and stand at its first while the screen is off", () => {
+  const fan = workstationOf(dunes).loops!.find((l) => l.name === 'fan')!;
+  const s = 12;
+  const [ax, ay] = project(0, 0, s)(...fan.at);
+  const at = frame(project(100 - ax, 150 - ay, s), 'right', 0, 0);
+  const shot = (u: number, active: boolean): Canvas => {
+    const c = new Canvas(200, 200);
+    fan.draw({ pen: c, s, at, len: DESK.len, dep: DESK.dep, wall: 'right', island: true, t: 0, active, seed: 1 }, u);
+    return c;
+  };
+  const n = framesFor(fan.secs);
+  const shots = Array.from({ length: n }, (_, i) => shot(i / n, true));
+  shots.forEach((c, i) => assert.ok(!same(c, shots[(i + 1) % n]), `the blades stand still from picture ${i} to the next`));
+  assert.ok(same(shot(0, false), shots[0]), 'off, it is not its first picture');
 });
 
 test('Dust Outpost: three locals at work, each where its job puts it', () => {

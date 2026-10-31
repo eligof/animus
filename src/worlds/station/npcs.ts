@@ -45,8 +45,8 @@ const CAP = {
 // Seated: its seat line at y = -1, so its shoulders are low.
 const CAP_BONES: Bones = { neck: [0.05, -5.6], shoulders: [[-1.7, -5.0], [1.75, -5.0]], upper: 1.75, fore: 1.7 };
 
-// The order: the far arm out pointing ahead, at u of its work (out over
-// three frames, back over two).
+// The order: the far arm out pointing ahead, at u of its work (out over a
+// fifth of the loop, back over a sixth).
 const capPoint = (u: number) => ease(u, 0.3, 0.5) - ease(u, 0.68, 0.84);
 // How far up the salute is, at u of its celebration.
 const capSalute = (u: number) => env(u, 0.25, 0.75);
@@ -383,7 +383,7 @@ const engWork: NpcLoop = {
   secs: 2.4,
   pose(u) {
     const crank = u < 0.5 ? Math.sin(u * TAU * 3) : 0;
-    // (leaning in to the gauge over two frames, back over two)
+    // (leaning in to the gauge over a fifth of the loop, back over a sixth)
     const peer = ease(u, 0.42, 0.62) - ease(u, 0.84, 1);
     const tap = peer * Math.max(0, Math.sin(u * TAU * 5));
     return {
@@ -465,7 +465,7 @@ const COM = {
 const COM_BONES: Bones = { neck: [0.1, -7.8], shoulders: [[-1.55, -7.3], [1.7, -7.3]], upper: 1.6, fore: 1.55 };
 
 // A hand to the headset, listening and answering, at u of its work: up
-// over three frames, down over two.
+// over a fifth of the loop, down over its last sixth.
 const comCall = (u: number) => ease(u, 0.42, 0.62) - ease(u, 0.85, 1);
 
 const comParts: NpcParts = {
@@ -543,17 +543,18 @@ const comParts: NpcParts = {
 // Keying at the console, both hands tapping by turns, head down to the
 // keys; leaning in to read the screen, a nod; then the near hand up to the
 // headset by its side (its elbow out, clear of its face), a word into the
-// mic and a nod, the far hand still keying; and back. Each change eased
-// over two frames or more.
+// mic and a nod, the far hand still keying; and back. Each change eased,
+// none snapped.
 const comWork: NpcLoop = {
   secs: 2.4,
   pose(u) {
     const call = comCall(u);
     const read = bump(u, 0.22, 0.56);
     const nod = bump(u, 0.36, 0.5) + bump(u, 0.66, 0.82);
+    // the hands key by turns, six times each round the loop, fast while
+    // both are down; its mouth and a blink go by the keys (twelve a loop)
+    const tap = -Math.cos(u * TAU * 6) * (1 - 0.6 * read);
     const i = Math.round(u * 12);
-    // the hands key by turns, fast while both are down
-    const tap = (i % 2 ? 1 : -1) * (1 - 0.6 * read);
     return {
       ...rest(),
       lean: 0.04 + 0.08 * read - 0.03 * call,

@@ -350,8 +350,8 @@ const SPOTS: P3[] = [
 // A salvaged desk fan at the planks' front right, facing out over the
 // front of the desk: a weighted foot, a bent neck, the motor behind, three
 // rusty tin blades in a wire cage. While the desk is worked its blades
-// turn (a third of a turn over its frames, so the loop meets itself);
-// still while it is not.
+// turn (a third of a turn round the loop, so it meets itself); still
+// while it is not.
 const FAN: P3 = [6.25, 2.3, TOP];
 const FAN_R = 0.56; // the cage
 const fan: DeskLoop = {
@@ -361,8 +361,7 @@ const fan: DeskLoop = {
   h: 1.95,
   secs: 0.75,
   draw(v, phase) {
-    const i = Math.floor(phase * 6);
-const k = kitOf(v);
+    const k = kitOf(v);
     const e = edge(k);
     const [u, w, z] = FAN;
     const zc = z + 1.3;
@@ -379,7 +378,7 @@ const k = kitOf(v);
     tube(k, at(0, 0, -0.5), at(0, 0, -0.12), 0.24, 0.2, C.steelDark, null, e);
     // the cage's back ring, the blades, the hub, the cage's front
     fillPts(k, loop(FAN_R, -0.04), withAlpha('#1e1006', 0.28), 0);
-    const turn = (i / 6) * ((Math.PI * 2) / 3);
+    const turn = phase * ((Math.PI * 2) / 3);
     for (let b = 0; b < 3; b++) {
       const th = turn + (b * Math.PI * 2) / 3 + Math.PI / 2;
       const blade: Pt[] = [];

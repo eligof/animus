@@ -1,4 +1,4 @@
-import { shade } from '../../art/iso.ts';
+import { mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
 import type { PropArt, PropView } from '../types.ts';
@@ -352,7 +352,7 @@ const run: PropArt = {
     const t = v.t;
     const n = v.active ? 0.5 + 0.5 * Math.sin(t * Math.PI * 2 + 0.5) * Math.sin(t * Math.PI + 1) : 0;
     const open = arch(MOUTH.u0, MOUTH.u1, MOUTH.z0, MOUTH.z1, MOUTH.v + 0.02);
-    const hot = v.active ? [[0, '#fff2b0'], [0.45, n > 0.5 ? '#ffd060' : '#ffb040'], [1, '#e85a1a']] as const : [[0, '#ffb040'], [0.5, '#e8702a'], [1, '#8a2a12']] as const;
+    const hot = v.active ? [[0, '#fff2b0'], [0.45, mix('#ffb040', '#ffd060', (n - 0.25) * 2)], [1, '#e85a1a']] as const : [[0, '#ffb040'], [0.5, '#e8702a'], [1, '#8a2a12']] as const;
     k.poly(open, k.vgrad(3.5, MOUTH.v, MOUTH.z0, MOUTH.z1, hot), k.lw);
     const [cx, cy] = k.p(3.5, MOUTH.v + 0.03, MOUTH.z0 + 0.35);
     k.pen.beginPath();
@@ -595,6 +595,7 @@ const idle: PropArt = {
   dep: 11,
   height: 8,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'idle', 8, (k) => {
       k.shadow(7.5, 5.5, 7.4, 5.2, 0.2);

@@ -605,7 +605,9 @@ const think: PropArt = {
       const lit = act ? (i + step) % 3 === 0 : i % 3 === 0;
       k.disc(P.u0 + 0.6 + i * 0.48, P.vb + 0.3, 9.95, 0.16, lit ? C.amber : '#5a4a3a', 0);
     }
-    const flip = act && Math.sin(t * 7) > 0.6 ? 0.5 : 0;
+    // the flippers kicked up and dropped back, quick but not a cut
+    const kickUp = Math.min(1, Math.max(0, (Math.sin(t * 7) - 0.4) / 0.4));
+    const flip = act ? 0.5 * kickUp * kickUp * (3 - 2 * kickUp) : 0;
     k.line([top(0.32, 0.86), top(0.45, 0.9 - flip * 0.12)], '#f6efe6', Math.max(1, 0.2 * k.s));
     k.line([top(0.68, 0.86), top(0.55, 0.9 - flip * 0.12)], '#f6efe6', Math.max(1, 0.2 * k.s));
     if (act) {

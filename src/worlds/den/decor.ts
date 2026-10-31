@@ -39,6 +39,7 @@ const arcade: PropArt = {
   dep: 4,
   height: 13,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const { u0, u1, v0, v1 } = ARC;
     const k = still(v, 'arcade', 13, (k) => {

@@ -85,14 +85,14 @@ const GLOVE_D = '#b09766';
 
 const TECH_BONES: Bones = { neck: [0.1, -7.8], shoulders: [[-1.95, -7.2], [2.05, -7.2]], upper: 1.75, fore: 1.55 };
 
-// How far into its work the tech scoops (0..1) and reads its slate, by
-// the frame (f = u * 12): the scoop up out of rest over two frames, down
-// over two (6) as the slate comes up over two (7), and the slate down over
-// two (11) to rest at frame 0; the dip into the bin eased in and out round
-// frame 3.
-const scooping = (u: number) => ease(u * 12, 0, 2) - ease(u * 12, 5, 7);
-const reading = (u: number) => ease(u * 12, 6, 8) - ease(u * 12, 10, 12);
-const dipping = (u: number) => bump(u * 12, 1.5, 4.5);
+// How far into its work the tech scoops (0..1) and reads its slate, at u
+// round the loop: the scoop up out of rest over the first sixth, down
+// from 5/12 to 7/12 as the slate comes up from a half to 2/3, and the
+// slate down over the last sixth to rest as the loop comes round; the dip
+// into the bin eased in and out round a quarter.
+const scooping = (u: number) => ease(u, 0, 1 / 6) - ease(u, 5 / 12, 7 / 12);
+const reading = (u: number) => ease(u, 1 / 2, 2 / 3) - ease(u, 5 / 6, 1);
+const dipping = (u: number) => bump(u, 1 / 8, 3 / 8);
 
 const techParts: NpcParts = {
   body(sk, _p, back) {
@@ -234,7 +234,7 @@ const techWork: NpcLoop = {
     const s = scooping(u);
     const r = reading(u);
     const dip = dipping(u);
-    const sift = u > 0.25 && u < 0.42 ? Math.sin(u * TAU * 12) : 0;
+    const sift = u > 1 / 4 && u < 5 / 12 ? Math.sin(u * TAU * 12) : 0;
     const tap = bump(u, 0.62, 0.72) + bump(u, 0.72, 0.82);
     return {
       ...rest(),
@@ -443,7 +443,7 @@ const pilotWork: NpcLoop = {
   pose(u) {
     const w = Math.sin(u * TAU);
     const w2 = Math.sin(u * TAU * 2 + 0.6);
-    const reach = ease(u * 12, 0.5, 3) - ease(u * 12, 4, 6);
+    const reach = ease(u, 1 / 24, 1 / 4) - ease(u, 1 / 3, 1 / 2);
     const tap = bump(u, 0.22, 0.3) + bump(u, 0.3, 0.38);
     const a = bump(u, 0.5, 0.92);
     return {
@@ -669,10 +669,10 @@ const cookParts: NpcParts = {
   },
 };
 
-// How far the cook has the spoon up for a taste at u round its work
-// (f = u * 12, the frame): up over three frames from 5, a taste, down over
-// three from 9 (the whisk swapped for the spoon halfway up).
-const cookTaste = (u: number): number => ease(u * 12, 5.5, 8.5) - ease(u * 12, 9, 12);
+// How far the cook has the spoon up for a taste at u round its work: up
+// over a quarter of the loop from just under halfway, a taste, down over
+// the last quarter (the whisk swapped for the spoon halfway up).
+const cookTaste = (u: number): number => ease(u, 11 / 24, 17 / 24) - ease(u, 3 / 4, 1);
 
 // Whisks the bowl, round and round, then tastes from the spoon, pleased.
 const cookWork: NpcLoop = {
@@ -698,15 +698,15 @@ const cookWork: NpcLoop = {
 
 // The low-gravity pancake: a dip and a flick of the pan, the pancake
 // floating up high and turning, watched all the way, caught, and the far
-// arm up and out (over two frames, and down over two as the loop comes
-// round).
+// arm up and out (over an eighth of the show, and down over the last
+// eighth as it comes round).
 const cookShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4,
   crowd: 'watch',
   pose(u) {
     const h = flight(u);
     const flick = bump(u, 0.08, 0.2);
-    const ta = ease(u * 16, 12, 14) - ease(u * 16, 14, 16);
+    const ta = ease(u, 3 / 4, 7 / 8) - ease(u, 7 / 8, 1);
     return {
       ...rest(),
       bob: -0.2 * bump(u, 0.02, 0.12) + 0.2 * flick,

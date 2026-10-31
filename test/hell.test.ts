@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
+import { ANIM_FPS } from '../src/art/motion.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
 import { planRoom, toWorld } from '../src/world/room.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
@@ -67,6 +68,15 @@ function painted(c: Canvas, min = 16): Box | null {
 
 const same = (a: Canvas, b: Canvas) => a.data.length === b.data.length && a.data.every((n, i) => n === b.data[i]);
 
+// Pixels not the same in two pictures of one size.
+function unlike(a: Canvas, b: Canvas): number {
+  let n = 0;
+  for (let o = 0; o < a.data.length; o += 4) {
+    if (a.data[o] !== b.data[o] || a.data[o + 1] !== b.data[o + 1] || a.data[o + 2] !== b.data[o + 2] || a.data[o + 3] !== b.data[o + 3]) n++;
+  }
+  return n;
+}
+
 for (const [name, art] of ARTS) {
   test(`hell ${name}: draws in both wall frames and as an island, inside its footprint and height`, () => {
     for (const s of [4, 16]) {
@@ -103,17 +113,21 @@ for (const [name, art] of ARTS) {
 }
 
 // Stations hold still while nobody works them (so they cost nothing to
-// show); the lava keeps moving, but only three times a second.
-test('hell: idle stations hold still; the lava moves at 3 fps', () => {
+// show); the lava keeps moving, a little every picture (ANIM_FPS a
+// second), never in jumps.
+test('hell: idle stations hold still; the lava moves a little every picture', () => {
   for (const [kind, art] of Object.entries(hell.stations)) {
     if (!art.animated) continue;
     const a = render(art, 8, 'right', false, 0.4, false).c;
     const b = render(art, 8, 'right', false, 5.9, false).c;
     assert.ok(same(a, b), `${kind} moves while idle`);
   }
-  const lava = DECOR_ART.lavaPool;
-  assert.ok(!same(render(lava, 8, 'right', false, 0.1, false).c, render(lava, 8, 'right', false, 1.4, false).c), 'the lava is still');
-  assert.ok(same(render(lava, 8, 'right', false, 0.34, false).c, render(lava, 8, 'right', false, 0.5, false).c), 'the lava moves faster than 3 fps');
+  const lava = (t: number) => render(DECOR_ART.lavaPool, 8, 'right', false, t, false).c;
+  for (const t of [0.1, 0.4, 0.77]) {
+    const [a, next, later] = [lava(t), lava(t + 1 / ANIM_FPS), lava(t + 1 / 3)];
+    assert.ok(!same(a, next), `the lava holds still from ${t} s to the next picture`);
+    assert.ok(unlike(a, next) < unlike(a, later), `the lava jumps at ${t} s: ${unlike(a, next)} pixels to the next picture, ${unlike(a, later)} a third of a second on`);
+  }
 });
 
 test('hell: props give off embers, sparks and soul-light in their own frame', () => {

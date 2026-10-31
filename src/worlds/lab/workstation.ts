@@ -348,8 +348,7 @@ const boiling: DeskLoop = {
   h: 1.6,
   secs: 1,
   draw(v, phase) {
-    const i = Math.floor(phase * 6);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = BOIL;
     const on = v.active;
     const zp = z + BOIL_Z;
@@ -363,12 +362,12 @@ const k = kitOf(v);
     if (on) k.halo(u, w, zp + BOIL_R, 0.65, C.greenGlow, 0.3);
     bulb(k, u, w, zp, BOIL_R, 0.36, on ? C.greenGlow : C.green, 0.6);
     if (!on) return;
-    // bubbles rising through the fluid, each a step further a frame, and
-    // one breaking out of the neck
+    // bubbles rising through the fluid, each up it once a loop, and one
+    // breaking out of the neck
     const pen = k.pen;
     pen.beginPath();
     for (let j = 0; j < 5; j++) {
-      const t = ((i / 6 + j / 5) % 1);
+      const t = (phase + j / 5) % 1;
       const zz = zp + 0.08 + t * BOIL_R * 1.05;
       const du = [-0.12, 0.08, -0.03, 0.13, 0.0][j] + Math.sin((t + j) * 6) * 0.02;
       const [x, y] = k.p(u + du, w, zz);
@@ -379,7 +378,7 @@ const k = kitOf(v);
     pen.fillStyle = '#ffffffd8';
     pen.fill();
     const top = zp + 2 * BOIL_R + 0.36 + 0.08;
-    const t = i / 6;
+    const t = phase;
     const [x, y] = k.p(u, w, top + 0.06 + t * 0.4);
     const r = (0.06 + 0.05 * Math.sin(t * Math.PI)) * k.s;
     pen.beginPath();

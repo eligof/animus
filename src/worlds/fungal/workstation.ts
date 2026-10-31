@@ -582,13 +582,13 @@ const SPOTS: readonly P3[] = [
 
 // A toadstool lamp at the front of the right end. While the desk is
 // worked it breathes: its stalk stretches a little and its cap bobs up as
-// its light swells, then settles, eased round eight steps (1.6 s); and
+// its light swells, then settles, eased round a breath of 1.6 s; and
 // three glowing spores, a third of a breath apart, rise off its crown,
 // drifting back away from the slab, brightening and then fading away. Dark, still and
 // spore-less while the desk is not worked.
 const LAMP: P3 = [6.3, 2.35, ZT];
-const BREATHS = 8;
-const breath = (i: number): number => (1 - Math.cos((i / BREATHS) * Math.PI * 2)) / 2;
+// How full the breath is at u round it: 0 at its start, 1 halfway.
+const breath = (u: number): number => (1 - Math.cos(u * Math.PI * 2)) / 2;
 const SPORES: ReadonlyArray<readonly [number, number, number]> = [
   [-0.04, -0.12, 0],
   [0.16, 0.02, 1 / 3],
@@ -599,13 +599,12 @@ const glowCap: DeskLoop = {
   at: LAMP,
   r: 0.6,
   h: 2.3,
-  secs: BREATHS / 5,
+  secs: 1.6,
   draw(v, phase) {
-    const i = Math.floor(phase * BREATHS);
-const k = smallKitOf(v);
+    const k = smallKitOf(v);
     const [u, w, z] = LAMP;
     const lit = v.active;
-    const a = lit ? breath(i) : 0;
+    const a = lit ? breath(phase) : 0;
     const bob = 0.15 * a;
     if (lit) k.pool(u, w, 0.9, 0.65, C.glow, 0.2 + 0.15 * a, z);
     const cap = lit ? mix(shade(C.glow, -0.05), shade(C.glow, 0.3), a) : shade(C.glowSoft, -0.3);
@@ -617,7 +616,7 @@ const k = smallKitOf(v);
     // way (-v), faded in and out
     const pen = k.pen;
     for (const [du, dv, ph] of SPORES) {
-      const p = (i / BREATHS + ph) % 1;
+      const p = (phase + ph) % 1;
       const fade = Math.sin(Math.PI * p);
       if (fade < 0.05) continue;
       const su = u + du + 0.06 * p;

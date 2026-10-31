@@ -214,7 +214,8 @@ const herbParts: NpcParts = {
 };
 
 // How far the herbalist has a sprig up at his nose, at u round his work:
-// lifted over three frames, a long sniff, lowered over three.
+// lifted over a quarter of the loop, a long sniff, lowered over the last
+// quarter.
 const herbSniff = (u: number): number => ease(u, 0.43, 0.68) - ease(u, 0.76, 1);
 
 // At the chest: the pestle going round in the mortar, then a sprig lifted
@@ -600,8 +601,8 @@ const BLUSH = '#f0a0b8';
 
 const MYC_BONES: Bones = { neck: [0.1, -5.5], shoulders: [[-1.85, -4.3], [1.95, -4.3]], upper: 1.15, fore: 1.1 };
 
-// How squeezed its cap is (0 to 1) and how far its spores have risen (0
-// none, then 0 to 1) at this frame.
+// How squeezed its cap is (0 to 1) and how far its spores have risen (-1
+// none, then 0 to 1) at this point of its loop.
 function puffOf(p: Puppet): { squeeze: number; rise: number } {
   if (p.act === 'work') return { squeeze: bump(p.u, 0.5, 0.68), rise: p.u > 0.58 ? (p.u - 0.58) / 0.42 : -1 };
   if (p.act === 'show') {

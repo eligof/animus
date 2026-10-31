@@ -98,6 +98,7 @@ const pit: PropArt = {
   dep: 10,
   height: 4.5,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const { c, r, curb, sink } = PIT;
     still(v, 'pit-back', 4.5, (k) => {

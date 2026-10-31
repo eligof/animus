@@ -1,5 +1,6 @@
 import type { Color } from '../../art/types.ts';
 import { mix, shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import { DESK } from '../../world/desks.ts';
 import type { Clutter, DeskLoop, PropView, WorkstationArt } from '../types.ts';
 import { across, caster, frustum, hull, leaf, ring } from './bits.ts';
@@ -510,11 +511,12 @@ const donut: Clutter = {
 // ── the loops ───────────────────────────────────────────────────────────────
 
 // A Newton's cradle in the front right corner: five steel balls hung from
-// a chrome frame on a walnut base. Frame 0 hangs still (a ball just
-// struck); at work the right end ball swings out and back, then the left
-// one, a full swing a second.
+// a chrome frame on a walnut base. At the start of its loop it hangs still
+// (a ball just struck); at work the right end ball swings out and back
+// over the first half, then the left one over the second, a full swing a
+// second, each out to SWING radians and back like a pendulum.
 const CRADLE: P3 = [6.3, 2.35, TOP];
-const SWING: ReadonlyArray<readonly [number, number]> = [[0, 0], [0, 0.18], [0, 0.3], [0, 0.18], [0, 0], [0.18, 0], [0.3, 0], [0.18, 0]];
+const SWING = 0.3;
 const cradle: DeskLoop = {
   name: 'cradle',
   at: CRADLE,
@@ -522,13 +524,13 @@ const cradle: DeskLoop = {
   h: 1.2,
   secs: 1,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = CRADLE;
     const top = z + 1.1;
     const L = 0.7;
     const br = 0.1;
-    const [left, right] = v.active ? SWING[i % SWING.length] : [0, 0];
+    const out = v.active ? SWING * Math.sin(phase * Math.PI * 2) : 0;
+    const [left, right] = [Math.max(0, -out), Math.max(0, out)];
     k.shadow(u, w, 0.62, 0.38, 0.24, z);
     k.box(u - 0.56, w - 0.3, z, 1.12, 0.6, 0.12, C.plankDark, { line: edge(k), stripe: false });
     const bar = (n: number) => stick(k, [[u - 0.5, n, z + 0.12], [u - 0.5, n, top], [u + 0.5, n, top], [u + 0.5, n, z + 0.12]], C.chrome, 0.05);
@@ -549,8 +551,8 @@ const k = kitOf(v);
 
 // A busy light clipped on the monitor's top, at its right corner: a white
 // puck, its dome lit red while at work, its red light swelling out round it
-// and ebbing slowly (two seconds a breath, never out); while not, the dome
-// is grey and throws no light.
+// and ebbing slowly (two seconds a breath, never out, a smooth curve
+// through BREATH); while not, the dome is grey and throws no light.
 const BUSY: P3 = [4.6, 0.75, MON.z1];
 const BREATH = [0.3, 0.45, 0.65, 0.85, 1, 0.85, 0.65, 0.45];
 const busyLight: DeskLoop = {
@@ -560,10 +562,9 @@ const busyLight: DeskLoop = {
   h: 0.6,
   secs: 2,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = BUSY;
-    const glow = v.active ? BREATH[i % BREATH.length] : 0;
+    const glow = v.active ? through(BREATH, phase) : 0;
     k.box(u - 0.23, w - 0.18, z, 0.46, 0.36, 0.07, C.steel, { line: edge(k), stripe: false });
     k.cyl(u, w, z + 0.07, 0.27, 0.13, '#e3e6ea', { line: edge(k) });
     if (glow > 0) {

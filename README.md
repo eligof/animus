@@ -75,7 +75,9 @@ Names, speech bubbles, the card and the
 chat are terminal text over the picture, so they stay crisp at any zoom.
 The picture goes out as a stack of sprites: each is sent once and the
 terminal keeps it, so a frame only moves what changed. It runs at 30 frames
-a second by default (`--fps`). The room is fitted to the window; selecting
+a second by default (`--fps`); what moves in place (an agent breathing, a
+local at work, steam off a cup) is drawn 15 times a second, each picture
+held for two frames. The room is fitted to the window; selecting
 an agent zooms in on it and follows it, `+` / `-` step the zoom and `z`
 hands it back. `l` turns the lamp light and glows off and on.
 

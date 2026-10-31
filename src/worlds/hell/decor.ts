@@ -15,9 +15,8 @@ type Spawn = (p: Particle) => void;
 
 // ── a pool of lava ───────────────────────────────────────────────────────────
 // Lava welling up in a ring of black rock, crusted plates drifting on it,
-// bubbles swelling and bursting, embers rising. The crust and bubbles move
-// three times a second (every other ambient step looks the same, so it
-// costs half as much to show).
+// bubbles swelling and bursting, embers rising. The crust and the bubbles
+// move a little every picture.
 const LAVA = { u: 6, v: 4.5, ru: 4.6, rv: 3.3 };
 
 // The pool's edge (a lumpy ellipse), n points.
@@ -36,6 +35,7 @@ const lavaPool: PropArt = {
   dep: 9,
   height: 2,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const { u, v: w, ru, rv } = LAVA;
     const k = still(v, 'lava', 3, (k) => {
@@ -52,7 +52,7 @@ const lavaPool: PropArt = {
       }
     });
     // the moving surface: drifting crust, bubbles
-    const t = Math.floor(v.t * 3) / 3;
+    const t = v.t;
     const pen = k.pen;
     const z = 0.54;
     for (let i = 0; i < 5; i++) {

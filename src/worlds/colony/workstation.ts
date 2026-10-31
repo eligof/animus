@@ -434,10 +434,9 @@ const WINDPUMP: DeskLoop = {
   h: 1.75,
   secs: 1,
   draw(v, phase) {
-    const i = Math.floor(phase * 6);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = PUMP_AT;
-    const t = v.active ? i / 6 : 0;
+    const t = v.active ? phase : 0;
     const wood = C.plank;
     // the tower: four legs, two braces
     const legs: Array<[number, number]> = [[-1, -1], [1, -1], [-1, 1], [1, 1]];

@@ -56,6 +56,7 @@ const blinker: PropArt = {
   dep: 4,
   height: 6,
   animated: true,
+  movesIdle: true,
   draw(v) {
     box(v, 6, 4, 6, v.active ? '#0000ff' : Math.floor(v.t * 2) % 2 ? '#ff8800' : '#aa00aa');
     const [cx, cy] = v.at(3, 6, 0);
@@ -289,6 +290,21 @@ test('what animates in place is drawn again per ambient step, and keeps its key 
   assert.equal(layer(at(2.01 + 2 * dt), 'prop:1')!.pic.key, p0, 'drawn again, the same');
   assert.notEqual(layer(at(2.51 + 2 * dt), 'prop:1')!.pic.key, p0, 'half a second on');
   assert.notEqual(layer(at(2.52 + 2 * dt, { active: [false, true] }), 'prop:1')!.pic.key, layer(at(2.52 + 2 * dt), 'prop:1')!.pic.key, 'worked');
+});
+
+test('an animated prop that holds still while nobody works it is drawn once, and per step once worked', () => {
+  const steady: PropArt = { ...blinker, movesIdle: false, draw: (v) => box(v, 6, 4, 6, !v.active ? '#aa00aa' : Math.floor(v.t * 2) % 2 ? '#0000ff' : '#00ffff') };
+  const room: Room = { ...ROOM, props: [place(still, 30, 30), place(steady, 14, 40)] };
+  const scene = new Scene();
+  const at = (t: number, worked = false) => scene.plate(frame({ t, room, active: [false, worked] }));
+  const p0 = layer(at(0.01), 'prop:1')!.pic.key;
+  const before = scene.stats.animated;
+  for (let k = 1; k <= 90; k++) at(0.01 + k / 30);
+  assert.equal(scene.stats.animated, before, 'drawn again while idle and still');
+  assert.equal(layer(at(3.1), 'prop:1')!.pic.key, p0, 'a new picture while idle');
+  const w0 = layer(at(4.01, true), 'prop:1')!.pic.key;
+  assert.notEqual(w0, p0, 'worked, the same picture');
+  assert.notEqual(layer(at(4.51, true), 'prop:1')!.pic.key, w0, 'worked, it does not move');
 });
 
 test('the overlay comes in pieces round what it paints, and its light is right over the base', () => {

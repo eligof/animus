@@ -344,10 +344,9 @@ const FAN: DeskLoop = {
   h: 1.35,
   secs: 1,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = FAN_AT;
-    const t = v.active ? i / 8 : 0;
+    const t = v.active ? phase : 0;
     const swing = Math.PI / 4 + 0.38 * Math.sin(t * Math.PI * 2);
     const spin = t * ((Math.PI * 2) / 3);
     const d: P3 = [Math.cos(swing), Math.sin(swing), 0];
@@ -405,8 +404,7 @@ const BEACON: DeskLoop = {
   h: 0.5,
   secs: 1,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = BEACON_AT;
     k.cyl(u, w, z, 0.22, 0.1, C.chrome, { line: hair(k) * 1.4 });
     const [x, y] = k.p(u, w, z + 0.1);
@@ -414,7 +412,7 @@ const k = kitOf(v);
     const H = 0.3 * k.s;
     const pen = k.pen;
     const lit = v.active;
-    const th = (i / 8) * Math.PI * 2;
+    const th = phase * Math.PI * 2;
     const toward = 0.5 + 0.5 * Math.cos(th); // 1: its bright side to the front
     if (lit) k.halo(u, w, z + 0.25, 0.45, C.valve, 0.25 + 0.4 * toward);
     pen.beginPath();

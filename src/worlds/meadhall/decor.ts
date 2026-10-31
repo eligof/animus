@@ -37,6 +37,7 @@ const hearth: PropArt = {
   dep: 9,
   height: 12,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const { u0, u1, v0, v1, rim, h, bed } = PIT;
     const cv = (v0 + v1) / 2;
@@ -496,6 +497,7 @@ const brazier: PropArt = {
   dep: 4,
   height: 7,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const { cu, cv, z0, z1, r0, r1 } = BOWL;
     const k = still(v, 'brazier', 7, (k) => {

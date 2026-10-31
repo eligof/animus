@@ -124,8 +124,8 @@ function stock(sk: Sketch, blade: boolean): void {
   sk.limb([...pt(1.5), ...pt(2.8)], 0.14, SM.white, { line: 0, sil: false });
 }
 
-// How far into his show the blows go (four, landing at frames 0, 3, 6
-// and 9 of its 16).
+// How far into his show the blows go (four, landing 3/16 of the loop
+// apart, the last at 9/16 and held there).
 const SHOW_BLOWS = 0.6;
 
 // The frame of local p's last blow landing, if this is one (sparks fly).
@@ -246,11 +246,11 @@ const horseshoe: NpcServe = {
 // One blow, k from 0 (the hammer's face on the bar) to 1 (drawn back
 // behind his head). The strike, from beside his ear down onto the bar, is
 // the way from k = 0.3 to 0 and falls between frames (no frame of a blow
-// has k under 0.3 but its landing), for his fist could not come down over
-// his short arm's arc without crossing his face; from 0.3 up the fist stays
-// by his ear and goes back behind his head, the elbow up, the hammer
-// cocked. The body leans into the blow and the far hand keeps the bar on
-// the anvil.
+// has k under 0.3 but its landing: see raised), for his fist could not
+// come down over his short arm's arc without crossing his face; from 0.3
+// up the fist stays by his ear and goes back behind his head, the elbow
+// up, the hammer cocked. The body leans into the blow and the far hand
+// keeps the bar on the anvil.
 function blow(k: number): Pick<Puppet, 'bob' | 'lean' | 'arms'> {
   const strike = ease(k, 0, 0.3);
   const back = ease(k, 0.3, 1);
@@ -265,8 +265,10 @@ function blow(k: number): Pick<Puppet, 'bob' | 'lean' | 'arms'> {
 }
 
 // How far up the hammer is through one blow, ph 0 to 1: landing at 0, up
-// fast, a moment at the top, and down.
-const raised = (ph: number) => (ph < 0.5 ? Math.sin((ph / 0.5) * (Math.PI / 2)) : Math.cos(((ph - 0.5) / 0.5) * (Math.PI / 2)) ** 1.4);
+// fast, a moment at the top, and down; never under 0.3 off the landing, so
+// the strike's last stretch falls between frames (a blow is 9 or 12 of
+// them).
+const raised = (ph: number) => (ph < 0.05 ? 0 : 0.3 + 0.7 * (ph < 0.5 ? Math.sin((ph / 0.5) * (Math.PI / 2)) : Math.cos(((ph - 0.5) / 0.5) * (Math.PI / 2)) ** 1.4));
 
 // At the anvil: two blows a loop, sparks off each, the head nodding with
 // them, eyes screwed up as each lands.
@@ -281,15 +283,16 @@ const smithWork: NpcLoop = {
 };
 
 // Forging a blade: four quick blows, harder and faster than at work, the
-// last landing at frame 9; then the blade lifted high over two frames,
-// glowing, held there with a laugh, and lowered over two more to the
-// anvil, where the next loop's first blow lands.
+// last landing 9/16 of the way round; then the blade lifted high over half
+// a second, glowing, held there with a laugh, and lowered over another
+// half second to the anvil, where the next loop's first blow lands.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
   crowd: 'watch',
   pose(u) {
     if (u < SHOW_BLOWS) {
-      const k = raised(((u * 16) / 3) % 1);
+      const n = (u * 16) / 3;
+      const k = n >= 3 ? 0 : raised(n % 1);
       return { ...rest(), ...blow(k), tilt: 0.16 - 0.12 * k, eyes: k < 0.1 ? 'shut' : 'open', mouth: k < 0.1 ? 'o' : 'closed' };
     }
     const up = ease(u, 0.57, 0.72) - ease(u, 0.8, 0.95);
@@ -526,8 +529,9 @@ const goldNugget: NpcServe = {
 };
 
 // How far the assayer has the loupe up to his eye at u round his work: up
-// over three frames, a long look, down over three (his near hand pinches
-// dust while it is down, holds the loupe while it is up).
+// over nearly a third of the loop, a long look, down over its last quarter
+// (his near hand pinches dust while it is down, holds the loupe while it
+// is up).
 const assayLook = (u: number): number => ease(u, 0.38, 0.68) - ease(u, 0.76, 1);
 
 // Weighing: dust pinched into the pan while the beam tips, the beam

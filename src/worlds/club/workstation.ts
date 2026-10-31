@@ -407,10 +407,9 @@ const mirrorBall: DeskLoop = {
   at: BALL,
   r: 0.5,
   h: 1.4,
-  secs: 8 / 6,
+  secs: 4 / 3,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = BALL;
     const on = v.active;
     const s = k.s;
@@ -425,10 +424,10 @@ const k = kitOf(v);
     pen.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     pen.fillStyle = on ? '#8d8aa6' : '#6e6a80';
     pen.fill();
-    // the facets: bands of latitude, columns of longitude turned an eighth
-    // of a column a frame (so the eighth frame is the first again). A
-    // facet's shade and glint go by where it is, not which it is: the
-    // lights it catches stay put while the facets slide under them.
+    // the facets: bands of latitude, columns of longitude turned one column
+    // round the loop (so its end is its start again). A facet's shade and
+    // glint go by where it is, not which it is: the lights it catches stay
+    // put while the facets slide under them.
     pen.save();
     pen.beginPath();
     pen.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
@@ -436,7 +435,7 @@ const k = kitOf(v);
     const BANDS = 6;
     const COLS = 12;
     const col = (Math.PI * 2) / COLS;
-    const turn = on ? (i / 8) * col : 0;
+    const turn = on ? phase * col : 0;
     const P = (lat: number, lon: number): [number, number] => [cx + rx * Math.cos(lat) * Math.sin(lon), cy - ry * Math.sin(lat)];
     const LIGHTS: ReadonlyArray<readonly [number, number, Color]> = [[1, -0.6, '#ffffff'], [2, 0.35, C.pink], [3, -0.2, '#ffffff'], [4, 0.75, C.cyan], [4, -0.85, '#ffffff']];
     for (let b = 0; b < BANDS; b++) {
@@ -483,7 +482,7 @@ const k = kitOf(v);
     pen.fillStyle = '#ffffff';
     pen.fill();
     for (const [ph, c] of [[0, C.pink], [0.5, C.cyan]] as const) {
-      const t = (i / 8 + ph) % 1;
+      const t = (phase + ph) % 1;
       const a = -Math.PI * 0.85 + t * Math.PI * 0.7;
       const [x, y] = [cx + Math.cos(a) * rx * 1.25, cy + Math.sin(a) * ry * 0.6 - ry * 0.2];
       const r = 0.1 * Math.sin(t * Math.PI) * s;

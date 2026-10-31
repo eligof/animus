@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import type { Color } from '../../art/types.ts';
 import { DESK } from '../../world/desks.ts';
 import type { Clutter, DeskLoop, PropView, WorkstationArt } from '../types.ts';
@@ -475,7 +476,8 @@ const SPOTS: readonly P3[] = [
 ];
 
 // A candle stub in a tin dish at the top's front right; its flame sways
-// while the desk is worked, out while it is not.
+// while the desk is worked, out while it is not. Its sway and height round
+// the loop: a smooth curve through these.
 const CANDLE: P3 = [6.35, 2.25, TOP];
 const SWAY = [0, 0.4, 0.7, 0.4, 0, -0.35];
 const TALL = [0.42, 0.45, 0.41, 0.44, 0.42, 0.4];
@@ -486,8 +488,7 @@ const candle: DeskLoop = {
   h: 1.4,
   secs: 1,
   draw(v, phase) {
-    const i = Math.floor(phase * 6);
-const k = kitOf(v);
+    const k = kitOf(v);
     const [u, w, z] = CANDLE;
     const s = k.s;
     k.cyl(u, w, z, 0.4, 0.08, C.ironLight, { line: k.thin });
@@ -501,9 +502,10 @@ const k = kitOf(v);
     k.line([[u, w, z + 0.56], [u + 0.02, w, z + 0.66]], INK, Math.max(0.7, 0.05 * s));
     if (!v.active) return;
     const [bx, by] = k.p(u, w, z + 0.62);
-    const tall = TALL[i] * s;
-    const tx = bx + SWAY[i] * 0.1 * s;
-    k.halo(u, w, z + 0.82, 0.7, '#ffc070', 0.36 + (TALL[i] - 0.42) * 2);
+    const h = through(TALL, phase);
+    const tall = h * s;
+    const tx = bx + through(SWAY, phase) * 0.1 * s;
+    k.halo(u, w, z + 0.82, 0.7, '#ffc070', 0.36 + (h - 0.42) * 2);
     const tongue = (f: number, c: Color) => {
       const pen = k.pen;
       const wd = 0.12 * s * f;

@@ -239,8 +239,8 @@ function cookFore(sk: Sketch, p: Puppet, k: 0 | 1): void {
 }
 
 // How far the cook has the ladle up at his lips, at u round his work:
-// lifted out of the pot over three frames, a taste and a nod, lowered back
-// into it over three.
+// lifted out of the pot over a quarter of the loop, a taste and a nod,
+// lowered back into it over the last fifth.
 const cookTaste = (u: number): number => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
 
 // At the stove: two rounds of the ladle in the pot, the near fist on the
@@ -493,7 +493,7 @@ const fisherParts: NpcParts = {
     }
     // the rod, short and stiff, pointing down at the hole (bent down hard
     // in the tug of war), the line from its tip to the float
-    const tug = show >= 0.12 ? bump(show, 0.1, 0.64) : 0;
+    const tug = bump(show, 0.1, 0.64);
     let tip: [number, number] = [0, 0];
     atHand(sk, p, 0, f, () => {
       const a = 1.05 + 0.35 * tug;
@@ -520,15 +520,16 @@ const fisherParts: NpcParts = {
     });
     // what hangs from the tip, drawn in the fisher's own frame: the line to
     // the float (bobbing as it jigs, under in the tug of war), or, as the
-    // fish comes out, the fish on its end
+    // fish comes out, the fish on its end, yanked on up and flapping
     const jig = p.act === 'work' ? Math.max(0, Math.sin(p.u * TAU * 2 - 0.5)) : 0;
     const bite = show >= 0 && show < 0.62 ? bump(show, 0.02, 0.14) : 0;
     const under = tug > 0 || bite > 0.5;
     const fly = show >= 0.5 && show < 0.62;
+    const up = ease(show, 0.5, 0.62);
     inFrame(sk, () => {
       const [bx, by] = BOB;
       const fy = by + 0.12 * jig + 0.3 * bite;
-      const end: [number, number] = fly ? [bx - 0.6, by - 4.2] : [bx, under ? by + 0.15 : fy - 0.25];
+      const end: [number, number] = fly ? [bx - 0.6 - 0.4 * up, by - 4.2 - 2.4 * up] : [bx, under ? by + 0.15 : fy - 0.25];
       {
         sk.draw((q, c) => {
           q.strokeStyle = withAlpha('#e6eef5', 0.95);
@@ -539,7 +540,7 @@ const fisherParts: NpcParts = {
           q.stroke();
         });
       }
-      if (fly) sk.at(mul(move(end[0], end[1]), turn(-0.5)), () => fishShape(sk, 4.2, 0.4));
+      if (fly) sk.at(mul(move(end[0], end[1]), turn(-0.5)), () => fishShape(sk, 4.2, 0.4 * Math.cos(show * TAU * 6)));
       else if (!under) {
         sk.blob(circ(bx, fy, 0.3), '#e8473a', { dark: '#b8322a', d: 0.08, line: 0.5 });
         sk.blob((q) => q.arc(bx, fy - 0.02, 0.3, Math.PI, 0), '#ffffff', { line: 0.5 });
@@ -576,7 +577,7 @@ const fisherWork: NpcLoop = {
 // The big catch: a bite (it sits up), a tug of war (leaning back on the
 // rod bent hard, rocking), the yank (the fish flies out), and the fish
 // shown off in both hands, lifted again and again, a grin, and lowered
-// over the last three frames, back to the rod as the loop comes round.
+// over the loop's last fifth, back to the rod as the loop comes round.
 const fisherShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
   crowd: 'watch',

@@ -1146,10 +1146,11 @@ export class Scene {
   }
 
   // An animated prop drawn whole on its own (world pixels), again per
-  // ambient step (each prop at its own phase) or when worked or left.
+  // ambient step (each prop at its own phase) while it moves, or when
+  // worked or left; idle and still (see PropArt.movesIdle), once.
   private animPic(it: Item, f: SceneFrame, l: Layer, s: number, t: Tint): Vol {
     const { p, i, active } = it.anim!;
-    const tick = Math.floor(f.t * AMBIENT_FPS + phaseOf(i));
+    const tick = active || p.art.movesIdle ? Math.floor(f.t * AMBIENT_FPS + phaseOf(i)) : 0;
     return this.vol(it.id, `${l.key}|${tick}|${active ? 1 : 0}`, () => this.animDrawn(p, i, f, l, s, f.t, active, t));
   }
 

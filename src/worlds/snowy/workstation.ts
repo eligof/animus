@@ -452,8 +452,8 @@ const SPOTS: readonly P3[] = [
 ];
 
 // A snow globe at the front of the right end, a little fir in it: shaken
-// while the desk is worked, its snow swirls round (eight steps a turn, 2
-// s); still, the snow lies at its foot.
+// while the desk is worked, its snow swirls round (a turn in 2 s); still,
+// the snow lies at its foot.
 const GLOBE: P3 = [5.45, 2.45, ZT];
 const FLAKES: ReadonlyArray<readonly [number, number, number, number]> = [
   [0.0, 0.2, 0.32, 1],
@@ -474,8 +474,7 @@ const snowGlobe: DeskLoop = {
   h: 1.05,
   secs: 2,
   draw(v, phase) {
-    const i = Math.floor(phase * 8);
-const k = smallKitOf(v);
+    const k = smallKitOf(v);
     const f = fineKit(k);
     const [u, w, z] = GLOBE;
     solid(k, lathe(k, u, w, z, [[0, 0.4], [0.22, 0.33]]), C.woodDark);
@@ -498,7 +497,7 @@ const k = smallKitOf(v);
     lump(f, u, w, z + 0.22, 0.4, v.active ? 0.1 : 0.17, C.snowHi);
     if (v.active) {
       for (const [a0, rho, zz, turn] of FLAKES) {
-        const a = a0 + (turn * i * Math.PI * 2) / 8;
+        const a = a0 + turn * phase * Math.PI * 2;
         dot(k, [u + Math.cos(a) * rho, w + Math.sin(a) * rho, z + 0.3 + zz + 0.05 * Math.sin(a * 2)], 0.05, '#ffffff');
       }
     }
@@ -515,7 +514,7 @@ const k = smallKitOf(v);
 };
 
 // A mug of cocoa at the front corner of the right end, steaming while the
-// desk is worked: three wisps rising and fading, each a step up a frame.
+// desk is worked: three wisps rising and fading, a third of the loop apart.
 const MUG: P3 = [6.4, 2.45, ZT];
 const cocoa: DeskLoop = {
   name: 'cocoa',
@@ -524,13 +523,12 @@ const cocoa: DeskLoop = {
   h: 1.65,
   secs: 1.2,
   draw(v, phase) {
-    const i = Math.floor(phase * 6);
-const k = smallKitOf(v);
+    const k = smallKitOf(v);
     const [u, w, z] = MUG;
     mug(k, u, w, z, C.wool, 0.32);
     if (!v.active) return;
     for (let j = 0; j < 3; j++) {
-      const t = (i / 6 + j / 3) % 1;
+      const t = (phase + j / 3) % 1;
       const zz = z + 0.72 + t * 0.75;
       const du = (j - 1) * 0.09 + Math.sin(t * Math.PI * 2 + j) * 0.04;
       const a = 0.8 * Math.sin(Math.PI * t);
