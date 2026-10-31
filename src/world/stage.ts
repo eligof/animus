@@ -252,6 +252,7 @@ export class Stage {
   private clock = 0;
   private now = 0;
   private seq = 0;
+  private halve = 0; // every other bit off a station only a local works (see emit)
   private placedLabels: Array<{ x: number; y: number; w: number }> = [];
   // Emotes over heads in the last frame.
   emotesShown = 0;
@@ -1158,6 +1159,10 @@ export class Stage {
     const cam = this.camera;
     if (!room || !cam) return;
     const active = this.activeProps();
+    // A station only a local works (no agent at it) gives off every other
+    // bit: it is worked all the time.
+    const actors = [...this.cast.values()];
+    const lone = new Set([...(this.life.locals?.worked ?? [])].filter((i) => !actors.some((a) => a.station === room.props[i].slot && a.state === 'work')));
     room.props.forEach((p, i) => {
       const art = p.art;
       if (!art.emit) return;
@@ -1174,6 +1179,7 @@ export class Stage {
         seed: p.seed,
       };
       art.emit(view, dt, (q) => {
+        if (lone.has(i) && this.halve++ % 2) return;
         const [x, y, z] = toWorld(p, q.x, q.y, q.z);
         const [vx, vy] = p.wall === 'right' ? [q.vx, q.vy] : [q.vy, q.vx];
         this.add({ ...q, x, y, z, vx, vy });

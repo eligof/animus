@@ -176,8 +176,8 @@ export type NpcPlace =
   | { mode: 'seated'; u: number; v: number; z: number; top?: number; edge?: number; look?: NpcLook }
   | { mode: 'standing'; u: number; v: number; look?: NpcLook };
 
-// What a local hands over (see the handOver act), drawn in its near hand's
-// frame (origin at the hand, the forearm running back up -y): a `drink`
+// What a local hands over (see the handOver act), drawn upright at its
+// near hand (origin at the hand, up -y, whatever the arm's angle): a `drink`
 // goes back with whoever it served as a mug of coffee while office life
 // is on; anything else (or a drink with office life off) as a heart.
 export type NpcServe = { name: string; drink: boolean; draw(sk: Sketch): void };

@@ -5,7 +5,7 @@ import { move, mul, turn, type Sketch } from '../figure/paint.ts';
 // the figures' units (see art/figure/rig.ts): origin between its feet on
 // the floor, x toward where it faces, y down. Its body bobs and leans about
 // its feet; its head turns about its neck; each arm swings at the shoulder
-// and bends at the elbow; the near hand holds out what it serves. Parts
+// and bends at the elbow; the near hand holds out what it serves, upright. Parts
 // are recorded back to front for the view, then painted by the sprites'
 // painter (see art/figure/paint.ts): from the front the near arm (0) goes
 // over everything, the far one (1) behind the body while it hangs, over it
@@ -31,7 +31,9 @@ export function buildNpc(sk: Sketch, n: Npc, p: Puppet, back: boolean): void {
       parts.upper(sk, p, k, back);
       sk.at(mul(move(0, b.upper), turn(-p.arms[k].el)), () => {
         parts.fore(sk, p, k, back);
-        if (k === 0 && held) sk.at(move(0, b.fore), () => held.draw(sk));
+        // what it serves stands upright in the hand, whatever the arm's
+        // angle: turned back by the lean, the shoulder and the elbow
+        if (k === 0 && held) sk.at(mul(move(0, b.fore), turn(p.arms[0].sh + p.arms[0].el - p.lean)), () => held.draw(sk));
       });
     });
   };

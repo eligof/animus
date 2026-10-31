@@ -232,6 +232,26 @@ export function inkOf(w: WorldDef): string {
   return w.ink ?? inkFrom(hexOf(w.palette.floor));
 }
 
+// A prop's picture `c` (drawn at `at`, s px a unit) split as the scene sorts
+// it: its body, inside the outline of its box (a little taller, and grown
+// by its ink and a little slack for overhangs), and what it painted on the
+// floor round that (drawn under everything).
+export function propParts(c: Canvas, at: (u: number, v: number, z: number) => [number, number], len: number, dep: number, height: number, s: number): { inside: Canvas; outside: Canvas } {
+  const box: Array<[number, number]> = [];
+  for (const u of [0, len]) for (const v of [0, dep]) for (const z of [0, height + BODY_UP]) box.push(at(u, v, z));
+  const mask = new Canvas(c.width, c.height);
+  mask.beginPath();
+  hullOf(box).forEach(([x, y], j) => (j ? mask.lineTo(x, y) : mask.moveTo(x, y)));
+  mask.closePath();
+  mask.fillStyle = '#ffffff';
+  mask.fill();
+  mask.strokeStyle = '#ffffff';
+  mask.lineJoin = 'round';
+  mask.lineWidth = 2 * (inkWidth(s) + 1 + BODY_SLACK * s);
+  mask.stroke();
+  return split(c, mask);
+}
+
 const scopeOf = (f: SceneFrame) => `${f.world.id}|${idOf(f.room)}|${f.lit}|${inkOf(f.world)}`;
 
 // Where a thing's ambient steps fall (0..1), so things drawn per step take
@@ -1283,21 +1303,7 @@ export class Scene {
     };
     this.drawProp(tmp, p, at, s, 0, active);
     this.stats.props++;
-    // The body: the outline of its box (a little taller, and grown by its
-    // ink and a little slack for overhangs).
-    const box: Array<[number, number]> = [];
-    for (const u of [0, p.len]) for (const v of [0, p.dep]) for (const z of [0, p.art.height + BODY_UP]) box.push(at(u, v, z));
-    const mask = new Canvas(cw, ch);
-    mask.beginPath();
-    hullOf(box).forEach(([x, y], j) => (j ? mask.lineTo(x, y) : mask.moveTo(x, y)));
-    mask.closePath();
-    mask.fillStyle = '#ffffff';
-    mask.fill();
-    mask.strokeStyle = '#ffffff';
-    mask.lineJoin = 'round';
-    mask.lineWidth = 2 * (inkWidth(s) + 1 + BODY_SLACK * s);
-    mask.stroke();
-    const parts = split(tmp, mask);
+    const parts = propParts(tmp, at, p.len, p.dep, p.art.height, s);
     const place = (c: Canvas): Sprite | null => {
       const crop = cropped(c);
       return crop ? { img: crop.img, x: bx + crop.x, y: by + crop.y } : null;

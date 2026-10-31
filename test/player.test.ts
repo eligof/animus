@@ -142,3 +142,11 @@ test("the club's locals, their stations always worked, cost at most 4 KiB a step
   assert.ok(on.npcs >= 1, 'no local in the plate');
   assert.ok(on.bytes <= off.bytes + 4096, `${on.bytes.toFixed(0)} bytes a step with the locals, ${off.bytes.toFixed(0)} without`);
 });
+
+test("hell's locals, its stations giving off the most sparks, cost at most 4 KiB a step over the same room without them", () => {
+  const hell = getTheme('hell')!;
+  const off = bytesAStep(hell, false);
+  const on = bytesAStep(hell, true);
+  assert.equal(on.npcs, 3, 'not three locals in the plate');
+  assert.ok(on.bytes <= off.bytes + 4096, `${on.bytes.toFixed(0)} bytes a step with the locals, ${off.bytes.toFixed(0)} without`);
+});

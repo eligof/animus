@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { Sketch } from '../src/art/figure/paint.ts';
 import { ACTS, loopOf, puppetOf, rest, type SharedAct } from '../src/art/npc/acts.ts';
 import { buildNpc } from '../src/art/npc/puppet.ts';
-import { getTheme } from '../src/themes/index.ts';
+import { getTheme, themeIds } from '../src/themes/index.ts';
 import { cutOf, facingOf } from '../src/world/npc-place.ts';
 import { toWorld } from '../src/world/room.ts';
-import type { Npc, Puppet } from '../src/worlds/types.ts';
+import type { Npc, Puppet, Swing } from '../src/worlds/types.ts';
 import { npcContract } from './npc-contract.ts';
 import { CUP, standIn, trio } from './npc-fakes.ts';
 
@@ -28,6 +28,9 @@ const ANY = standIn('any', 'run', { mode: 'behind', u: 5, v: 2, top: 6, edge: 4 
 // Every frame of shared act `a`, as a local shows it.
 const frames = (a: SharedAct) => Array.from({ length: ACTS[a].frames }, (_, i) => puppetOf(ANY, a, i));
 const most = (ps: Pose[], f: (p: Pose) => number) => Math.max(...ps.map(f));
+// Where an arm puts its hand from its shoulder, both its lengths 1: x
+// toward where the local faces, y down.
+const hand = (a: Swing): [number, number] => [Math.sin(a.sh) + Math.sin(a.sh + a.el), Math.cos(a.sh) + Math.cos(a.sh + a.el)];
 
 test('every shared act starts and ends at rest, its first and last frames shown, a few frames a second', () => {
   assert.deepEqual(SHARED.sort(), ['applaud', 'beckon', 'cheer', 'flinch', 'handOver', 'nod', 'talk', 'wave']);
@@ -42,15 +45,26 @@ test('every shared act starts and ends at rest, its first and last frames shown,
 });
 
 test('each shared act moves what it should', () => {
-  assert.ok(most(frames('wave'), (p) => p.arms[1].sh) > 2.2, 'a wave with the far hand down');
+  // A hand raised straight up covers a local's face (its head is wider
+  // than its shoulders): raised hands go up and out to the sides.
+  const waves = frames('wave').map((p) => hand(p.arms[1]));
+  assert.ok(waves.some(([x, y]) => y < -0.8 && x > 1), 'a wave without the far hand up beside the head');
+  assert.ok(Math.max(...waves.map(([x]) => x)) - Math.min(...waves.filter(([, y]) => y < -0.5).map(([x]) => x)) >= 0.3, 'a wave that does not wave');
   assert.ok(frames('wave').every((p) => p.arms[0].sh < 0.2), 'a wave with the near hand');
-  assert.ok(most(frames('cheer'), (p) => Math.min(p.arms[0].sh, p.arms[1].sh)) > 2.5 && most(frames('cheer'), (p) => p.bob) > 0.3, 'a cheer without both hands up and a hop');
+  const up = (p: Pose) => {
+    const [[x0, y0], [x1, y1]] = [hand(p.arms[0]), hand(p.arms[1])];
+    return y0 < -0.8 && y1 < -0.8 && x0 < -1 && x1 > 1;
+  };
+  assert.ok(frames('cheer').some(up) && most(frames('cheer'), (p) => p.bob) > 0.3, 'a cheer without both hands up and out to the sides, and a hop');
+  assert.ok(frames('cheer').every((p) => hand(p.arms[0])[0] < 0.5), 'a cheer with the near hand swung up in front of the face');
   assert.ok(frames('flinch').some((p) => p.lean < -0.1 && p.eyes === 'shut'), 'a flinch that does not shrink back, eyes shut');
   const claps = frames('applaud').map((p) => p.arms[0].el);
   assert.ok(most(frames('applaud'), (p) => Math.min(p.arms[0].sh, p.arms[1].sh)) > 0.8 && Math.max(...claps) - Math.min(...claps) >= 0.3, 'applause without hands out front, clapping');
+  assert.ok(frames('applaud').every((p) => p.arms.every((a) => hand(a)[1] > -0.2)), 'applause up at the face, not at the chest');
   assert.ok(new Set(frames('talk').map((p) => p.mouth)).size >= 3, 'a word with the mouth still');
   assert.ok(most(frames('nod'), (p) => p.tilt) > 0.12, 'a nod that does not nod');
-  assert.ok(frames('handOver').some((p) => p.hold && p.arms[0].sh > 1.2), 'a hand-over with nothing held out');
+  assert.ok(frames('handOver').some((p) => p.hold && p.arms[0].sh > 0.8 && Math.abs(p.arms[0].sh + p.arms[0].el - Math.PI / 2) < 0.3), 'a hand-over with nothing held out, the forearm level');
+  assert.ok(frames('handOver').every((p) => !p.hold || hand(p.arms[0])[1] > -0.2), 'a hand-over held up at the face, not at the chest');
   const curls = frames('beckon').map((p) => p.arms[1].el);
   assert.ok(most(frames('beckon'), (p) => p.arms[1].sh) > 1.2 && Math.max(...curls) - Math.min(...curls) >= 0.5, 'a beckon with no curl of the hand');
 });
@@ -95,6 +109,30 @@ test('a puppet records its parts back to front for the view: the near arm over e
   assert.equal(order(0.12, true), 'upper0 fore0 body head upper1 fore1');
   assert.equal(order(1.2, true), 'upper1 fore1 upper0 fore0 body head');
   assert.equal(order(0.12, false, true), 'upper1 fore1 body head upper0 fore0 cup', 'what it serves, in its near hand');
+});
+
+test("what a local serves stands upright in its hand all through the hand-over, whatever the arm's angle, in every world, from in front and behind", () => {
+  let held = 0;
+  for (const id of themeIds()) {
+    for (const n of getTheme(id)!.npcs ?? []) {
+      if (!n.serve) continue;
+      for (const back of [false, true]) {
+        for (let i = 0; i < ACTS.handOver.frames; i++) {
+          const p = puppetOf(n, 'handOver', i);
+          const at: Array<readonly number[]> = [];
+          buildNpc(new Sketch(), { ...n, serve: { ...n.serve, draw: (sk) => void at.push(sk.m) } }, p, back);
+          assert.equal(at.length, p.hold ? 1 : 0, `${id} ${n.name}: frame ${i}`);
+          for (const m of at) {
+            // where its up (0, -1) points, in radians from straight up
+            const off = Math.atan2(-m[2], m[3]);
+            assert.ok(Math.abs(off) < 0.02, `${id} ${n.name}${back ? ' from behind' : ''}: frame ${i} turned ${off.toFixed(2)} from upright`);
+            held++;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(held > 0, 'nothing held out');
 });
 
 test('a local is cut where its counter top crosses it, and faces into the room, along its station or away, on either wall', () => {

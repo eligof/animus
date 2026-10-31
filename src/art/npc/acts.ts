@@ -6,7 +6,10 @@ import type { Npc, NpcAct, NpcLoop, Puppet, Swing } from '../../worlds/types.ts'
 // with nothing drawn of its own, and starts and ends at rest (its first
 // and last frames: see puppetOf), so it slots in between frames of the
 // local's work. Arm 0 is the near one (it hands things over), arm 1 the
-// far one, on the side the local faces (it waves and beckons).
+// far one, on the side the local faces (it waves and beckons). A local's
+// head is wider than its shoulders and its arms are short: a hand raised
+// straight up covers its face, so raised hands go out to the sides, the
+// near one up behind, the far one up in front.
 
 export const TAU = Math.PI * 2;
 export type SharedAct = Exclude<NpcAct, 'work' | 'show' | 'celebrate'>;
@@ -39,23 +42,24 @@ export function bump(u: number, a: number, b: number): number {
 }
 
 export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
-  // the far hand up, waving
+  // the far hand up in front of it, waving beside its head
   wave: {
     secs: 1.2,
     frames: 8,
     pose(u) {
       const k = env(u, 0.2, 0.85);
-      return { ...rest(), tilt: -0.04 * k, arms: [HANG, swing(2.5 * k, k * (0.45 + 0.35 * Math.sin(u * TAU * 3)))], eyes: k > 0.5 ? 'happy' : 'open' };
+      return { ...rest(), tilt: -0.04 * k, arms: [HANG, swing(1.65 * k, k * (0.55 + 0.3 * Math.sin(u * TAU * 3)))], eyes: k > 0.5 ? 'happy' : 'open' };
     },
   },
-  // both hands up and a little hop
+  // both hands up and out to the sides, a pump of the fists and a little
+  // hop
   cheer: {
     secs: 1.2,
     frames: 8,
     pose(u) {
       const k = env(u, 0.2, 0.8);
-      const up = swing(2.75 * k, -0.1 * k);
-      return { ...rest(), bob: 0.6 * bump(u, 0.25, 0.75), tilt: -0.08 * k, arms: [up, up], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+      const pump = 0.2 * bump(u, 0.25, 0.75);
+      return { ...rest(), bob: 0.6 * bump(u, 0.25, 0.75), tilt: -0.08 * k, arms: [swing(-1.85 * k, -(1.05 + pump) * k), swing(1.65 * k, (0.65 + pump) * k)], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
     },
   },
   // a start: back, hands up by the face, eyes shut
@@ -67,14 +71,14 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
       return { ...rest(), bob: -0.3 * k, lean: -0.22 * k, tilt: 0.08 * k, arms: [swing(1.9 * k, 1.7 * k), swing(1.7 * k, 1.8 * k)], eyes: k > 0.3 ? 'shut' : 'open', mouth: k > 0.3 ? 'o' : 'smile' };
     },
   },
-  // hands out in front, clapping
+  // hands out in front at the chest, under the chin, clapping
   applaud: {
     secs: 1.6,
     frames: 10,
     pose(u) {
       const k = env(u, 0.15, 0.85);
       const clap = 0.5 + 0.5 * Math.sin(u * TAU * 4);
-      return { ...rest(), tilt: 0.04 * k, arms: [swing(1.15 * k, k * (1.0 + 0.45 * clap)), swing(1.05 * k, k * (1.0 + 0.45 * clap))], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 && clap > 0.5 ? 'open' : 'smile' };
+      return { ...rest(), tilt: 0.04 * k, arms: [swing(0.9 * k, k * (0.35 + 0.35 * clap)), swing(0.75 * k, k * (0.75 + 0.35 * clap))], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 && clap > 0.5 ? 'open' : 'smile' };
     },
   },
   // a word: the far hand turning it over, the mouth going
@@ -95,13 +99,14 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
       return { ...rest(), tilt: 0.2 * n, eyes: n > 0.5 ? 'happy' : 'open' };
     },
   },
-  // the near arm out with what it serves (see Npc.serve)
+  // the near hand out at the chest, the forearm level, with what it serves
+  // standing in it (see Npc.serve) under the chin
   handOver: {
     secs: 1.6,
     frames: 8,
     pose(u) {
       const k = env(u, 0.25, 0.75);
-      return { ...rest(), lean: 0.08 * k, tilt: 0.06 * k, arms: [swing(1.35 * k, 0.15 * k), HANG], eyes: k > 0.6 ? 'happy' : 'open', hold: k > 0.5 };
+      return { ...rest(), lean: 0.08 * k, tilt: 0.06 * k, arms: [swing(0.85 * k, 0.55 * k), HANG], eyes: k > 0.6 ? 'happy' : 'open', hold: k > 0.5 };
     },
   },
   // the far hand out, curling: come over
