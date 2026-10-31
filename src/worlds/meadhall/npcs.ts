@@ -1,12 +1,13 @@
 import { shade } from '../../art/iso.ts';
-import { ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { ease, env, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
-import { apply, type Mat, move, mul, turn } from '../../art/figure/paint.ts';
+import { atHand, inFrame, reach, seen, toBody, toward } from '../../art/npc/helpers.ts';
+import { move, mul, turn } from '../../art/figure/paint.ts';
 import type { Sketch } from '../../art/figure/paint.ts';
 import type { Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, Puppet, Swing } from '../types.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, Puppet } from '../types.ts';
 import { C } from './kit.ts';
-import type { P3 } from './kit.ts';
+import type {  } from './kit.ts';
 import { BAR, SKALD, THRONE } from './stations.ts';
 
 // The Longhall's locals (see Npc in ../types.ts), on the shared puppet, in
@@ -19,52 +20,6 @@ import { BAR, SKALD, THRONE } from './stations.ts';
 const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => (p: Pen) => p.ellipse(cx, cy, rx, ry, rot, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
 type Pt = [number, number];
-
-// The inverse of a sketch frame: draws in the local's own frame from
-// inside a part (the puppet's frames are similarities).
-function inv(m: Mat): Mat {
-  const det = m[0] * m[3] - m[1] * m[2];
-  return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det, (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det];
-}
-
-// Draws `fn` in the local's own frame (its feet at the origin, upright,
-// unleaned), from inside any part.
-const inFrame = (sk: Sketch, fn: () => void) => sk.at(inv(sk.m), fn);
-
-// A point of the station's frame (u, v, z) in the frame of a local at
-// (u0, v0), its frame lifted z0, facing +u (`along`): x along the screen
-// toward where it faces, y down. A step along u is a unit across the
-// screen and half a unit down; a step out (+v) a unit back and half down.
-function along(u0: number, v0: number, z0: number, p: P3): Pt {
-  const du = p[0] - u0;
-  const dv = p[1] - v0;
-  return [du - dv, (du + dv) / 2 - (p[2] - z0)];
-}
-
-// The swing that puts the hand of an arm `a` + `b` long, its shoulder at s,
-// on t (both in the body's frame), the elbow kept low (bent forward, or
-// back for a hand across the chest, which a three-quarter view shows so).
-function reach(s: Pt, t: Pt, a: number, b: number): Swing {
-  const dx = t[0] - s[0];
-  const dy = t[1] - s[1];
-  const d = Math.min(a + b - 1e-3, Math.max(Math.abs(a - b) + 1e-3, Math.hypot(dx, dy)));
-  const phi = Math.atan2(dx, dy);
-  const at = Math.acos(Math.max(-1, Math.min(1, (a * a + d * d - b * b) / (2 * a * d))));
-  const el = Math.PI - Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
-  return Math.cos(phi - at) >= Math.cos(phi + at) ? { sh: phi - at, el } : { sh: phi + at, el: -el };
-}
-
-// A point of the local's own frame in its body's frame (the body lifted
-// `bob` and leaning `lean`, see art/npc/puppet.ts).
-function toBody(p: Puppet, t: Pt): Pt {
-  return apply(turn(-p.lean), t[0], t[1] + p.bob);
-}
-
-// The turn that stands a drawing upright in the current part's frame:
-// inside sk.at(turn(upTurn(sk))), -y is straight up on screen.
-function upTurn(sk: Sketch): number {
-  return -Math.atan2(sk.m[1], sk.m[0]);
-}
 
 // ── the skald ────────────────────────────────────────────────────────────
 // On the back bench toward the end of the long table, behind it: a skald with
@@ -206,7 +161,7 @@ const skaldParts: NpcParts = {
     sk.limb([0, 0, 0, f - 0.4], 1.0, k ? S.gownD : S.gown, { dark: k ? null : S.gownD });
     sk.blob(circ(0, f - 0.05, 0.55), k ? S.skinD : S.skin, { dark: S.skinD, d: 0.18 });
     // the lyre raised high in her show, upright in her far hand
-    if (k === 1 && p.act === 'show') sk.at(mul(move(0, f), turn(upTurn(sk) + 0.25)), () => sk.at(move(0, 0.6), () => lyre(sk)));
+    if (k === 1 && p.act === 'show') atHand(sk, p, 1, f, () => sk.at(mul(turn(0.25), move(0, 0.6)), () => lyre(sk)));
   },
 };
 
@@ -220,9 +175,8 @@ const skaldWork: NpcLoop = {
     const down = ease(sweep, 0, 0.5) - ease(sweep, 0.5, 1);
     const sway = Math.sin(u * TAU);
     const p: Puppet = { ...rest(), u, lean: 0.03 * sway, tilt: 0.08 * sway + 0.04, eyes: u > 0.4 && u < 0.62 ? 'shut' : 'open', mouth: sweep < 0.5 ? 'o' : 'smile' };
-    const [s0, s1] = SKALD_BONES.shoulders as [Pt, Pt];
     const top: Pt = [LAP[0] + Math.sin(LYRE_LEAN) * 4.0, LAP[1] - Math.cos(LYRE_LEAN) * 4.0];
-    return { ...p, arms: [reach(s0, toBody(p, [STRUM[0] - 0.2 * down, STRUM[1] + 1.1 * down]), SKALD_BONES.upper, SKALD_BONES.fore), reach(s1, toBody(p, [top[0] + 0.35, top[1] + 0.6]), SKALD_BONES.upper, SKALD_BONES.fore)] };
+    return { ...p, arms: [reach(SKALD_BONES, 0, ...toBody(p, STRUM[0] - 0.2 * down, STRUM[1] + 1.1 * down), true), reach(SKALD_BONES, 1, ...toBody(p, top[0] + 0.35, top[1] + 0.6), true)] };
   },
 };
 
@@ -292,7 +246,7 @@ const F = {
 const SMITH_BONES: Bones = { neck: [0.2, -7.95], shoulders: [[-2.05, -7.35], [2.1, -7.4]], upper: 1.85, fore: 1.75 };
 const SMITH_AT = { u: 7.4, v: 12.5 };
 // The bar on the anvil, in the smith's frame, and the spot it is struck.
-const BAR_AT: [Pt, Pt] = [along(SMITH_AT.u, SMITH_AT.v, 0, BAR[0]), along(SMITH_AT.u, SMITH_AT.v, 0, BAR[1])];
+const BAR_AT: [Pt, Pt] = [seen(SMITH_AT, BAR[0]), seen(SMITH_AT, BAR[1])];
 const STRIKE: Pt = [BAR_AT[0][0] * 0.4 + BAR_AT[1][0] * 0.6, BAR_AT[0][1] * 0.4 + BAR_AT[1][1] * 0.6 - 0.2];
 // The hammer's haft, hand to head; its angle (radians in the local's
 // frame) on the bar and raised: stood up a little forward of upright, the
@@ -550,8 +504,7 @@ const smithWork: NpcLoop = {
     const w = lift(u);
     const s = (u * 2) % 1;
     const p: Puppet = { ...rest(), u, bob: -0.12 * (1 - w) * (s < 0.1 ? 1 : 0), lean: 0.08 - 0.12 * w, tilt: 0.14 - 0.08 * w, eyes: s < 0.1 ? 'shut' : 'open', mouth: s < 0.1 ? 'closed' : w > 0.8 ? 'o' : 'smile' };
-    const [s0, s1] = SMITH_BONES.shoulders as [Pt, Pt];
-    return { ...p, arms: [reach(s0, toBody(p, GRIP), SMITH_BONES.upper, SMITH_BONES.fore), reach(s1, toBody(p, swingAt(w).hand), SMITH_BONES.upper, SMITH_BONES.fore)] };
+    return { ...p, arms: [reach(SMITH_BONES, 0, ...toBody(p, ...GRIP), true), reach(SMITH_BONES, 1, ...toBody(p, ...swingAt(w).hand), true)] };
   },
 };
 
@@ -722,7 +675,7 @@ const chiefParts: NpcParts = {
     sk.limb([0, f - 0.95, 0, f - 0.55], 1.3, C.gold, { dark: '#b08a2a' });
     sk.blob(circ(0, f, 0.72), k ? K.skinD : K.skin, { dark: K.skinD, d: 0.2 });
     // the horn of mead in its far hand, upright
-    if (k === 1 && (p.act === 'work' || p.act === 'celebrate')) sk.at(mul(move(0, f), turn(upTurn(sk))), () => drinkingHorn(sk, true));
+    if (k === 1 && (p.act === 'work' || p.act === 'celebrate')) atHand(sk, p, 1, f, () => drinkingHorn(sk, true));
   },
 };
 
@@ -749,11 +702,10 @@ const chiefWork: NpcLoop = {
     const o = off(u);
     const stroke = u < 0.45 ? Math.sin((Math.PI * u) / 0.45) : 0;
     const p: Puppet = { ...rest(), u, lean: -0.02, tilt: 0.05 + 0.1 * q, eyes: q > 0.5 ? 'happy' : stroke > 0.9 ? 'blink' : 'open', mouth: q > 0.5 ? 'open' : 'smile' };
-    const [s0, s1] = CHIEF_BONES.shoulders as [Pt, Pt];
     const beard: Pt = [1.0 + 0.2 * stroke, -6.0 + 2.2 * Math.sin(stroke * Math.PI * 0.5)];
     const near: Pt = [beard[0] + (LAP_HAND[0] - beard[0]) * o, beard[1] + (LAP_HAND[1] - beard[1]) * o];
     const far: Pt = [KNEE[0] + (TOAST[0] - KNEE[0]) * q, KNEE[1] + (TOAST[1] - KNEE[1]) * q];
-    return { ...p, arms: [reach(s0, toBody(p, near), CHIEF_BONES.upper, CHIEF_BONES.fore), reach(s1, toBody(p, far), CHIEF_BONES.upper, CHIEF_BONES.fore)] };
+    return { ...p, arms: [reach(CHIEF_BONES, 0, ...toBody(p, ...near), true), reach(CHIEF_BONES, 1, ...toBody(p, ...far), true)] };
   },
 };
 
@@ -767,10 +719,10 @@ const chiefCelebrate: NpcLoop = {
     const k = env(u, 0.2, 0.8);
     const shake = Math.sin(u * TAU * 3);
     const p: Puppet = { ...rest(), lean: -0.05 * k, tilt: -0.12 * k, eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
-    const high = reach(CHIEF_BONES.shoulders[1] as Pt, toBody(p, HORN_HIGH), CHIEF_BONES.upper, CHIEF_BONES.fore);
+    const high = reach(CHIEF_BONES, 1, ...toBody(p, ...HORN_HIGH), true);
     return {
       ...p,
-      arms: [{ sh: 0.12 + (-1.85 + 0.15 * shake) * k, el: 0.2 - 1.05 * k }, { sh: 0.12 + (high.sh - 0.12) * k, el: 0.2 + (high.el - 0.2) * k }],
+      arms: [swing((-1.85 + 0.15 * shake) * k, -1.05 * k), toward(k, high)],
     };
   },
 };

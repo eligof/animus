@@ -1,7 +1,8 @@
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, own, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
-import { move, mul, turn, zoom, type Mat, type Sketch } from '../../art/figure/paint.ts';
+import { atHand, inFrame, seen } from '../../art/npc/helpers.ts';
+import { move, mul, turn, zoom, type Sketch } from '../../art/figure/paint.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcPlace, NpcServe, Puppet } from '../types.ts';
 import { C, withAlpha } from './kit.ts';
@@ -15,32 +16,6 @@ import { FISH_STOOL, FLOAT, RADIO_STOOL, STOVE } from './stations.ts';
 
 const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => (p: Pen) => p.ellipse(cx, cy, rx, ry, rot, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
-
-// In arm k's forearm frame: a frame at the hand turned back upright (as
-// the local stands, whatever its arm and lean do), for what it holds.
-const upright = (p: Puppet, k: 0 | 1, at: number) => mul(move(0, at), turn(p.arms[k].sh + p.arms[k].el - p.lean));
-
-// The inverse of a sketch frame: from inside a part, back to the local's
-// own frame (its feet), for what hangs from a hand to the world (a line).
-function invert(m: Mat): Mat {
-  const det = m[0] * m[3] - m[1] * m[2];
-  const a = m[3] / det;
-  const b = -m[1] / det;
-  const c = -m[2] / det;
-  const d = m[0] / det;
-  return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
-}
-
-// A point of a station (u, v, z in its frame) in the frame of a local
-// placed at `pl` looking along the station (its +x toward +u on either
-// wall, the sprite mirrored with the wall): the view's 2:1 projection, u
-// across one way and v the other, each a half down.
-function seen(pl: NpcPlace, u: number, v: number, z: number): [number, number] {
-  const du = u - pl.u;
-  const dv = v - pl.v;
-  const lift = pl.mode === 'seated' ? pl.z : 0;
-  return [du - dv, lift - z + (du + dv) / 2];
-}
 
 // A soft round glow (steam's sheen, a lamp's light), r units across.
 function glowDot(sk: Sketch, x: number, y: number, r: number, a: number, color: string): void {
@@ -247,7 +222,7 @@ function cookFore(sk: Sketch, p: Puppet, k: 0 | 1): void {
     const high = p.act === 'celebrate' ? env(p.u, 0.2, 0.8) : 0;
     const tip = work * (-0.15 - 0.95 * taste) + (1 - work) * (0.3 + (Math.PI - 0.5) * high);
     const grip = 1.0 + 0.9 * taste;
-    sk.at(upright(p, 1, f), () => {
+    atHand(sk, p, 1, f, () => {
       sk.at(turn(-tip), () => {
         sk.limb([0, -grip, 0, 3.6 - grip], 0.26, LADLE, { dark: LADLE_D });
         sk.blob((q) => {
@@ -306,7 +281,7 @@ const cookCelebrate: NpcLoop = {
       bob: 0.25 * laugh * k,
       lean: -0.06 * k,
       tilt: -0.12 * k,
-      arms: [{ sh: 0.12 - (1.8 + 0.15 * laugh) * k, el: 0.2 - 0.9 * k }, { sh: 0.12 + 1.75 * k, el: 0.2 + 0.6 * k }],
+      arms: [swing(-(1.8 + 0.15 * laugh) * k, -0.9 * k), swing(1.75 * k, 0.6 * k)],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'smile',
     };
@@ -367,7 +342,7 @@ const FISH_BELLY = '#ee8c5e';
 const FISH_BONES: Bones = { neck: [0.2, -5.7], shoulders: [[-1.7, -5.1], [1.95, -5.1]], upper: 1.6, fore: 1.5 };
 const FISH_PLACE: NpcPlace = { mode: 'seated', u: FISH_STOOL.u, v: FISH_STOOL.v, z: FISH_STOOL.top - 1, look: 'along' };
 // Where the float rides, in the fisher's frame.
-const BOB = seen(FISH_PLACE, FLOAT[0], FLOAT[1], FLOAT[2]);
+const BOB = seen(FISH_PLACE, FLOAT);
 
 // Buffalo checks over a shape just painted: dark bands both ways, clipped
 // to it.
@@ -508,11 +483,11 @@ const fisherParts: NpcParts = {
     sk.blob(ell(0, f, 0.62, 0.58), k ? MITT_D : MITT, { dark: MITT_D, d: 0.2 });
     const show = p.act === 'show' ? p.u : -1;
     const caught = show >= 0.62;
-    if (k !== 0) return;
+    if (k !== 0 || !own(p.act)) return;
     if (caught) {
       // the great fish shown off across the chest in both hands (the rod
       // dropped on the ice), its tail flapping
-      sk.at(upright(p, 0, f), () => {
+      atHand(sk, p, 0, f, () => {
         sk.at(mul(move(4.6, -0.1), turn(Math.PI / 2)), () => fishShape(sk, 6.2, 0.35 * Math.sin(show * TAU * 6)));
         sk.blob(ell(0, 0, 0.62, 0.58), MITT, { dark: MITT_D, d: 0.2 });
       });
@@ -522,7 +497,7 @@ const fisherParts: NpcParts = {
     // in the tug of war), the line from its tip to the float
     const tug = show >= 0.12 ? bump(show, 0.1, 0.64) : 0;
     let tip: [number, number] = [0, 0];
-    sk.at(upright(p, 0, f), () => {
+    atHand(sk, p, 0, f, () => {
       const a = 1.05 + 0.35 * tug;
       const L = 3.1;
       const ex = Math.sin(a) * L;
@@ -552,7 +527,7 @@ const fisherParts: NpcParts = {
     const bite = show >= 0 && show < 0.62 ? bump(show, 0.02, 0.14) : 0;
     const under = tug > 0 || bite > 0.5;
     const fly = show >= 0.5 && show < 0.62;
-    sk.at(invert(sk.m), () => {
+    inFrame(sk, () => {
       const [bx, by] = BOB;
       const fy = by + 0.12 * jig + 0.3 * bite;
       const end: [number, number] = fly ? [bx - 0.6, by - 4.2] : [bx, under ? by + 0.15 : fy - 0.25];

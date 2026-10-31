@@ -1,9 +1,10 @@
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, own, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, handOf, toBody } from '../../art/npc/helpers.ts';
 import type { Sketch } from '../../art/figure/paint.ts';
 import type { Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet } from '../types.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, NpcServe } from '../types.ts';
 import { C } from './kit.ts';
 import { ANVIL, BENCH, FIRE, LEFT_SEAT, POT } from './stations.ts';
 
@@ -15,32 +16,6 @@ import { ANVIL, BENCH, FIRE, LEFT_SEAT, POT } from './stations.ts';
 
 const ell = (cx: number, cy: number, rx: number, ry: number) => (p: Pen) => p.ellipse(cx, cy, rx, ry, 0, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
-
-// Where the hand of arm k is in the body's frame (which bobs and leans: see
-// toBody), for a held thing that must reach a point (the tongs to the
-// anvil, the spoon into the pot).
-function handAt(b: Bones, p: Puppet, k: 0 | 1): [number, number] {
-  const { sh, el } = p.arms[k];
-  const [sx, sy] = b.shoulders[k];
-  return [sx + b.upper * Math.sin(sh) + b.fore * Math.sin(sh + el), sy + b.upper * Math.cos(sh) + b.fore * Math.cos(sh + el)];
-}
-
-// A point of the local's own frame (feet on the floor, upright) in its
-// body's frame, which bobs and leans.
-function toBody(p: Puppet, x: number, y: number): [number, number] {
-  const c = Math.cos(-p.lean);
-  const s = Math.sin(-p.lean);
-  const yy = y + p.bob;
-  return [x * c - yy * s, x * s + yy * c];
-}
-
-// Draws `fn` in a frame at the hand of arm k (the fore part's frame) turned
-// so that its +y runs at angle `a` in the body's frame (0 straight down, +
-// toward where the local faces).
-function along(sk: Sketch, b: Bones, p: Puppet, k: 0 | 1, a: number, fn: () => void): void {
-  const r = a - (p.arms[k].sh + p.arms[k].el);
-  sk.at([Math.cos(-r), Math.sin(-r), -Math.sin(-r), Math.cos(-r), 0, b.fore], fn);
-}
 
 // Legs in trousers and shoes, the far one first: hips at y = -top.
 function legs(sk: Sketch, top: number, w: number, cloth: string, clothD: string, shoe: string, apart = 0.95): void {
@@ -199,8 +174,8 @@ const tailorParts: NpcParts = {
     // the rolled cuff
     sk.limb([0, 0.05, 0, 0.45], 1.2, k ? T_SHIRT_D : T_SHIRT, { dark: k ? null : T_SHIRT_D, line: 0.5 });
     sk.blob(circ(0, f, 0.6), k ? T_SKIN_D : T_SKIN, { dark: T_SKIN_D, d: 0.2 });
-    // the pincushion on the near wrist, pins in it
-    if (k === 0 && p.act !== 'handOver') {
+    // the pincushion on the near wrist, pins in it, in its own loops
+    if (k === 0 && own(p.act)) {
       sk.blob(ell(-0.55, f - 0.55, 0.5, 0.42), C.cloth, { dark: shade(C.cloth, -0.25), d: 0.15, line: 0.5 });
       sk.draw((q, c) => {
         if (c.px < 4) return;
@@ -427,21 +402,21 @@ const smithParts: NpcParts = {
       const { sh, el } = p.arms[1];
       const up = Math.max(0, Math.min(1, (sh - STRIKE.sh) / (RAISE.sh - STRIKE.sh)));
       const a = p.act === 'celebrate' ? sh + el + 0.35 : Math.PI / 2 + (RAISE.a - Math.PI / 2) * up;
-      along(sk, S_BONES, p, 1, a, () => {
+      atHand(sk, p, 1, f, () => {
         sk.limb([0, -0.35, 0, 1.75], 0.36, C.plankLight, { dark: C.plank });
         sk.blob((q) => q.roundRect(-0.9, 1.35, 1.5, 0.8, 0.14), C.iron, { dark: shade(C.iron, -0.3), d: 0.2 });
         sk.blob((q) => q.roundRect(-0.95, 1.4, 0.3, 0.7, 0.08), '#8a8a94', { line: 0.4, sil: false });
-      });
+      }, a);
     }
     if (k === 0 && (p.act === 'work' || p.act === 'show')) {
       // the tongs, reaching from the fist to the work on the anvil (or up
       // for the show's horseshoe)
-      const [hx, hy] = handAt(S_BONES, p, 0);
+      const [hx, hy] = handOf(S_BONES, p, 0);
       const high = p.act === 'show' ? showHigh(p.u) : 0;
       const [tx, ty] = toBody(p, ANVIL_DX - 0.9 + (SHOW_SHOE[0] - ANVIL_DX + 0.9) * high, -ANVIL_DY + (SHOW_SHOE[1] + ANVIL_DY) * high);
       const a = Math.atan2(tx - hx, ty - hy);
       const L = Math.min(4.6, Math.max(2.0, Math.hypot(tx - hx, ty - hy) - 0.5));
-      along(sk, S_BONES, p, 0, a, () => {
+      atHand(sk, p, 0, f, () => {
         sk.limb([0.12, -0.2, 0.15, L - 0.15], 0.2, C.iron);
         sk.limb([-0.12, -0.2, -0.15, L - 0.15], 0.2, shade(C.iron, 0.15));
         if (p.act === 'show' && p.u >= FLURRY - 0.2) {
@@ -467,7 +442,7 @@ const smithParts: NpcParts = {
           sk.limb([0, L - 0.3, 0, L + 1.0], 0.42, HOT, { dark: '#e86a1a' });
           sk.blob(circ(0, L + 0.85, 0.28), HOTTER, { line: 0, sil: false });
         }
-      });
+      }, a);
     }
     sk.blob(circ(0, f, 0.72), k ? S_SKIN_D : S_SKIN, { dark: S_SKIN_D, d: 0.2 });
   },
@@ -538,7 +513,7 @@ const smithCelebrate: NpcLoop = {
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 2));
-    return { ...rest(), bob: 0.25 * pump * k, tilt: -0.12 * k, arms: [{ sh: 0.12 + 0.4 * k, el: 0.2 + 0.9 * k }, { sh: 0.12 + (1.55 + 0.25 * pump) * k, el: 0.2 + (0.75 - 0.15 * pump) * k }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.25 * pump * k, tilt: -0.12 * k, arms: [swing(0.4 * k, 0.9 * k), swing((1.55 + 0.25 * pump) * k, (0.75 - 0.15 * pump) * k)], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 
@@ -699,15 +674,15 @@ const cookParts: NpcParts = {
     sk.limb([0, 0.0, 0, 0.4], 1.3, k ? K_SHIRT_D : K_SHIRT, { dark: k ? null : K_SHIRT_D, line: 0.5 });
     if (k === 1 && p.act === 'work') {
       // the long spoon: into the pot stirring, or up for a taste
-      const [hx, hy] = handAt(K_BONES, p, 1);
+      const [hx, hy] = handOf(K_BONES, p, 1);
       const [tx, ty] = toBody(p, POT_DX - 0.2, -POT_DY + 0.6);
       const taste = cookTaste(p.u);
       const a = Math.atan2(tx - hx, ty - hy) * (1 - taste) + Math.PI * 0.82 * taste;
-      along(sk, K_BONES, p, 1, a, () => {
+      atHand(sk, p, 1, f, () => {
         sk.limb([0, -0.4, 0, 2.6], 0.3, C.plankLight, { dark: C.plank });
         sk.blob(ell(0, 2.85, 0.42, 0.62), C.plankLight, { dark: C.plank, d: 0.15 });
         if (taste > 0.5) sk.blob(ell(0, 2.75, 0.3, 0.42), '#b0683a', { line: 0, sil: false });
-      });
+      }, a);
     }
     sk.blob(circ(0, f, 0.65), k ? K_SKIN_D : K_SKIN, { dark: K_SKIN_D, d: 0.2 });
   },

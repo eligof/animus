@@ -1,7 +1,8 @@
 import { shade } from '../../art/iso.ts';
 import { move, turn, type Sketch } from '../../art/figure/paint.ts';
-import { bump, ease, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, HANG, own, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, level, reach, seen, toBody } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet, Swing } from '../types.ts';
 import { C } from './kit.ts';
@@ -18,37 +19,8 @@ import { BOOTH, SCOPE, TOP_GAUGE, VALVE } from './stations.ts';
 const ell = (cx: number, cy: number, rx: number, ry: number) => (p: Pen) => p.ellipse(cx, cy, rx, ry, 0, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
 
-// Draws fn the right way up on screen, however the arm holding it is
-// turned (a pot kept level in a hand).
-function level(sk: Sketch, fn: () => void): void {
-  const m = sk.m;
-  sk.at(turn(-Math.atan2(m[1], m[0])), fn);
-}
-
-// What a hand holds, level, at the end of a forearm `f` long.
-const held = (sk: Sketch, f: number, fn: () => void) => sk.at(move(0, f), () => level(sk, fn));
-
-// The swing that puts arm k's hand at (x, y) in a local's frame (its feet
-// at the origin, x toward where it faces, y down), its body leaning `lean`
-// and lifted `bob` as the puppet has it; as near as the arm reaches. The
-// elbow bends forward, under the line to the hand.
-function reach(b: Bones, k: 0 | 1, x: number, y: number, lean = 0, bob = 0): Swing {
-  const c = Math.cos(lean);
-  const s = Math.sin(lean);
-  const wy = y + bob;
-  const [sx, sy] = b.shoulders[k];
-  const dx = x * c + wy * s - sx;
-  const dy = -x * s + wy * c - sy;
-  const a = b.upper;
-  const f = b.fore;
-  const d = Math.max(Math.abs(a - f) + 1e-3, Math.min(Math.hypot(dx, dy), a + f - 1e-3));
-  const cos = (q: number) => Math.acos(Math.max(-1, Math.min(1, q)));
-  return { sh: Math.atan2(dx, dy) - cos((a * a + d * d - f * f) / (2 * a * d)), el: Math.PI - cos((a * a + f * f - d * d) / (2 * a * f)) };
-}
-
 // Swing a to b by k.
 const mixSwing = (a: Swing, b: Swing, k: number): Swing => ({ sh: a.sh + (b.sh - a.sh) * k, el: a.el + (b.el - a.el) * k });
-const HANG: Swing = rest().arms[0];
 
 // Strokes in the second pass: round-capped, `w` units wide.
 function strokes(sk: Sketch, color: string, w: number, fn: (q: Pen) => void): void {
@@ -203,10 +175,10 @@ const overseerParts: NpcParts = {
     sk.limb([0, 0, 0, f - 0.45], 1.15, k ? BLAZER_D : BLAZER, { dark: k ? null : BLAZER_D });
     sk.blob((q) => q.roundRect(-0.55, f - 0.75, 1.1, 0.4, 0.15), C.cream, { line: 0.5 });
     sk.blob(circ(0, f, 0.6), k ? O_SKIN_D : O_SKIN, { dark: O_SKIN_D, d: 0.2 });
-    if (k !== 0) return;
+    if (k !== 0 || !own(p.act)) return;
     // the microphone: a chrome capsule on a black grip, turned toward its
     // mouth once lifted, a coiled cord hanging from it
-    held(sk, f, () => {
+    atHand(sk, p, 0, f, () => {
       strokes(sk, '#2a2a26', 0.13, (q) => {
         q.moveTo(0, 0.3);
         for (let i = 1; i <= 6; i++) q.quadraticCurveTo(i % 2 ? 0.45 : -0.45, 0.3 + (i - 0.5) * 0.4, 0, 0.3 + i * 0.4);
@@ -282,12 +254,12 @@ const MECH_BONES: Bones = { neck: [0.1, -7.55], shoulders: [[-2.05, -7.0], [2.15
 // valve wheel at its front corner, the wheel and the gauge over it showing
 // beside it, not behind it.
 const MECH_AT = { u: 8, v: 13 };
-// Where a point of the purifier shows in the mechanic's own frame (x the
-// way it faces on screen, y down): its wheel, a little inside the rim
-// where the hand grips, and the gauge it knocks on.
-const seen = (u: number, v: number, z: number) => ({ x: u - v - (MECH_AT.u - MECH_AT.v), y: (u + v - MECH_AT.u - MECH_AT.v) / 2 - z });
-const WHEEL = { ...seen(VALVE[0], VALVE[1], VALVE[2]), r: 0.85 };
-const GAUGE = seen(TOP_GAUGE[0], TOP_GAUGE[1], TOP_GAUGE[2]);
+// Where points of the purifier show in the mechanic's own frame (see seen
+// in art/npc/helpers.ts): its wheel, a little inside the rim where the hand
+// grips, and the gauge it knocks on.
+const WHEEL = seen(MECH_AT, VALVE);
+const WHEEL_R = 0.85;
+const GAUGE = seen(MECH_AT, TOP_GAUGE);
 
 // How far into its work the mechanic cranks the wheel (the rest it knocks
 // on the gauge).
@@ -388,7 +360,7 @@ const mechParts: NpcParts = {
     sk.blob(ell(0.15, 0.95, 0.3, 0.2), GREASE, { line: 0, sil: false });
     sk.blob(circ(0, f, 0.68), k ? M_SKIN_D : M_SKIN, { dark: M_SKIN_D, d: 0.2 });
     // the wrench hanging in the near fist (stood up in it as it cheers)
-    if (k === 0) held(sk, f, () => sk.at(turn(p.act === 'celebrate' && p.arms[0].sh < -0.6 ? -Math.PI / 2 - 0.35 : Math.PI / 2 - 0.1 * p.lean), () => wrench(sk)));
+    if (k === 0 && own(p.act)) atHand(sk, p, 0, f, () => sk.at(turn(p.act === 'celebrate' && p.arms[0].sh < -0.6 ? -Math.PI / 2 - 0.35 : Math.PI / 2 - 0.1 * p.lean), () => wrench(sk)));
   },
 };
 
@@ -424,8 +396,8 @@ const mechWork: NpcLoop = {
     const tap = bump(u, 0.62, 0.71) + bump(u, 0.79, 0.88);
     const lean = 0.05 + 0.04 * Math.sin(TAU * turnOf) * c + 0.03 * t;
     const bob = -0.12 * Math.abs(Math.sin(TAU * turnOf)) * c;
-    const crank = reach(MECH_BONES, 1, WHEEL.x + WHEEL.r * Math.cos(th), WHEEL.y + WHEEL.r * (0.5 * Math.cos(th) - Math.sin(th)), lean, bob);
-    const knock = reach(MECH_BONES, 1, GAUGE.x - 0.75 - 0.5 * (1 - tap), GAUGE.y + 0.2, lean, bob);
+    const crank = reach(MECH_BONES, 1, ...toBody({ lean, bob }, WHEEL[0] + WHEEL_R * Math.cos(th), WHEEL[1] + WHEEL_R * (0.5 * Math.cos(th) - Math.sin(th))));
+    const knock = reach(MECH_BONES, 1, ...toBody({ lean, bob }, GAUGE[0] - 0.75 - 0.5 * (1 - tap), GAUGE[1] + 0.2));
     return {
       ...rest(),
       lean,
@@ -452,7 +424,7 @@ const mechCelebrate: NpcLoop = {
       ...rest(),
       tilt: 0.06 * puff - 0.08 * up,
       bob: -0.15 * puff + 0.35 * bump(u, 0.4, 0.75),
-      arms: [{ sh: 0.12 - 1.9 * up, el: 0.2 - (1.0 + pump) * up }, { sh: 0.12 + 1.65 * up, el: 0.2 + (0.65 + pump) * up }],
+      arms: [swing(-1.9 * up, -(1.0 + pump) * up), swing(1.65 * up, (0.65 + pump) * up)],
       eyes: puff > 0.5 ? 'shut' : up > 0.3 ? 'happy' : 'open',
       mouth: puff > 0.5 ? 'o' : up > 0.3 ? 'open' : 'smile',
     };
@@ -610,10 +582,10 @@ const waitressParts: NpcParts = {
     const f = WAITRESS_BONES.fore;
     sk.limb([0, 0, 0, f - 0.2], 0.9, k ? W_SKIN_D : W_SKIN, { dark: k ? null : W_SKIN_D });
     sk.blob(circ(0, f, 0.55), k ? W_SKIN_D : W_SKIN, { dark: W_SKIN_D, d: 0.15 });
-    if (k === 0 && p.act !== 'handOver') {
-      // the coffee pot (put down to hand over a cup), tipped to pour at work
+    if (k === 0 && own(p.act)) {
+      // the coffee pot, tipped to pour at work
       const tip = p.act === 'work' ? POUR_TIP * tilting(p.u) : 0;
-      held(sk, f, () => sk.at(turn(tip), () => pot(sk, p.act === 'work' && tip > 0.6)));
+      atHand(sk, p, 0, f, () => sk.at(turn(tip), () => pot(sk, p.act === 'work' && tip > 0.6)));
     }
     if (k === 1 && p.act === 'work' && musing(p.u) > 0.4) {
       // the pencil, tapped to her chin
@@ -679,7 +651,7 @@ const waitressWork: NpcLoop = {
       ...rest(),
       lean,
       tilt: 0.1 * po - 0.06 * m,
-      arms: [mixSwing(hold, reach(WAITRESS_BONES, 0, at.x, at.y, lean), po), { sh: 0.12 + m * 0.75, el: 0.2 + m * (1.95 + 0.25 * tap) }],
+      arms: [mixSwing(hold, reach(WAITRESS_BONES, 0, ...toBody({ lean, bob: 0 }, at.x, at.y)), po), swing(m * 0.75, m * (1.95 + 0.25 * tap))],
       eyes: m > 0.5 && u > 0.7 && u < 0.8 ? 'blink' : 'open',
       mouth: m > 0.5 ? 'closed' : 'smile',
     };
@@ -713,17 +685,15 @@ const coffee: NpcServe = {
   name: 'coffee',
   drink: true,
   draw(sk) {
-    level(sk, () => {
-      sk.limb([0.85, -0.95, 1.4, -0.75, 1.4, -0.15, 0.85, 0.05], 0.3, C.cream);
-      sk.blob((q) => q.roundRect(-0.9, -1.35, 1.8, 1.85, 0.35), C.cream, { dark: shade(C.cream, -0.15), d: 0.3 });
-      sk.blob((q) => q.roundRect(-0.9, -0.7, 1.8, 0.45, 0), C.teal, { line: 0.5, sil: false });
-      sk.blob(ell(0, -1.32, 0.75, 0.2), COFFEE, { line: 0.5, sil: false });
-      strokes(sk, '#f4f4ee', 0.16, (q) => {
-        q.moveTo(-0.25, -1.65);
-        q.quadraticCurveTo(-0.6, -2.0, -0.2, -2.35);
-        q.moveTo(0.35, -1.6);
-        q.quadraticCurveTo(0.05, -1.95, 0.4, -2.2);
-      });
+    sk.limb([0.85, -0.95, 1.4, -0.75, 1.4, -0.15, 0.85, 0.05], 0.3, C.cream);
+    sk.blob((q) => q.roundRect(-0.9, -1.35, 1.8, 1.85, 0.35), C.cream, { dark: shade(C.cream, -0.15), d: 0.3 });
+    sk.blob((q) => q.roundRect(-0.9, -0.7, 1.8, 0.45, 0), C.teal, { line: 0.5, sil: false });
+    sk.blob(ell(0, -1.32, 0.75, 0.2), COFFEE, { line: 0.5, sil: false });
+    strokes(sk, '#f4f4ee', 0.16, (q) => {
+      q.moveTo(-0.25, -1.65);
+      q.quadraticCurveTo(-0.6, -2.0, -0.2, -2.35);
+      q.moveTo(0.35, -1.6);
+      q.quadraticCurveTo(0.05, -1.95, 0.4, -2.2);
     });
   },
 };

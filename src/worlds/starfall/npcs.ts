@@ -1,7 +1,8 @@
 import { shade } from '../../art/iso.ts';
 import { move, turn, type Sketch } from '../../art/figure/paint.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, HANG, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet } from '../types.ts';
 import { C } from './kit.ts';
@@ -17,16 +18,6 @@ import { CHAIR, CHUTE } from './stations.ts';
 
 const ell = (cx: number, cy: number, rx: number, ry: number) => (p: Pen) => p.ellipse(cx, cy, rx, ry, 0, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
-
-// Draws fn the right way up on screen, however the arm holding it is
-// turned (a cup kept level in a hand).
-function level(sk: Sketch, fn: () => void): void {
-  const m = sk.m;
-  sk.at(turn(-Math.atan2(m[1], m[0])), fn);
-}
-
-// What a hand holds, level, at the end of a forearm `f` long.
-const held = (sk: Sketch, f: number, fn: () => void) => sk.at(move(0, f), () => level(sk, fn));
 
 // A torso from the shoulders (y0) to the hips (y1), x0 to x1 across.
 function torso(x0: number, x1: number, y0: number, y1: number, belly = 0): (p: Pen) => void {
@@ -207,7 +198,7 @@ const techParts: NpcParts = {
     if (p.act !== 'work') return;
     // the scoop in the near hand while it samples, nuggets in it once dipped
     if (k === 0 && scooping(p.u) > 0.3) {
-      held(sk, f, () => {
+      atHand(sk, p, k, f, () => {
         sk.limb([0, 0, 0.9, 0.5], 0.32, '#8c939b');
         sk.blob((q) => {
           q.moveTo(0.7, 0.3);
@@ -221,7 +212,7 @@ const techParts: NpcParts = {
     }
     // the slate in the far hand while it reads
     if (k === 1 && reading(p.u) > 0.4) {
-      held(sk, f, () => {
+      atHand(sk, p, k, f, () => {
         sk.blob((q) => q.roundRect(-0.4, -2.0, 2.6, 1.9, 0.3), C.dark, { dark: '#1e2133', d: 0.15 });
         sk.blob((q) => q.roundRect(-0.05, -1.7, 1.9, 1.3, 0.15), C.screen, { line: 0.5 });
         strokes(sk, '#2f6a9a', 0.14, (q) => {
@@ -251,7 +242,7 @@ const techWork: NpcLoop = {
       lean: s * (0.1 + 0.1 * dip) - 0.03 * r,
       bob: -0.25 * dip,
       tilt: s * (0.12 + 0.1 * dip) + 0.12 * r + 0.08 * bump(u, 0.82, 0.95),
-      arms: [{ sh: 0.12 + s * (0.8 + 0.08 * dip) + r * 1.05 + 0.15 * tap, el: 0.2 + s * (0.45 - 0.45 * dip + 0.12 * sift) + r * (1.15 - 0.2 * tap) }, { sh: 0.12 + r * 1.2, el: 0.2 + r * 1.25 }],
+      arms: [{ sh: HANG.sh + s * (0.8 + 0.08 * dip) + r * 1.05 + 0.15 * tap, el: HANG.el + s * (0.45 - 0.45 * dip + 0.12 * sift) + r * (1.15 - 0.2 * tap) }, swing(r * 1.2, r * 1.25)],
       eyes: u > 0.84 && u < 0.92 ? 'happy' : u > 0.34 && u < 0.4 ? 'blink' : 'open',
       mouth: r > 0.5 ? 'closed' : 'smile',
     };
@@ -263,19 +254,17 @@ const crystal: NpcServe = {
   name: 'crystal',
   drink: false,
   draw(sk) {
-    level(sk, () => {
-      sk.blob((q) => q.roundRect(-0.85, -0.25, 1.7, 0.55, 0.2), '#8c939b', { dark: '#6e757d', d: 0.1 });
-      for (const [x, h, w, lean] of [[-0.45, 1.5, 0.42, -0.25], [0.45, 1.2, 0.4, 0.3], [0, 2.1, 0.5, 0.05]] as const) {
-        sk.blob((q) => {
-          q.moveTo(x - w, -0.2);
-          q.lineTo(x - w * 0.8 + lean, -0.2 - h * 0.75);
-          q.lineTo(x + lean, -0.2 - h);
-          q.lineTo(x + w * 0.8 + lean, -0.2 - h * 0.75);
-          q.lineTo(x + w, -0.2);
-          q.closePath();
-        }, C.cyan, { dark: shade(C.cyan, -0.25), d: 0.2 });
-      }
-    });
+    sk.blob((q) => q.roundRect(-0.85, -0.25, 1.7, 0.55, 0.2), '#8c939b', { dark: '#6e757d', d: 0.1 });
+    for (const [x, h, w, lean] of [[-0.45, 1.5, 0.42, -0.25], [0.45, 1.2, 0.4, 0.3], [0, 2.1, 0.5, 0.05]] as const) {
+      sk.blob((q) => {
+        q.moveTo(x - w, -0.2);
+        q.lineTo(x - w * 0.8 + lean, -0.2 - h * 0.75);
+        q.lineTo(x + lean, -0.2 - h);
+        q.lineTo(x + w * 0.8 + lean, -0.2 - h * 0.75);
+        q.lineTo(x + w, -0.2);
+        q.closePath();
+      }, C.cyan, { dark: shade(C.cyan, -0.25), d: 0.2 });
+    }
   },
 };
 
@@ -482,7 +471,7 @@ const pilotCelebrate: NpcLoop = {
       ...rest(),
       bob: 0.2 * pump * k,
       tilt: -0.12 * k,
-      arms: [{ sh: 0.12 + 0.6 * k, el: 0.2 + 0.4 * k }, { sh: 0.12 + 1.9 * k, el: 0.2 + (0.75 + 0.3 * pump) * k }],
+      arms: [swing(0.6 * k, 0.4 * k), swing(1.9 * k, (0.75 + 0.3 * pump) * k)],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'smile',
     };
@@ -635,7 +624,7 @@ const cookParts: NpcParts = {
     if (p.act === 'work') {
       // the bowl in the far hand, the whisk (a spoon to taste) in the near
       if (k === 1) {
-        held(sk, f, () => {
+        atHand(sk, p, k, f, () => {
           sk.blob((q) => {
             q.moveTo(-0.6, -0.7);
             q.lineTo(2.6, -0.7);
@@ -657,7 +646,7 @@ const cookParts: NpcParts = {
     }
     if (p.act === 'show' && k === 0) {
       // the pan, level, and the pancake flying up out of it, turning
-      held(sk, f, () => {
+      atHand(sk, p, k, f, () => {
         const tip = 0.35 * bump(p.u, 0.08, 0.2) - 0.15 * bump(p.u, 0.72, 0.86);
         sk.at(turn(-tip), () => {
           sk.limb([0, 0, 1.0, -0.15], 0.38, PAN);
@@ -702,7 +691,7 @@ const cookWork: NpcLoop = {
       tilt: 0.12 * stir - 0.08 * taste,
       lean: 0.03 * stir,
       arms: [
-        { sh: 0.12 + stir * (0.95 + 0.12 * Math.sin(ph)) + taste * 1.05, el: 0.2 + stir * (1.05 + 0.2 * Math.cos(ph)) + taste * 1.9 },
+        { sh: HANG.sh + stir * (0.95 + 0.12 * Math.sin(ph)) + taste * 1.05, el: HANG.el + stir * (1.05 + 0.2 * Math.cos(ph)) + taste * 1.9 },
         { sh: 0.95, el: 1.05 },
       ],
       eyes: taste > 0.6 ? 'happy' : 'open',
@@ -728,7 +717,7 @@ const cookShow: NpcLoop & { crowd: 'watch' } = {
       bob: -0.2 * bump(u, 0.02, 0.12) + 0.2 * flick,
       lean: -0.06 * h,
       tilt: -0.22 * h + 0.06 * bump(u, 0.74, 0.84),
-      arms: [{ sh: 1.05 + 0.35 * flick - 0.15 * bump(u, 0.74, 0.86), el: 0.45 - 0.2 * flick }, { sh: 0.12 + 0.5 * h + 1.6 * ta, el: 0.2 + 0.4 * h + 0.5 * ta }],
+      arms: [{ sh: 1.05 + 0.35 * flick - 0.15 * bump(u, 0.74, 0.86), el: 0.45 - 0.2 * flick }, { sh: HANG.sh + 0.5 * h + 1.6 * ta, el: HANG.el + 0.4 * h + 0.5 * ta }],
       eyes: ta > 0.3 ? 'happy' : 'open',
       mouth: h > 0.3 ? 'o' : ta > 0.3 ? 'open' : 'smile',
     };
@@ -740,17 +729,15 @@ const mug: NpcServe = {
   name: 'mug',
   drink: true,
   draw(sk) {
-    level(sk, () => {
-      sk.limb([0.85, -0.95, 1.35, -0.7, 1.35, -0.15, 0.85, 0.05], 0.26, C.white);
-      sk.blob((q) => q.roundRect(-0.85, -1.35, 1.75, 1.85, 0.3), C.white, { dark: '#cdd5e1', d: 0.3 });
-      sk.blob((q) => q.roundRect(-0.85, -0.75, 1.75, 0.5, 0), C.magenta, { line: 0.5, sil: false });
-      sk.blob(ell(0.02, -1.32, 0.72, 0.2), '#6a3a2a', { line: 0.5, sil: false });
-      strokes(sk, '#eef3f8', 0.16, (q) => {
-        q.moveTo(-0.2, -1.65);
-        q.quadraticCurveTo(-0.55, -2.0, -0.15, -2.35);
-        q.moveTo(0.35, -1.6);
-        q.quadraticCurveTo(0.05, -1.95, 0.4, -2.2);
-      });
+    sk.limb([0.85, -0.95, 1.35, -0.7, 1.35, -0.15, 0.85, 0.05], 0.26, C.white);
+    sk.blob((q) => q.roundRect(-0.85, -1.35, 1.75, 1.85, 0.3), C.white, { dark: '#cdd5e1', d: 0.3 });
+    sk.blob((q) => q.roundRect(-0.85, -0.75, 1.75, 0.5, 0), C.magenta, { line: 0.5, sil: false });
+    sk.blob(ell(0.02, -1.32, 0.72, 0.2), '#6a3a2a', { line: 0.5, sil: false });
+    strokes(sk, '#eef3f8', 0.16, (q) => {
+      q.moveTo(-0.2, -1.65);
+      q.quadraticCurveTo(-0.55, -2.0, -0.15, -2.35);
+      q.moveTo(0.35, -1.6);
+      q.quadraticCurveTo(0.05, -1.95, 0.4, -2.2);
     });
   },
 };

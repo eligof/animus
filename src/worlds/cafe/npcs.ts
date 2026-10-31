@@ -1,10 +1,11 @@
 import type { Sketch } from '../../art/figure/paint.ts';
-import { move, mul, turn, zoom } from '../../art/figure/paint.ts';
+import { mul, turn, zoom } from '../../art/figure/paint.ts';
 import { shade } from '../../art/iso.ts';
 import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, fromHand, handOf, reach, toward } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet, Swing } from '../types.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, NpcServe } from '../types.ts';
 import { C } from './kit.ts';
 import { ESPRESSO, OPEN, SEAT } from './stations.ts';
 
@@ -17,46 +18,6 @@ import { ESPRESSO, OPEN, SEAT } from './stations.ts';
 const ell = (cx: number, cy: number, rx: number, ry: number) => (p: Pen) => p.ellipse(cx, cy, rx, ry, 0, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
 const mix = (a: number, b: number, k: number) => a + (b - a) * k;
-
-// ── held things ──────────────────────────────────────────────────────────
-// A hand's place in the body's frame (see buildNpc in art/npc/puppet.ts):
-// its shoulder, swung `sh` there and bent `el` at the elbow.
-function handOf(b: Bones, p: Puppet, k: 0 | 1): [number, number] {
-  const [sx, sy] = b.shoulders[k];
-  const { sh, el } = p.arms[k];
-  return [sx + Math.sin(sh) * b.upper + Math.sin(sh + el) * b.fore, sy + Math.cos(sh) * b.upper + Math.cos(sh + el) * b.fore];
-}
-
-// Arm k's swing that puts its hand at (x, y) in the body's frame (as near
-// as it reaches), its elbow bent down and forward.
-function reach(b: Bones, k: 0 | 1, x: number, y: number): Swing {
-  const [sx, sy] = b.shoulders[k];
-  const U = b.upper;
-  const F = b.fore;
-  const d = Math.max(Math.abs(U - F) + 1e-3, Math.min(Math.hypot(x - sx, y - sy), U + F - 1e-3));
-  const a = Math.atan2(x - sx, y - sy);
-  const at = Math.acos((U * U + d * d - F * F) / (2 * U * d));
-  const el = Math.acos((U * U + F * F - d * d) / (2 * U * F));
-  return { sh: a - at, el: Math.PI - el };
-}
-
-// A swing `k` of the way from hanging at rest (see rest in art/npc/acts.ts)
-// to `to`: for one-shot acts, which start and end at rest.
-const toward = (k: number, to: Swing): Swing => ({ sh: 0.12 + (to.sh - 0.12) * k, el: 0.2 + (to.el - 0.2) * k });
-
-// Draws `fn` at arm k's hand, upright in the room (inside its `fore`).
-function atHand(sk: Sketch, b: Bones, p: Puppet, k: 0 | 1, fn: () => void): void {
-  const { sh, el } = p.arms[k];
-  sk.at(mul(move(0, b.fore), turn(sh + el - p.lean)), fn);
-}
-
-// Point (x, y) of the body's frame as seen from arm k's hand, upright (in
-// the frame atHand draws in).
-function fromHand(b: Bones, p: Puppet, k: 0 | 1, x: number, y: number): [number, number] {
-  const [hx, hy] = handOf(b, p, k);
-  const [dx, dy] = [x - hx, y - hy];
-  return [Math.cos(p.lean) * dx - Math.sin(p.lean) * dy, Math.sin(p.lean) * dx + Math.cos(p.lean) * dy];
-}
 
 // The standing locals' build: a long body under the head, so what their
 // hands do shows over the counter they stand behind and under their chin.
@@ -286,7 +247,7 @@ const baristaParts: NpcParts = {
     sk.limb([0, 0.2, 0, f - 0.25], 0.95, k ? BR_SKIN_D : BR_SKIN, { dark: k ? null : BR_SKIN_D });
     sk.blob((q) => q.roundRect(-0.68, -0.2, 1.36, 0.65, 0.3), k ? SHIRT_D : SHIRT, { dark: k ? null : SHIRT_D, d: 0.15 });
     // what the hand holds, under its fingers
-    atHand(sk, TALL_BONES, p, k, () => {
+    atHand(sk, p, k, TALL_BONES.fore, () => {
       if (p.act === 'work') {
         const tamp = tampOf(p.u);
         if (k === 0 && tamp > 0.05) sk.at(zoom(1.25), () => portafilter(sk, pressOf(p.u)));
@@ -593,7 +554,7 @@ const pastryChefParts: NpcParts = {
   fore(sk, p, k) {
     const f = PC_BONES.fore;
     sk.limb([0, 0, 0, f - 0.45], 1.1, k ? WHITES_D : WHITES, { dark: k ? null : WHITES_D });
-    atHand(sk, PC_BONES, p, k, () => {
+    atHand(sk, p, k, PC_BONES.fore, () => {
       if (p.act !== 'work') return;
       const ice = iceOf(p.u);
       if (k === 0) cupcake(sk, downOf(p.u) > 0.5 && p.u < 0.9 ? 1 : p.u >= 0.9 ? 0 : ice);
@@ -853,7 +814,7 @@ const regularParts: NpcParts = {
   fore(sk, p, k) {
     const f = RG_BONES.fore;
     sk.limb([0, 0, 0, f - 0.4], 1.05, k ? TWEED_D : TWEED, { dark: k ? null : TWEED_D });
-    atHand(sk, RG_BONES, p, k, () => {
+    atHand(sk, p, k, RG_BONES.fore, () => {
       if (p.act !== 'work' || k !== 0) return;
       // the paper, held open from the near hand's edge to the far hand's
       // (by the far hand alone, folded, over a sip): the forearms behind

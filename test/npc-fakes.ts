@@ -1,5 +1,5 @@
 import { shade } from '../src/art/iso.ts';
-import { rest } from '../src/art/npc/acts.ts';
+import { HANG, rest } from '../src/art/npc/acts.ts';
 import { face } from '../src/art/npc/face.ts';
 import type { Pen } from '../src/art/types.ts';
 import { PROP_SIZE } from '../src/world/layout.ts';
@@ -40,7 +40,7 @@ export function standIn(name: string, station: SlotKind, place: NpcPlace, o: Sta
   const work: NpcLoop = {
     secs: 1,
     frames: 8,
-    pose: (u) => ({ ...rest(), tilt: 0.1 * Math.sin(u * TAU), arms: [{ sh: 0.12, el: 0.2 }, { sh: 0.6 + 0.5 * Math.sin(u * TAU), el: 0.6 }] }),
+    pose: (u) => ({ ...rest(), tilt: 0.1 * Math.sin(u * TAU), arms: [HANG, { sh: 0.6 + 0.5 * Math.sin(u * TAU), el: 0.6 }] }),
   };
   const n: Npc = {
     name,

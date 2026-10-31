@@ -1,6 +1,7 @@
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, toward } from '../../art/npc/helpers.ts';
 import type { Sketch } from '../../art/figure/paint.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet } from '../types.ts';
@@ -16,14 +17,6 @@ import { FRONT_DESK, ISLAND, RACK } from './stations.ts';
 
 const ell = (cx: number, cy: number, rx: number, ry: number) => (p: Pen) => p.ellipse(cx, cy, rx, ry, 0, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
-
-// Draws `fn` in a frame at the hand of arm k (the fore part's frame) turned
-// so that its +y runs at angle `a` in the body's frame (0 straight down, +
-// toward where the local faces): at 0 the frame is level with the body.
-function along(sk: Sketch, b: Bones, p: Puppet, k: 0 | 1, a: number, fn: () => void): void {
-  const r = a - (p.arms[k].sh + p.arms[k].el);
-  sk.at([Math.cos(-r), Math.sin(-r), -Math.sin(-r), Math.cos(-r), 0, b.fore], fn);
-}
 
 // Legs in trousers and shoes, the far one first: hips at y = -top.
 function legs(sk: Sketch, top: number, w: number, cloth: string, clothD: string, shoe: string, sole = shoe): void {
@@ -185,10 +178,10 @@ const adminParts: NpcParts = {
     sk.limb([0, 0, 0, f - 0.3], 0.95, k ? A_SKIN_D : A_SKIN, { dark: k ? null : A_SKIN_D });
     sk.limb([0, 0, 0, 0.45], 1.25, k ? PLAID_D : PLAID, { dark: k ? null : PLAID_D, line: 0.5 });
     if (k === 0 && laptopOut(p)) {
-      // the laptop open on the forearm, held level: its base on the arm,
-      // its lid up from the hinge at the front, the screen's light on the
-      // lid's inside edge
-      along(sk, A_BONES, p, 0, 0, () => {
+      // the laptop open on the forearm, held level with its body: its base
+      // on the arm, its lid up from the hinge at the front, the screen's
+      // light on the lid's inside edge
+      atHand(sk, p, 0, A_BONES.fore, () => {
         sk.blob((q) => q.roundRect(-0.9, -0.62, 4.1, 0.45, 0.14), LAPTOP, { dark: LAPTOP_D, d: 0.15 });
         sk.blob((q) => {
           q.moveTo(2.85, -0.45);
@@ -207,7 +200,7 @@ const adminParts: NpcParts = {
           q.lineTo(2.4, -0.66);
           q.stroke();
         });
-      });
+      }, 0);
     }
     if (k === 1 && p.act === 'work' && p.u >= 0.5 && p.u < 0.85) {
       // the patch cable it plugs into the rack
@@ -253,7 +246,7 @@ const adminCelebrate: NpcLoop = {
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
-    return { ...rest(), bob: 0.15 * bump(u, 0.3, 0.7), tilt: -0.08 * k, arms: [{ sh: 0.12 + (HOLD.sh - 0.12) * k, el: 0.2 + (HOLD.el - 0.2) * k }, { sh: 0.12 + 1.3 * k, el: 0.2 + 1.25 * k }], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.15 * bump(u, 0.3, 0.7), tilt: -0.08 * k, arms: [toward(k, HOLD), swing(1.3 * k, 1.25 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 
@@ -705,7 +698,7 @@ const managerParts: NpcParts = {
       }, C.noteTeal, { dark: shade(C.noteTeal, -0.2), d: 0.15 });
     }
     sk.blob(circ(0, f, 0.58), k ? M_SKIN_D : M_SKIN, { dark: M_SKIN_D, d: 0.2 });
-    if (k === 1 && cakeOut(p)) along(sk, M_BONES, p, 1, 0, () => cake(sk, p.u));
+    if (k === 1 && cakeOut(p)) atHand(sk, p, 1, M_BONES.fore, () => cake(sk, p.u), 0);
   },
 };
 

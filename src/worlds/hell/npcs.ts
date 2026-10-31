@@ -1,9 +1,10 @@
-import { apply, mul, move, turn, type Mat, type Sketch } from '../../art/figure/paint.ts';
+import { apply, mul, move, turn, type Sketch } from '../../art/figure/paint.ts';
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, HANG, own, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, inFrame, invert, upright } from '../../art/npc/helpers.ts';
 import type { Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet, Swing } from '../types.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Swing } from '../types.ts';
 import { C } from './kit.ts';
 import { ANVIL, BUREAU, POT } from './stations.ts';
 
@@ -34,17 +35,6 @@ function stroke(sk: Sketch, pts: readonly number[], w: number, color: string, ca
     q.stroke();
   });
 }
-
-// The inverse of a sketch frame: a point of the local's own frame in the
-// part's, for what reaches a fixed place (tongs on the ingot, fire on it).
-function inverse(m: Mat): Mat {
-  const det = m[0] * m[3] - m[1] * m[2];
-  return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det, (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det];
-}
-
-// The turn that sets arm k's forearm frame back upright on screen, for
-// what a hand holds level (a ladle, a blotter).
-const upright = (p: Puppet, k: 0 | 1): Mat => turn(p.arms[k].sh + p.arms[k].el - p.lean);
 
 // An arm k of the way from a to b.
 const mix = (a: Swing, b: Swing, k: number): Swing => ({ sh: a.sh + (b.sh - a.sh) * k, el: a.el + (b.el - a.el) * k });
@@ -207,9 +197,9 @@ const clerkParts: NpcParts = {
     const f = CLERK_BONES.fore;
     sk.limb([0, 0, 0, f - 0.4], 0.95, k ? FROCK_D : FROCK, { dark: k ? null : FROCK_D });
     stroke(sk, [-0.45, f - 0.45, 0.45, f - 0.45], 0.32, COLLAR, 'butt');
-    // the red quill, in the near hand whenever it is not handing something
-    if (k === 0 && !p.hold) {
-      sk.at(mul(move(0, f), upright(p, 0)), () => {
+    // the red quill in the near hand, in its own loops (see NpcParts)
+    if (k === 0 && own(p.act)) {
+      atHand(sk, p, 0, f, () => {
         sk.blob((q) => {
           q.moveTo(0.25, 0.1);
           q.quadraticCurveTo(-1.2, -1.2, -1.15, -3.0);
@@ -221,7 +211,7 @@ const clerkParts: NpcParts = {
     }
     // the rocking blotter in the far hand, over the fresh line
     if (k === 1 && p.act === 'work' && p.u >= 0.6 && p.u < 0.96) {
-      sk.at(mul(move(0, f), upright(p, 1)), () => {
+      atHand(sk, p, 1, f, () => {
         sk.blob((q) => {
           q.moveTo(-1.1, 0.3);
           q.quadraticCurveTo(0, 1.25, 1.1, 0.3);
@@ -458,7 +448,7 @@ const smithParts: NpcParts = {
     }
     const gout = show >= 0 ? bump(show, 0.2, 0.44) : 0;
     if (gout > 0.05) {
-      const [tx, ty] = apply(inverse(sk.m), INGOT[0], INGOT[1]);
+      const [tx, ty] = apply(invert(sk.m), INGOT[0], INGOT[1]);
       const mx = cx + 0.7;
       const my = cy + 2.3;
       const dx = tx - mx;
@@ -486,21 +476,21 @@ const smithParts: NpcParts = {
     const f = SMITH_BONES.fore;
     sk.limb([0, 0, 0, f - 0.3], 1.7, k ? PLUM_D : PLUM, { dark: k ? null : PLUM_D });
     sk.blob((q) => q.roundRect(-0.95, f - 1.15, 1.9, 0.75, 0.2), APRON, { dark: APRON_D, d: 0.1 });
-    if (k === 1) {
+    if (k === 1 && own(p.act)) {
       // the hammer: a short haft on along the forearm, a heavy iron head
       // across its end
       sk.limb([0, f - 0.2, 0, f + 1.6], 0.42, HAMMER_H, { dark: shade(HAMMER_H, -0.3) });
       sk.blob((q) => q.roundRect(-0.85, f + 1.2, 1.7, 0.95, 0.15), C.iron, { dark: '#221c20', d: 0.15 });
       sk.blob((q) => q.rect(-0.9, f + 1.3, 0.25, 0.75), C.ironLight, { line: 0.4 });
     }
-    if (k === 0) {
+    if (k === 0 && own(p.act)) {
       // the tongs: on the ingot at work and through the show's fire and
       // flurry, then flung up with his arm as he roars
       const show = p.act === 'show' ? p.u : -1;
       const held = p.act === 'work' || (show >= 0 && roarOf(show) < 0.3);
       let tx = 0;
       let ty = f + 3.2;
-      if (held) [tx, ty] = apply(inverse(sk.m), INGOT[0] - 0.6, INGOT[1] + 0.1);
+      if (held) [tx, ty] = apply(invert(sk.m), INGOT[0] - 0.6, INGOT[1] + 0.1);
       const a = Math.atan2(ty - f, tx);
       const l = Math.hypot(tx, ty - f);
       sk.at(mul(move(0, f), turn(a)), () => {
@@ -511,7 +501,7 @@ const smithParts: NpcParts = {
       // of sparks leaping off it, and sparks fly off every blow
       if (show >= 0) {
         const fl = flareOf(show);
-        sk.at(inverse(sk.m), () => {
+        inFrame(sk, () => {
           const [x, y] = INGOT;
           if (fl > 0.05) flare(sk, x, y, fl);
           const burst = bump(show, 0.3, 0.5);
@@ -563,8 +553,8 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
     const flurrying = ease(u, 0.4, 0.47) - ease(u, 0.66, 0.74);
     const blow = blowOf(u);
     const roar = roarOf(u);
-    const hammer = mix(mix({ sh: 2.0, el: 0.85 }, blow ? H_HIT : H_UP, flurrying), { sh: 0.12 + 1.75, el: 0.2 + 0.75 }, roar);
-    const tongs = mix(T_HOLD, { sh: 0.12 - 1.9, el: 0.2 - 1.0 }, roar);
+    const hammer = mix(mix({ sh: 2.0, el: 0.85 }, blow ? H_HIT : H_UP, flurrying), swing(1.75, 0.75), roar);
+    const tongs = mix(T_HOLD, swing(-1.9, -1.0), roar);
     return {
       ...rest(),
       bob: 0.25 * breathe + 0.35 * roar * Math.abs(Math.sin(u * TAU * 4)),
@@ -803,7 +793,7 @@ const witchCelebrate: NpcLoop = {
       bob: 0.12 * Math.abs(shake),
       lean: -0.06 * k,
       tilt: -0.22 * k + 0.05 * shake,
-      arms: [{ sh: 0.12 - 1.8 * k, el: 0.2 - 0.7 * k + 0.15 * shake }, { sh: 0.12 + 1.9 * k, el: 0.2 - 0.5 * k - 0.15 * shake }],
+      arms: [{ sh: HANG.sh - 1.8 * k, el: HANG.el - 0.7 * k + 0.15 * shake }, { sh: HANG.sh + 1.9 * k, el: HANG.el - 0.5 * k - 0.15 * shake }],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.3 ? 'open' : 'smile',
     };

@@ -1,6 +1,7 @@
 import { shade } from '../../art/iso.ts';
-import { bump, ease, env, rest, TAU } from '../../art/npc/acts.ts';
+import { bump, ease, env, HANG, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
+import { atHand, upright } from '../../art/npc/helpers.ts';
 import { move, turn, mul, type Sketch } from '../../art/figure/paint.ts';
 import type { Color, Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet } from '../types.ts';
@@ -20,13 +21,6 @@ const poly = (pts: readonly number[]) => (p: Pen) => {
   for (let i = 2; i < pts.length; i += 2) p.lineTo(pts[i], pts[i + 1]);
   p.closePath();
 };
-
-// Draws `fn` in a frame turned back level with the floor at the end of arm
-// k's forearm (the hand), whatever the arm and the lean: for what hangs or
-// lies level (a hot bar on the anvil, scales on their chain).
-function level(sk: Sketch, p: Puppet, k: 0 | 1, f: number, fn: () => void): void {
-  sk.at(mul(move(0, f), turn(p.arms[k].sh + p.arms[k].el - p.lean)), fn);
-}
 
 // A few short strokes of light about (x, y): sparks off a blow, a glint.
 function sparks(sk: Sketch, x: number, y: number, r: number, n: number, color: Color, seed: number): void {
@@ -220,14 +214,14 @@ const smithParts: NpcParts = {
     if (k === 1 && work) {
       // in the show, once the arm is up, what it holds is the finished blade
       const blade = p.act === 'show' && p.arms[1].sh > 1.2;
-      level(sk, p, 1, f, () => stock(sk, blade));
+      atHand(sk, p, 1, f, () => stock(sk, blade));
     }
     if (k === 0 && (work || p.act === 'celebrate')) hammer(sk, f);
     // a leather glove on the fist
     sk.blob(circ(0, f, 0.85), k ? SM.gloveD : SM.glove, { dark: k ? null : SM.gloveD, d: 0.25 });
     if (k === 0 && landed(p)) {
       // the blow lands: sparks off the hammer's face
-      sk.at(move(FACE[0], f + FACE[1]), () => sk.at(turn(p.arms[0].sh + p.arms[0].el - p.lean), () => sparks(sk, 0, 0.1, 2.0, 8, '#ffd36a', Math.round(p.u * 16))));
+      sk.at(mul(move(FACE[0], f + FACE[1]), upright(p, 0)), () => sparks(sk, 0, 0.1, 2.0, 8, '#ffd36a', Math.round(p.u * 16)));
     }
   },
 };
@@ -270,9 +264,9 @@ function blow(k: number): Pick<Puppet, 'bob' | 'lean' | 'arms'> {
   };
 }
 
-// The hammer's way round one blow, ph 0 to 1: landing at 0, up fast, a
-// moment at the top, and down.
-const swing = (ph: number) => (ph < 0.5 ? Math.sin((ph / 0.5) * (Math.PI / 2)) : Math.cos(((ph - 0.5) / 0.5) * (Math.PI / 2)) ** 1.4);
+// How far up the hammer is through one blow, ph 0 to 1: landing at 0, up
+// fast, a moment at the top, and down.
+const raised = (ph: number) => (ph < 0.5 ? Math.sin((ph / 0.5) * (Math.PI / 2)) : Math.cos(((ph - 0.5) / 0.5) * (Math.PI / 2)) ** 1.4);
 
 // At the anvil: two blows a loop, sparks off each, the head nodding with
 // them, eyes screwed up as each lands.
@@ -281,7 +275,7 @@ const smithWork: NpcLoop = {
   frames: 12,
   pose(u) {
     const ph = (u * 2) % 1;
-    const k = swing(ph);
+    const k = raised(ph);
     const hit = ph < 0.05;
     return { ...rest(), ...blow(k), tilt: 0.14 - 0.1 * k, eyes: hit ? 'shut' : 'open', mouth: hit ? 'closed' : 'smile' };
   },
@@ -297,7 +291,7 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
   crowd: 'watch',
   pose(u) {
     if (u < SHOW_BLOWS) {
-      const k = swing(((u * 16) / 3) % 1);
+      const k = raised(((u * 16) / 3) % 1);
       return { ...rest(), ...blow(k), tilt: 0.16 - 0.12 * k, eyes: k < 0.1 ? 'shut' : 'open', mouth: k < 0.1 ? 'o' : 'closed' };
     }
     const up = ease(u, 0.57, 0.72) - ease(u, 0.8, 0.95);
@@ -326,7 +320,7 @@ const smithCelebrate: NpcLoop = {
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 1.5));
-    return { ...rest(), bob: 0.3 * pump * k, lean: -0.06 * k, tilt: -0.15 * k, arms: [{ sh: 0.12 - 2.5 * k, el: 0.2 - 0.8 * k }, { sh: 0.12 + 1.65 * k, el: 0.2 + (0.6 + 0.3 * pump) * k }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.3 * pump * k, lean: -0.06 * k, tilt: -0.15 * k, arms: [swing(-2.5 * k, -0.8 * k), swing(1.65 * k, (0.6 + 0.3 * pump) * k)], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 
@@ -497,10 +491,10 @@ const assayerParts: NpcParts = {
       // the scales, weighed: tipping while the dust goes in, settling
       // level, and tipping again as the next pinch comes
       const tip = 0.28 * (1 - ease(p.u, 0.3, 0.55) + ease(p.u, 0.85, 1)) * (0.7 + 0.3 * Math.sin(p.u * TAU * 3));
-      level(sk, p, 1, f, () => scales(sk, tip));
+      atHand(sk, p, 1, f, () => scales(sk, tip));
     } else if (look < 0.15) {
       // a pinch of gold dust falling into the pan
-      level(sk, p, 0, f, () => {
+      atHand(sk, p, 0, f, () => {
         sk.draw((q) => {
           q.fillStyle = C.gold;
           for (let i = 0; i < 4; i++) {
@@ -514,7 +508,7 @@ const assayerParts: NpcParts = {
     } else {
       // the loupe at his eye: a little black barrel pointing out from it,
       // pinched between finger and thumb, its lens catching the light
-      level(sk, p, 0, f, () => {
+      atHand(sk, p, 0, f, () => {
         sk.limb([0, -0.2, -0.1, -0.85], 0.35, AS.skin, { line: 0.5 });
         sk.blob((q) => q.roundRect(-0.45, -1.55, 0.95, 0.75, 0.15), '#2a2420', { line: 0.6 });
         sk.blob(ell(0.55, -1.18, 0.2, 0.42), '#cfe6ea', { line: 0.5 });
@@ -745,7 +739,7 @@ const prospectorParts: NpcParts = {
       pick(sk, f, p.arms[0].sh);
       if (p.u < 0.05) {
         const [x, y] = pickTip(f, p.arms[0].sh);
-        sk.at(move(x, y), () => sk.at(turn(p.arms[0].sh + p.arms[0].el - p.lean), () => {
+        sk.at(mul(move(x, y), upright(p, 0)), () => {
           // chips of rock off the blow
           sk.draw((q) => {
             q.fillStyle = C.rockLight;
@@ -756,12 +750,12 @@ const prospectorParts: NpcParts = {
             }
           });
           twinkle(sk, -0.5, -0.4, 0.55, C.goldHi);
-        }));
+        });
       }
     }
     if (k === 1 && p.act === 'celebrate' && p.arms[1].sh > 0.6) {
       // a nugget held up to the light, glinting
-      level(sk, p, 1, f, () => {
+      atHand(sk, p, 1, f, () => {
         sk.blob(poly([-0.6, -0.4, -0.35, -1.05, 0.25, -1.2, 0.7, -0.75, 0.6, -0.2, 0.1, 0.05]), C.gold, { dark: C.goldDark, d: 0.25 });
         twinkle(sk, 0.05, -0.8, 0.4 + 0.35 * Math.abs(Math.sin(p.u * TAU * 2)), '#ffffff');
       });
@@ -799,7 +793,7 @@ const prospectorCelebrate: NpcLoop = {
   frames: 10,
   pose(u) {
     const k = env(u, 0.25, 0.8);
-    return { ...rest(), bob: 0.15 * k, lean: -0.08 * k, tilt: -0.22 * k, arms: [{ sh: 0.3 * k, el: 0.2 + 1.5 * k }, { sh: 0.12 + 2.5 * k, el: 0.2 + 0.25 * k }], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.5 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.15 * k, lean: -0.08 * k, tilt: -0.22 * k, arms: [{ sh: 0.3 * k, el: HANG.el + 1.5 * k }, swing(2.5 * k, 0.25 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.5 ? 'open' : 'smile' };
   },
 };
 
