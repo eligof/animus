@@ -168,9 +168,11 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
   r.t = u * per;
   const s1 = Math.sin(u * TAU);
   const c1 = Math.cos(u * TAU);
-  // which of n even steps round the loop u is at: what flaps or shakes
-  // goes by time, at the rate it was drawn at
-  const at = (n: number) => Math.floor(u * n);
+  // what flaps (a mouth, an eye) changes every other picture, 7.5 times a
+  // second, and a shake goes side to side every picture (the loops that
+  // shake are an even number of pictures, so it holds round the end)
+  const flap = Math.floor(i / 2);
+  const side = i % 2 ? 1 : -1;
   switch (pose) {
     case 'idle': {
       r.chest = 0.14 * (0.5 - 0.5 * c1);
@@ -315,7 +317,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.arms[0] = arm([0.7 - 0.9 * p, -2.6 - 2.0 * p], 1, { fwd: true, high: p > 0.5, grip: 'open' });
       r.arms[1] = arm([3.2 + 0.4 * q, -2.5 - 2.3 * q], 1, { fwd: true, high: q > 0.5, grip: 'open' });
       r.lean = 0.04 * (p - q);
-      r.face.mouth = ['open', 'o', 'smile', 'open', 'small', 'open', 'o', 'smile', 'open', 'open', 'smile', 'small'][at(12)] as Mouth;
+      r.face.mouth = ['open', 'o', 'smile', 'open', 'small', 'open', 'o', 'smile', 'open', 'open', 'smile', 'small'][flap % 12] as Mouth;
       r.face.brows = u > 0.5 ? 'up' : 'none';
       r.tilt = 0.05 * Math.sin(a * 2);
       break;
@@ -335,7 +337,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       break;
     }
     case 'error': {
-      const j = at(8) % 2 ? 1 : -1;
+      const j = side;
       r.shake = 0.22 * j;
       r.lean = -0.16;
       r.pelvis[1] += 0.2;
@@ -346,7 +348,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       break;
     }
     case 'flinch': {
-      const j = at(4) % 2 ? 1 : -1;
+      const j = side;
       r.shake = 0.1 * j;
       r.lean = -0.2;
       r.tilt = 0.1;
@@ -368,7 +370,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.legs[1] = { foot: [1.35, -1.0], ang: -0.2, bend: -1 };
       r.arms[0] = arm([1.0, -2.2], 1, { fwd: true });
       r.arms[1] = arm([1.75, -2.6], 1, { fwd: true });
-      r.face = { eyes: 'closed', look: [0, 0], mouth: at(8) < 4 ? 'small' : 'o', brows: 'none', blush: true };
+      r.face = { eyes: 'closed', look: [0, 0], mouth: u < 0.5 ? 'small' : 'o', brows: 'none', blush: true };
       break;
     }
     case 'sit': {
@@ -456,8 +458,8 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       const a = u * TAU * 2;
       r.arms[1] = arm([2.6 + 0.3 * Math.sin(a), -2.3 - (talking ? 0.6 * Math.max(0, Math.sin(a)) : 0)], 1, { fwd: true, grip: 'open' });
       r.arms[0] = arm([-1.6, -1.75], 1);
-      r.face.mouth = talking ? (['open', 'smile', 'o', 'open', 'smile', 'small', 'open', 'smile', 'o'] as Mouth[])[at(16) % 9] : 'smile';
-      r.face.eyes = talking ? 'open' : at(16) % 4 < 2 ? 'happy' : 'open';
+      r.face.mouth = talking ? (['open', 'smile', 'o', 'open', 'smile', 'small', 'open', 'smile', 'o'] as Mouth[])[flap % 9] : 'smile';
+      r.face.eyes = talking ? 'open' : flap % 4 < 2 ? 'happy' : 'open';
       r.tilt = talking ? 0 : 0.07 * Math.max(0, Math.sin(a * 1.5));
       break;
     }
@@ -471,7 +473,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       const p = Math.sin(a) > 0;
       r.arms[0] = p ? arm([-3.15, -6.6], -1, { high: true, grip: 'point' }) : arm([-2.6, -1.6], 1);
       r.arms[1] = p ? arm([2.9, -1.7], 1) : arm([3.1, -6.7], 1, { high: true, grip: 'point' });
-      r.face = { eyes: 'happy', look: [0, 0], mouth: at(12) % 6 < 3 ? 'grin' : 'open', brows: 'none', blush: true };
+      r.face = { eyes: 'happy', look: [0, 0], mouth: flap % 6 < 3 ? 'grin' : 'open', brows: 'none', blush: true };
       r.sway = Math.sin(a);
       break;
     }

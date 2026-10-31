@@ -30,9 +30,9 @@ export function critterArt(c: CritterFrame, t: number): { key: string; draw: () 
     draw: () => {
       const sk = new Sketch();
       const b = hexOf(c.body);
-      // i: the step of the loop as first drawn (4 moving, 8 idle), for what
-      // flaps or spins by step
-      const f = { b, bd: shade(b, -0.22), u, i: Math.floor(u * (c.moving ? 4 : 8)), moving: c.moving, blink };
+      // i: the step, for what spins or pants by step: every picture on the
+      // move, eight a loop idle
+      const f = { b, bd: shade(b, -0.22), u, i: c.moving ? i : Math.floor(u * 8), moving: c.moving, blink };
       switch (c.kind) {
         case 'cat':
           cat(sk, f, false);

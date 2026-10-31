@@ -29,6 +29,10 @@ test("every pose, shared act, local's loop and desk loop is drawn 15 times a sec
   }
 });
 
+test("a shake goes side to side every picture, round the end of its loop too", () => {
+  for (const pose of ['error', 'flinch'] as const) assert.equal(LOOP[pose][1] % 2, 0, `${pose}: ${LOOP[pose][1]} pictures`);
+});
+
 test('props, steam and the room move 15 times a second; a worked station goes round in two seconds', () => {
   assert.equal(AMBIENT_FPS, ANIM_FPS);
   assert.equal(CYCLE / AMBIENT_FPS, 2);

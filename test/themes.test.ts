@@ -259,19 +259,21 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
   // Idle and still, an animated prop is drawn once (see PropArt.movesIdle).
   test(`world ${w.id}: its animated props hold still while nobody works them, unless they say they move`, () => {
     const s = 6;
-    const shot = (art: PropArt, wall: 'left' | 'right', t: number) => {
+    const shot = (art: PropArt, wall: 'left' | 'right', island: boolean, t: number) => {
       const c = new Canvas(Math.ceil((art.len + art.dep) * s + 12 * s), Math.ceil(((art.len + art.dep) / 2 + art.height) * s + 12 * s));
       const at = frame(iso(art.dep * s + 6 * s, art.height * s + 6 * s, s), wall, 0, 0);
-      art.draw({ pen: c, s, at, len: art.len, dep: art.dep, wall, island: false, t, active: false, seed: 1234 });
+      art.draw({ pen: c, s, at, len: art.len, dep: art.dep, wall, island, t, active: false, seed: 1234 });
       return createHash('sha256').update(c.data).digest('hex');
     };
     const props: Array<[string, PropArt]> = [...Object.entries(w.stations), ...(w.decor ?? []).map((d, k): [string, PropArt] => [`decor ${k}`, d.art])];
     for (const [name, art] of props) {
       if (!art.animated) continue;
-      for (const wall of ['left', 'right'] as const) {
-        const seen = new Set([0.4, 1.3, 2.9, 5.9, 11.7].map((t) => shot(art, wall, t)));
-        if (art.movesIdle) assert.ok(seen.size > 1, `${name} (${wall} wall) says it moves while idle, but holds still`);
-        else assert.equal(seen.size, 1, `${name} (${wall} wall) moves while idle: say so (movesIdle), or hold it still`);
+      // every 0.4 s over 12 s, off the beat of anything that blinks
+      for (const wall of ['left', 'right'] as const) for (const island of [false, true]) {
+        const seen = new Set(Array.from({ length: 30 }, (_, k) => shot(art, wall, island, 0.013 + 0.4 * k)));
+        const what = `${name} (${wall} wall${island ? ', an island' : ''})`;
+        if (art.movesIdle) assert.ok(seen.size > 1, `${what} says it moves while idle, but holds still`);
+        else assert.equal(seen.size, 1, `${what} moves while idle: say so (movesIdle), or hold it still`);
       }
     }
   });
