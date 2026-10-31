@@ -244,19 +244,24 @@ function npcId(n: Npc): number {
   return k;
 }
 
+// What shows for a local its world does not have: nothing, one picture
+// for all.
+let noNpc: Sprite | null = null;
+
 // A local (see world/npcs.ts) as it shows: a frame of an act, facing its
 // way, at scale s, cut along its counter's top edge if it stands behind
-// one. The anchor is the point between its feet.
+// one (its height to a hundredth of a unit, the same in the key and the
+// picture). The anchor is the point between its feet.
 export function npcSprite(world: WorldDef, n: NpcFrame, s: number, ink: string): Sprite {
   const art = world.npcs?.[n.k];
-  if (!art) return { img: new Canvas(1, 1), ax: 0, ay: 0 };
+  if (!art) return (noNpc ??= { img: new Canvas(1, 1), ax: 0, ay: 0 });
   const q = quant(s);
-  const cut = n.cut ? `${Math.round(n.cut.h * 100)}/${n.cut.slope}` : '';
-  return cached(`n|${npcId(art)}|${n.act}|${n.frame}|${n.facing.back ? 1 : 0}${n.facing.flip ? 1 : 0}|${cut}|${q}|${ink}`, () => {
+  const cut = n.cut ? { h: Math.round(n.cut.h * 100) / 100, slope: n.cut.slope } : null;
+  return cached(`n|${npcId(art)}|${n.act}|${n.frame}|${n.facing.back ? 1 : 0}${n.facing.flip ? 1 : 0}|${cut ? `${cut.h}/${cut.slope}` : ''}|${q}|${ink}`, () => {
     const sk = new Sketch();
     buildNpc(sk, art, puppetOf(art, n.act, n.frame), n.facing.back);
     const sp = paint(sk, q, ink, n.facing.flip, NPC_BOX);
-    return n.cut ? cutAt(sp, n.cut.h * q, n.cut.slope) : sp;
+    return cut ? cutAt(sp, cut.h * q, cut.slope) : sp;
   });
 }
 

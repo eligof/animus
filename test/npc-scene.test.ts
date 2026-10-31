@@ -40,6 +40,20 @@ test('a local is a sprite drawn once for what it shows: its local, act, frame, f
   assert.notEqual(npcSprite(f.world, n, 8, ink), a, 'the same at another scale');
 });
 
+test("one picture for a local its world does not have; a cut to a hundredth of a unit, the same in the key and the picture", () => {
+  const f = scene();
+  const ink = inkOf(f.world);
+  const none: NpcFrame = { ...f.npcs![0], k: 99 };
+  assert.equal(npcSprite(f.world, none, 7, ink), npcSprite(f.world, none, 7, ink), 'a new picture of nothing every time');
+  // locals of their own (nothing kept for them yet), cut a hair apart
+  const n: NpcFrame = { ...f.npcs![0], act: 'work', frame: 1, facing: { back: false, flip: false } };
+  const fresh = () => trio(getTheme('club')!);
+  const a = npcSprite(fresh(), { ...n, cut: { h: 5.034, slope: 0.5 } }, 8, ink);
+  const b = npcSprite(fresh(), { ...n, cut: { h: 5.03, slope: 0.5 } }, 8, ink);
+  assert.deepEqual([a.ax, a.ay, a.img.width, a.img.height], [b.ax, b.ay, b.img.width, b.img.height], 'cut apart');
+  assert.ok(Buffer.from(a.img.data).equals(Buffer.from(b.img.data)), 'cut apart');
+});
+
 test("cut at its counter: nothing under the counter's edge shows, and what shows stays where it was", () => {
   const f = scene();
   const ink = inkOf(f.world);

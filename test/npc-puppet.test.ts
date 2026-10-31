@@ -10,26 +10,33 @@ import type { Npc, Puppet } from '../src/worlds/types.ts';
 import { npcContract } from './npc-contract.ts';
 import { CUP, standIn, trio } from './npc-fakes.ts';
 
-// The locals' puppet: the shared acts start and end at rest and move what
-// they should; a puppet records its parts back to front for the view; a
-// place says where a local is cut and which way it faces; the stand-ins
-// meet the contract every world's locals are held to.
+// The locals' puppet: the shared acts start and end at rest, their last
+// frame shown the end, and move what they should; a puppet records its
+// parts back to front for the view; a place says where a local is cut and
+// which way it faces; the stand-ins meet the contract every world's locals
+// are held to.
 
 const SHARED = Object.keys(ACTS) as SharedAct[];
+type Pose = Omit<Puppet, 'act' | 'u'>;
 // Two puppets alike, but for the act and how far into it.
-function alike(p: Puppet, q: Puppet): boolean {
+function alike(p: Pose, q: Pose): boolean {
   const d = Math.abs(p.bob - q.bob) + Math.abs(p.lean - q.lean) + Math.abs(p.tilt - q.tilt) + p.arms.reduce((n, a, k) => n + Math.abs(a.sh - q.arms[k].sh) + Math.abs(a.el - q.arms[k].el), 0);
   return d < 1e-9 && p.eyes === q.eyes && p.mouth === q.mouth && p.hold === q.hold;
 }
-// Every frame of shared act `a`.
-const frames = (a: SharedAct) => Array.from({ length: ACTS[a].frames }, (_, i) => ACTS[a].pose(i / ACTS[a].frames));
-const most = (ps: Puppet[], f: (p: Puppet) => number) => Math.max(...ps.map(f));
+// Any local: the shared acts are the same for all.
+const ANY = standIn('any', 'run', { mode: 'behind', u: 5, v: 2, top: 6, edge: 4 });
+// Every frame of shared act `a`, as a local shows it.
+const frames = (a: SharedAct) => Array.from({ length: ACTS[a].frames }, (_, i) => puppetOf(ANY, a, i));
+const most = (ps: Pose[], f: (p: Pose) => number) => Math.max(...ps.map(f));
 
-test('every shared act starts and ends at rest, a few frames a second', () => {
+test('every shared act starts and ends at rest, its first and last frames shown, a few frames a second', () => {
   assert.deepEqual(SHARED.sort(), ['applaud', 'beckon', 'cheer', 'flinch', 'handOver', 'nod', 'talk', 'wave']);
   for (const a of SHARED) {
     assert.ok(alike(ACTS[a].pose(0), rest()), `${a} does not start at rest`);
     assert.ok(alike(ACTS[a].pose(1), rest()), `${a} does not end at rest`);
+    const shown = frames(a);
+    assert.ok(alike(shown[0], rest()), `${a}: its first frame is not at rest`);
+    assert.ok(alike(shown[shown.length - 1], rest()), `${a}: its last frame is not at rest`);
     assert.ok(ACTS[a].frames >= 6 && ACTS[a].frames <= 10 && ACTS[a].frames / ACTS[a].secs <= 12, `${a}: ${ACTS[a].frames} frames over ${ACTS[a].secs} s`);
   }
 });
@@ -48,15 +55,22 @@ test('each shared act moves what it should', () => {
   assert.ok(most(frames('beckon'), (p) => p.arms[1].sh) > 1.2 && Math.max(...curls) - Math.min(...curls) >= 0.5, 'a beckon with no curl of the hand');
 });
 
-test("a local's own loops or the shared acts give its puppet, the act and how far into it set", () => {
-  const [, clerk, smith] = trio(getTheme('mines')!).npcs!;
+test("a local's own loops or the shared acts give its puppet, the act and how far into it set: round a loop for work and a show, through to the end for the rest", () => {
+  const [pourer, clerk, smith] = trio(getTheme('mines')!).npcs!;
   assert.equal(loopOf(smith, 'work'), smith.work);
   assert.equal(loopOf(smith, 'celebrate'), smith.celebrate);
   assert.equal(loopOf(clerk, 'celebrate'), ACTS.cheer, 'no way of its own: the shared cheer');
   const p = puppetOf(smith, 'wave', 4);
   assert.equal(p.act, 'wave');
-  assert.equal(p.u, 4 / ACTS.wave.frames);
-  assert.ok(alike(p, ACTS.wave.pose(4 / ACTS.wave.frames)));
+  assert.equal(p.u, 4 / (ACTS.wave.frames - 1));
+  assert.ok(alike(p, ACTS.wave.pose(4 / (ACTS.wave.frames - 1))));
+  // work and a show go round: their last frame is not their first
+  assert.equal(puppetOf(smith, 'work', 3).u, 3 / smith.work.frames);
+  assert.equal(puppetOf(pourer, 'show', pourer.show!.frames - 1).u, (pourer.show!.frames - 1) / pourer.show!.frames);
+  // a celebration plays once: its last frame is its end
+  const cel = smith.celebrate!;
+  assert.equal(puppetOf(smith, 'celebrate', cel.frames - 1).u, 1);
+  assert.ok(alike(puppetOf(smith, 'celebrate', cel.frames - 1), cel.pose(1)));
 });
 
 test('a puppet records its parts back to front for the view: the near arm over everything; the far one behind the body hanging, over it reaching forward, over the head raised; from behind the other way round', () => {

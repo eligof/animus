@@ -202,32 +202,42 @@ const cells = (s: Spot, r: number): Rect => ({ x0: Math.floor(s.x - r), y0: Math
 
 // How far out a show's crowd gathers, past where a local serves.
 const RING_OUT = 7;
+// Whoever a local serves keeps this far from every prop and pile, and
+// NPC_R and this from a standing local: the stage's floor to stand on
+// (see Stage.standable).
+const SERVE_M = 1.2;
 
 // Where each of the world's locals stands (see WorldDef.npcs): one behind
 // its counter or seated, inside its station where its art says; one
 // standing, where its art says if that floor is free (NPC_R clear of every
 // prop and supply pile and off the plazas, 3 from the stations' spots (8
 // from the way in's), 3 from the spots idlers like, out of the yard, 5 off
-// the hub, and apart from the other standing ones), else left out, as
-// decor is. Whoever it serves stands a step out in front of it (past its
-// station's front for one inside it), the next a step along, each where
-// the floor is free (else none); a show's crowd rings a point further out.
+// the hub, apart from the other standing ones and off where those placed
+// before it serve), else left out, as decor is. Whoever it serves stands a
+// step out in front of it (past its station's front for one inside it),
+// the next a step along, each where the floor is free and off every
+// standing local placed before it (else none): no local's counter is
+// blocked by another's. A show's crowd rings a point further out.
 function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], pois: readonly Poi[], supply: readonly Rect[]): PlacedNpc[] {
   const rects = [...props.map(footprint), ...supply];
   const plazas = buildSites(L);
   const h = hub(L);
   const yd = yard(L);
+  const arts = world.npcs ?? [];
   const clear = (s: Spot, m: number, plaza: number) =>
     s.x >= L.T + 1 && s.y >= L.T + 1 && s.x <= L.W - 2 && s.y <= L.D - 2 && !rects.some((r) => within(r, s.x, s.y, m)) && plazas.every((b) => Math.hypot(b.x - s.x, b.y - s.y) >= b.r + plaza);
   const out: PlacedNpc[] = [];
+  // Where those placed so far serve (those that do).
+  const serves = () => out.filter((o) => arts[o.k].serve).flatMap((o) => [o.front, o.wait]).filter((s): s is Spot => !!s);
   const free = (s: Spot) =>
     clear(s, NPC_R, 2) &&
     L.slots.every((q) => Math.hypot(q.spot.x - s.x, q.spot.y - s.y) >= (q.kind === 'entrance' ? 8 : 3)) &&
     pois.every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= 3) &&
     Math.hypot(yd.x - s.x, yd.y - s.y) >= yd.r + 1 &&
     Math.hypot(h.x - s.x, h.y - s.y) >= 5 &&
-    out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - s.x, o.y - s.y) >= 2 * NPC_R + 1);
-  (world.npcs ?? []).forEach((n, k) => {
+    out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - s.x, o.y - s.y) >= 2 * NPC_R + 1) &&
+    serves().every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= NPC_R + SERVE_M);
+  arts.forEach((n, k) => {
     const prop = props.findIndex((p) => p.slot?.kind === n.station);
     if (prop < 0) return;
     const p = props[prop];
@@ -237,7 +247,8 @@ function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], poi
     const fv = pl.mode === 'standing' ? Math.max(pl.v, p.dep) + 3 : p.dep + 2.5;
     const spot = (u: number): Spot | null => {
       const [sx, sy] = toWorld(p, u, fv, 0);
-      return clear({ x: sx, y: sy }, 1.2, 1) ? { x: sx, y: sy } : null;
+      const s = { x: sx, y: sy };
+      return clear(s, SERVE_M, 1) && out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - sx, o.y - sy) >= NPC_R + SERVE_M) ? s : null;
     };
     const front = spot(pl.u);
     const wait = front && (spot(pl.u + 4) ?? spot(pl.u - 4));

@@ -416,6 +416,11 @@ export class Life {
   }
 
   // ── the locals (see npcs.ts) ──────────────────────────────────────────
+  // Who has id `id` this frame, if anyone does.
+  actor(id: string): Actor | undefined {
+    return this.byId.get(id);
+  }
+
   // Free to join something a local puts on (a show): idle and awake, in
   // the room, hands free, nothing holding it, not about to be high-fived,
   // and doing nothing much (wandering, or at a spot).
@@ -631,9 +636,10 @@ export class Life {
         const b = brew!;
         let poi = 'poi' in b ? b.poi : null;
         if ('local' in b) {
-          const spot = this.locals!.join(b.local, a);
-          const l = this.locals!.of(b.local)!;
-          if (spot) poi = { x: spot.x, y: spot.y, kind: 'drink', face: { x: l.at.x, y: l.at.y } };
+          const L = this.locals;
+          const l = L?.of(b.local);
+          const spot = L && l ? L.join(b.local, a) : null;
+          if (l && spot) poi = { x: spot.x, y: spot.y, kind: 'drink', face: { x: l.at.x, y: l.at.y } };
         }
         if (!poi) {
           m.think = c + 1;
@@ -865,10 +871,12 @@ export class Life {
           } else if (c - e.since > COFFEE_LEG) this.end(a);
         } else if (e.step === 'pour') {
           if (e.local !== undefined) {
-            // served, or gone without once SERVE_WAIT is over
+            // served, or gone without once SERVE_WAIT is over: counted
+            // from its turn, never while it is being served
             const L = this.locals;
             if (!L || !L.served(e.local, a)) {
-              if (c >= e.until) this.end(a);
+              if (L && !L.turn(e.local, a)) e.until = c + SERVE_WAIT;
+              else if (c >= e.until) this.end(a);
               return;
             }
             L.leave(e.local, a);
@@ -938,7 +946,8 @@ export class Life {
       }
       case 'order': {
         // at a local's counter, served in its turn (see npcs.ts), or gone
-        // without once SERVE_WAIT is over
+        // without once SERVE_WAIT is over: counted from its turn, never
+        // while it is being served
         const L = this.locals;
         if (!L?.of(e.local)) {
           this.end(a);
@@ -962,7 +971,8 @@ export class Life {
           // (being served was its word with the local: see natters)
           m.natter = c;
           this.end(a);
-        } else if (c - e.since > SERVE_WAIT) this.end(a);
+        } else if (!L.turn(e.local, a)) e.since = c;
+        else if (c - e.since > SERVE_WAIT) this.end(a);
         return;
       }
       case 'watch': {
@@ -1461,9 +1471,10 @@ export class Life {
     const c = this.clock;
     for (const a of actors) {
       const m = a.mind;
-      if (c < m.natterLook || c - m.natter < NATTER_EVERY || !this.spare(a)) continue;
+      if (c < m.natterLook || c - m.natter < NATTER_EVERY) continue;
+      // (a local in reach first: it is the cheaper look)
       const k = L.near(a, c);
-      if (k === null) continue;
+      if (k === null || !this.spare(a)) continue;
       m.natterLook = c + NATTER_LOOK;
       if (!m.rng.chance(NATTER_CHANCE)) continue;
       m.natter = c;

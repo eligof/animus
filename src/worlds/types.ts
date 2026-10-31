@@ -46,6 +46,9 @@ export type PropArt = {
   len: number;
   dep: number;
   height: number;
+  // A station a local works (see Npc) is shown worked as a loop of two
+  // seconds, its pictures drawn once and kept (see CYCLE in art/scene.ts):
+  // what moves on it while worked (beats, turns) should repeat within 2 s.
   animated?: boolean;
   draw(v: PropView): void;
   emit?(v: PropView, dt: number, spawn: (p: Particle) => void): void;
@@ -114,8 +117,8 @@ export type NpcMouth = 'closed' | 'open' | 'smile' | 'o';
 
 // An arm: swung `sh` radians at the shoulder from hanging straight down
 // (+ forward, toward where it faces; PI straight up), bent `el` radians at
-// the elbow the same way.
-export type Swing = { sh: number; el: number };
+// the elbow the same way. Never changed once made: puppets share them.
+export type Swing = { readonly sh: number; readonly el: number };
 
 // A local's puppet in one frame: which act and how far into it (`u`, 0 to
 // 1), its body lifted (`bob`, units) and leaning about its feet (`lean`,
@@ -147,9 +150,11 @@ export type NpcParts = {
 };
 
 // A loop of a local's own: `frames` pictures over `secs` seconds, at most
-// 12 a second; `pose` its puppet at `u` (frame i at i / frames; its act
-// and u are set for it: start from rest() in art/npc/acts.ts).
-export type NpcLoop = { secs: number; frames: number; pose(u: number): Puppet };
+// 12 a second; `pose` its puppet at `u` (its act and u are set for it:
+// start from rest() in art/npc/acts.ts). Work and a show go round, frame i
+// at i / frames; the rest play once, frame i at i / (frames - 1), so the
+// last frame shown is the end (u = 1): a celebration ends as it began.
+export type NpcLoop = { secs: number; frames: number; pose(u: number): Omit<Puppet, 'act' | 'u'> };
 
 // Which way a local faces (see facingOf in world/npc-place.ts): `out` into
 // the room and `along` its station (+u) show its front; `back` (into its

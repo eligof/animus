@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
+import { ACTS, puppetOf, rest } from '../src/art/npc/acts.ts';
 import { hub } from '../src/world/layout.ts';
 import { NPC_R } from '../src/world/npc-place.ts';
 import { Stage } from '../src/world/stage.ts';
@@ -8,12 +9,14 @@ import type { Actor } from '../src/world/stage.ts';
 import type { Layout } from '../src/world/types.ts';
 import { mines } from '../src/worlds/mines.ts';
 import type { NpcAct, WorldDef } from '../src/worlds/types.ts';
-import { standers, trio } from './npc-fakes.ts';
+import { standIn, standers, trio, withLocals } from './npc-fakes.ts';
 
-// The locals on stage: at their stations at work, their stations worked,
-// each to its own rhythm; the acts life gives them (a wave for a newcomer,
-// a cheer for a finish, a flinch at a bang, applause for a level-up), one
-// after another; n turns them off and on; a standing one is kept clear.
+// The locals on stage: at their stations at work, their stations worked
+// (never the way in), each to its own rhythm; the acts life gives them (a
+// wave for a newcomer, first from the local by the door; a cheer for a
+// finish, a flinch at a bang, applause for a level-up), one after another,
+// each seen through to its end; n turns them off and on; a standing one is
+// kept clear.
 
 const NOW = 1_700_000_000_000;
 // A roomy scene: a room about 107 across.
@@ -135,6 +138,58 @@ test('acts come one after another: one lined up waits for the one under way, nev
     if (act !== seq[seq.length - 1]) seq.push(act);
   });
   assert.deepEqual(seq.filter((a) => a !== 'work'), ['applaud', 'cheer'], `in turn: ${seq.join(', ')}`);
+});
+
+test('an act played once is seen through to its last frame, back at rest', () => {
+  const stage = newStage();
+  const now = run(stage, () => [agent('w', 'write')], 6);
+  const L = stage.life.locals!;
+  const clerk = L.all.find((l) => l.art.name === 'clerk')!;
+  L.applaud(stage.life.clock);
+  const seen: number[] = [];
+  run(stage, () => [agent('w', 'write')], 3, now, (t) => {
+    const n = stage.frame(t)!.npcs!.find((q) => q.k === clerk.k)!;
+    if (n.act === 'applaud') seen.push(n.frame);
+  });
+  const last = Math.max(...seen);
+  assert.equal(last, ACTS.applaud.frames - 1, 'its last frame never shown');
+  const p = puppetOf(clerk.art, 'applaud', last);
+  const r = rest();
+  const off = Math.abs(p.bob - r.bob) + Math.abs(p.lean - r.lean) + Math.abs(p.tilt - r.tilt) + p.arms.reduce((n, a, k) => n + Math.abs(a.sh - r.arms[k].sh) + Math.abs(a.el - r.arms[k].el), 0);
+  assert.ok(off < 1e-9 && p.eyes === r.eyes && p.mouth === r.mouth && !p.hold, `its last frame ${off.toFixed(2)} off rest`);
+});
+
+test('a local at the way in never works it: its door opens only for those who pass, and it is first to greet a newcomer', () => {
+  const porter = standIn('porter', 'entrance', { mode: 'behind', u: 12, v: 1, top: 3, edge: 2 });
+  const w = withLocals(lively, [...world.npcs!, porter]);
+  const stage = newStage(w);
+  const now = run(stage, () => [agent('w', 'write')], 8);
+  const L = stage.life.locals!;
+  const p = stage.room()!.npcs.find((q) => w.npcs![q.k] === porter);
+  assert.ok(p, 'the porter is not in the room');
+  const f = stage.frame(now)!;
+  assert.equal(f.npcs!.find((q) => q.k === p.k)!.works, false, 'the porter works the way in');
+  assert.ok(!L.worked.has(p.prop), 'the way in is worked');
+  assert.equal(f.active[p.prop], false, 'the way in open with nobody passing');
+  for (const q of f.npcs!) if (q.k !== p.k) assert.ok(q.works && L.worked.has(q.prop) && f.active[q.prop], `${w.npcs![q.k].name}'s station is not worked`);
+  // someone walks in: the porter waves, before any other local stirs
+  const first = new Map<number, { act: NpcAct; at: number }>();
+  run(stage, (t) => [agent('w', 'write'), awake('new', t)], 3, now, (t) => {
+    for (const q of stage.frame(t)!.npcs!) if (q.act !== 'work' && !first.has(q.k)) first.set(q.k, { act: q.act, at: stage.life.clock });
+  });
+  const mine = first.get(p.k);
+  assert.equal(mine?.act, 'wave', 'the porter did not wave');
+  for (const [k, o] of first) if (k !== p.k) assert.ok(o.at > mine!.at, `${w.npcs![k].name} greeted first`);
+  // and so every time
+  const door = stage.stations().find((s) => s.kind === 'entrance')!.spot;
+  const at = L.of(p.k)!;
+  for (let i = 0; i < 30; i++) {
+    for (const l of L.all) l.acts = [];
+    L.greet(door, stage.life.clock);
+    const wave = at.acts[0];
+    assert.equal(wave?.act, 'wave', 'the porter did not wave');
+    for (const l of L.all) if (l !== at && l.acts.length) assert.ok(l.acts[0].at > wave.at, `${l.art.name} greeted first`);
+  }
 });
 
 test('n off: the locals go and their stations stand idle; on again, they are back', () => {

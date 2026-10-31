@@ -467,7 +467,21 @@ export class Stage {
   // The room's locals on duty, if they are on (see npcs.ts).
   private meet(): void {
     const placed = this.npcsOn ? (this.plan?.npcs ?? []) : [];
-    this.life.setLocals(placed.length ? new Locals(this.world, placed, (s) => this.standable(s), this.life.clock) : null);
+    const host = { standable: (s: Spot) => this.standable(s), watchable: (s: Spot) => this.watchable(s) };
+    this.life.setLocals(placed.length ? new Locals(this.world, placed, host, this.life.clock) : null);
+  }
+
+  // Whether one watching a local's show may stand at s: standable, and
+  // WORK_APART from every agent at a workstation, where it stands or is
+  // going (see share).
+  private watchable(s: Spot): boolean {
+    if (!this.standable(s)) return false;
+    for (const o of this.cast.values()) {
+      if (o.station?.kind !== 'desk' || o.state === 'leave' || o.gone) continue;
+      const at = o.path[o.path.length - 1] ?? o;
+      if (Math.hypot(at.x - s.x, at.y - s.y) < WORK_APART) return false;
+    }
+    return true;
   }
 
   private door(): Slot | undefined {
@@ -1168,15 +1182,15 @@ export class Stage {
   }
 
   // Per room prop: someone works it (or, at the entrance, comes or goes),
-  // or a local does (see npcs.ts): every station but the way in, whose
-  // door opens only for those who pass.
+  // or a local does (see Locals.worked: every station but the way in, whose
+  // door opens only for those who pass).
   private activeProps(): boolean[] {
     const actors = [...this.cast.values()];
-    const worked = new Set((this.life.locals?.all ?? []).filter((l) => l.at.station !== 'entrance').map((l) => l.at.prop));
+    const worked = this.life.locals?.worked;
     return (this.plan?.props ?? []).map((p, i) => {
       const s = p.slot;
       if (!s) return false;
-      if (worked.has(i)) return true;
+      if (worked?.has(i)) return true;
       if (s.kind === 'entrance') return actors.some((a) => (a.state === 'enter' || a.state === 'leave') && Math.hypot(a.x - s.spot.x, a.y - s.spot.y) < 8);
       return actors.some((a) => a.station === s && a.state === 'work');
     });

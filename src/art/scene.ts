@@ -77,7 +77,9 @@ export type SceneImage = { bitmap: Bitmap; rect: Cells; cell: { w: number; h: nu
 export const AMBIENT_FPS = 6;
 // An animated prop a local works (see SceneFrame.npcs) goes round a loop of
 // CYCLE ambient steps (two seconds), each step's picture drawn once and
-// kept (see cyclePic): the step prop i shows at scene time t.
+// kept (see cyclePic): the step prop i shows at scene time t. Its worked
+// motion is seen as that 2 s loop, so it should repeat within 2 s (its
+// beats and turns; see PropArt.animated).
 export const CYCLE = 12;
 export const cycleStep = (t: number, i: number) => Math.floor(t * AMBIENT_FPS + phaseOf(i)) % CYCLE;
 
@@ -275,6 +277,10 @@ export class Scene {
   // What warm last finished: for which view and cameras, at which step.
   private warmed = { sig: '', tick: NaN };
   private renders = 0;
+  // The props the locals work (see NpcFrame.works), kept while the room
+  // and how many locals there are stay the same: worked out once for them,
+  // not every frame.
+  private worked: { room: SceneFrame['room'] | null; n: number; props: ReadonlySet<number> } = { room: null, n: -1, props: new Set() };
 
   // The frame as one picture: the plate composited (the canvas is reused
   // from frame to frame).
@@ -911,7 +917,7 @@ export class Scene {
     // stands on, see below), and those its locals work (round a loop: see
     // cyclePic).
     const propItem = new Map<number, Item>();
-    const worked = new Set((f.npcs ?? []).filter((n) => n.works).map((n) => n.prop));
+    const worked = this.workedOf(f);
     f.room.props.forEach((p, i) => {
       const r = footprint(p);
       const box = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: p.art.height, point: false };
@@ -1106,6 +1112,14 @@ export class Scene {
       }
       return out;
     });
+  }
+
+  // The props frame f's locals work (see worked).
+  private workedOf(f: SceneFrame): ReadonlySet<number> {
+    const n = f.npcs?.length ?? 0;
+    const w = this.worked;
+    if (w.room !== f.room || w.n !== n) this.worked = { room: f.room, n, props: new Set((f.npcs ?? []).filter((q) => q.works).map((q) => q.prop)) };
+    return this.worked.props;
   }
 
   // An animated prop drawn whole on its own (world pixels), again per

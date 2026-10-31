@@ -3,16 +3,17 @@ import type { Npc, NpcAct, NpcLoop, Puppet, Swing } from '../../worlds/types.ts'
 // The acts every local shares (see Npc in worlds/types.ts): a wave, a
 // cheer, a flinch, applause, a word, a nod, handing over what it serves
 // and beckoning someone over. Each drives the same puppet for every local
-// with nothing drawn of its own, and starts and ends at rest, so it slots
-// in between frames of the local's work. Arm 0 is the near one (it hands
-// things over), arm 1 the far one, on the side the local faces (it waves
-// and beckons).
+// with nothing drawn of its own, and starts and ends at rest (its first
+// and last frames: see puppetOf), so it slots in between frames of the
+// local's work. Arm 0 is the near one (it hands things over), arm 1 the
+// far one, on the side the local faces (it waves and beckons).
 
 export const TAU = Math.PI * 2;
 export type SharedAct = Exclude<NpcAct, 'work' | 'show' | 'celebrate'>;
 
-// Arms hanging easy, a soft bend at the elbow.
-const HANG: Swing = { sh: 0.12, el: 0.2 };
+// Arms hanging easy, a soft bend at the elbow (shared by every puppet at
+// rest: a Swing is never changed).
+const HANG: Swing = Object.freeze({ sh: 0.12, el: 0.2 });
 const swing = (sh: number, el: number): Swing => ({ sh: HANG.sh + sh, el: HANG.el + el });
 const TALK: ReadonlyArray<Puppet['mouth']> = ['open', 'smile', 'o', 'open', 'closed'];
 
@@ -37,7 +38,7 @@ export function bump(u: number, a: number, b: number): number {
   return u <= a || u >= b ? 0 : Math.sin(((u - a) / (b - a)) * Math.PI);
 }
 
-export const ACTS: Record<SharedAct, NpcLoop> = {
+export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // the far hand up, waving
   wave: {
     secs: 1.2,
@@ -124,9 +125,20 @@ export function loopOf(n: Npc, act: NpcAct): NpcLoop {
   return ACTS[act];
 }
 
+// Whether `act` plays once (everything but work and a show, which go
+// round).
+export const once = (act: NpcAct): boolean => act !== 'work' && act !== 'show';
+
+// How far into `act` frame `frame` of its loop lp is: round a loop, frame i
+// at i / frames; played once, i / (frames - 1), so its last frame is its
+// end and it is seen back at rest.
+export function uOf(act: NpcAct, lp: NpcLoop, frame: number): number {
+  return once(act) ? (lp.frames > 1 ? frame / (lp.frames - 1) : 0) : frame / lp.frames;
+}
+
 // Local n's puppet in frame `frame` of `act`.
 export function puppetOf(n: Npc, act: NpcAct, frame: number): Puppet {
   const lp = loopOf(n, act);
-  const u = frame / lp.frames;
+  const u = uOf(act, lp, frame);
   return { ...lp.pose(u), act, u };
 }

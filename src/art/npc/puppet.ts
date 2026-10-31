@@ -23,6 +23,7 @@ const HIGH = 2.2;
 export function buildNpc(sk: Sketch, n: Npc, p: Puppet, back: boolean): void {
   const b = n.bones;
   const parts = n.parts;
+  const held = p.hold ? n.serve : undefined;
   sk.push(mul(move(0, -p.bob), turn(p.lean)));
   const arm = (k: 0 | 1) => {
     const [sx, sy] = b.shoulders[k];
@@ -30,7 +31,7 @@ export function buildNpc(sk: Sketch, n: Npc, p: Puppet, back: boolean): void {
       parts.upper(sk, p, k, back);
       sk.at(mul(move(0, b.upper), turn(-p.arms[k].el)), () => {
         parts.fore(sk, p, k, back);
-        if (k === 0 && p.hold && n.serve) sk.at(move(0, b.fore), () => n.serve!.draw(sk));
+        if (k === 0 && held) sk.at(move(0, b.fore), () => held.draw(sk));
       });
     });
   };

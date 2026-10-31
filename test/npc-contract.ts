@@ -93,7 +93,14 @@ export function npcContract(w: WorldDef, n: Npc): void {
     loop('show', n.show, [6, 16], [1, 6]);
     assert.ok(n.show.crowd === 'dance' || n.show.crowd === 'watch', `${what}: a show's crowd`);
   }
-  if (n.celebrate) loop('celebrate', n.celebrate, [4, 12], [0.6, 2.5]);
+  if (n.celebrate) {
+    loop('celebrate', n.celebrate, [4, 12], [0.6, 2.5]);
+    // played once, it ends as it starts (its last frame shown posed as its
+    // first), so it slots back into its work
+    const [p, q] = [puppetOf(n, 'celebrate', 0), puppetOf(n, 'celebrate', n.celebrate.frames - 1)];
+    const off = Math.abs(p.bob - q.bob) + Math.abs(p.lean - q.lean) + Math.abs(p.tilt - q.tilt) + p.arms.reduce((s, a, k) => s + Math.abs(a.sh - q.arms[k].sh) + Math.abs(a.el - q.arms[k].el), 0);
+    assert.ok(off < 0.05, `${what}: its celebration ends ${off.toFixed(2)} off where it starts`);
+  }
   // Every frame of every act inside its box, as it is seen (from behind
   // too if it faces away; the other way round is the mirror image).
   for (const back of pl.look === 'back' ? [false, true] : [false]) {

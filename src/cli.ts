@@ -82,9 +82,11 @@ export async function main(argv: string[]): Promise<number> {
     return Number.isFinite(n) && n >= min && n <= max ? n : null;
   };
 
+  // The saved choices, read once.
+  const cfg = loadConfig();
   let theme = values.theme ? getTheme(values.theme) : undefined;
   if (values.theme && !theme) return fail(`unknown theme "${values.theme}" (try: ${themeIds().join(', ')})`);
-  theme ??= getTheme(loadConfig().theme ?? '') ?? THEMES[0];
+  theme ??= getTheme(cfg.theme ?? '') ?? THEMES[0];
 
   const fps = num('fps', values.fps, 30, 1, 60);
   if (fps === null) return fail('--fps must be a number from 1 to 60');
@@ -94,12 +96,12 @@ export async function main(argv: string[]): Promise<number> {
   if (asked !== undefined && asked !== 'auto' && asked !== 'scene' && asked !== 'dashboard') return fail('--view must be auto, scene or dashboard');
   // The scene needs images: a saved choice of it only holds where they show.
   const images = supportsImages();
-  const saved = loadConfig().view;
+  const saved = cfg.view;
   const want = asked ?? (saved === 'scene' && !images ? 'auto' : saved) ?? 'auto';
   const view = want === 'auto' ? (images ? 'scene' : 'dashboard') : want;
-  const lights = loadConfig().lights ?? true;
-  const officeLife = loadConfig().officeLife ?? true;
-  const npcs = loadConfig().npcs ?? true;
+  const lights = cfg.lights ?? true;
+  const officeLife = cfg.officeLife ?? true;
+  const npcs = cfg.npcs ?? true;
 
   if (values.snapshot) {
     const width = num('width', values.width, 120, 20, 1000);
