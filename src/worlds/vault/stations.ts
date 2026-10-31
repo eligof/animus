@@ -11,7 +11,7 @@ import { C, INK, circle, due, hash, kitOf, still, withAlpha, wisp } from './kit.
 // front and the +u end). Animated ones paint their still parts through the
 // sprite cache (see still) and only the moving bits each frame.
 //
-//   write     the counting desk: a ledger, a quill, a balance and coins
+//   write     the counting desk: the teller's, a ledger, a balance and coins
 //   read      the ledger archive: steel shelving, card drawers, a lectern
 //   search    the safe being cracked: its dial turning under a clamp lamp
 //   run       the foundry: a furnace, a ladle pouring gold into moulds
@@ -36,14 +36,18 @@ function script(u0: number, u1: number, v: number, z: number, seed: number): P3[
 }
 
 // ── write: the counting desk ───────────────────────────────────────────────
-// A mahogany pedestal desk with a green leather top: an open ledger, an
-// inkwell and quill, a banker's lamp, a brass balance with coins in its
-// pans, stacks of coins and a bundle of notes; a leather chair pulled out.
-// Working sets the quill writing down the page and the balance swaying.
+// A mahogany pedestal desk with a green leather top, turned to the room:
+// the teller's leather chair behind it (see npcs.ts), her open ledger, a
+// red ink pad, coins and bundles of notes; the inkwell and quill, a
+// banker's lamp and a brass balance with coins in its pans at its far end,
+// clear of her. Worked, the lamp burns brighter and the balance sways (her
+// hands count and stamp). `top`: the desk top; `back`: its back edge, a
+// step out from the wall; `seat`: the chair, where she sits.
 
-const DESK = 6.3; // the desk top
-const PAGE = { u0: 5.25, u1: 6.95, v0: 2.75, dv: 0.3, rows: 6 };
-const SCALE = { u: 8.7, v: 2.2, z: DESK + 3.3, arm: 1.45 };
+export const COUNTER = { top: 6.3, back: 2.2, seat: [5.5, 1.4] as const };
+const DESK = COUNTER.top;
+const PAGE = { u0: 5.25, u1: 6.95, v0: 3.35, dv: 0.3, rows: 6 };
+const SCALE = { u: 1.9, v: 5.4, z: DESK + 3.3, arm: 1.3 };
 
 const write: PropArt = {
   len: 11,
@@ -51,54 +55,69 @@ const write: PropArt = {
   height: 12,
   animated: true,
   draw(v: PropView): void {
+    const b = COUNTER.back;
     const k = still(v, 'write', 12, (k) => {
-      k.shadow(5.5, 3.4, 6.2, 3.8, 0.32);
-      // the pedestals, the back panel, the top
-      k.box(3.7, 0.9, 0.8, 3.6, 0.5, 4.8, C.mahoganyDark, { stripe: false });
+      k.shadow(5.5, 4.2, 6.2, 3.6, 0.32);
+      // the teller's chair, behind the desk, facing the room
+      chair(k, COUNTER.seat[0], COUNTER.seat[1], Math.PI / 2, C.oxblood);
+      // the pedestals, the modesty panel between them, the top
       for (const u0 of [0.9, 7.3]) {
-        k.box(u0, 0.9, 0, 2.8, 4.1, 5.6, C.mahogany, { stripe: false });
+        k.box(u0, b + 0.4, 0, 2.8, 4.2, 5.6, C.mahogany, { stripe: false });
         for (const [z0, z1] of [[0.4, 2.0], [2.2, 3.8], [4.0, 5.3]] as const) {
-          k.rect(u0 + 0.25, z0, u0 + 2.55, z1, 5.01, k.side(shade(C.mahogany, 0.06), 0, 1), k.thin);
-          k.rod([[u0 + 1.0, 5.1, (z0 + z1) / 2 + 0.1], [u0 + 1.8, 5.1, (z0 + z1) / 2 + 0.1]], C.brass, 0.12);
+          k.rect(u0 + 0.25, z0, u0 + 2.55, z1, b + 4.61, k.side(shade(C.mahogany, 0.06), 0, 1), k.thin);
+          k.rod([[u0 + 1.0, b + 4.7, (z0 + z1) / 2 + 0.1], [u0 + 1.8, b + 4.7, (z0 + z1) / 2 + 0.1]], C.brass, 0.12);
         }
       }
-      k.box(0.4, 0.5, 5.6, 10.2, 5.0, 0.7, C.mahogany);
-      k.poly([[1.0, 1.0, DESK + 0.01], [9.6, 1.0, DESK + 0.01], [9.6, 5.0, DESK + 0.01], [1.0, 5.0, DESK + 0.01]], C.leather, k.thin);
-      k.line([[1.25, 1.25, DESK + 0.02], [9.35, 1.25, DESK + 0.02], [9.35, 4.75, DESK + 0.02], [1.25, 4.75, DESK + 0.02], [1.25, 1.25, DESK + 0.02]], withAlpha(C.brassLight, 0.6), Math.max(0.6, 0.06 * k.s));
-      // the banker's lamp at the back
-      k.disc(2.2, 1.6, DESK + 0.02, 0.62, C.brass, k.thin);
-      k.rod([[2.2, 1.6, DESK], [2.2, 1.6, DESK + 2.3]], C.brass, 0.15);
-      // the ledger: its covers, then the pages, the left one written full
-      k.poly([[3.3, 2.5, DESK + 0.03], [7.1, 2.5, DESK + 0.03], [7.1, 4.85, DESK + 0.03], [3.3, 4.85, DESK + 0.03]], C.oxblood, k.thin);
+      k.box(3.7, b + 3.7, 0.8, 3.6, 0.5, 4.8, C.mahoganyDark, { stripe: false });
+      k.box(0.4, b, 5.6, 10.2, 4.6, 0.7, C.mahogany);
+      const [l0, l1] = [b + 0.45, b + 4.15];
+      k.poly([[1.0, l0, DESK + 0.01], [9.6, l0, DESK + 0.01], [9.6, l1, DESK + 0.01], [1.0, l1, DESK + 0.01]], C.leather, k.thin);
+      k.line([[1.25, l0 + 0.25, DESK + 0.02], [9.35, l0 + 0.25, DESK + 0.02], [9.35, l1 - 0.25, DESK + 0.02], [1.25, l1 - 0.25, DESK + 0.02], [1.25, l0 + 0.25, DESK + 0.02]], withAlpha(C.brassLight, 0.6), Math.max(0.6, 0.06 * k.s));
+      // the ledger before her: its covers, then the pages, written full
+      k.poly([[3.3, 3.1, DESK + 0.03], [7.1, 3.1, DESK + 0.03], [7.1, 5.45, DESK + 0.03], [3.3, 5.45, DESK + 0.03]], C.oxblood, k.thin);
       const z = DESK + 0.18;
-      k.poly([[3.45, 2.6, z], [5.2, 2.6, z], [5.2, 4.75, z], [3.45, 4.75, z]], '#f3ead2', k.thin);
-      k.poly([[5.2, 2.6, z], [6.95, 2.6, z], [6.95, 4.75, z], [5.2, 4.75, z]], '#f8f0dc', k.thin);
-      k.line([[5.2, 2.6, z + 0.01], [5.2, 4.75, z + 0.01]], withAlpha(INK, 0.45), Math.max(0.6, 0.06 * k.s));
+      k.poly([[3.45, 3.2, z], [5.2, 3.2, z], [5.2, 5.35, z], [3.45, 5.35, z]], '#f3ead2', k.thin);
+      k.poly([[5.2, 3.2, z], [6.95, 3.2, z], [6.95, 5.35, z], [5.2, 5.35, z]], '#f8f0dc', k.thin);
+      k.line([[5.2, 3.2, z + 0.01], [5.2, 5.35, z + 0.01]], withAlpha(INK, 0.45), Math.max(0.6, 0.06 * k.s));
       if (k.s >= 5) {
         const ink = withAlpha('#2a3550', 0.7);
         const w = Math.max(0.6, 0.05 * k.s);
         for (let r = 0; r < PAGE.rows; r++) k.line(script(3.65, 4.2 + hash(r, 41) * 0.8, PAGE.v0 + r * PAGE.dv, z + 0.01, r), ink, w);
-        for (let r = 0; r < 2; r++) k.line(script(PAGE.u0 + 0.2, PAGE.u0 + 0.8 + hash(r, 42) * 0.7, PAGE.v0 + r * PAGE.dv, z + 0.01, r + 9), ink, w);
-        k.line([[4.95, 2.6, z + 0.01], [4.95, 4.75, z + 0.01]], withAlpha('#c0392f', 0.5), w);
+        for (let r = 0; r < 4; r++) k.line(script(PAGE.u0 + 0.2, PAGE.u0 + 0.8 + hash(r, 42) * 0.7, PAGE.v0 + r * PAGE.dv, z + 0.01, r + 9), ink, w);
+        k.line([[4.95, 3.2, z + 0.01], [4.95, 5.35, z + 0.01]], withAlpha('#c0392f', 0.5), w);
+        // her stamp's marks down the right-hand page
+        for (const [u, w2] of [[6.45, 4.55], [6.2, 5.0]] as const) {
+          const e = k.ell(u, w2, z + 0.01, 0.28);
+          k.pen.beginPath();
+          k.pen.ellipse(e.cx, e.cy, e.rx, e.ry, e.rot, 0, Math.PI * 2);
+          k.paint(withAlpha(C.red, 0.2), Math.max(0.6, 0.06 * k.s), withAlpha(C.red, 0.75));
+        }
       }
-      k.line([[6.2, 4.75, z], [6.25, 5.3, DESK - 0.2]], '#c0392f', Math.max(0.8, 0.12 * k.s));
-      // the inkwell
-      k.cyl(2.1, 4.1, DESK, 0.48, 0.55, '#2a3550', { top: '#3a4a70' });
-      k.cyl(2.1, 4.1, DESK + 0.55, 0.22, 0.2, C.brass);
-      // the balance's foot and pillar
+      k.line([[6.2, 5.35, z], [6.25, 5.9, DESK - 0.2]], '#c0392f', Math.max(0.8, 0.12 * k.s));
+      // the red ink pad at her elbow
+      k.box(7.4, 3.0, DESK, 1.3, 0.9, 0.16, C.iron, { line: k.thin, stripe: false });
+      k.poly([[7.55, 3.12, DESK + 0.17], [8.55, 3.12, DESK + 0.17], [8.55, 3.78, DESK + 0.17], [7.55, 3.78, DESK + 0.17]], C.red, 0);
+      // the inkwell at the far end, the balance's foot and pillar
+      k.cyl(3.4, 6.05, DESK, 0.42, 0.5, '#2a3550', { top: '#3a4a70' });
+      k.cyl(3.4, 6.05, DESK + 0.5, 0.2, 0.18, C.brass);
       k.cyl(SCALE.u, SCALE.v, DESK, 0.75, 0.3, C.mahoganyDark, { top: shade(C.mahoganyDark, 0.15) });
       k.cyl(SCALE.u, SCALE.v, DESK + 0.3, 0.12, SCALE.z - DESK - 0.3, C.brass, { line: k.thin });
-      // coins and a bundle of notes at the front right
-      coins(k, 7.8, 4.0, DESK, 6);
-      coins(k, 8.6, 4.4, DESK, 4);
-      coins(k, 7.6, 4.7, DESK, 3);
-      k.box(9.0, 3.6, DESK, 1.2, 0.75, 0.4, '#7fa070', { line: k.thin, stripe: false });
-      k.box(9.4, 3.58, DESK, 0.3, 0.79, 0.42, '#f3ead2', { line: 0, stripe: false });
-      // the chair, pulled out
-      chair(k, 2.6, 6.3, -Math.PI / 2 - 0.4, C.oxblood);
+      // coins and bundles of notes down the near end, low
+      coins(k, 8.1, 4.5, DESK, 5);
+      coins(k, 8.9, 4.9, DESK, 3);
+      coins(k, 7.8, 5.6, DESK, 3);
+      for (const [u, w2, n] of [[8.6, 5.7, 0], [8.7, 5.75, 1]] as const) {
+        k.box(u, w2, DESK + n * 0.4, 1.2, 0.75, 0.4, '#7fa070', { line: k.thin, stripe: false });
+        k.box(u + 0.4, w2 - 0.02, DESK + n * 0.4, 0.3, 0.79, 0.42, '#f3ead2', { line: 0, stripe: false });
+      }
+      // the banker's lamp at the far back corner
+      k.disc(1.3, 2.95, DESK + 0.02, 0.6, C.brass, k.thin);
+      k.rod([[1.3, 2.95, DESK], [1.3, 2.95, DESK + 2.3]], C.brass, 0.15);
+      // the quill, stood in its well
+      quill(k, [3.4, 6.05, DESK + 0.55], [0.5, -0.35, 1]);
     });
     // the lamp's green shade, lit
-    const [s0, s1, sv, sz, sr] = [1.1, 3.3, 1.75, DESK + 2.2, 0.62];
+    const [s0, s1, sv, sz, sr] = [0.5, 2.0, 3.0, DESK + 2.2, 0.58];
     const lamp = '#2f7a54';
     const arcAt = (u: number): P3[] => Array.from({ length: 9 }, (_, i) => [u, sv + Math.cos((i / 8) * Math.PI) * sr, sz + Math.sin((i / 8) * Math.PI) * sr * 0.9] as P3);
     const shell = hull([...arcAt(s0), ...arcAt(s1)].map((p) => k.p(...p)));
@@ -106,50 +125,31 @@ const write: PropArt = {
     k.line(arcAt(s1), withAlpha(INK, 0.7), k.thin);
     k.line([[s0 + 0.1, sv - sr * 0.3, sz + sr * 0.85], [s1 - 0.2, sv - sr * 0.3, sz + sr * 0.85]], withAlpha('#d8ffe8', 0.6), Math.max(0.7, 0.08 * k.s));
     k.line([[s0 + 0.1, sv + sr, sz], [s1 - 0.1, sv + sr, sz]], '#fff0c0', Math.max(0.8, 0.12 * k.s));
-    k.pool(3.6, 3.0, 2.6, 1.6, '#ffe2a0', v.active ? 0.5 : 0.3, DESK + 0.05);
-    k.halo(2.2, 1.9, sz - 0.1, 2.6, '#ffd890', v.active ? 0.45 : 0.3);
-    // the balance's beam and pans, swaying while someone counts
-    const tilt = v.active ? Math.sin(v.t * 1.9) * 0.16 : 0.04;
+    k.pool(2.2, 4.0, 2.4, 1.6, '#ffe2a0', v.active ? 0.5 : 0.3, DESK + 0.05);
+    k.halo(1.3, 3.2, sz - 0.1, 2.6, '#ffd890', v.active ? 0.45 : 0.3);
+    // the balance's beam and pans, swaying while the teller counts (once
+    // in two seconds, so a worked desk loops cleanly)
+    const tilt = v.active ? Math.sin(v.t * Math.PI) * 0.16 : 0.04;
     const ends: P3[] = [-1, 1].map((sd) => [SCALE.u + sd * Math.cos(tilt) * SCALE.arm, SCALE.v, SCALE.z + sd * Math.sin(tilt) * SCALE.arm] as P3);
     k.rod([ends[0], ends[1]], C.brass, 0.14);
     k.disc(SCALE.u, SCALE.v, SCALE.z + 0.05, 0.16, C.brassLight, k.thin);
     for (const [i, e] of ends.entries()) {
       const pz = e[2] - 1.7;
       const strings: Array<[P3, P3]> = [];
-      for (const a of [0.6, 2.7, 4.8]) strings.push([e, [e[0] + Math.cos(a) * 0.62, e[1] + Math.sin(a) * 0.62, pz]]);
+      for (const a of [0.6, 2.7, 4.8]) strings.push([e, [e[0] + Math.cos(a) * 0.55, e[1] + Math.sin(a) * 0.55, pz]]);
       k.segs(strings, withAlpha(INK, 0.8), Math.max(0.6, 0.05 * k.s));
-      k.disc(e[0], e[1], pz, 0.7, C.brass, k.thin);
-      k.disc(e[0], e[1], pz + 0.02, 0.5, shade(C.brass, 0.15), 0);
-      if (i === 0) coins(k, e[0], e[1], pz, 3, 0.36);
-      else goldBar(k, e[0] - 0.5, e[1] - 0.25, pz, 1.0, 0.5, 0.3);
+      k.disc(e[0], e[1], pz, 0.62, C.brass, k.thin);
+      k.disc(e[0], e[1], pz + 0.02, 0.44, shade(C.brass, 0.15), 0);
+      if (i === 0) coins(k, e[0], e[1], pz, 3, 0.32);
+      else goldBar(k, e[0] - 0.45, e[1] - 0.22, pz, 0.9, 0.45, 0.28);
     }
-    // the quill: in the well, or writing down the right-hand page
-    if (!v.active) {
-      quill(k, [2.1, 4.1, DESK + 0.6], [0.5, -0.35, 1]);
-      return;
-    }
-    const z = DESK + 0.19;
-    const span = PAGE.rows - 2;
-    const pos = (v.t * 0.45) % span;
-    const row = 2 + Math.floor(pos);
-    const f = pos - Math.floor(pos);
-    const ink = withAlpha('#2a3550', 0.75);
-    const w = Math.max(0.6, 0.05 * k.s);
-    let tip: P3 = [PAGE.u0 + 0.2, PAGE.v0 + row * PAGE.dv, z];
-    for (let r = 2; r <= row; r++) {
-      const u1 = PAGE.u0 + 0.3 + (hash(r, 43) * 0.5 + 0.9) * (r === row ? f : 1);
-      const pts = script(PAGE.u0 + 0.2, Math.max(PAGE.u0 + 0.22, u1), PAGE.v0 + r * PAGE.dv, z, r + 20);
-      if (k.s >= 5) k.line(pts, ink, w);
-      if (r === row) tip = pts[pts.length - 1];
-    }
-    quill(k, tip, [0.45, -0.5, 1]);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
     const n = due(v.t, dt, 0.5, v.seed);
     for (let i = 0; i < n; i++) {
       const tick = Math.floor(v.t * 10) + i;
-      spawn({ kind: 'glint', x: 7.8 + hash(tick, 1) * 1.2, y: 4.0 + hash(tick, 2) * 0.8, z: DESK + 1.2, vx: 0, vy: 0, vz: 0.6, life: 0.7, color: [255, 226, 140], glow: true, gravity: 0 });
+      spawn({ kind: 'glint', x: 7.8 + hash(tick, 1) * 1.2, y: 4.5 + hash(tick, 2) * 1.0, z: DESK + 1.2, vx: 0, vy: 0, vz: 0.6, life: 0.7, color: [255, 226, 140], glow: true, gravity: 0 });
     }
   },
 };
@@ -294,11 +294,13 @@ const LEDGER: readonly [P3, P3, P3, P3] = [[11.1, 1.25, 6.62], [13.5, 1.25, 6.62
 // ── search: the safe being cracked ─────────────────────────────────────────
 // A great old safe in bottle green with gold lines, ball feet, a brass
 // dial and a spoked handle; beside it a tool trolley: a clamp lamp turned
-// on the dial, a stethoscope, a drill and a toolbox. Searching spins the
-// dial back and forth under the lamp.
+// on the dial, a crowbar, a drill and a toolbox. Worked, the dial spins
+// back and forth under the lamp, the safecracker's hand on it (see
+// npcs.ts: he stands before the door's hinge side). `SAFE`: its body;
+// `DIAL`: the dial's middle on the door.
 
-const SAFE = { u0: 0.6, u1: 7.0, v0: 0.4, v1: 3.7, z0: 0.7, z1: 10.2 };
-const DIAL: P3 = [3.8, SAFE.v1 + 0.02, 6.2];
+export const SAFE = { u0: 0.6, u1: 7.0, v0: 0.4, v1: 3.7, z0: 0.7, z1: 10.2 };
+export const DIAL: P3 = [3.8, SAFE.v1 + 0.02, 6.2];
 
 const search: PropArt = {
   len: 12,
@@ -372,18 +374,14 @@ const search: PropArt = {
       k.box(t0 + 2.4, w0 + 0.9, 1.35, 1.0, 1.4, 0.7, '#e09a2a', { line: k.thin, round: 0.15 });
       k.rod([[t0 + 2.9, w0 + 2.3, 1.75], [t0 + 2.9, w0 + 2.8, 1.75]], C.chrome, 0.1);
       k.box(t0, w0, 4.75, t1 - t0, w1 - w0, 0.25, C.steel, { line: k.thin });
-      // on top: a stethoscope, a crowbar, a pad of figures
+      // on top: a crowbar, a pad of figures and a torch (the stethoscope
+      // is round the safecracker's neck: see npcs.ts)
       const tz = 5.0;
       k.rod([[t0 + 0.6, w0 + 0.7, tz + 0.1], [t1 - 0.6, w1 - 0.6, tz + 0.1]], C.red, 0.16);
       k.poly([[t0 + 1.6, w0 + 0.3, tz + 0.02], [t0 + 2.9, w0 + 0.3, tz + 0.02], [t0 + 2.9, w0 + 1.4, tz + 0.02], [t0 + 1.6, w0 + 1.4, tz + 0.02]], C.paper, k.thin);
       if (k.s >= 5) for (let r = 0; r < 3; r++) k.line(script(t0 + 1.8, t0 + 2.6, w0 + 0.55 + r * 0.3, tz + 0.03, r + 50), withAlpha('#2a3550', 0.7), Math.max(0.6, 0.05 * k.s));
-      const tube: P3[] = [];
-      for (let i = 0; i <= 16; i++) {
-        const a = i * 0.55;
-        tube.push([t0 + 1.4 + Math.cos(a) * (0.6 + i * 0.02), w1 - 0.9 + Math.sin(a) * 0.45, tz + 0.12]);
-      }
-      k.rod(tube, '#2a2a30', 0.1);
-      k.disc(t0 + 2.6, w1 - 0.6, tz + 0.12, 0.32, C.chrome, k.thin);
+      k.rod([[t0 + 1.0, w1 - 0.7, tz + 0.2], [t0 + 2.2, w1 - 0.9, tz + 0.2]], '#2a2a30', 0.3);
+      k.rod([[t0 + 2.2, w1 - 0.9, tz + 0.2], [t0 + 2.6, w1 - 0.95, tz + 0.2]], C.chrome, 0.42);
       // the clamp lamp's post on the trolley's corner
       k.rod([[t0 + 0.4, w0 + 0.4, tz], [t0 + 0.4, w0 + 0.4, 8.6], [t0 - 0.2, w0 + 1.4, 9.0]], C.steelDark, 0.12);
     });
@@ -972,12 +970,14 @@ function sack(k: Kit, cu: number, cv: number, r: number, h: number, seed: number
 // ── entrance: the vault doorway ─────────────────────────────────────────────
 // A round doorway through the vault's wall: a massive stepped steel jamb
 // ringed with the sockets the bolts shoot into, a tunnel through, and the
-// marble lobby beyond in warm light; a brass bridge plate over the sill,
-// stanchions to either side and a beacon over the top that turns while
-// someone comes or goes. (The door itself stands open against the wall
-// beside it: see room.ts.)
+// marble lobby beyond in warm light; a brass bridge plate over the sill, a
+// stanchion and its rope on the far side, the guard's stool on the near
+// one (see npcs.ts), and a beacon over the top that turns while someone
+// comes or goes. (The door itself stands open against the wall beside it:
+// see room.ts.)
 
 const DOORWAY = { a: 7.5, z: 6.55, r: 6.55, R: 7.45, deep: 2.6 };
+export const STOOL = { u: 14.0, v: 2.4, z: 2.4 };
 
 const entrance: PropArt = {
   len: 15,
@@ -1054,11 +1054,17 @@ const entrance: PropArt = {
       k.line([[a - 4.2, 1.9, 0.08], [a + 4.2, 1.9, 0.08]], C.brass, Math.max(1, 0.22 * k.s));
       // the beacon's bracket over the top
       k.box(a - 0.5, 0, cz + R - 0.1, 1.0, 1.0, 1.2, C.gunmetal, { line: k.thin });
-      // stanchions to either side, ropes back to the jamb
-      for (const u of [0.7, 14.3]) {
-        stanchion(k, u, 3.1);
-        rope(k, [u, 3.1], [u, 0.8], 0.6);
-      }
+      // a stanchion on the far side, its rope back to the jamb; the
+      // guard's stool on the near side: three brass legs, a ring to rest
+      // his boots on, an oxblood leather seat
+      stanchion(k, 0.7, 3.1);
+      rope(k, [0.7, 3.1], [0.7, 0.8], 0.6);
+      const { u: su, v: sv, z: sz } = STOOL;
+      k.shadow(su, sv, 1.3, 1.3, 0.28);
+      for (const a of [0.9, 3.0, 5.1]) k.rod([[su + Math.cos(a) * 0.55, sv + Math.sin(a) * 0.55, sz - 0.3], [su + Math.cos(a) * 1.0, sv + Math.sin(a) * 1.0, 0]], C.brassDark, 0.13);
+      const ring: P3[] = Array.from({ length: 25 }, (_, i) => [su + Math.cos((i / 24) * Math.PI * 2) * 0.8, sv + Math.sin((i / 24) * Math.PI * 2) * 0.8, 0.9] as P3);
+      k.line(ring, C.brass, Math.max(0.8, 0.1 * k.s));
+      k.cyl(su, sv, sz - 0.4, 0.95, 0.4, C.oxblood, { top: shade(C.oxblood, 0.15) });
     });
     // the beacon: dark, or turning amber while someone passes
     const bz = cz + R + 1.6;
