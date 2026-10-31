@@ -3,11 +3,14 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './den/decor.ts';
 import { INK } from './den/kit.ts';
+import { NPCS } from './den/npcs.ts';
 import { denPois, room } from './den/room.ts';
 import { STATIONS } from './den/stations.ts';
 import { WORKSTATION } from './den/workstation.ts';
 
 // Hacker's Den: green rain on the walls, servers humming, pizza going cold.
+// Its locals (a sysadmin, an overclocker and a pizza courier) are in
+// den/npcs.ts.
 
 const PALETTE: Palette = {
   bg: hex('#020403'),
@@ -41,6 +44,7 @@ export const den: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'hacker',
   critter: { kind: 'cat', body: hex('#2b2b33') }, // a black cat
   finale: { colors: [[90, 255, 130], [40, 200, 90], [200, 255, 210]] }, // green bits

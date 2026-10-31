@@ -250,8 +250,10 @@ const read: PropArt = {
 // ── search: the server racks ────────────────────────────────────────────────
 // Two black racks: servers with blinking lights, a switch and a patch panel
 // with cables spilling down, a UPS at the foot; a pull-out console with a
-// little screen; a router and the cat's towel on top. Searching runs the
-// lights fast and sweeps the console's screen; idle they blink slowly.
+// little screen, low enough for the sysadmin standing at the racks' end to
+// type at (see npcs.ts); a router and the cat's towel on top. Searching
+// runs the lights fast and sweeps the console's screen (once round every
+// two seconds); idle they blink slowly.
 
 const RACKS = [[0.4, 5.6], [6.0, 11.2]] as const;
 const RF = 3.75; // the racks' front
@@ -260,7 +262,7 @@ const RF = 3.75; // the racks' front
 type Unit = { z: number; h: number; kind: 'ups' | 'server' | 'disk' | 'switch' | 'patch' | 'blank' | 'console' };
 function unitsOf(r: number): Unit[] {
   const plan: Array<[Unit['kind'], number]> = r === 0
-    ? [['ups', 2.6], ['server', 1.4], ['server', 1.4], ['disk', 2.2], ['console', 1.0], ['blank', 0.5], ['server', 0.9], ['server', 0.9], ['switch', 0.9], ['patch', 1.0], ['blank', 0.7], ['server', 1.4]]
+    ? [['ups', 2.6], ['server', 1.4], ['console', 1.0], ['blank', 0.5], ['server', 0.9], ['server', 0.9], ['disk', 2.2], ['server', 1.4], ['switch', 0.9], ['patch', 1.0], ['blank', 0.7], ['server', 1.4]]
     : [['ups', 2.6], ['disk', 2.2], ['disk', 2.2], ['server', 1.4], ['blank', 0.5], ['server', 0.9], ['server', 0.9], ['server', 0.9], ['switch', 0.9], ['patch', 1.0], ['server', 1.4], ['blank', 0.8]];
   const out: Unit[] = [];
   let z = 0.6;
@@ -362,7 +364,7 @@ const search: PropArt = {
     glass(k, q, v.active ? '#06180e' : C.screenOff, 0.05, 0);
     if (v.active) {
       // rows scanned, one highlighted, a bar sweeping
-      const scan = (v.t * 1.3) % 1;
+      const scan = (v.t * 0.5) % 1;
       code(k, inset(q, 0.05), Math.floor(v.t * 3) / 3, v.seed + 3, 7, 0);
       k.poly([on(q, 0.03, 0.85 - scan * 0.75), on(q, 0.97, 0.85 - scan * 0.75), on(q, 0.97, 0.95 - scan * 0.75), on(q, 0.03, 0.95 - scan * 0.75)], withAlpha(C.green, 0.35), 0);
       k.halo(3.0, RF, cz + 1.8, 3, C.green, 0.25);
@@ -424,12 +426,22 @@ function unitArt(k: Kit, u0: number, u1: number, un: Unit): void {
 
 // ── run: the overclocking rig ───────────────────────────────────────────────
 // A steel bench with an open test rig on it: a board on a stand, a card
-// with three fans, a radiator with three more, a reservoir of glowing
-// coolant, tubes; a box fan aimed at it, a power strip daisy chained, a
-// fire extinguisher handy. Running spins the fans, bubbles the coolant and
-// sends up heat.
+// with three fans, a reservoir of glowing coolant, tubes, a fan controller
+// with a big knob on the stand's end; a box fan, a power strip, a
+// multimeter, a fire extinguisher handy. The bench stands out from its
+// back, leaving room behind its far end for the overclocker (see
+// npcs.ts), whose glove turns the knob; the rig keeps to the near end,
+// clear of it. Running spins the fans, bubbles the coolant, runs the
+// controller's lights up and down and sends up heat, all round every two
+// seconds.
 
-const RIG = { u0: 1.4, u1: 9.6, back: 2.4, front: 2.9, z0: 6.6 };
+// The bench's top (its height, its back edge out from the station's back)
+// and the rig's stand on it (its posts at u0 and u1, the board at back).
+export const BENCH = { z: 6.6, back: 2.4, front: 8.0 };
+const RIG = { u0: 1.0, u1: 6.6, back: 3.0, z0: BENCH.z };
+// The fan controller on the stand's far post: the middle of its face to
+// the bench's end, where its knob and lights are.
+const KNOB: P3 = [RIG.u1 + 0.67, RIG.back, RIG.z0 + 1.75];
 
 const run: PropArt = {
   len: 11,
@@ -437,15 +449,15 @@ const run: PropArt = {
   height: 15,
   animated: true,
   draw(v: PropView): void {
-    const { u0, u1, back, front, z0 } = RIG;
+    const { u0, u1, back, z0 } = RIG;
     const k = still(v, 'run', 15, (k) => {
-      k.shadow(5.5, 5.2, 6.4, 6.0, 0.3);
+      k.shadow(5.5, 5.4, 6.4, 5.4, 0.3);
       // the bench: steel legs, a shelf under with crates, the top
-      for (const [u, w] of [[0.6, 1.0], [9.9, 1.0], [0.6, 7.3], [9.9, 7.3]] as const) k.box(u, w, 0, 0.5, 0.5, 6.0, '#5d6864', { line: k.thin });
-      k.box(0.6, 1.0, 1.0, 9.8, 6.8, 0.3, '#5d6864', { line: k.thin, stripe: false });
-      crate(k, 1.4, 2.4, 1.3, 3.0, 3.6, 2.6, '#c0392f');
-      k.box(5.2, 2.6, 1.3, 2.8, 3.2, 2.2, C.cardboard, { line: k.thin });
-      k.box(0.2, 0.6, 6.0, 10.6, 7.4, 0.6, '#8a9692');
+      for (const [u, w] of [[0.6, BENCH.back + 0.4], [9.9, BENCH.back + 0.4], [0.6, 7.3], [9.9, 7.3]] as const) k.box(u, w, 0, 0.5, 0.5, z0 - 0.6, '#5d6864', { line: k.thin });
+      k.box(0.6, BENCH.back + 0.4, 1.0, 9.8, 7.4 - BENCH.back, 0.3, '#5d6864', { line: k.thin, stripe: false });
+      crate(k, 1.4, 3.1, 1.3, 3.0, 3.6, 2.6, '#c0392f');
+      k.box(5.2, 3.3, 1.3, 2.8, 3.2, 2.2, C.cardboard, { line: k.thin });
+      k.box(0.2, BENCH.back, z0 - 0.6, 10.6, BENCH.front - BENCH.back, 0.6, '#8a9692');
       // the rig: an aluminium frame, the board standing up in it
       for (const u of [u0, u1]) k.box(u - 0.2, back - 0.2, z0, 0.4, 0.4, 6.4, '#c3ccc8', { line: k.thin });
       k.box(u0 - 0.2, back - 0.2, z0 + 6.2, u1 - u0 + 0.4, 0.4, 0.3, '#c3ccc8', { line: k.thin, stripe: false });
@@ -454,11 +466,11 @@ const run: PropArt = {
         // traces on the board
         const pen = k.pen;
         pen.beginPath();
-        for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < 8; i++) {
           const zz = z0 + 1 + hash(v.seed, i, 1) * 4.5;
-          const a = u0 + 0.6 + hash(v.seed, i, 2) * 3;
+          const a = u0 + 0.5 + hash(v.seed, i, 2) * 2.4;
           const [x0, y0] = k.p(a, back + 0.06, zz);
-          const [x1, y1] = k.p(a + 1 + hash(v.seed, i, 3) * 3, back + 0.06, zz);
+          const [x1, y1] = k.p(Math.min(u1 - 0.5, a + 0.8 + hash(v.seed, i, 3) * 2.4), back + 0.06, zz);
           pen.moveTo(x0, y0);
           pen.lineTo(x1, y1);
         }
@@ -467,27 +479,31 @@ const run: PropArt = {
         pen.stroke();
       }
       // the CPU block, RAM sticks (their lights are live)
-      k.box(4.4, back + 0.05, z0 + 3.4, 1.8, 0.6, 1.8, '#c3ccc8', { line: k.thin });
-      for (let i = 0; i < 4; i++) k.box(6.8 + i * 0.42, back + 0.05, z0 + 3.0, 0.22, 0.6, 2.6, '#2a2f33', { line: k.thin * 0.6, stripe: false });
+      k.box(u0 + 2.0, back + 0.05, z0 + 3.4, 1.6, 0.6, 1.6, '#c3ccc8', { line: k.thin });
+      for (let i = 0; i < 4; i++) k.box(u0 + 3.9 + i * 0.36, back + 0.05, z0 + 3.0, 0.22, 0.6, 2.6, '#2a2f33', { line: k.thin * 0.6, stripe: false });
       // the reservoir's mounts (its coolant is live), the tubes
-      for (const z of [3.0, 6.0]) k.box(1.9, back + 0.05, z0 + z, 1.2, 0.5, 0.25, '#c3ccc8', { line: k.thin, stripe: false });
-      k.rod([[2.5, back + 0.6, z0 + 6.2], [3.6, back + 1.0, z0 + 6.4], [4.6, back + 0.8, z0 + 5.2]], '#c3ffd8', 0.2);
-      k.rod([[6.0, back + 0.8, z0 + 4.0], [6.5, back + 1.1, z0 + 3.2], [6.9, back + 1.0, z0 + 2.9]], '#c3ffd8', 0.2);
+      for (const z of [3.0, 6.0]) k.box(u0 + 0.4, back + 0.05, z0 + z, 1.2, 0.5, 0.25, '#c3ccc8', { line: k.thin, stripe: false });
+      k.rod([[u0 + 1.0, back + 0.6, z0 + 6.2], [u0 + 1.9, back + 1.0, z0 + 6.4], [u0 + 2.8, back + 0.8, z0 + 5.0]], '#c3ffd8', 0.2);
+      k.rod([[u0 + 3.6, back + 0.8, z0 + 4.0], [u0 + 4.0, back + 1.1, z0 + 3.2], [u0 + 4.3, back + 1.0, z0 + 2.9]], '#c3ffd8', 0.2);
       // the card: a long shroud with fans on its front
-      k.box(u0 + 0.3, back + 0.6, z0 + 1.0, 7.4, 1.0, 1.9, '#2a2f33', { line: k.lw });
-      k.line([[u0 + 0.35, back + 1.62, z0 + 2.85], [u0 + 7.65, back + 1.62, z0 + 2.85]], C.magenta, Math.max(0.8, 0.12 * k.s));
-      // a box fan on the bench aimed at it, a power strip, an extinguisher
-      k.box(8.4, 4.9, z0 + 0.6, 2.2, 0.6, 2.4, '#e9ecea', { line: k.lw, round: 0.2 });
-      k.box(8.8, 5.0, z0 + 0.6, 1.4, 0.6, 0.15, '#e9ecea', { line: k.thin });
-      k.box(1.6, 5.4, z0 + 0.6, 3.2, 0.8, 0.35, '#e9ecea', { line: k.thin });
-      for (let i = 0; i < 4; i++) k.dot(2.0 + i * 0.75, 5.8, z0 + 0.96, 0.12, '#2a2f33');
-      k.dot(4.5, 5.8, z0 + 0.96, 0.12, '#ff5a4a');
-      cable(k, [[1.6, 5.8, z0 + 0.8], [0.6, 6.6, z0 + 0.62], [0.15, 7.6, z0 + 0.3], [0.1, 8.3, z0 - 1.6], [0.5, 9.0, 0.1], [1.6, 9.6, 0.1]], '#1c2226', 0.16);
-      // a multimeter, a can, a screwdriver
-      k.box(5.8, 5.6, z0 + 0.6, 1.0, 1.4, 0.3, '#e8b030', { line: k.thin });
-      k.rect(5.95, z0 + 0.62, 6.65, z0 + 0.9, 7.01, '#2a2f33', 0);
-      can(k, 7.4, 6.8, z0 + 0.6, CANS[2]);
-      k.rod([[2.0, 7.1, z0 + 0.75], [3.6, 6.5, z0 + 0.75]], '#c0392f', 0.2);
+      k.box(u0 + 0.3, back + 0.6, z0 + 1.0, u1 - u0 - 0.6, 1.0, 1.9, '#2a2f33', { line: k.lw });
+      k.line([[u0 + 0.35, back + 1.62, z0 + 2.85], [u1 - 0.35, back + 1.62, z0 + 2.85]], C.magenta, Math.max(0.8, 0.12 * k.s));
+      // the fan controller on the far post, its knob to the bench's end
+      k.box(u1 + 0.2, back - 0.3, KNOB[2] - 0.75, 0.45, 0.6, 1.5, '#2a2f33', { line: k.thin });
+      fillPts(k, ring(k, [KNOB[0] + 0.02, KNOB[1], KNOB[2] - 0.15], [1, 0, 0], 0.27, 14), '#c0392f', k.thin);
+      k.line([[KNOB[0] + 0.03, KNOB[1], KNOB[2] - 0.15], [KNOB[0] + 0.03, KNOB[1] - 0.12, KNOB[2] + 0.05]], '#f0e6dc', Math.max(0.7, 0.07 * k.s));
+      // a box fan on the bench, a power strip, a multimeter, a can, a
+      // screwdriver
+      k.box(7.4, 5.6, z0, 2.2, 0.6, 2.4, '#e9ecea', { line: k.lw, round: 0.2 });
+      k.box(7.8, 5.7, z0, 1.4, 0.6, 0.15, '#e9ecea', { line: k.thin });
+      k.box(1.6, 5.4, z0, 3.2, 0.8, 0.35, '#e9ecea', { line: k.thin });
+      for (let i = 0; i < 4; i++) k.dot(2.0 + i * 0.75, 5.8, z0 + 0.36, 0.12, '#2a2f33');
+      k.dot(4.5, 5.8, z0 + 0.36, 0.12, '#ff5a4a');
+      cable(k, [[1.6, 5.8, z0 + 0.2], [0.6, 6.6, z0 + 0.02], [0.15, 7.6, z0 - 0.3], [0.1, 8.3, z0 - 2.2], [0.5, 9.0, 0.1], [1.6, 9.6, 0.1]], '#1c2226', 0.16);
+      k.box(5.4, 6.4, z0, 1.0, 1.4, 0.3, '#e8b030', { line: k.thin });
+      k.rect(5.55, z0 + 0.02, 6.25, z0 + 0.3, 7.81, '#2a2f33', 0);
+      can(k, 9.6, 7.0, z0, CANS[2]);
+      k.rod([[2.0, 7.3, z0 + 0.15], [3.6, 6.7, z0 + 0.15]], '#c0392f', 0.2);
       // the extinguisher on the floor at the front corner
       k.shadow(10.0, 9.8, 0.9, 0.9, 0.25);
       k.cyl(10.0, 9.8, 0, 0.62, 3.0, '#c0392f');
@@ -495,37 +511,42 @@ const run: PropArt = {
       k.rod([[10.0, 9.8, 3.45], [10.6, 9.6, 3.6], [10.9, 9.3, 2.0]], '#2a2f33', 0.12);
     });
     const t = pace(v, 1);
-    const spin = v.active ? v.t * 11 : 0.3;
+    // the card's fans turn a fifth of a blade a step, the box fan's a sixth
+    // (see CYCLE in art/scene.ts: round in two seconds)
+    const spin = v.active ? v.t * 0.8 * Math.PI : 0.3;
     // the reservoir: coolant glowing, bubbles rising while it runs
-    const rc: P3 = [2.5, back + 0.6, z0 + 3.0];
-    const glow = v.active ? 0.85 + 0.15 * Math.sin(v.t * 4) : 0.5;
+    const rc: P3 = [u0 + 1.0, back + 0.6, z0 + 3.0];
+    const glow = v.active ? 0.85 + 0.15 * Math.sin(v.t * Math.PI) : 0.5;
     k.cyl(rc[0], rc[1], rc[2], 0.5, 3.2, mix('#1a6a3a', C.green, glow * 0.7), { top: mix('#2a8a4a', '#c3ffd8', glow * 0.6) });
     if (v.active) {
       for (let i = 0; i < 3; i++) {
-        const ph = (v.t * (0.9 + hash(i, 4) * 0.6) + hash(i, 5)) % 1;
+        const ph = (v.t * 0.5 * (i + 1) + hash(i, 5)) % 1;
         k.dot(rc[0] + (hash(i, 6) - 0.5) * 0.4, rc[1] + 0.45, rc[2] + 0.3 + ph * 2.7, 0.1, '#e2ffe8');
       }
       k.halo(rc[0], rc[1] + 0.6, rc[2] + 1.6, 2.6, C.green, 0.3);
     }
     // the card's fans
     for (let i = 0; i < 3; i++) {
-      const fc: P3 = [u0 + 1.6 + i * 2.4, back + 1.62, z0 + 1.95];
-      fillPts(k, ring(k, fc, [0, 1, 0], 0.85, 16), '#151a1d', k.thin * 0.7);
-      fanBlades(k, fc[0], fc[1], fc[2], 0.75, spin + i, v.active ? '#5a6a70' : '#3a4448');
-      k.dot(fc[0], fc[1], fc[2], 0.18, '#2a2f33');
+      const fc: P3 = [u0 + 1.15 + i * 1.65, back + 1.62, z0 + 1.95];
+      fillPts(k, ring(k, fc, [0, 1, 0], 0.74, 16), '#151a1d', k.thin * 0.7);
+      fanBlades(k, fc[0], fc[1], fc[2], 0.66, spin + i, v.active ? '#5a6a70' : '#3a4448');
+      k.dot(fc[0], fc[1], fc[2], 0.16, '#2a2f33');
     }
     // the RAM's lights, cycling while it runs
     for (let i = 0; i < 4; i++) {
       const hue = v.active ? [C.magenta, C.cyan, C.green, C.amber][(i + Math.floor(t * 4)) % 4] : '#3a4448';
-      k.line([[6.91 + i * 0.42, back + 0.66, z0 + 5.4], [6.91 + i * 0.42, back + 0.66, z0 + 5.6]], hue, Math.max(1, 0.16 * k.s));
+      k.line([[u0 + 4.01 + i * 0.36, back + 0.66, z0 + 5.4], [u0 + 4.01 + i * 0.36, back + 0.66, z0 + 5.6]], hue, Math.max(1, 0.16 * k.s));
     }
+    // the fan controller's lights, up and down with the knob
+    const lvl = v.active ? Math.round(2.5 + 1.5 * Math.sin(v.t * Math.PI)) : 1;
+    for (let i = 0; i < 4; i++) k.dot(KNOB[0], KNOB[1] + (i - 1.5) * 0.14, KNOB[2] + 0.45, 0.06, i < lvl ? [C.green, C.green, C.amber, C.magenta][i] : '#1a2a22');
     // the box fan's blades
-    const bc: P3 = [9.5, 5.52, z0 + 1.8];
+    const bc: P3 = [8.5, 6.22, z0 + 1.2];
     fillPts(k, ring(k, bc, [0, 1, 0], 0.95, 16), '#c3ccc8', k.thin * 0.7);
-    fanBlades(k, bc[0], bc[1], bc[2], 0.85, spin * 0.6, '#7a8a90', 3);
+    fanBlades(k, bc[0], bc[1], bc[2], 0.85, v.active ? v.t * (2 / 3) * Math.PI : 0.2, '#7a8a90', 3);
     if (v.active) {
-      k.halo(5.5, back + 1.8, z0 + 2, 5.5, C.magenta, 0.16);
-      k.pool(5.5, front + 1.2, 4.5, 2.6, C.magenta, 0.18, z0 + 0.61);
+      k.halo((u0 + u1) / 2, back + 1.8, z0 + 2, 4.5, C.magenta, 0.16);
+      k.pool((u0 + u1) / 2, back + 2.8, 3.5, 2.2, C.magenta, 0.18, z0 + 0.01);
     }
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
@@ -534,12 +555,12 @@ const run: PropArt = {
     const n = due(v.t, dt, 3, v.seed);
     for (let i = 0; i < n; i++) {
       const tick = Math.floor(v.t * 20) + i;
-      spawn(wisp(RIG.u0 + 1 + hash(tick, 1) * 7, RIG.back + 1, RIG.z0 + 6.8, tick, i, [200, 214, 210]));
+      spawn(wisp(RIG.u0 + 0.6 + hash(tick, 1) * (RIG.u1 - RIG.u0 - 1.2), RIG.back + 1, RIG.z0 + 6.8, tick, i, [200, 214, 210]));
     }
     // now and then a spark off the board
     if (due(v.t, dt, 0.6, v.seed + 1)) {
       const j = (q: number) => hash(Math.floor(v.t * 10), q) - 0.5;
-      spawn({ kind: 'spark', x: 5 + j(1) * 3, y: RIG.back + 1.2, z: RIG.z0 + 3, vx: j(2) * 3, vy: 1 + j(3), vz: 2 + j(4) * 2, life: 0.5, color: [255, 220, 120], glow: true, gravity: 12 });
+      spawn({ kind: 'spark', x: (RIG.u0 + RIG.u1) / 2 + j(1) * 3, y: RIG.back + 1.2, z: RIG.z0 + 3, vx: j(2) * 3, vy: 1 + j(3), vz: 2 + j(4) * 2, life: 0.5, color: [255, 220, 120], glow: true, gravity: 12 });
     }
   },
 };

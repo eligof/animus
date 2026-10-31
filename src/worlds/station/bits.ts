@@ -146,8 +146,10 @@ export function glass(k: Kit, q: Quad, lit: boolean, tint: Color = C.screen): vo
 }
 
 // Rows of "code" on a screen quad: short coloured bars, scrolled by `roll`
-// (rows a second times t); none of it text.
-export function codeRows(k: Kit, q: Quad, roll: number, rows = 7, colors: readonly Color[] = ['#1d5a7a', '#c0507a', '#2f8f5a', '#7a5ab0', '#16324a']): void {
+// (rows a second times t); none of it text. With a `period`, the rows
+// repeat every that many, so a scroll of that many rows comes round to
+// where it began.
+export function codeRows(k: Kit, q: Quad, roll: number, rows = 7, colors: readonly Color[] = ['#1d5a7a', '#c0507a', '#2f8f5a', '#7a5ab0', '#16324a'], period = 0): void {
   const pen = k.pen;
   const base = Math.floor(roll);
   const h = 0.8 / rows;
@@ -155,7 +157,7 @@ export function codeRows(k: Kit, q: Quad, roll: number, rows = 7, colors: readon
     pen.beginPath();
     let any = false;
     for (let i = 0; i < rows + 1; i++) {
-      const row = base - i;
+      const row = period ? (((base - i) % period) + period) % period : base - i;
       if (Math.floor(hash(row, 3) * colors.length) !== ci) continue;
       const fz = 0.1 + (i + roll - base) * h;
       if (fz > 0.86) continue;
