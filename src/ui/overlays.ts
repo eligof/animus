@@ -45,7 +45,7 @@ const HELP: Array<[string, string]> = [
   ['i / c / enter', 'card on / off · cheer · talk to it'],
   ['d', 'toggle the demo crew'],
   ['r', 'scene / agent dashboard'],
-  ['l / o', 'lighting / office life on / off'],
+  ['l / o / n', 'lights, office life, locals on/off'],
   ['+ / -', 'zoom in / out (z: auto)'],
   ['f', 'fullscreen scene (hide the panels)'],
   ['space', 'pause animation'],

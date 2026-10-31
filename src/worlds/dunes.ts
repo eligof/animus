@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './dunes/decor.ts';
 import { INK } from './dunes/kit.ts';
+import { NPCS } from './dunes/npcs.ts';
 import { dunesPois, room } from './dunes/room.ts';
 import { STATIONS } from './dunes/stations.ts';
 import { WORKSTATION } from './dunes/workstation.ts';
@@ -13,8 +14,8 @@ import { WORKSTATION } from './dunes/workstation.ts';
 // barrels racked behind the bar, crates and scrap stacked two high, sand
 // on the wind outside. In outlined cartoon (dark leather-brown ink): the
 // shell in dunes/room.ts, the stations in dunes/stations.ts, the furniture
-// in dunes/decor.ts, all drawn with the kit in dunes/kit.ts and
-// dunes/bits.ts.
+// in dunes/decor.ts, the locals in dunes/npcs.ts, all drawn with the kit
+// in dunes/kit.ts and dunes/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#1c140c'),
@@ -48,6 +49,7 @@ export const dunes: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'drifter',
   critter: { kind: 'beetle', body: hex('#b4682c') }, // a sand beetle
   finale: { colors: [[226, 196, 140], [192, 88, 46], [63, 184, 168]] }, // sand, rust and turquoise confetti

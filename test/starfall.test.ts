@@ -245,3 +245,12 @@ test('Starfall Base: its desks have things of their own to pick from, and someth
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test('Starfall Base: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(starfall.npcs!.map((n) => [n.name, n.station, n.place.mode]), [
+    ['refineryTech', 'run', 'standing'],
+    ['pilot', 'think', 'seated'],
+    ['cook', 'idle', 'standing'],
+  ]);
+  assert.ok(starfall.npcs!.some((n) => n.show), 'no show');
+});

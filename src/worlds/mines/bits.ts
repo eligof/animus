@@ -133,13 +133,14 @@ export function hangLantern(k: Kit, u: number, v: number, ztop: number, len: num
   lantern(k, u, v, ztop - len - 2.05 * sc, glow, sc);
 }
 
-// Flames as nested tongues in the plane v = n, `phase` sets their sway.
+// Flames as nested tongues in the plane v = n, `phase` sets their sway (a
+// phase of t * PI repeats in 2 s).
 export function flames(k: Kit, a: number, n: number, z: number, scale: number, phase = 0): void {
   const tongue = (du: number, w: number, h: number, sway: number, c: Color) => {
     k.poly([[a + du - w, n, z], [a + du - w * 0.8, n, z + h * 0.45], [a + du + sway, n, z + h], [a + du + w * 0.8, n, z + h * 0.45], [a + du + w, n, z]], c, 0, 0.5 * scale);
   };
-  const sw = (i: number) => Math.sin(phase * 2.3 + i * 1.7) * 0.35 * scale;
-  const hh = (i: number) => 1 + Math.sin(phase * 3.1 + i * 2.3) * 0.12;
+  const sw = (i: number) => Math.sin(phase * 2 + i * 1.7) * 0.35 * scale;
+  const hh = (i: number) => 1 + Math.sin(phase * 3 + i * 2.3) * 0.12;
   tongue(-1.2 * scale, 1.1 * scale, 3.4 * scale * hh(0), sw(0), C.fire);
   tongue(1.1 * scale, 1.0 * scale, 3.0 * scale * hh(1), sw(1), C.fire);
   tongue(0, 1.5 * scale, 4.4 * scale * hh(2), sw(2), C.fire);

@@ -11,6 +11,7 @@ import { blot, flame, horn, shieldFace, zigzag } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, softDot, withAlpha } from './kit.ts';
+import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The Longhall's shell at night, after the great timber halls of the
@@ -253,13 +254,13 @@ function runners(L: Layout, decor: readonly PlacedProp[]): Runner[] {
 }
 
 // The decor the stage puts in a room this size (planRoom seeded by the
-// world's id, as the stage furnishes it).
+// world's id, its locals in, as the stage furnishes it).
 const FURNISHED = new Map<string, PlacedProp[]>();
 function decorOf(L: Layout): PlacedProp[] {
   const key = `${L.W}x${L.D}x${L.H}x${L.T}`;
   let hit = FURNISHED.get(key);
   if (!hit) {
-    hit = L.slots.length ? planRoom({ id: 'meadhall', stations: STATIONS, decor: DECOR } as unknown as WorldDef, L, hashString('meadhall')).props.filter((p) => !p.slot) : [];
+    hit = L.slots.length ? planRoom({ id: 'meadhall', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('meadhall')).props.filter((p) => !p.slot) : [];
     FURNISHED.set(key, hit);
   }
   return hit;
@@ -300,9 +301,9 @@ function lightsOf(L: Layout): Light[] {
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots, but a drink at either end of the long table rather than
 // by the forge; warm before the hearth, found where the stage puts it
-// (planRoom seeded by the world's id, as the vault finds its decor), or by
-// the table if the room had no wall for the hearth; a look up at a couple
-// of the windows.
+// (planRoom seeded by the world's id, its locals in), or by the table if
+// the room had no wall for the hearth; a look up at a couple of the
+// windows.
 export function meadhallPois(L: Layout): Poi[] {
   const { features: fs } = planFor(L.W, L.D, L.H, L.T);
   const pt = (wall: Wall, a: number, out: number) => (wall === 'right' ? { x: a, y: L.T + out } : { x: L.T + out, y: a });
@@ -315,7 +316,7 @@ export function meadhallPois(L: Layout): Poi[] {
   let out = defaultPois(L).filter((p) => p.kind !== 'drink');
   const table = slot('idle');
   if (table) out.push({ ...at(table, -6, 0), kind: 'drink', face: mid(table) }, { ...at(table, 6, 0), kind: 'drink', face: mid(table) });
-  const furnished = planRoom({ id: 'meadhall', stations: STATIONS, decor: DECOR } as unknown as WorldDef, L, hashString('meadhall'));
+  const furnished = planRoom({ id: 'meadhall', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('meadhall'));
   const pit = furnished.props.find((p) => p.art === DECOR_ART.hearth);
   if (pit) {
     const r = footprint(pit);

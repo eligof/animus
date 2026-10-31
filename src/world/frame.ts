@@ -1,6 +1,6 @@
 import type { RGB } from '../term/color.ts';
 import type { Rect as Cells } from '../term/screen.ts';
-import type { BuildShape, CritterKind, WorldDef } from '../worlds/types.ts';
+import type { BuildShape, CritterKind, NpcAct, WorldDef } from '../worlds/types.ts';
 import type { Block } from './build.ts';
 import type { Costume, Emote, Feel, Pose, Traits, Wear } from './character.ts';
 import type { Rect } from './layout.ts';
@@ -153,6 +153,34 @@ export type Screen = 'write' | 'read' | 'search' | 'run' | 'web' | 'think' | 'ta
 // few looks of it (0 to 2) it wears.
 export type DeskFrame = { id: number; wall: 'left' | 'right'; x0: number; y0: number; len: number; dep: number; screen: Screen; grow: number; seed: number };
 
+// A local (see world/npcs.ts): which of its world's (`k`, an index into
+// WorldDef.npcs), where it stands (x, y; z its frame lifted onto a seat)
+// and how high its head comes (`top`: its emote shows over that), which
+// way it faces, what it is doing (`act`, at `frame` of that act's loop: see
+// art/npc/acts.ts), the station it works (`prop`, an index into the room's
+// props), whether it stands on that station's box (`on`: behind its
+// counter or seated) and works it (`works`: every station but the way in),
+// where its picture is cut (`cut`: `h` units over its feet, the line
+// falling `slope` pixels a pixel to the right, along its counter's edge),
+// an emote over it, and whether it casts a contact shadow (standing on the
+// floor).
+export type NpcFrame = {
+  k: number;
+  x: number;
+  y: number;
+  z: number;
+  top: number;
+  facing: Facing;
+  act: NpcAct;
+  frame: number;
+  prop: number;
+  on: boolean;
+  works: boolean;
+  cut?: { h: number; slope: number };
+  emote?: { kind: Emote; t: number };
+  shadow: boolean;
+};
+
 export type SceneFrame = {
   world: WorldDef;
   room: Room;
@@ -164,6 +192,7 @@ export type SceneFrame = {
   critter: CritterFrame | null;
   trinkets?: TrinketFrame[];
   desks?: DeskFrame[]; // the workstations, by desk index
+  npcs?: NpcFrame[]; // the locals (none while they are off)
   builds: BuildFrame[];
   particles: readonly Particle[];
   labels: LabelFrame[];

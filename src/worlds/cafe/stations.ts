@@ -182,10 +182,16 @@ const read: PropArt = {
 
 // ── search: the pastry case ─────────────────────────────────────────────────
 // A walnut counter with a glass case of cakes, croissants, cinnamon rolls,
-// macarons and cupcakes, and a bundt cake under a glass dome. Looking
-// through it lights the case, and a glint runs along the glass.
+// macarons and cupcakes; at its end the counter steps forward, an open top
+// with a tray of cupcakes waiting for their icing, and behind it room for
+// the pastry chef (see npcs.ts: it ices them), just past the case and
+// turned along the counter, so its top runs on past the chef either side.
+// Looking through it lights the case, and a glint runs along the glass.
+// `OPEN`: where the open end begins, its top's back edge and height, and
+// where along it the chef stands.
 
-const CASE = { u0: 0.6, u1: 8.4, v0: 0.5, v1: 3.5, z0: 5.85, z1: 9.7, mid: 7.75 };
+const CASE = { u0: 0.6, u1: 7.6, v0: 0.5, v1: 3.5, z0: 5.85, z1: 9.7, mid: 7.75 };
+export const OPEN = { u0: 8.0, edge: 1.3, top: 5.85, at: 8.8 };
 
 const search: PropArt = {
   len: 12,
@@ -195,8 +201,11 @@ const search: PropArt = {
   draw(v: PropView): void {
     const k = still(v, 'search', 11, (k) => {
       k.shadow(6, 2.2, 6.6, 2.6, 0.3);
-      k.box(0.5, 0.45, 0, 11, 3.2, 0.6, C.walnutDark, { stripe: false });
-      k.box(0.3, 0.3, 0.6, 11.4, 3.5, 4.8, C.walnut, { stripe: false });
+      const e0 = OPEN.edge + 0.2;
+      k.box(0.5, 0.45, 0, OPEN.u0 - 0.5, 3.2, 0.6, C.walnutDark, { stripe: false });
+      k.box(OPEN.u0, e0 + 0.15, 0, 11.5 - OPEN.u0, 3.65 - e0 - 0.15 + 0.15, 0.6, C.walnutDark, { stripe: false });
+      k.box(0.3, 0.3, 0.6, OPEN.u0 - 0.3, 3.5, 4.8, C.walnut, { stripe: false });
+      k.box(OPEN.u0, e0, 0.6, 11.7 - OPEN.u0, 3.8 - e0, 4.8, C.walnut, { stripe: false });
       // panels on the front
       const F = 3.8;
       const panels: Array<[number, number]> = [[0.9, 4.1], [4.4, 7.6], [7.9, 11.1]];
@@ -204,10 +213,11 @@ const search: PropArt = {
         k.poly([[u0, F, 1.3], [u1, F, 1.3], [u1, F, 4.8], [u0, F, 4.8]], k.side(shade(C.walnut, -0.08), 0, 1), k.thin);
         k.line([[u0 + 0.15, F, 1.45], [u0 + 0.15, F, 4.65], [u1 - 0.15, F, 4.65]], shade(C.walnut, 0.3), Math.max(0.7, 0.1 * k.s));
       }
-      k.box(0.1, 0.1, 5.4, 11.8, 3.9, 0.45, '#ece5da');
+      k.box(0.1, 0.1, 5.4, OPEN.u0, 3.9, 0.45, '#ece5da');
+      k.box(OPEN.u0 + 0.1, OPEN.edge, 5.4, 11.8 - OPEN.u0, 4.0 - OPEN.edge, 0.45, '#ece5da');
       if (k.fine) {
         k.line([[1, 1, 5.86], [2.5, 2.2, 5.86], [3.4, 2.0, 5.86], [4.6, 3.6, 5.86]], '#c9c0b4', 0.06 * k.s);
-        k.line([[9.0, 0.6, 5.86], [10.2, 1.9, 5.86], [11.6, 2.4, 5.86]], '#c9c0b4', 0.06 * k.s);
+        k.line([[9.0, 3.0, 5.86], [10.2, 3.5, 5.86], [11.6, 3.9, 5.86]], '#c9c0b4', 0.06 * k.s);
       }
       // inside the case: a cream back, the shelf, the bakes
       const { u0, u1, v0, v1, z0, z1, mid } = CASE;
@@ -218,7 +228,7 @@ const search: PropArt = {
       k.cyl(2.0, 2.0, z0 + 1.2, 1.18, 0.3, '#fff5f0');
       k.disc(2.0, 2.0, z0 + 1.52, 0.18, '#c0392f', k.thin);
       for (const [cu, cv] of [[4.2, 1.6], [5.1, 2.4], [4.1, 2.8]] as const) croissant(k, cu, cv, z0);
-      for (const [cu, cv] of [[6.6, 1.5], [7.5, 2.2], [6.5, 2.7]] as const) {
+      for (const [cu, cv] of [[6.2, 1.5], [6.95, 2.25], [6.1, 2.8]] as const) {
         k.cyl(cu, cv, z0, 0.55, 0.45, '#c98a4a');
         if (k.fine) k.line(spiral(cu, cv, z0 + 0.46, 0.45), '#8a5530', 0.06 * k.s);
       }
@@ -233,23 +243,19 @@ const search: PropArt = {
         k.cyl(1.1 + i * 0.75, 1.4 + r * 1.1, mid + 0.12, 0.3, 0.1, '#fdf6ea', { line: 0 });
         k.cyl(1.1 + i * 0.75, 1.4 + r * 1.1, mid + 0.22, 0.33, 0.14, c, { line: k.thin * 0.8 });
       }
-      for (const [cu, cv, c] of [[5.6, 1.6, '#f2a7b8'], [6.9, 1.7, '#f6ecd8'], [6.2, 2.7, '#8a5530']] as const) cupcake(k, cu, cv, mid, c);
+      for (const [cu, cv, c] of [[5.4, 1.6, '#f2a7b8'], [6.75, 1.7, '#f6ecd8'], [6.1, 2.7, '#8a5530']] as const) cupcake(k, cu, cv, mid, c);
       // the glass: top, front, end, with the frame's edges
       k.poly([[u0, v0, z1], [u1, v0, z1], [u1, v1, z1], [u0, v1, z1]], '#dff2fa30', 0);
       k.poly([[u0, v1, z0], [u1, v1, z0], [u1, v1, z1], [u0, v1, z1]], '#dff2fa22', 0);
       for (const e of [[[u0, v1, z0], [u0, v1, z1]], [[u1, v1, z0], [u1, v1, z1]], [[u1, v0, z0], [u1, v0, z1]]] as P3[][]) k.rod(e, C.brass, 0.14);
       k.line([[u0, v0, z1], [u0, v1, z1], [u1, v1, z1], [u1, v0, z1], [u0, v0, z1]], INK, k.lw);
       k.line([[u0, v1, z1], [u1, v1, z1], [u1, v0, z1]], C.brass, Math.max(0.8, 0.14 * k.s));
-      // the cake stand under its dome
-      k.cyl(10.0, 2.0, z0, 0.55, 0.15, '#f2ece0');
-      k.cyl(10.0, 2.0, z0 + 0.15, 0.18, 0.75, '#f2ece0');
-      k.cyl(10.0, 2.0, z0 + 0.9, 1.15, 0.15, '#f2ece0');
-      k.cyl(10.0, 2.0, z0 + 1.05, 0.85, 0.85, '#a8623a');
-      k.disc(10.0, 2.0, z0 + 1.9, 0.5, '#fbf3e6', 0);
-      dome(k, 10.0, 2.0, z0 + 1.05, 1.15, 2.4);
-      // a jar of tips with a coin or two
-      k.cyl(11.3, 3.25, z0, 0.42, 0.85, '#d6e6ea');
-      k.disc(11.3, 3.25, z0 + 0.35, 0.3, C.brass, 0);
+      // on the open end, kept low before the chef: a tray of cupcakes
+      // still to be iced, a jar of tips with a coin or two
+      k.box(8.9, 2.55, z0, 2.0, 1.15, 0.12, C.chrome, { line: k.thin });
+      for (const cu of [9.35, 10.1]) bareCupcake(k, cu, 3.1, z0 + 0.12);
+      k.cyl(11.3, 3.3, z0, 0.42, 0.85, '#d6e6ea');
+      k.disc(11.3, 3.3, z0 + 0.35, 0.3, C.brass, 0);
     });
     // reflections on the front glass (live, over the sprite)
     const { u0, u1, v1, z0, z1 } = CASE;
@@ -257,8 +263,9 @@ const search: PropArt = {
     k.poly([[u0 + 2.0, v1, z0 + 0.4], [u0 + 2.4, v1, z0 + 0.4], [u0 + 3.6, v1, z1 - 0.3], [u0 + 3.2, v1, z1 - 0.3]], '#ffffff24', 0);
     if (!v.active) return;
     k.halo((u0 + u1) / 2, 1.8, (z0 + z1) / 2, 5.5, '#ffe2a8', 0.32);
-    // the glint, sliding along the front glass
-    const f = (v.t * 0.45) % 1.4;
+    // the glint, sliding along the front glass (once every two seconds,
+    // the loop a worked station is drawn round)
+    const f = (v.t * 0.7) % 1.4;
     if (f < 1) {
       const u = u0 + (u1 - u0 - 1.2) * f;
       k.poly([[u, v1 + 0.02, z0 + 0.3], [u + 0.5, v1 + 0.02, z0 + 0.3], [u + 1.3, v1 + 0.02, z1 - 0.2], [u + 0.8, v1 + 0.02, z1 - 0.2]], '#ffffff70', 0);
@@ -301,32 +308,29 @@ function cupcake(k: Kit, cu: number, cv: number, z: number, icing: Color): void 
   k.disc(cu, cv, z + 1.35, 0.13, '#c0392f', 0);
 }
 
-// A glass cloche: a dome outline with a knob and a highlight.
-function dome(k: Kit, cu: number, cv: number, z: number, r: number, h: number): void {
-  const e = k.ell(cu, cv, z, r);
-  const [, ty] = k.p(cu, cv, z + h);
-  const pen = k.pen;
-  pen.beginPath();
-  pen.moveTo(e.cx - e.rx, e.cy);
-  pen.bezierCurveTo(e.cx - e.rx, ty + (e.cy - ty) * 0.15, e.cx - e.rx * 0.4, ty, e.cx, ty);
-  pen.bezierCurveTo(e.cx + e.rx * 0.4, ty, e.cx + e.rx, ty + (e.cy - ty) * 0.15, e.cx + e.rx, e.cy);
-  pen.ellipse(e.cx, e.cy, e.rx, e.ry, 0, 0, Math.PI);
-  pen.closePath();
-  k.paint('#e6f4fa26', k.thin);
-  pen.beginPath();
-  pen.ellipse(e.cx - e.rx * 0.45, ty + (e.cy - ty) * 0.35, e.rx * 0.18, (e.cy - ty) * 0.25, 0.3, 0, Math.PI * 2);
-  pen.fillStyle = '#ffffff55';
-  pen.fill();
-  k.disc(cu, cv, z + h + 0.15, 0.22, '#e6f4fa', k.thin);
+// A cupcake in its case before the icing: a bare golden top.
+function bareCupcake(k: Kit, cu: number, cv: number, z: number): void {
+  const e0 = k.ell(cu, cv, z, 0.3);
+  const e1 = k.ell(cu, cv, z + 0.5, 0.4);
+  fill(k, [[e0.cx - e0.rx, e0.cy], [e0.cx + e0.rx, e0.cy], [e1.cx + e1.rx, e1.cy], [e1.cx - e1.rx, e1.cy]], '#f2a7b8', k.thin);
+  const [x, y] = k.p(cu, cv, z + 0.62);
+  k.pen.beginPath();
+  k.pen.ellipse(x, y, e1.rx * 1.02, e1.rx * 0.7, 0, 0, Math.PI * 2);
+  k.paint('#d9a35c', k.thin);
 }
 
 // ── run: the espresso bar ──────────────────────────────────────────────────
-// A walnut bar with a marble top and a brass foot rail; on it a red
-// two-group espresso machine with a brass dome and cups warming on top, a
-// grinder and a milk jug; two stools in front. Running it pulls shots into
-// the cups, wobbles the gauge and sends up steam.
+// A walnut bar with a marble top and a brass foot rail; at its far end a
+// red two-group espresso machine with a brass dome and cups warming on top,
+// its steam wand on the near side; behind the bar, room for the barista
+// (see npcs.ts: it tamps, steams the milk and pours) and a low back counter
+// with the grinder, cups and a jar of beans; two stools in front. Running
+// it pulls shots into the cups, wobbles the gauge and sends up steam.
+// `top`: the marble top's height, `edge` its back edge, `at` where along
+// it the barista stands, `wand` the steam wand's tip.
 
-const GROUPS = [5.9, 8.3];
+const GROUPS = [1.85, 3.95];
+export const ESPRESSO = { top: 6.65, edge: 4.2, at: 7.2, wand: [5.45, 4.85, 8.6] as const };
 
 const run: PropArt = {
   len: 11,
@@ -334,22 +338,41 @@ const run: PropArt = {
   height: 15,
   animated: true,
   draw(v: PropView): void {
+    const zt = ESPRESSO.top;
     const k = still(v, 'run', 15, (k) => {
       k.shadow(5.5, 5.4, 6.6, 6.2, 0.3);
+      // the back counter: walnut doors, a marble top; the grinder, cups and
+      // beans on it
+      k.box(0.5, 0.4, 0, 10.0, 1.8, 5.0, C.walnutDark, { stripe: false });
+      for (const [a0, a1] of [[0.9, 3.9], [4.2, 7.2], [7.5, 10.2]] as const) {
+        k.poly([[a0, 2.21, 0.6], [a1, 2.21, 0.6], [a1, 2.21, 4.4], [a0, 2.21, 4.4]], k.side(shade(C.walnutDark, 0.08), 0, 1), k.thin);
+      }
+      k.box(0.4, 0.3, 5.0, 10.2, 2.0, 0.3, '#eee8de');
+      for (let i = 0; i < 3; i++) k.cyl(1.6, 1.3, 5.3 + i * 0.16, 0.75, 0.16, C.china, { line: k.thin });
+      cup(k, 1.6, 1.3, 5.78, C.china, false, 0.4);
+      cup(k, 3.0, 1.2, 5.3, '#e8d9bf', false, 0.4);
+      k.cyl(7.9, 1.3, 5.3, 0.55, 1.2, '#d6e6ea');
+      k.cyl(7.9, 1.3, 5.4, 0.47, 0.85, C.coffee, { line: 0 });
+      k.cyl(7.9, 1.3, 6.5, 0.6, 0.22, C.walnut);
+      k.box(8.6, 0.6, 5.3, 1.7, 1.5, 1.6, '#2f2a29', { round: 0.15 });
+      k.cyl(9.45, 1.35, 6.9, 0.45, 0.5, C.chrome);
+      k.cyl(9.45, 1.35, 7.4, 0.75, 1.5, '#cddde1');
+      k.cyl(9.45, 1.35, 7.45, 0.62, 1.0, C.coffee, { line: 0 });
+      k.cyl(9.45, 1.35, 8.9, 0.85, 0.28, '#2f2a29');
       // the bar
-      k.box(0.5, 1.2, 0, 10, 6.0, 6.6, C.walnut, { stripe: false });
+      k.box(0.5, 4.4, 0, 10, 2.8, zt - 0.55, C.walnut, { stripe: false });
       const F = 7.2;
       const pen = k.pen;
       pen.beginPath();
       for (let u = 1.2; u < 10.4; u += 0.9) {
         const [x0, y0] = k.p(u, F, 0.7);
-        const [x1, y1] = k.p(u, F, 6.3);
+        const [x1, y1] = k.p(u, F, zt - 0.85);
         pen.moveTo(x0, y0);
         pen.lineTo(x1, y1);
       }
-      for (let w = 1.9; w < 7.1; w += 0.9) {
+      for (let w = 5.0; w < 7.1; w += 0.9) {
         const [x0, y0] = k.p(10.5, w, 0.7);
-        const [x1, y1] = k.p(10.5, w, 6.3);
+        const [x1, y1] = k.p(10.5, w, zt - 0.85);
         pen.moveTo(x0, y0);
         pen.lineTo(x1, y1);
       }
@@ -357,85 +380,79 @@ const run: PropArt = {
       pen.lineWidth = Math.max(0.8, 0.1 * k.s);
       pen.stroke();
       k.poly([[0.5, F, 0], [10.5, F, 0], [10.5, F, 0.6], [0.5, F, 0.6]], shade(C.walnutDark, -0.1), k.thin);
-      k.poly([[10.5, 1.2, 0], [10.5, F, 0], [10.5, F, 0.6], [10.5, 1.2, 0.6]], shade(C.walnutDark, -0.2), k.thin);
+      k.poly([[10.5, 4.4, 0], [10.5, F, 0], [10.5, F, 0.6], [10.5, 4.4, 0.6]], shade(C.walnutDark, -0.2), k.thin);
       // the foot rail on its brackets
       for (const u of [1.4, 5.5, 9.6]) k.rod([[u, F, 1.0], [u, F + 0.55, 1.0]], C.brass, 0.14);
       k.rod([[0.9, F + 0.6, 1.0], [10.1, F + 0.6, 1.0]], C.brass, 0.2);
       // marble top
-      k.box(0.25, 1.0, 6.6, 10.5, 6.45, 0.55, '#eee8de');
-      if (k.fine) k.line([[0.9, 2, 7.16], [2.6, 3.6, 7.16], [3.1, 3.3, 7.16], [4.2, 6.9, 7.16]], '#cbc2b6', 0.06 * k.s);
-      const zt = 7.15;
-      // grinder
-      k.box(1.3, 2.4, zt, 2.0, 2.0, 1.7, '#2f2a29', { round: 0.15 });
-      k.cyl(2.3, 3.4, zt + 1.7, 0.5, 0.55, C.chrome);
-      k.cyl(2.3, 3.4, zt + 2.25, 0.85, 1.7, '#cddde1');
-      k.cyl(2.3, 3.4, zt + 2.3, 0.7, 1.15, C.coffee, { line: 0 });
-      k.cyl(2.3, 3.4, zt + 3.95, 0.95, 0.3, '#2f2a29');
-      // saucers and cups stacked, a jar of biscotti
-      for (let i = 0; i < 3; i++) k.cyl(1.5, 6.0, zt + i * 0.16, 0.8, 0.16, C.china, { line: k.thin });
-      cup(k, 1.5, 6.0, zt + 0.48, C.china, false, 0.42);
-      k.cyl(3.4, 6.1, zt, 0.55, 1.3, '#d6e6ea');
-      k.cyl(3.4, 6.1, zt + 0.1, 0.45, 0.8, '#d9a35c', { line: 0 });
-      k.cyl(3.4, 6.1, zt + 1.3, 0.6, 0.25, C.walnut);
+      k.box(0.25, ESPRESSO.edge, zt - 0.55, 10.5, 3.25, 0.55, '#eee8de');
+      if (k.fine) k.line([[6.4, 4.6, zt + 0.01], [7.3, 5.6, zt + 0.01], [7.8, 5.4, zt + 0.01], [8.6, 7.1, zt + 0.01]], '#cbc2b6', 0.06 * k.s);
+      // saucers and a cup, a jar of biscotti, kept low before the barista
+      for (let i = 0; i < 3; i++) k.cyl(8.4, 6.3, zt + i * 0.16, 0.8, 0.16, C.china, { line: k.thin });
+      cup(k, 8.4, 6.3, zt + 0.48, C.china, false, 0.42);
+      k.cyl(9.7, 6.6, zt, 0.55, 1.3, '#d6e6ea');
+      k.cyl(9.7, 6.6, zt + 0.1, 0.45, 0.8, '#d9a35c', { line: 0 });
+      k.cyl(9.7, 6.6, zt + 1.3, 0.6, 0.25, C.walnut);
       // the machine
-      k.box(4.5, 2.0, zt, 5.2, 3.0, 3.75, C.red, { round: 0.25 });
-      k.box(4.4, 1.9, zt + 3.75, 5.4, 3.2, 0.45, C.chrome);
-      k.box(4.8, 4.98, zt, 4.6, 0.95, 0.45, C.chrome);
-      if (k.fine) for (let u = 5.1; u < 9.3; u += 0.35) k.line([[u, 5.05, zt + 0.46], [u, 5.85, zt + 0.46]], '#8f969c', 0.05 * k.s);
+      k.box(0.8, 4.4, zt, 4.2, 2.2, 3.75, C.red, { round: 0.25 });
+      k.box(0.7, 4.3, zt + 3.75, 4.4, 2.4, 0.45, C.chrome);
+      k.box(1.0, 6.6, zt, 3.8, 0.75, 0.45, C.chrome);
+      if (k.fine) for (let u = 1.3; u < 4.7; u += 0.35) k.line([[u, 6.65, zt + 0.46], [u, 7.3, zt + 0.46]], '#8f969c', 0.05 * k.s);
       // brass dome and cups warming on top
       const top = zt + 4.2;
-      cup(k, 5.1, 2.5, top, '#e8d9bf', false, 0.38);
-      cup(k, 5.2, 4.2, top, C.china, false, 0.38);
-      k.cyl(7.1, 3.5, top, 1.2, 0.35, C.brass);
-      brassDome(k, 7.1, 3.5, top + 0.35, 1.2, 1.4);
-      cup(k, 9.0, 2.6, top, C.china, false, 0.38);
+      cup(k, 1.35, 4.85, top, '#e8d9bf', false, 0.36);
+      cup(k, 1.4, 6.05, top, C.china, false, 0.36);
+      k.cyl(2.95, 5.5, top, 1.05, 0.32, C.brass);
+      brassDome(k, 2.95, 5.5, top + 0.32, 1.05, 1.25);
+      cup(k, 4.5, 5.0, top, C.china, false, 0.36);
       // gauge on the front
       const gz = zt + 2.75;
-      fill(k, ring(k, [7.1, 5.02, gz], [0, 1, 0], 0.62, 20), C.chrome, k.thin);
-      fill(k, ring(k, [7.1, 5.04, gz], [0, 1, 0], 0.48, 20), '#f6efdc', 0);
+      fill(k, ring(k, [2.9, 6.62, gz], [0, 1, 0], 0.55, 20), C.chrome, k.thin);
+      fill(k, ring(k, [2.9, 6.64, gz], [0, 1, 0], 0.42, 20), '#f6efdc', 0);
       // group heads with their portafilters, cups under them
       for (const g of GROUPS) {
-        k.cyl(g, 5.35, zt + 1.75, 0.5, 0.8, C.chrome);
-        k.cyl(g, 5.4, zt + 1.3, 0.42, 0.45, '#3a3433');
-        k.rod([[g + 0.1, 5.75, zt + 1.5], [g + 0.35, 7.0, zt + 1.35]], '#2b2522', 0.34);
-        cup(k, g, 5.45, zt + 0.45, C.china, false, 0.34);
+        k.cyl(g, 6.75, zt + 1.75, 0.45, 0.75, C.chrome);
+        k.cyl(g, 6.8, zt + 1.3, 0.38, 0.45, '#3a3433');
+        k.rod([[g + 0.1, 7.0, zt + 1.5], [g + 0.3, 7.45, zt + 1.4]], '#2b2522', 0.3);
+        cup(k, g, 6.9, zt + 0.45, C.china, false, 0.32);
       }
-      // the steam wand and a milk jug
-      k.rod([[9.7, 4.0, zt + 3.0], [10.15, 4.6, zt + 2.6], [10.15, 5.3, zt + 1.0]], C.chrome, 0.14);
-      k.cyl(9.95, 6.4, zt, 0.42, 0.95, C.chrome);
+      // the steam wand, down the machine's near side
+      const [wu, wv, wz] = ESPRESSO.wand;
+      k.rod([[5.0, wv, zt + 3.4], [wu, wv, zt + 3.2], [wu, wv, wz]], C.chrome, 0.14);
       // two stools before the bar
       stool(k, 2.2, 9.4, '#8f2f2f');
       stool(k, 8.8, 9.4, '#8f2f2f');
     });
-    const zt = 7.15;
-    // the gauge's needle
-    const a = v.active ? -0.4 + Math.sin(v.t * 9) * 0.12 : -2.2;
+    // the gauge's needle (round a loop that fits the scene's two seconds)
+    const a = v.active ? -0.4 + Math.sin(v.t * Math.PI * 3) * 0.12 : -2.2;
     const gz = zt + 2.75;
-    k.line([[7.1, 5.06, gz], [7.1 + Math.cos(a) * 0.38, 5.06, gz - Math.sin(a) * 0.38]], '#c0392f', Math.max(0.8, 0.09 * k.s));
+    k.line([[2.9, 6.66, gz], [2.9 + Math.cos(a) * 0.34, 6.66, gz - Math.sin(a) * 0.34]], '#c0392f', Math.max(0.8, 0.09 * k.s));
     // the pilot light
-    const [lx, ly] = k.p(4.95, 5.02, zt + 3.25);
+    const [lx, ly] = k.p(1.2, 6.62, zt + 3.25);
     k.pen.beginPath();
     k.pen.arc(lx, ly, Math.max(1, 0.16 * k.s), 0, Math.PI * 2);
     k.pen.fillStyle = v.active ? '#ffcf5a' : '#7a5a3a';
     k.pen.fill();
     if (!v.active) return;
-    k.halo(4.95, 5.1, zt + 3.25, 1.2, '#ffcf5a', 0.6);
+    k.halo(1.2, 6.7, zt + 3.25, 1.2, '#ffcf5a', 0.6);
     // shots running into the cups
     for (const [i, g] of GROUPS.entries()) {
-      const w = Math.sin(v.t * 23 + i) * 0.03;
-      k.line([[g + w, 5.45, zt + 1.28], [g - w, 5.45, zt + 1.0]], '#6a3b22', Math.max(1, 0.12 * k.s));
+      const w = Math.sin(v.t * Math.PI * 8 + i) * 0.03;
+      k.line([[g + w, 6.9, zt + 1.28], [g - w, 6.9, zt + 0.95]], '#6a3b22', Math.max(1, 0.12 * k.s));
     }
-    k.halo(7.1, 5.4, zt + 2, 5, '#ffb070', 0.18);
+    k.halo(2.9, 6.6, zt + 2, 5, '#ffb070', 0.18);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) {
-      if (due(v.t, dt, 0.35, v.seed)) spawn(wisp(5.2, 4.2, 12.0, Math.floor(v.t * 10), 0));
+      if (due(v.t, dt, 0.35, v.seed)) spawn(wisp(1.4, 4.9, ESPRESSO.top + 5.0, Math.floor(v.t * 10), 0));
       return;
     }
+    // steam off the wand (the barista's jug) and the group heads
     const n = due(v.t, dt, 5, v.seed);
     for (let i = 0; i < n; i++) {
       const tick = Math.floor(v.t * 20) + i;
-      const at = hash(tick, 7) < 0.55 ? ([10.15, 5.4, 7.8] as const) : ([GROUPS[tick & 1], 5.45, 8.0] as const);
+      const [wu, wv, wz] = ESPRESSO.wand;
+      const at = hash(tick, 7) < 0.55 ? ([wu, wv, wz + 0.4] as const) : ([GROUPS[tick & 1], 6.9, ESPRESSO.top + 1.8] as const);
       spawn(wisp(at[0], at[1], at[2], tick, i));
     }
   },
@@ -580,8 +597,12 @@ const web: PropArt = {
 
 // ── think: the wingback and the lamp ───────────────────────────────────────
 // A teal wingback armchair with a mustard throw, a pouf before it, a tall
-// fringed floor lamp and a side table with tea and books. Thinking turns
-// the lamp up and steams the tea.
+// fringed floor lamp and a side table with a teapot and books. The old
+// regular reads in the chair, its feet on the pouf (see npcs.ts: it holds
+// its own cup); worked, the lamp is turned up and the pot steams.
+// `SEAT`: where in the chair the regular sits, its cushion's top.
+
+export const SEAT = { u: 4.6, v: 3.0, z: 3.6 };
 
 const think: PropArt = {
   len: 12,
@@ -610,7 +631,7 @@ const think: PropArt = {
       k.cyl(10.2, 4.7, 4.3, 1.45, 0.3, C.walnut);
       k.box(10.0, 4.6, 4.6, 1.6, 1.2, 0.35, '#34476b', { line: k.thin, stripe: false });
       k.box(10.15, 4.7, 4.95, 1.3, 1.0, 0.35, '#b5543a', { line: k.thin, stripe: false });
-      cup(k, 9.5, 4.2, 4.6, '#f6f1e6', false, 0.45);
+      teapot(k, 9.25, 4.4, 4.6);
     });
     // the shade, lit; brighter while someone thinks here
     frustum(k, 10.4, 1.5, 12.6, 1.95, 15.0, 1.15, '#f3e2bd', v.active ? '#fff3cf' : '#f6e6c4');
@@ -625,7 +646,7 @@ const think: PropArt = {
     pen.strokeStyle = C.mustard;
     pen.lineWidth = Math.max(0.8, 0.1 * k.s);
     pen.stroke();
-    const a = v.active ? 0.55 + 0.05 * Math.sin(v.t * 2.1) : 0.3;
+    const a = v.active ? 0.55 + 0.05 * Math.sin(v.t * Math.PI) : 0.3;
     k.halo(10.4, 1.6, 13.6, 5, '#ffd890', a);
     k.pool(9.0, 3.2, 4.5, 3.4, '#ffd890', a * 0.45, 0);
     if (v.active) k.pool(5.5, 3.4, 2.6, 2.2, '#ffd890', 0.18, 2.9);
@@ -633,7 +654,7 @@ const think: PropArt = {
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
     const n = due(v.t, dt, 1.2, v.seed);
-    for (let i = 0; i < n; i++) spawn(wisp(9.5, 4.2, 5.4, Math.floor(v.t * 10), i));
+    for (let i = 0; i < n; i++) spawn(wisp(10.6, 4.4, 6.1, Math.floor(v.t * 10), i));
   },
 };
 

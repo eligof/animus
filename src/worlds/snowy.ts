@@ -2,6 +2,7 @@ import { hex } from '../term/color.ts';
 import type { Palette } from '../themes/types.ts';
 import { DECOR } from './snowy/decor.ts';
 import { INK } from './snowy/kit.ts';
+import { NPCS } from './snowy/npcs.ts';
 import { room, snowyPois } from './snowy/room.ts';
 import { STATIONS } from './snowy/stations.ts';
 import { WORKSTATION } from './snowy/workstation.ts';
@@ -10,8 +11,10 @@ import type { WorldDef } from './types.ts';
 // Snowy Depths: frozen falls, drifted snow and a pond iced over. A cavern in
 // a glacier in outlined cartoon (night-navy ink), cold blues warmed by fire
 // and lamplight: the shell in snowy/room.ts, the stations in
-// snowy/stations.ts, the things between them in snowy/decor.ts, all drawn
-// with the kit in snowy/kit.ts and snowy/bits.ts.
+// snowy/stations.ts, the things between them in snowy/decor.ts, each
+// agent's desk in snowy/workstation.ts and the locals (a camp cook, an ice
+// fisher and a radio operator) in snowy/npcs.ts, all drawn with the kit in
+// snowy/kit.ts and snowy/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#06090e'),
@@ -45,6 +48,7 @@ export const snowy: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'parka',
   critter: { kind: 'fox', body: hex('#eef3f8') }, // a snow fox
   finale: { colors: [[255, 211, 74]] }, // gold dust

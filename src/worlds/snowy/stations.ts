@@ -15,9 +15,18 @@ import { C, INK, SPOT, chip, due, ember, flake, hash, kitOf, still, wisp, withAl
 //   write     the expedition desk: a ledger written up by quill and candle
 //   read      the bookcase, snowed on, a lamp lit to read by
 //   search    the ice face: relics frozen in a slab of clear ice, a pick
-//   run       the iron stove: fire in its belly, a kettle on top
+//   run       the iron stove: fire in its belly, a pot of cocoa and a
+//             kettle on top
 //   web       the radio: a valve set on a crate, an aerial on a mast
 //   think     the fishing hole cut in the frozen pond, a stool and a rod
+//
+// Three of them are worked by the locals (see ./npcs.ts): the cook stirs
+// the cocoa from past the stove's far end, the fisher sits on the stool by
+// the hole with the rod in its hands, the radio operator on the log
+// before the set with the headphones on. What a local holds is drawn in
+// its hands, not on its station, while it is there; a worked station goes
+// round a two-second loop, so what moves on it comes round in two
+// seconds.
 //   idle      the fire pit: fur-draped log benches, a kettle on a tripod
 //   entrance  the ice gate: an igloo arch onto the snowy night
 
@@ -404,13 +413,18 @@ function relics(k: Kit, n: number): void {
 
 // ── run: the stove ──────────────────────────────────────────────────────────
 // A pot-bellied iron stove on a hearth stone, its pipe going up into the
-// dark, a copper kettle on top and socks drying on a line from the pipe;
-// a wood box and a coal bucket by it. Running it stokes the fire behind
-// the door, rattles the kettle's lid and puffs smoke from the pipe.
+// dark, a pot of cocoa and a copper kettle on top and socks drying on a
+// line from the pipe; a wood box and a coal bucket by it. The stove
+// stands toward the far end (-u) of its hearth, the pot on that side of
+// its top, for the cook standing past that end to stir. Running it stokes
+// the fire behind the door, swirls the cocoa, rattles the kettle's lid and
+// puffs smoke from the pipe.
 
-const STOVE = { u: SPOT.stove[0], v: SPOT.stove[1], r: 2.3 };
+export const STOVE = { u: SPOT.stove[0], v: SPOT.stove[1], r: 2.3 };
 const PIPE: P3 = [STOVE.u + 0.6, STOVE.v - 1.1, 21.6]; // the pipe's top
-const KETTLE: P3 = [STOVE.u - 0.6, STOVE.v + 0.5, 6.6];
+const KETTLE: P3 = [STOVE.u + 1.0, STOVE.v + 0.55, 6.6];
+// The pot of cocoa on the top plate's far side: its foot, radius, height.
+export const COCOA = { u: STOVE.u - 1.15, v: STOVE.v + 0.1, z: 6.6, r: 0.95, h: 1.25 };
 
 const run: PropArt = {
   len: 11,
@@ -419,13 +433,13 @@ const run: PropArt = {
   animated: true,
   draw(v: PropView): void {
     const { u: cu, v: cv, r } = STOVE;
-    const k = still(v, 'run', 23, (k) => {
-      k.shadow(5.5, 5.4, 6.3, 6.0, 0.28);
+    const k = still(v, v.active ? 'run-stirred' : 'run', 23, (k) => {
+      k.shadow(5.2, 5.4, 5.0, 5.6, 0.28);
       // the hearth stone
-      k.box(1.4, 0.9, 0, 7.8, 7.6, 0.4, '#9aa5b6');
+      k.box(0.4, 0.9, 0, 7.4, 7.6, 0.4, '#9aa5b6');
       k.pen.beginPath();
-      for (const u of [4.0, 6.6]) k.run([[u, 0.9, 0.41], [u, 8.5, 0.41]]);
-      for (const w of [3.4, 6.0]) k.run([[1.4, w, 0.41], [9.2, w, 0.41]]);
+      for (const u of [2.9, 5.5]) k.run([[u, 0.9, 0.41], [u, 8.5, 0.41]]);
+      for (const w of [3.4, 6.0]) k.run([[0.4, w, 0.41], [7.8, w, 0.41]]);
       k.pen.strokeStyle = '#6f7a8c';
       k.pen.lineWidth = Math.max(0.7, 0.08 * k.s);
       k.pen.stroke();
@@ -443,6 +457,8 @@ const run: PropArt = {
       k.cyl(PIPE[0], PIPE[1], 16.6, 0.74, 0.3, C.ironLight);
       lump(k, PIPE[0], PIPE[1], PIPE[2], 1.15, 0.9, C.iron);
       lump(k, PIPE[0] - 0.15, PIPE[1] - 0.1, PIPE[2] + 0.55, 0.8, 0.45, C.snow, k.thin);
+      // the pot of cocoa (its ladle in it while nobody stirs)
+      cocoaPot(k, !v.active);
       // the door's frame (the fire behind it is live)
       const F = cv + r + 0.02;
       k.poly([[cu - 1.25, F, 2.0], [cu + 1.25, F, 2.0], [cu + 1.25, F, 4.75], [cu - 1.25, F, 4.75]], C.ironLight, k.lw, 0.3);
@@ -469,7 +485,7 @@ const run: PropArt = {
     });
     // the fire behind the door: stoked while running, banked otherwise
     const F = cv + r + 0.04;
-    const n = v.active ? 0.5 + 0.5 * (0.6 * Math.sin(v.t * 11) + 0.4 * Math.sin(v.t * 17.3 + 1)) : 0.3;
+    const n = v.active ? 0.5 + 0.5 * (0.6 * Math.sin(v.t * 4 * Math.PI) + 0.4 * Math.sin(v.t * 6 * Math.PI + 1)) : 0.3;
     const win: P3[] = [[cu - 0.95, F, 2.3], [cu + 0.95, F, 2.3], [cu + 0.95, F, 4.45], [cu - 0.95, F, 4.45]];
     k.poly(win, k.vgrad(cu, F, 2.3, 4.45, [[0, mix('#ffd060', '#ffefb0', n)], [0.6, mix('#e8641e', '#ff9a30', n)], [1, mix('#5a1e10', '#a8401a', n)]]), k.thin, 0.2);
     k.pen.beginPath();
@@ -478,14 +494,18 @@ const run: PropArt = {
     k.pen.lineWidth = Math.max(1, 0.16 * k.s);
     k.pen.stroke();
     k.halo(cu, F + 0.6, 3.3, v.active ? 4.6 : 3.4, '#ff9a48', 0.28 + 0.2 * n);
-    // the kettle, its lid rattling on the boil
-    kettle(k, KETTLE[0], KETTLE[1], KETTLE[2], 1.0, v.active ? Math.max(0, Math.sin(v.t * 15)) * 0.16 : 0);
+    // the cocoa swirling as it is stirred; the kettle, its lid rattling on
+    // the boil
+    if (v.active) swirl(k, v.t);
+    kettle(k, KETTLE[0], KETTLE[1], KETTLE[2], 0.85, v.active ? Math.max(0, Math.sin(v.t * 5 * Math.PI)) * 0.16 : 0);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     const tick = Math.floor(v.t * 10);
     const n = due(v.t, dt, v.active ? 3 : 0.5, v.seed);
-    for (let i = 0; i < n; i++) spawn(wisp(KETTLE[0] - 1.45, KETTLE[1], KETTLE[2] + 1.4, tick, i));
+    for (let i = 0; i < n; i++) spawn(wisp(KETTLE[0] - 1.25, KETTLE[1], KETTLE[2] + 1.2, tick, i));
     if (!v.active) return;
+    const c = due(v.t, dt, 1.6, v.seed + 2);
+    for (let i = 0; i < c; i++) spawn(wisp(COCOA.u, COCOA.v, COCOA.z + COCOA.h + 0.2, tick, i + 9));
     const m = due(v.t, dt, 1.4, v.seed + 1);
     for (let i = 0; i < m; i++) {
       const p = wisp(PIPE[0], PIPE[1], PIPE[2] + 1.2, tick, i + 5, [150, 158, 172]);
@@ -493,6 +513,35 @@ const run: PropArt = {
     }
   },
 };
+
+// The pot of cocoa on the stove: an iron pot with lugs, cocoa to its
+// brim, a ladle leaning in it when `ladle`.
+function cocoaPot(k: Kit, ladle: boolean): void {
+  const { u, v, z, r, h } = COCOA;
+  for (const s of [-1, 1]) k.rod([[u + s * r * 0.98, v - s * r * 0.2, z + h * 0.75], [u + s * (r + 0.35), v - s * r * 0.28, z + h * 0.8]], C.iron, 0.16);
+  k.cyl(u, v, z, r, h, C.ironLight);
+  k.cyl(u, v, z + h - 0.18, r + 0.06, 0.2, C.iron, { line: k.thin });
+  k.disc(u, v, z + h - 0.06, r * 0.86, C.cocoa, k.thin);
+  k.disc(u - 0.25, v - 0.2, z + h - 0.04, r * 0.3, shade(C.cocoa, 0.25), 0);
+  if (ladle) {
+    k.rod([[u + 0.2, v - 0.1, z + h - 0.3], [u + 0.95, v - 0.75, z + h + 2.0]], C.tin, 0.14);
+    k.disc(u + 0.95, v - 0.75, z + h + 2.0, 0.12, C.tin, k.thin);
+  }
+}
+
+// The cocoa going round under the cook's ladle: a cream spiral turning
+// once in two seconds.
+function swirl(k: Kit, t: number): void {
+  const { u, v, z, r, h } = COCOA;
+  const a0 = t * Math.PI;
+  const pts: P3[] = [];
+  for (let i = 0; i <= 14; i++) {
+    const f = i / 14;
+    const a = a0 + f * Math.PI * 2.2;
+    pts.push([u + Math.cos(a) * r * 0.72 * f, v + Math.sin(a) * r * 0.72 * f, z + h - 0.03]);
+  }
+  k.line(pts, '#c08a62', Math.max(0.8, 0.1 * k.s));
+}
 
 // A sock hung from a point on the line.
 function sock(k: Kit, at: P3, color: Color): void {
@@ -518,13 +567,18 @@ function mitten(k: Kit, at: P3, color: Color): void {
 const DIAL: P3 = [5.35, 5.42, 6.3];
 const MAST: P3 = [7.3, 1.6, 20.3];
 
+// The log stool before the set, where the radio operator sits (a little
+// to the set's far side, so its dial shows past the operator's shoulder):
+// its foot and the height of its top.
+export const RADIO_STOOL = { u: 3.7, v: 7.6, top: 2.6 };
+
 const web: PropArt = {
   len: 9,
   dep: 9,
   height: 22,
   animated: true,
   draw(v: PropView): void {
-    const k = still(v, 'web', 22, (k) => {
+    const k = still(v, v.active ? 'web-worn' : 'web', 22, (k) => {
       k.shadow(4.5, 4.4, 4.6, 4.4, 0.28);
       // the mast, lashed, and its aerial
       heap(k, MAST[0], MAST[1], 0, 1.5, 1.1, 2, C.snow, k.thin);
@@ -557,18 +611,21 @@ const web: PropArt = {
         k.pen.arc(x, y, Math.max(1, 0.26 * k.s), 0, Math.PI * 2);
         k.paint('#e9dcc0', k.thin * 0.8);
       }
-      // headphones on the case
-      k.rod([[2.6, 3.4, 7.55], [2.9, 3.6, 8.5], [3.6, 3.7, 8.6], [3.9, 3.5, 7.55]], C.iron, 0.12);
-      k.disc(2.6, 3.4, 7.55, 0.45, C.woolDark, k.thin);
-      k.disc(3.9, 3.5, 7.55, 0.45, C.woolDark, k.thin);
+      // headphones on the case (on the operator's head while it listens)
+      if (!v.active) {
+        k.rod([[2.6, 3.4, 7.55], [2.9, 3.6, 8.5], [3.6, 3.7, 8.6], [3.9, 3.5, 7.55]], C.iron, 0.12);
+        k.disc(2.6, 3.4, 7.55, 0.45, C.woolDark, k.thin);
+        k.disc(3.9, 3.5, 7.55, 0.45, C.woolDark, k.thin);
+      }
       // a log stool
-      k.shadow(4.6, 7.7, 1.2, 0.9, 0.2);
-      k.cyl(4.6, 7.6, 0, 0.85, 2.6, C.bark, { top: '#d9ad78' });
+      const st = RADIO_STOOL;
+      k.shadow(st.u, st.v + 0.1, 1.2, 0.9, 0.2);
+      k.cyl(st.u, st.v, 0, 0.85, st.top, C.bark, { top: '#d9ad78' });
     });
     // the dial and its needle, the mast's lamp
     const face = ring3([DIAL[0], DIAL[1], DIAL[2]], [0, 1, 0], 0.62, 18).map((q) => k.p(...q));
     fillPts(k, face, v.active ? '#ffe39a' : '#4a4637', k.thin * 0.7);
-    const a = v.active ? 0.6 + Math.sin(v.t * 1.7) * 0.9 : -0.6;
+    const a = v.active ? 0.6 + Math.sin(v.t * Math.PI) * 0.9 : -0.6;
     k.line([[DIAL[0], DIAL[1] + 0.02, DIAL[2] - 0.3], [DIAL[0] + Math.cos(Math.PI / 2 - a) * 0.5, DIAL[1] + 0.02, DIAL[2] - 0.3 + Math.sin(Math.PI / 2 - a) * 0.6]], C.woolDark, Math.max(0.8, 0.1 * k.s));
     const blink = v.active && (v.t * 1.5) % 1 < 0.5;
     const [lx, ly] = k.p(MAST[0], MAST[1], MAST[2] + 0.35);
@@ -596,9 +653,16 @@ const web: PropArt = {
 // tackle box and a lantern on the ice, and behind it all a little red
 // fishing shanty, snow on its roof and a lamp in its window, the auger
 // stood in the snow by it. Pondering plays a bite: the rod's tip nods,
-// the float dips, rings spread.
+// the float dips, rings spread. The stool stands on the hole's far side
+// (-u), so the fisher sitting on it faces the hole along the station; while
+// it fishes, the rod, its line and float are in its hands (see ./npcs.ts)
+// and only the rings spread here.
 
 const ROD = { butt: [1.0, 2.6, 0.5] as P3, rest: [2.4, 3.4, 2.0] as P3 };
+// The stool by the hole (its foot, its seat's height) and where the float
+// rides on the water.
+export const FISH_STOOL = { u: 1.5, v: 4.7, top: 2.72 };
+export const FLOAT: P3 = [SPOT.hole[0] + 0.25, SPOT.hole[1] + 0.15, 0.2];
 
 const think: PropArt = {
   len: 12,
@@ -640,16 +704,16 @@ const think: PropArt = {
       heap(k, ROD.rest[0], ROD.rest[1], 0, 0.7, 0.45, 3, C.snow, k.thin);
       k.rod([[ROD.rest[0], ROD.rest[1], 0], [ROD.rest[0], ROD.rest[1], ROD.rest[2] - 0.3]], C.woodDark, 0.16);
       k.rod([[ROD.rest[0], ROD.rest[1], ROD.rest[2] - 0.3], [ROD.rest[0] - 0.3, ROD.rest[1], ROD.rest[2] + 0.3]], C.woodDark, 0.12);
-      // the lantern on the ice
-      lantern(k, 1.2, 5.6, 0, true, 0.9);
-      k.halo(1.2, 5.6, 1.0, 2.6, '#ffc870', 0.45);
+      // the lantern on the ice by the shanty's door
+      lantern(k, 7.7, 5.0, 0, true, 0.9);
+      k.halo(7.7, 5.0, 1.0, 2.6, '#ffc870', 0.45);
       // a fish on the ice
       const fu = 2.9;
       const fv = 6.2;
       k.poly([[fu - 1.0, fv, 0.05], [fu - 0.4, fv - 0.35, 0.12], [fu + 0.5, fv - 0.3, 0.12], [fu + 0.9, fv, 0.05], [fu + 0.5, fv + 0.32, 0.1], [fu - 0.4, fv + 0.35, 0.1]], C.fish, k.thin, 0.1);
       k.poly([[fu + 0.85, fv, 0.05], [fu + 1.4, fv - 0.45, 0.05], [fu + 1.4, fv + 0.45, 0.05]], shade(C.fish, -0.15), k.thin);
       // the stool, a fur on it
-      stool(k, 6.6, 5.6);
+      stool(k, FISH_STOOL.u, FISH_STOOL.v);
       // the auger, stood in the snow by the shanty
       heap(k, 11.5, 5.7, 0, 0.8, 0.5, 4, C.snow, k.thin);
       k.rod([[11.5, 5.7, 0.2], [11.5, 5.7, 5.0]], C.ironLight, 0.12);
@@ -660,31 +724,31 @@ const think: PropArt = {
       k.pen.lineWidth = Math.max(0.9, 0.14 * k.s);
       k.pen.stroke();
     });
-    // the rod (its tip nodding while a bite is played), its line and float
     const t = v.t;
-    const nod = v.active ? Math.sin(t * 5.2) * 0.3 + Math.sin(t * 13) * 0.08 : 0;
-    const { butt, rest } = ROD;
-    const d: P3 = [rest[0] - butt[0], rest[1] - butt[1], rest[2] - butt[2]];
-    const tip: P3 = [rest[0] + d[0] * 1.15, rest[1] + d[1] * 1.15, rest[2] + d[2] * 1.15 - 0.6 + nod];
-    const mid: P3 = [rest[0] + d[0] * 0.6, rest[1] + d[1] * 0.6, rest[2] + d[2] * 0.6 - 0.05 + nod * 0.3];
-    k.rod([butt, rest, mid, tip], C.woodDark, 0.1);
-    k.disc(butt[0] + d[0] * 0.25, butt[1] + d[1] * 0.25, butt[2] + d[2] * 0.25, 0.3, C.ironLight, k.thin);
-    const dip = v.active ? Math.max(0, Math.sin(t * 5.2 - 0.6)) * 0.12 : 0;
-    const fl: P3 = [hu + 0.25, hv + 0.15, 0.2 - dip];
-    k.line([tip, fl], '#e6eef5', Math.max(0.7, 0.05 * k.s));
     if (v.active) {
-      // rings spreading from the float
+      // the fisher has the rod: rings spreading from its float, round
+      // twice in two seconds
       k.pen.beginPath();
       for (let i = 0; i < 2; i++) {
-        const f = (t * 0.7 + i * 0.5) % 1;
-        const e = k.ell(fl[0], fl[1], 0.1, 0.25 + f * 0.8);
+        const f = (t * 0.5 + i * 0.5) % 1;
+        const e = k.ell(FLOAT[0], FLOAT[1], 0.1, 0.25 + f * 0.8);
         k.pen.moveTo(e.cx + e.rx, e.cy);
         k.pen.ellipse(e.cx, e.cy, e.rx, e.ry, e.rot, 0, Math.PI * 2);
       }
       k.pen.strokeStyle = '#cfe9f8a0';
       k.pen.lineWidth = Math.max(0.7, 0.07 * k.s);
       k.pen.stroke();
+      return;
     }
+    // the rod on its stick, its line and float, at rest
+    const { butt, rest } = ROD;
+    const d: P3 = [rest[0] - butt[0], rest[1] - butt[1], rest[2] - butt[2]];
+    const tip: P3 = [rest[0] + d[0] * 1.15, rest[1] + d[1] * 1.15, rest[2] + d[2] * 1.15 - 0.6];
+    const mid: P3 = [rest[0] + d[0] * 0.6, rest[1] + d[1] * 0.6, rest[2] + d[2] * 0.6 - 0.05];
+    k.rod([butt, rest, mid, tip], C.woodDark, 0.1);
+    k.disc(butt[0] + d[0] * 0.25, butt[1] + d[1] * 0.25, butt[2] + d[2] * 0.25, 0.3, C.ironLight, k.thin);
+    const fl = FLOAT;
+    k.line([tip, fl], '#e6eef5', Math.max(0.7, 0.05 * k.s));
     ball(k, fl[0], fl[1], fl[2] + 0.18, 0.22, '#e8473a', k.thin * 0.8);
     const [x, y] = k.p(fl[0], fl[1], fl[2] + 0.18);
     k.pen.beginPath();

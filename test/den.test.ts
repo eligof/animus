@@ -207,3 +207,12 @@ test('Hacker\'s Den: its desks have things of their own to pick from, and someth
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test("Hacker's Den: three locals at work, each where its job puts it", () => {
+  assert.deepEqual(den.npcs!.map((n) => [n.name, n.station, n.place.mode]), [
+    ['sysadmin', 'search', 'standing'],
+    ['overclocker', 'run', 'behind'],
+    ['courier', 'entrance', 'standing'],
+  ]);
+  assert.ok(den.npcs!.some((n) => n.show), 'no show');
+});

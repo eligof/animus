@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './shelter/decor.ts';
 import { INK } from './shelter/kit.ts';
+import { NPCS } from './shelter/npcs.ts';
 import { shelterPois, room } from './shelter/room.ts';
 import { STATIONS } from './shelter/stations.ts';
 import { WORKSTATION } from './shelter/workstation.ts';
@@ -11,8 +12,9 @@ import { WORKSTATION } from './shelter/workstation.ts';
 // teal and orange and cream over riveted steel and an ochre deck: a diner's
 // corner, capsule lights, steam off the pipes and a jukebox, in outlined
 // cartoon (dark green-grey ink): the shell in shelter/room.ts, the stations
-// in shelter/stations.ts, the furniture in shelter/decor.ts, all drawn with
-// the kit in shelter/kit.ts and shelter/bits.ts.
+// in shelter/stations.ts, the furniture in shelter/decor.ts, the locals in
+// shelter/npcs.ts, all drawn with the kit in shelter/kit.ts and
+// shelter/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#0b0f0e'),
@@ -46,6 +48,7 @@ export const shelter: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'jumpsuit',
   critter: { kind: 'rat', body: hex('#8f857a') }, // a shelter rat
   finale: { colors: [[63, 176, 168], [240, 137, 46], [239, 230, 204]] }, // teal, orange and cream confetti

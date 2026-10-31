@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 // stand-ups; not `office`, the Startup's theme id). Keys from older
 // versions (pixels, hdTipSeen) are ignored.
 export type ViewPref = 'auto' | 'scene' | 'dashboard';
-export type Config = { theme?: string; view?: ViewPref; lights?: boolean; officeLife?: boolean };
+export type Config = { theme?: string; view?: ViewPref; lights?: boolean; officeLife?: boolean; npcs?: boolean };
 
 export function configPath(env: NodeJS.ProcessEnv = process.env): string {
   return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'animus', 'config.json');
@@ -22,6 +22,7 @@ export function loadConfig(path = configPath()): Config {
     if (d?.view === 'auto' || d?.view === 'scene' || d?.view === 'dashboard') cfg.view = d.view;
     if (typeof d?.lights === 'boolean') cfg.lights = d.lights;
     if (typeof d?.officeLife === 'boolean') cfg.officeLife = d.officeLife;
+    if (typeof d?.npcs === 'boolean') cfg.npcs = d.npcs;
     return cfg;
   } catch {
     return {};

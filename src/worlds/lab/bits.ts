@@ -82,12 +82,14 @@ export function bulb(k: Kit, u: number, v: number, z: number, R: number, nh: num
 }
 
 // Bubbles rising through a column of liquid from z0 to z1 round (u, v):
-// n of them, r px across at most, moving with the clock t (rate a second).
+// n of them, r px across at most, moving with the clock t (rate a second,
+// each bubble's own to the nearest 0.5, so they repeat in 2 s).
 export function bubbles(k: Kit, u: number, v: number, z0: number, z1: number, spread: number, t: number, n: number, seed: number, color = '#ffffffd0', rate = 0.9): void {
   const pen = k.pen;
   pen.beginPath();
   for (let i = 0; i < n; i++) {
-    const ph = (t * rate * (0.7 + hash(seed, i, 1) * 0.6) + hash(seed, i, 2)) % 1;
+    const sp = Math.max(0.5, Math.round(rate * (0.7 + hash(seed, i, 1) * 0.6) * 2) / 2);
+    const ph = (t * sp + hash(seed, i, 2)) % 1;
     const z = z0 + (z1 - z0) * ph;
     const du = (hash(seed, i, 3) - 0.5) * spread + Math.sin(ph * 9 + i) * spread * 0.12;
     const dv = (hash(seed, i, 4) - 0.5) * spread * 0.6;

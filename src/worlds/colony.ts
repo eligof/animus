@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './colony/decor.ts';
 import { INK } from './colony/kit.ts';
+import { NPCS } from './colony/npcs.ts';
 import { colonyPois, room } from './colony/room.ts';
 import { STATIONS } from './colony/stations.ts';
 import { WORKSTATION } from './colony/workstation.ts';
@@ -12,7 +13,8 @@ import { WORKSTATION } from './colony/workstation.ts';
 // games: plain cut stone walls, a floor zoned plank, tile and stone, neat
 // stockpiles and a room full of the colony's things. The shell in
 // colony/room.ts, the stations in colony/stations.ts, the furniture in
-// colony/decor.ts, all drawn with the kit in colony/kit.ts and
+// colony/decor.ts, the locals (a tailor, a blacksmith and a camp cook) in
+// colony/npcs.ts, all drawn with the kit in colony/kit.ts and
 // colony/bits.ts.
 
 const PALETTE: Palette = {
@@ -47,6 +49,7 @@ export const colony: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'colonist',
   critter: { kind: 'husky', body: hex('#8a929e') }, // a husky
   finale: { colors: [[124, 192, 74], [140, 98, 58], [106, 174, 224]] }, // grass green, wood brown and sky blue confetti

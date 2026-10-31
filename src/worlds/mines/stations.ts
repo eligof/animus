@@ -35,13 +35,18 @@ const GOLDDUST: readonly [number, number, number] = [255, 214, 92];
 
 // ── write: the smithy ───────────────────────────────────────────────────────
 // A fieldstone forge against the wall under a riveted iron hood and its
-// flue; bellows on a stand to one side, the anvil on a log stump in front,
-// a quench tub with tongs, a scuttle of coal. Working blows the bellows,
-// brightens the coals, lays a hot bar on the anvil and rings the hammer on
-// it, throwing sparks.
+// flue; bellows on a stand to one side, the anvil on a log stump at the
+// front corner, a quench tub with tongs, a scuttle of coal. Its smith
+// stands on the floor beside the anvil (SMITH, see npcs.ts) and does the
+// hammering: worked, the bellows blow, the coals brighten and the anvil
+// glows under the bar he holds there, throwing sparks; left alone, the
+// hammer rests across the stump.
 
 const HOOD = { b: 8.2, t: 11.6 };
-const ANVIL = { u: 5.6, v: 5.4, z: 4.3 };
+const ANVIL = { u: 3.4, v: 5.8, z: 4.3 };
+// Where the smith stands: on the floor past the smithy's front, the anvil
+// a step ahead of him along u.
+export const SMITH = { u: 1.0, v: 8.8 };
 
 const write: PropArt = {
   len: 11,
@@ -68,8 +73,8 @@ const write: PropArt = {
       k.box(7.0, 1.2, 2.3, 3.4, 2.0, 0.35, C.timber, { line: k.thin });
       bellowsBoard(k, 2.9, '#7a5232');
       // a scuttle of coal by the hearth
-      bucket(k, 1.4, 5.6, 0, 0.85, 1.1, C.iron, C.coal);
-      heap(k, 1.4, 5.6, 1.0, 0.6, 0.45, v.seed + 9, [C.coal, '#3a3230']);
+      bucket(k, 6.7, 5.9, 0, 0.85, 1.1, C.iron, C.coal);
+      heap(k, 6.7, 5.9, 1.0, 0.6, 0.45, v.seed + 9, [C.coal, '#3a3230']);
       // the hood over the fire on two iron rods, its flue up the wall
       for (const u of [0.95, 6.05]) k.rod([[u, 3.95, 3.4], [u, 3.95, HOOD.b - 0.5]], C.iron, 0.12);
       hood(k);
@@ -84,33 +89,27 @@ const write: PropArt = {
     });
     // the coals: glowing, brighter while worked, small flames licking up
     const t = v.t;
-    const flick = 0.5 + 0.5 * (0.6 * Math.sin(t * 7.3) + 0.4 * Math.sin(t * 12.9 + 1.3));
+    const flick = 0.5 + 0.5 * (0.6 * Math.sin(t * Math.PI * 2) + 0.4 * Math.sin(t * Math.PI * 4 + 1.3));
     const hot = v.active ? 0.75 + 0.25 * flick : 0.35 + 0.1 * flick;
     k.pool(3.5, 2.25, 2.3, 1.4, '#ff7a2a', 0.55 * hot, 3.42);
-    flames(k, 3.5, 2.4, 3.45, v.active ? 0.42 : 0.28, t * (v.active ? 2.2 : 1.2));
+    flames(k, 3.5, 2.4, 3.45, v.active ? 0.42 : 0.28, t * (v.active ? Math.PI : 1.2));
     k.halo(3.5, 2.4, 4.6, v.active ? 4.5 : 3.2, '#ff9a48', 0.42 * hot);
     // the bellows breathing
-    const lift = v.active ? 0.55 + 0.45 * Math.sin(t * 3.2) : 0.75;
+    const lift = v.active ? 0.55 + 0.45 * Math.sin(t * Math.PI) : 0.75;
     bellowsTop(k, 2.9, lift);
-    // a hot bar on the anvil, and the hammer: resting, or ringing on the bar
-    if (v.active) {
-      k.rod([[ANVIL.u - 0.6, ANVIL.v - 0.05, ANVIL.z + 0.1], [ANVIL.u + 1.0, ANVIL.v + 0.15, ANVIL.z + 0.1]], '#ffae4a', 0.2);
-      k.line([[ANVIL.u - 0.45, ANVIL.v - 0.05, ANVIL.z + 0.16], [ANVIL.u + 0.85, ANVIL.v + 0.15, ANVIL.z + 0.16]], '#fff0b0', Math.max(0.8, 0.07 * k.s));
-      k.halo(ANVIL.u + 0.2, ANVIL.v, ANVIL.z + 0.2, 1.8, '#ff9a48', 0.5);
-    }
-    const ph = (t * 1.6) % 1;
-    const up = v.active ? (ph < 0.75 ? Math.sin((ph / 0.75) * Math.PI * 0.5) : 1 - (ph - 0.75) / 0.25) : 0;
-    hammer(k, up, v.active);
+    // the anvil glowing under the smith's hot bar, or the hammer resting
+    if (v.active) k.halo(ANVIL.u - 0.2, ANVIL.v, ANVIL.z + 0.2, 1.8, '#ff9a48', 0.42 + 0.08 * Math.sin(t * Math.PI * 2));
+    else hammer(k);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     const t = v.t;
     // smoke off the flue
     if (due(t, dt, v.active ? 1.2 : 0.35, v.seed)) spawn(puff('smoke', 3.5, 1.9, 16.2, Math.floor(t * 10), 0));
     if (!v.active) return;
-    // sparks where the hammer lands
-    const strike = Math.floor(t * 1.6);
-    if (Math.floor((t - dt) * 1.6) !== strike) {
-      for (let i = 0; i < 7; i++) spawn(fling('spark', ANVIL.u + 0.3, ANVIL.v, ANVIL.z + 0.3, strike, i, SPARK, 0.8, 3.2, 12));
+    // sparks off the anvil, at the smith's tempo (two blows in 1.6 s)
+    const strike = Math.floor(t * 1.25);
+    if (Math.floor((t - dt) * 1.25) !== strike) {
+      for (let i = 0; i < 7; i++) spawn(fling('spark', ANVIL.u - 0.3, ANVIL.v, ANVIL.z + 0.3, strike, i, SPARK, 0.8, 3.2, 12));
     }
     if (due(t, dt, 2.5, v.seed + 1)) spawn(fling('ember', 3.5, 2.4, 4.2, Math.floor(t * 20), 1, [255, 140, 60], 0.3, 2, -0.5));
   },
@@ -205,42 +204,39 @@ function bellowsTop(k: Kit, z: number, lift: number): void {
   k.rod([[10.3, 2.2, top[4][2]], [11.0, 2.2, top[4][2] + 0.1]], C.timberDark, 0.16);
 }
 
+// The anvil on its stump, its heel toward the smith (-u), its horn away.
 function anvil(k: Kit): void {
   const { u, v: w, z } = ANVIL;
   const steel = '#4e4c54';
   k.box(u - 0.9, w - 0.55, 2.4, 1.8, 1.1, 0.5, steel, { line: k.lw });
   k.box(u - 0.55, w - 0.38, 2.9, 1.1, 0.76, 0.75, steel, { line: k.lw });
-  // the horn, toward -u
-  k.poly([[u - 1.1, w - 0.45, z - 0.65], [u - 2.35, w, z - 0.2], [u - 1.1, w + 0.45, z - 0.65], [u - 1.1, w + 0.45, z], [u - 1.1, w - 0.45, z]], shade(steel, 0.12), k.lw);
-  k.box(u - 1.1, w - 0.5, z - 0.7, 2.4, 1.0, 0.7, steel, { line: k.lw, top: '#8e9098' });
-  k.line([[u - 0.9, w + 0.3, z + 0.01], [u + 1.1, w + 0.3, z + 0.01]], '#c4c6cc', Math.max(0.7, 0.08 * k.s));
+  k.box(u - 1.3, w - 0.5, z - 0.7, 2.4, 1.0, 0.7, steel, { line: k.lw, top: '#8e9098' });
+  // the horn, toward +u (nearer the viewer, so drawn after the face)
+  k.poly([[u + 1.1, w - 0.45, z - 0.65], [u + 2.35, w, z - 0.2], [u + 1.1, w + 0.45, z - 0.65], [u + 1.1, w + 0.45, z], [u + 1.1, w - 0.45, z]], shade(steel, 0.12), k.lw);
+  k.line([[u - 1.1, w + 0.3, z + 0.01], [u + 0.9, w + 0.3, z + 0.01]], '#c4c6cc', Math.max(0.7, 0.08 * k.s));
 }
 
-// The hammer: resting across the stump's edge (up < 0 means at rest), or
-// raised `up` (0..1) over the anvil.
-function hammer(k: Kit, up: number, active: boolean): void {
-  if (!active) {
-    k.rod([[ANVIL.u + 0.2, ANVIL.v + 0.9, 2.45], [ANVIL.u + 1.6, ANVIL.v + 1.5, 2.2]], C.timber, 0.16);
-    k.box(ANVIL.u - 0.15, ANVIL.v + 0.55, 2.4, 0.6, 0.55, 0.45, C.iron, { line: k.thin });
-    return;
-  }
-  const a = -0.15 + up * 1.25; // radians up from level
-  const pivot: P3 = [ANVIL.u + 1.6, ANVIL.v + 1.4, ANVIL.z + 0.9];
-  const L = 1.9;
-  const head: P3 = [pivot[0] - Math.cos(a) * L, pivot[1] - Math.cos(a) * L * 0.7, pivot[2] + Math.sin(a) * L];
-  k.rod([pivot, head], C.timber, 0.15);
-  k.rod([[head[0] + 0.05, head[1] - 0.35, head[2] - 0.05], [head[0] - 0.05, head[1] + 0.35, head[2] + 0.05]], '#5a5862', 0.42);
+// The hammer at rest, its head on the stump's edge, its haft out over it.
+function hammer(k: Kit): void {
+  k.rod([[ANVIL.u + 0.2, ANVIL.v + 0.9, 2.45], [ANVIL.u + 1.4, ANVIL.v + 1.0, 2.2]], C.timber, 0.16);
+  k.box(ANVIL.u - 0.15, ANVIL.v + 0.45, 2.4, 0.6, 0.55, 0.45, C.iron, { line: k.thin });
 }
 
 // ── read: the assay office ──────────────────────────────────────────────────
 // Rough shelves of the mine's books and samples: day books and ledgers,
 // boxes of ore (gold, copper, amethyst, coal), jars of gold dust and rolled
-// surveys; on top a crate and a lamp. Beside them a standing desk with the
-// day book open under a hanging lantern. Reading lights the lantern and
-// turns the pages.
+// surveys; on top a crate and a lamp. Beside them the assay counter, the
+// day book open on it under a lantern hung high off the wall, and behind
+// it, between the counter and the wall, room for the assayer (ASSAY, see
+// npcs.ts), who weighs the gold. Worked, the lantern burns bright and its
+// light flickers on the counter.
 
 const SHELF = [0.5, 5.0, 9.4, 13.8, 18.2];
 const BAYS: ReadonlyArray<readonly [number, number]> = [[0.95, 4.9], [5.4, 9.35]];
+// The counter (u0 to u1, its back `back` out from the wall, its front at
+// `front`, its top `top` high) and where the assayer stands behind it.
+export const ASSAY = { u0: 9.95, u1: 13.85, back: 1.8, front: 3.85, top: 5.9, u: 11.65, v: 1.4 };
+const LAMP: P3 = [13.3, 1.0, 17.0];
 
 const read: PropArt = {
   len: 14,
@@ -267,48 +263,35 @@ const read: PropArt = {
       crate(k, 0.9, 0.6, 18.3, 2.6, 2.2, 1.6, C.pine);
       heap(k, 2.2, 1.7, 19.9, 0.9, 0.4, v.seed + 3, [C.rockLight, C.gold, C.copper]);
       for (let i = 0; i < 3; i++) logU(k, 5.2, 8.6 - i * 0.3, 1.0 + i * 0.75, 18.6 + (i === 1 ? 0.55 : 0.3), 0.32, C.paper);
-      // the desk: a slanted top on legs, the day book open, ink and quill
-      k.shadow(12, 2.0, 2.2, 1.8, 0.26);
-      for (const [u, w] of [[10.6, 0.6], [13.2, 0.6], [10.6, 3.0], [13.2, 3.0]] as const) k.box(u, w, 0, 0.42, 0.42, w < 1 ? 7.2 : 6.4, C.timberOld, { line: k.thin });
-      k.box(10.5, 0.5, 2.0, 3.2, 3.0, 0.3, C.timberOld, { line: k.thin, stripe: false });
-      bookRow(k, 10.8, 13.3, 3.3, 2.3, 1.6, v.seed + 17);
-      const desk: P3[] = [[10.3, 0.4, 7.5], [13.9, 0.4, 7.5], [13.9, 3.7, 6.5], [10.3, 3.7, 6.5]];
-      k.box(10.3, 0.4, 6.2, 3.6, 3.3, 0.3, C.timber, { line: k.thin, stripe: false });
-      k.poly(desk, C.plank, k.lw);
-      k.poly([[10.9, 0.9, 7.42], [12.1, 0.9, 7.42], [12.1, 3.2, 6.62], [10.9, 3.2, 6.62]], '#e8dcc0', k.thin);
-      k.poly([[12.1, 0.9, 7.42], [13.3, 0.9, 7.42], [13.3, 3.2, 6.62], [12.1, 3.2, 6.62]], C.paper, k.thin);
-      if (k.s >= 5) for (const u0 of [11.05, 12.25]) for (let i = 0; i < 4; i++) {
-        const fv = 1.2 + i * 0.45;
-        const zz = 7.42 - (fv - 0.9) * (0.8 / 2.3) + 0.01;
-        k.line([[u0, fv, zz], [u0 + 0.85, fv, zz]], '#8a7a62', Math.max(0.6, 0.05 * k.s));
+      // the counter: boarded in, a plank top, the day book open on it
+      const { u0, u1, back, front, top } = ASSAY;
+      k.shadow((u0 + u1) / 2, (back + front) / 2, 2.4, 1.4, 0.26);
+      k.box(u0, back + 0.05, 0, u1 - u0, front - back - 0.2, top - 0.3, C.timberOld, { stripe: false });
+      for (let u = u0 + 0.45; u < u1 - 0.3; u += 0.6) k.line([[u, front - 0.13, 0.15], [u, front - 0.13, top - 0.45]], shade(C.timberOld, -0.3), Math.max(0.6, 0.06 * k.s));
+      for (let w = back + 0.5; w < front - 0.3; w += 0.6) k.line([[u1 - 0.09, w, 0.15], [u1 - 0.09, w, top - 0.45]], shade(C.timberOld, -0.42), Math.max(0.6, 0.06 * k.s));
+      k.box(u0, front - 0.35, 0, u1 - u0, 0.2, 0.35, C.timberDark, { line: k.thin, stripe: false });
+      k.box(u0 - 0.1, back, top - 0.3, u1 - u0 + 0.2, front - back, 0.3, C.plank, { line: k.lw });
+      const z = top + 0.01;
+      k.poly([[u0 + 0.5, back + 0.75, z], [u0 + 1.7, back + 0.7, z + 0.08], [u0 + 1.7, front - 0.35, z + 0.08], [u0 + 0.5, front - 0.3, z]], '#e8dcc0', k.thin);
+      k.poly([[u0 + 1.7, back + 0.7, z + 0.08], [u0 + 2.9, back + 0.75, z], [u0 + 2.9, front - 0.3, z], [u0 + 1.7, front - 0.35, z + 0.08]], C.paper, k.thin);
+      if (k.s >= 5) for (const a of [u0 + 0.65, u0 + 1.85]) for (let i = 0; i < 3; i++) {
+        const w = back + 1.05 + i * 0.45;
+        k.line([[a, w, z + 0.05], [a + 0.85, w, z + 0.05]], '#8a7a62', Math.max(0.6, 0.05 * k.s));
       }
-      k.cyl(13.55, 1.0, 7.4, 0.22, 0.35, '#2b2a33', { line: k.thin });
-      k.line([[13.55, 1.0, 7.75], [13.3, 1.4, 8.8]], '#efe6d6', Math.max(0.8, 0.12 * k.s));
-      // the lantern's arm off the shelves' end
-      k.rod([[9.75, 1.6, 12.0], [12.2, 1.6, 12.0]], C.iron, 0.12);
-      k.rod([[9.75, 1.6, 10.8], [10.9, 1.6, 12.0]], C.iron, 0.08);
-      // a stool
-      k.shadow(12.4, 3.6, 0.9, 0.8, 0.2);
-      k.cyl(12.4, 3.5, 0, 0.75, 0.15, C.timberDark, { line: k.thin });
-      for (const a of [0.6, 2.7, 4.8]) k.rod([[12.4 + Math.cos(a) * 0.55, 3.5 + Math.sin(a) * 0.45, 0], [12.4 + Math.cos(a) * 0.3, 3.5 + Math.sin(a) * 0.25, 3.1]], C.timberOld, 0.14);
-      k.cyl(12.4, 3.5, 3.1, 0.7, 0.3, C.timber, { line: k.thin });
+      // an ink pot and its pen lying by it, a poke of dust and a nugget or two
+      k.cyl(u1 - 0.45, back + 0.4, top, 0.22, 0.3, '#2b2a33', { line: k.thin });
+      k.line([[u1 - 0.5, back + 0.95, z + 0.06], [u1 - 0.2, back + 1.9, z + 0.06]], '#efe6d6', Math.max(0.8, 0.1 * k.s));
+      sack(k, u1 - 0.55, front - 0.55, top, 0.32, 0.5, true, v.seed + 5, C.gold);
+      for (let j = 0; j < 2; j++) nugget(k, u0 + 0.35 + j * 0.3, front - 0.35, top, 0.17, v.seed + 30 + j, j === 0);
+      // the lantern's bracket on the wall, high over the assayer's head
+      k.rod([[LAMP[0], 0.05, LAMP[2] + 0.2], [LAMP[0], LAMP[1], LAMP[2] + 0.2]], C.iron, 0.12);
+      k.rod([[LAMP[0], 0.05, LAMP[2] - 0.8], [LAMP[0], LAMP[1] - 0.4, LAMP[2] + 0.15]], C.iron, 0.08);
     });
-    // the lantern over the desk: bright while someone reads
-    part(v, `read-lamp-${v.active}`, [11.0, 13.4, 0.4, 2.8, 8.4, 12.2], 0, 0, 0, (k) => hangLantern(k, 12.2, 1.6, 12.0, 0.5, v.active ? 1 : 0.45));
-    // its light on the desk, dim while nobody reads
-    k.pool(12, 2.0, 2.6, 2.0, '#ffe2a0', v.active ? 0.4 : 0.14, 7.0);
-    if (v.active) {
-      // a page turning over, right to left
-      const ph = (v.t * 0.7) % 1;
-      if (ph < 0.45) {
-        const a = (ph / 0.45) * Math.PI;
-        const tip = (fv: number): P3 => {
-          const zz = 7.42 - (fv - 0.9) * (0.8 / 2.3);
-          return [12.1 + Math.cos(a) * 1.1, fv, zz + Math.sin(a) * 1.1];
-        };
-        k.poly([[12.1, 0.92, 7.44], tip(0.92), tip(3.18), [12.1, 3.18, 6.64]], '#fbf2dc', k.thin);
-      }
-    }
+    // the lantern over the counter: bright while the assayer works
+    part(v, `read-lamp-${v.active}`, [LAMP[0] - 1.2, LAMP[0] + 1.2, LAMP[1] - 1.2, LAMP[1] + 1.2, LAMP[2] - 3.0, LAMP[2] + 0.4], 0, 0, 0, (k) => hangLantern(k, LAMP[0], LAMP[1], LAMP[2], 0.4, v.active ? 1 : 0.45));
+    // its light on the counter, dim while nobody works, flickering while he does
+    const flick = v.active ? 0.36 + 0.05 * Math.sin(v.t * Math.PI * 2) + 0.03 * Math.sin(v.t * Math.PI * 6) : 0.14;
+    k.pool((ASSAY.u0 + ASSAY.u1) / 2, (ASSAY.back + ASSAY.front) / 2, 2.4, 1.5, '#ffe2a0', flick, ASSAY.top);
   },
 };
 
@@ -418,17 +401,18 @@ const search: PropArt = {
       k.rod([[5.6, 1.3, 12.6], [5.6, 1.8, 12.6]], C.iron, 0.08);
     });
     part(v, `search-lamp-${v.active}`, [4.6, 6.6, 0.8, 2.8, 9.2, 12.8], 0, 0, 0, (k) => hangLantern(k, 5.6, 1.8, 12.6, 0.3, v.active ? 1 : 0.7));
-    // glitter along the vein: one glint idling, several while worked
+    // glitter along the vein: one glint idling, several while worked (the
+    // same ones every 2 s)
     const rate = v.active ? 5 : 1.2;
     const n = v.active ? 4 : 1;
     for (let i = 0; i < n; i++) {
-      const tick = Math.floor(v.t * rate) + i * 7;
+      const tick = (Math.floor(v.t * rate) % 10) + i * 7;
       const j = Math.floor(hash(tick, 3) * FACE_VEIN.length);
       const a = Math.sin(((v.t * rate) % 1) * Math.PI);
       const [u, w, z] = FACE_VEIN[j];
       sparkle(k, u + (hash(tick, 4) - 0.5) * 0.8, w + 0.2, z + (hash(tick, 5) - 0.5) * 0.6, 0.45 + 0.4 * a, a);
     }
-    if (v.active) k.halo(6, 2.6, 6, 6, '#ffd36a', 0.16 + 0.06 * Math.sin(v.t * 5));
+    if (v.active) k.halo(6, 2.6, 6, 6, '#ffd36a', 0.16 + 0.06 * Math.sin(v.t * Math.PI * 2));
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;

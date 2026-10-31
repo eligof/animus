@@ -1,0 +1,162 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { THEMES, getTheme } from '../src/themes/index.ts';
+import { deskZone } from '../src/world/desks.ts';
+import { PROP_SIZE, buildSites, hub, planLayout, yard } from '../src/world/layout.ts';
+import type { Rect } from '../src/world/layout.ts';
+import { NPC_R, cutOf, facingOf } from '../src/world/npc-place.ts';
+import { footprint, planRoom, toWorld } from '../src/world/room.ts';
+import { hashString } from '../src/world/rng.ts';
+import type { Spot } from '../src/world/types.ts';
+import type { Npc, NpcLook, WorldDef } from '../src/worlds/types.ts';
+import { CUP, TICKET, standIn, standers, trio, withLocals } from './npc-fakes.ts';
+
+// Where the locals stand in a planned room: one behind its counter or
+// seated inside its station where its art says, facing where it says; one
+// standing on floor kept clear (desks, decor and routing keep off it) or
+// left out; whoever one serves in front of its station, the next beside,
+// both reachable, never where one standing blocks them, the decor off
+// them too; a world's shell finding the stage's furniture, locals and
+// all.
+
+const mines = getTheme('mines')!;
+// The smallest room, and a big one (a 200 x 60 terminal's).
+const SMALL = planLayout(200, 105, 'mines');
+const BIG = planLayout(500, 290, 'mines');
+const plan = (w: WorldDef, L = BIG) => planRoom(w, L, hashString(w.id));
+const near = (r: Rect, s: Spot, m: number) => s.x > r.x0 - m && s.x < r.x1 + m && s.y > r.y0 - m && s.y < r.y1 + m;
+
+test('a local behind its counter or seated stands inside its station where its art says, cut at its counter', () => {
+  const w = trio(mines);
+  for (const L of [SMALL, BIG]) {
+    const room = plan(w, L);
+    assert.equal(room.npcs.length, 3, `${room.npcs.length} of 3 placed in a room ${L.W} across`);
+    for (const p of room.npcs) {
+      const n = w.npcs![p.k];
+      const prop = room.props[p.prop];
+      assert.equal(prop.slot?.kind, n.station);
+      const [x, y] = toWorld(prop, n.place.u, n.place.v, 0);
+      assert.deepEqual([p.x, p.y, p.z, p.mode, p.station, p.wall], [x, y, n.place.mode === 'seated' ? n.place.z : 0, n.place.mode, n.station, prop.wall]);
+      assert.equal(p.cut, cutOf(n.place));
+      assert.ok(near(footprint(prop), p, 0), `${n.name} is not inside its station`);
+    }
+  }
+});
+
+test('a local faces into the room, along its station or away, as its art says, on either wall', () => {
+  for (const look of ['out', 'along', 'back'] as NpcLook[]) {
+    // the write station backs onto the right wall, the read station the left
+    const w = withLocals(mines, [
+      standIn('r', 'write', { mode: 'behind', u: 5.5, v: 1.5, top: 5, edge: 3, look }),
+      standIn('l', 'read', { mode: 'behind', u: 7, v: 1, top: 4, edge: 2, look }),
+    ]);
+    const room = plan(w);
+    assert.deepEqual(room.npcs.map((p) => p.wall).sort(), ['left', 'right']);
+    for (const p of room.npcs) assert.deepEqual(p.facing, facingOf(p.wall, look), `${w.npcs![p.k].name} looking ${look}`);
+  }
+});
+
+test('a standing local is placed on floor kept clear, else left out; desks, decor and routing keep off it', () => {
+  const w = standers(mines);
+  const room = plan(w);
+  const L = room.L;
+  const placed = room.npcs.filter((p) => p.mode === 'standing');
+  assert.ok(placed.length >= 1, 'no standing local fits');
+  assert.ok(!room.npcs.some((p) => w.npcs![p.k].name === 'insider'), 'one standing inside its station placed');
+  const yd = yard(L);
+  const h = hub(L);
+  for (const p of placed) {
+    const what = `${w.npcs![p.k].name} at ${p.x.toFixed(1)}, ${p.y.toFixed(1)}`;
+    for (const q of room.props) assert.ok(!near(footprint(q), p, NPC_R), `${what}: on a prop`);
+    for (const r of room.supply) assert.ok(!near(r, p, NPC_R), `${what}: on a pile`);
+    for (const s of L.slots) assert.ok(Math.hypot(s.spot.x - p.x, s.spot.y - p.y) >= (s.kind === 'entrance' ? 8 : 3), `${what}: on the ${s.kind} station's spot`);
+    for (const q of room.pois) assert.ok(Math.hypot(q.x - p.x, q.y - p.y) >= 3, `${what}: on a spot idlers like`);
+    for (const b of buildSites(L)) assert.ok(Math.hypot(b.x - p.x, b.y - p.y) >= b.r + 2, `${what}: on a plaza`);
+    assert.ok(Math.hypot(yd.x - p.x, yd.y - p.y) >= yd.r + 1 && Math.hypot(h.x - p.x, h.y - p.y) >= 5, `${what}: in the yard or on the hub`);
+    for (const d of room.desks) assert.ok(!near(deskZone(d), p, NPC_R), `${what}: a workstation on it`);
+    assert.ok(!room.nav.isOpen(p), `${what}: routing walks through it`);
+    for (const o of placed) if (o !== p) assert.ok(Math.hypot(o.x - p.x, o.y - p.y) >= 2 * NPC_R + 1, `${what}: two on one spot`);
+  }
+});
+
+test('whoever a local serves stands in front of its station, the next beside, on free floor workstations keep off, reachable from the way in', () => {
+  const w = trio(mines);
+  const room = plan(w);
+  const door = room.L.slots.find((s) => s.kind === 'entrance')!.spot;
+  let pairs = 0;
+  for (const p of room.npcs) {
+    for (const s of [p.front, p.wait]) {
+      if (!s) continue;
+      for (const q of room.props) assert.ok(!near(footprint(q), s, 1.2), `local ${p.k}: served on a prop`);
+      for (const d of room.desks) assert.ok(!near(deskZone(d), s, 1), `local ${p.k}: served under a workstation`);
+      assert.ok(room.nav.find(door, s), `local ${p.k}: whoever it serves cannot get there from the way in`);
+    }
+    if (p.front && p.wait) pairs++;
+  }
+  assert.ok(room.npcs.find((p) => w.npcs![p.k].name === 'pourer')!.front, 'nowhere to be served a drink');
+  assert.ok(pairs >= 1, 'nowhere to wait beside a counter');
+});
+
+test("a world's shell finds the same furniture with its locals: it plans the room from the world's id, stations, decor and locals, as the stage does", () => {
+  // (the shells that find their furniture: see club/plan.ts, office/room.ts,
+  // vault/room.ts, meadhall/room.ts, shelter/room.ts, colony/room.ts); the
+  // locals move the decor in some rooms, so a shell without them would not
+  let moved = 0;
+  for (const id of ['club', 'office', 'vault', 'meadhall', 'shelter', 'colony']) {
+    const w = getTheme(id)!;
+    for (const side of [80, 97, 108, 125, 132, 150, 160]) {
+      const L = planLayout(2 * side + 12, 1000, id);
+      const stage = planRoom(w, L, hashString(id)).props.map(footprint);
+      const shell = { id, stations: w.stations, decor: w.decor, npcs: w.npcs } as WorldDef;
+      assert.deepEqual(planRoom(shell, L, hashString(id)).props.map(footprint), stage, `${id} ${side}`);
+      if (JSON.stringify(planRoom({ ...w, npcs: [] }, L, hashString(id)).props.map(footprint)) !== JSON.stringify(stage)) moved++;
+    }
+  }
+  assert.ok(moved > 0, 'the locals moved no decor');
+});
+
+test('the decor keeps off the locals: where one stands, and where whoever one serves stands and waits', () => {
+  for (const w of THEMES) {
+    for (const side of [97, 108, 144]) {
+      const room = planRoom(w, planLayout(2 * side + 12, 1000, w.id), hashString(w.id));
+      const decor = room.props.filter((p) => !p.slot).map(footprint);
+      for (const n of room.npcs) {
+        const name = `${w.id} ${side}: ${w.npcs![n.k].name}`;
+        if (n.mode === 'standing') for (const r of decor) assert.ok(!near(r, n, NPC_R), `${name}: decor where it stands`);
+        if (!w.npcs![n.k].serve) continue;
+        for (const s of [n.front, n.wait]) if (s) for (const r of decor) assert.ok(!near(r, s, 1.2), `${name}: decor where whoever it serves stands`);
+      }
+    }
+  }
+});
+
+test("no local's counter is blocked by one standing: one standing keeps off where those before it serve, and whoever one serves off those standing before it", () => {
+  // two that serve, and some standing all along their fronts, a step and
+  // two out: placed after the two, and before them
+  const servers = [
+    standIn('pourer', 'run', { mode: 'behind', u: 5.5, v: 2, top: 6, edge: 4 }, { serve: CUP }),
+    standIn('clerk', 'think', { mode: 'seated', u: 6, v: 3, z: 2 }, { serve: TICKET }),
+  ];
+  const standing: Npc[] = [];
+  for (const station of ['run', 'think'] as const) {
+    const { len, dep } = PROP_SIZE[station];
+    for (let u = -2; u <= len + 2; u += 1.5) for (const out of [2.5, 4]) standing.push(standIn(`stander${standing.length}`, station, { mode: 'standing', u, v: dep + out }));
+  }
+  let checked = 0;
+  for (const npcs of [[...servers, ...standing], [...standing, ...servers]]) {
+    const w = withLocals(mines, npcs);
+    for (const L of [SMALL, BIG]) {
+      const room = plan(w, L);
+      const up = room.npcs.filter((p) => p.mode === 'standing');
+      for (const p of room.npcs) {
+        if (!w.npcs![p.k].serve) continue;
+        for (const s of [p.front, p.wait]) {
+          if (!s) continue;
+          checked++;
+          for (const q of up) assert.ok(Math.hypot(q.x - s.x, q.y - s.y) >= NPC_R + 1.2 - 1e-9, `${w.npcs![q.k].name} stands ${Math.hypot(q.x - s.x, q.y - s.y).toFixed(2)} from where ${w.npcs![p.k].name} serves, in a room ${L.W} across`);
+        }
+      }
+    }
+  }
+  assert.ok(checked >= 4, `${checked} places to be served`);
+});

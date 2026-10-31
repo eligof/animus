@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './meadhall/decor.ts';
 import { INK } from './meadhall/kit.ts';
+import { NPCS } from './meadhall/npcs.ts';
 import { meadhallPois, room } from './meadhall/room.ts';
 import { STATIONS } from './meadhall/stations.ts';
 import { WORKSTATION } from './meadhall/workstation.ts';
@@ -12,8 +13,8 @@ import { WORKSTATION } from './meadhall/workstation.ts';
 // windows onto falling snow high above, a stone-rimmed hearth against a
 // wall and runners on dark flagstones, in outlined cartoon (smoky brown
 // ink): the shell in meadhall/room.ts, the stations in meadhall/stations.ts,
-// the furniture in meadhall/decor.ts, all drawn with the kit in
-// meadhall/kit.ts and meadhall/bits.ts.
+// the furniture in meadhall/decor.ts, the locals in meadhall/npcs.ts, all
+// drawn with the kit in meadhall/kit.ts and meadhall/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#120c08'),
@@ -47,6 +48,7 @@ export const meadhall: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'nord',
   critter: { kind: 'fox', body: hex('#d9772e') }, // a fox
   finale: { colors: [[240, 120, 40], [245, 197, 66], [150, 200, 235]] }, // ember, gold and frost-blue confetti

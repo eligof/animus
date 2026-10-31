@@ -22,6 +22,8 @@ import { hub, planLayout, slotRect, yard } from './layout.ts';
 import type { Rect as Box } from './layout.ts';
 import { Life, SLEEP_AFTER, faceToward, newMind } from './life.ts';
 import type { Look, Mind } from './life.ts';
+import { NPC_R } from './npc-place.ts';
+import { Locals } from './npcs.ts';
 import { smoke, updateParticles } from './particles.ts';
 import { NavGrid, smooth } from './path.ts';
 import { Rng, hashString } from './rng.ts';
@@ -250,6 +252,7 @@ export class Stage {
   private clock = 0;
   private now = 0;
   private seq = 0;
+  private halve = 0; // every other bit off a station only a local works (see emit)
   private placedLabels: Array<{ x: number; y: number; w: number }> = [];
   // Emotes over heads in the last frame.
   emotesShown = 0;
@@ -259,6 +262,8 @@ export class Stage {
   readonly life: Life;
   private works: Works | null = null;
   private critter: Critter | null = null;
+  // The locals on duty or not (see npcs and meet).
+  private npcsOn = true;
   // The workstations up, by desk index, and a count that moves on whenever
   // one goes up or down (walkers re-plan round it).
   private desks = new Map<number, Workstation>();
@@ -305,6 +310,20 @@ export class Stage {
 
   set office(on: boolean) {
     this.life.setOffice(on);
+  }
+
+  // The locals (see npcs.ts) on duty or not: off, they go, and every errand
+  // with one ends (see Life.setLocals); on, they are back at their
+  // stations. Walkers re-plan round where a standing one is, or was.
+  get npcs(): boolean {
+    return this.npcsOn;
+  }
+
+  set npcs(on: boolean) {
+    if (on === this.npcsOn) return;
+    this.npcsOn = on;
+    this.meet();
+    this.desksVer++;
   }
 
   // The terminal's cell size in pixels (the canvas is the scene's cells at
@@ -391,6 +410,7 @@ export class Stage {
     a.mind.emote = null;
     a.hush = this.clock + WORD_S;
     if (!this.life.carrying(a)) this.life.gesture(a, 'cheer', 1.4);
+    this.life.locals?.applaud(this.life.clock);
   }
 
   layout(r: Rect): void {
@@ -442,6 +462,27 @@ export class Stage {
     const g = Math.max(0, Math.min(1, (L.W - 72) / 98));
     this.critter = home ? new Critter({ kind: this.world.critter.kind, body: this.world.critter.body }, home, 6 + 4 * g, seed ^ 0xca7) : null;
     this.life.setWorld(this.spots, this.works, this.critter, this.cast.values());
+    this.meet();
+  }
+
+  // The room's locals on duty, if they are on (see npcs.ts).
+  private meet(): void {
+    const placed = this.npcsOn ? (this.plan?.npcs ?? []) : [];
+    const host = { standable: (s: Spot) => this.standable(s), watchable: (s: Spot) => this.watchable(s) };
+    this.life.setLocals(placed.length ? new Locals(this.world, placed, host, this.life.clock) : null);
+  }
+
+  // Whether one watching a local's show may stand at s: standable, and
+  // WORK_APART from every agent at a workstation, where it stands or is
+  // going (see share).
+  private watchable(s: Spot): boolean {
+    if (!this.standable(s)) return false;
+    for (const o of this.cast.values()) {
+      if (o.station?.kind !== 'desk' || o.state === 'leave' || o.gone) continue;
+      const at = o.path[o.path.length - 1] ?? o;
+      if (Math.hypot(at.x - s.x, at.y - s.y) < WORK_APART) return false;
+    }
+    return true;
   }
 
   private door(): Slot | undefined {
@@ -475,6 +516,7 @@ export class Stage {
       const r = slotRect(w.desk);
       if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
     }
+    for (const l of this.life.locals?.all ?? []) if (l.at.mode === 'standing' && Math.hypot(s.x - l.at.x, s.y - l.at.y) < NPC_R + margin) return true;
     const o = this.obstacles();
     for (const d of o.discs) if (Math.hypot(s.x - d.x, s.y - d.y) < d.r + margin) return true;
     for (const r of o.rects) if (s.x > r.x0 - margin && s.x < r.x1 + margin && s.y > r.y0 - margin && s.y < r.y1 + margin) return true;
@@ -598,17 +640,18 @@ export class Stage {
     // one stands beside or behind it.
     const spotFor = (k: number): Spot => this.laneSpot(st, k);
     const gap = (s: Spot, to: Spot[]) => Math.min(Infinity, ...to.map((o) => onScreen(s, o)));
-    // The first free lane on bare floor clear of every prop that keeps a
-    // step from everyone round it and off the other props' own spots; then
-    // the first a step from the others there and off those spots; then a
-    // step from the others there; then one not on top of them (LANE_APART:
-    // clamping to the floor lands lanes together); then the one furthest
-    // from them, clear if any is. With every lane taken, any.
+    // The first free lane on bare floor clear of every prop and off where
+    // a local serves that keeps a step from everyone round it and off the
+    // other props' own spots; then the first a step from the others there
+    // and off those spots; then a step from the others there; then one not
+    // on top of them (LANE_APART: clamping to the floor lands lanes
+    // together); then the one furthest from them, clear if any is. With
+    // every lane taken, any.
     const free = [...LANES.keys()].filter((k) => !taken.has(k));
     const lanes = (free.length ? free : [...LANES.keys()]).map((k) => ({ k, s: spotFor(k) }));
     // (Clamped to the floor, an island's lane can end up beside it.)
     const before = (s: Spot) => !st.island || s.x + s.y >= st.spot.x + st.spot.y - 1;
-    const clear = lanes.filter((l) => !this.inside(l.s, 1.5) && this.level(l.s) && before(l.s));
+    const clear = lanes.filter((l) => !this.inside(l.s, 1.5) && this.level(l.s) && before(l.s) && !this.life.locals?.byCounter(l.s));
     const props = this.L.slots.filter((p) => p !== st).map((p) => p.spot);
     const mates = (l: { k: number; s: Spot }) => gap(l.s, there) >= LANE;
     const own = (l: { k: number; s: Spot }) => l.k === 0 || gap(l.s, props) >= LANE;
@@ -915,7 +958,8 @@ export class Stage {
     const L = this.L;
     if (!L || !this.plan) return null;
     this.obstacles();
-    const key = `${this.worldKey}:${this.works?.version ?? 0}`;
+    // (a standing local is in the way only while the locals are on)
+    const key = `${this.worldKey}:${this.works?.version ?? 0}:${this.life.locals ? 1 : 0}`;
     if (!this.nav || this.navKey !== key) {
       this.navKey = key;
       this.nav = new NavGrid(L.T, L.T, L.W - 1, L.D - 1, NAV_CELL, (x, y) => this.rate(x, y));
@@ -1116,6 +1160,10 @@ export class Stage {
     const cam = this.camera;
     if (!room || !cam) return;
     const active = this.activeProps();
+    // A station only a local works (no agent at it) gives off every other
+    // bit: it is worked all the time.
+    const actors = [...this.cast.values()];
+    const lone = new Set([...(this.life.locals?.worked ?? [])].filter((i) => !actors.some((a) => a.station === room.props[i].slot && a.state === 'work')));
     room.props.forEach((p, i) => {
       const art = p.art;
       if (!art.emit) return;
@@ -1132,6 +1180,7 @@ export class Stage {
         seed: p.seed,
       };
       art.emit(view, dt, (q) => {
+        if (lone.has(i) && this.halve++ % 2) return;
         const [x, y, z] = toWorld(p, q.x, q.y, q.z);
         const [vx, vy] = p.wall === 'right' ? [q.vx, q.vy] : [q.vy, q.vx];
         this.add({ ...q, x, y, z, vx, vy });
@@ -1139,12 +1188,16 @@ export class Stage {
     });
   }
 
-  // Per room prop: someone works it (or, at the entrance, comes or goes).
+  // Per room prop: someone works it (or, at the entrance, comes or goes),
+  // or a local does (see Locals.worked: every station but the way in, whose
+  // door opens only for those who pass).
   private activeProps(): boolean[] {
     const actors = [...this.cast.values()];
-    return (this.plan?.props ?? []).map((p) => {
+    const worked = this.life.locals?.worked;
+    return (this.plan?.props ?? []).map((p, i) => {
       const s = p.slot;
       if (!s) return false;
+      if (worked?.has(i)) return true;
       if (s.kind === 'entrance') return actors.some((a) => (a.state === 'enter' || a.state === 'leave') && Math.hypot(a.x - s.spot.x, a.y - s.spot.y) < 8);
       return actors.some((a) => a.station === s && a.state === 'work');
     });
@@ -1401,6 +1454,8 @@ export class Stage {
       marks: [],
       next: this.reach(actors, sel),
     };
+    const npcs = this.life.locals?.frames(c);
+    if (npcs) f.npcs = npcs;
     this.place(f, actors, emoting, tops, now, selectedId, opts.card ?? false);
     return f;
   }

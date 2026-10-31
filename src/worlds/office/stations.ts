@@ -314,15 +314,16 @@ const search: PropArt = {
 };
 
 // ── run: the server rack and the 3D printer ─────────────────────────────────
-// A free-standing server rack: black steel, a smoked glass door, rows of
-// units with small status lights in green and amber, patch cables in one.
-// Beside it a 3D printer on a little cart: an open black frame, a bed with
-// a half-printed shape on it, the print head on its gantry, spools of
-// filament on the shelf below. At work the lights blink fast, the head
-// runs back and forth and the print grows; idle, the lights hold steady
-// and the head is parked.
+// A free-standing server rack toward the open +u side, where the IT admin
+// stands beside it (see npcs.ts): black steel, a smoked glass door, rows
+// of units with small status lights in green and amber, patch cables in
+// one. Beside it a 3D printer on a little cart: an open black frame, a bed
+// with a half-printed shape on it, the print head on its gantry, spools of
+// filament on the shelf below. At work the lights blink fast and the head
+// runs back and forth over the print, laying it down; idle, the lights
+// hold steady and the head is parked.
 
-const RACK = { u0: 0.6, u1: 5.6, v0: 0.8, v1: 6.3, h: 19.2 };
+export const RACK = { u0: 5.4, u1: 10.4, v0: 0.8, v1: 6.3, h: 19.2 };
 const UNITS: ReadonlyArray<readonly [number, number]> = (() => {
   const out: Array<[number, number]> = [];
   let z = 1.6;
@@ -332,8 +333,8 @@ const UNITS: ReadonlyArray<readonly [number, number]> = (() => {
   }
   return out;
 })();
-const CART = { u0: 6.6, u1: 10.4, v0: 4.2, v1: 8.8, top: 5.4 };
-const PR = { u0: 6.9, u1: 10.1, v0: 4.5, v1: 8.2, z0: 5.4, z1: 10.6, bed: 6.4 };
+const CART = { u0: 0.6, u1: 4.4, v0: 4.2, v1: 8.8, top: 5.4 };
+const PR = { u0: 0.9, u1: 4.1, v0: 4.5, v1: 8.2, z0: 5.4, z1: 10.6, bed: 6.4 };
 
 const run: PropArt = {
   len: 11,
@@ -344,6 +345,34 @@ const run: PropArt = {
     const { u0, u1, v0, v1, h } = RACK;
     const k = still(v, 'run', 20, (k) => {
       k.shadow(5.2, 5.4, 5.6, 5.4, 0.3);
+      // the cart: four posts on casters, a shelf of filament spools, its top
+      const { u0: c0, u1: c1, v0: w0, v1: w1, top } = CART;
+      for (const [u, w] of [[c0 + 0.3, w0 + 0.3], [c1 - 0.3, w0 + 0.3]] as const) {
+        caster(k, u, w);
+        k.box(u - 0.15, w - 0.15, 0.55, 0.3, 0.3, top - 0.55, C.steel, { line: k.thin });
+      }
+      k.box(c0, w0, 1.3, c1 - c0, w1 - w0, 0.25, C.steel, { line: k.thin });
+      for (const [j, c] of ([C.noteTeal, C.chartWarm, C.white] as const).entries()) {
+        const su = c0 + 0.9 + j * 1.15;
+        k.cyl(su, (w0 + w1) / 2, 1.55, 0.5, 0.9, c, { line: k.thin });
+        k.disc(su, (w0 + w1) / 2, 2.46, 0.18, '#2c2e33', 0);
+      }
+      for (const [u, w] of [[c0 + 0.3, w1 - 0.3], [c1 - 0.3, w1 - 0.3]] as const) {
+        caster(k, u, w);
+        k.box(u - 0.15, w - 0.15, 0.55, 0.3, 0.3, top - 0.55, C.steel, { line: k.thin });
+      }
+      k.box(c0, w0, top - 0.3, c1 - c0, w1 - w0, 0.3, C.birch);
+      // the printer: its back posts and top, the bed, a spool on top
+      const { u0: p0, u1: p1, v0: q0, v1: q1, z0: pz0, z1: pz1, bed } = PR;
+      k.box(p0, q0, pz0, p1 - p0, q1 - q0, 0.5, '#2c2e33', { line: k.thin });
+      for (const [u, w] of [[p0, q0], [p1 - 0.3, q0], [p0, q1 - 0.3]] as const) k.box(u, w, pz0 + 0.5, 0.3, 0.3, pz1 - pz0 - 0.5, '#2c2e33', { line: k.thin });
+      k.box(p0 + 0.3, q0 + 0.4, bed - 0.2, p1 - p0 - 0.6, q1 - q0 - 0.8, 0.2, C.steelLight, { line: k.thin });
+      if (k.fine) {
+        const grid: Array<[P3, P3]> = [];
+        for (let u = p0 + 0.8; u < p1 - 0.4; u += 0.5) grid.push([[u, q0 + 0.45, bed + 0.01], [u, q1 - 0.45, bed + 0.01]]);
+        k.segs(grid, withAlpha('#ffffff', 0.25), 0.05 * k.s);
+      }
+      k.disc(p0 + 1.6, q0 + 0.3, pz1 + 0.45, 0.6, C.chartHot, k.thin);
       // the rack on its feet
       for (const [u, w] of [[u0 + 0.4, v0 + 0.4], [u1 - 0.4, v0 + 0.4], [u0 + 0.4, v1 - 0.4], [u1 - 0.4, v1 - 0.4]] as const) k.box(u - 0.3, w - 0.3, 0, 0.6, 0.6, 0.5, C.steel, { line: k.thin });
       k.box(u0, v0, 0.5, u1 - u0, v1 - v0, h - 0.5, '#2c2e33');
@@ -378,34 +407,6 @@ const run: PropArt = {
       k.trace(fr);
       k.paint(null, Math.max(1, 0.25 * k.s), C.steel);
       k.rod([[u1 - 0.7, n + 0.25, 8], [u1 - 0.7, n + 0.25, 12]], C.chrome, 0.16);
-      // the cart: four posts on casters, a shelf of filament spools, its top
-      const { u0: c0, u1: c1, v0: w0, v1: w1, top } = CART;
-      for (const [u, w] of [[c0 + 0.3, w0 + 0.3], [c1 - 0.3, w0 + 0.3]] as const) {
-        caster(k, u, w);
-        k.box(u - 0.15, w - 0.15, 0.55, 0.3, 0.3, top - 0.55, C.steel, { line: k.thin });
-      }
-      k.box(c0, w0, 1.3, c1 - c0, w1 - w0, 0.25, C.steel, { line: k.thin });
-      for (const [j, c] of ([C.noteTeal, C.chartWarm, C.white] as const).entries()) {
-        const su = c0 + 0.9 + j * 1.15;
-        k.cyl(su, (w0 + w1) / 2, 1.55, 0.5, 0.9, c, { line: k.thin });
-        k.disc(su, (w0 + w1) / 2, 2.46, 0.18, '#2c2e33', 0);
-      }
-      for (const [u, w] of [[c0 + 0.3, w1 - 0.3], [c1 - 0.3, w1 - 0.3]] as const) {
-        caster(k, u, w);
-        k.box(u - 0.15, w - 0.15, 0.55, 0.3, 0.3, top - 0.55, C.steel, { line: k.thin });
-      }
-      k.box(c0, w0, top - 0.3, c1 - c0, w1 - w0, 0.3, C.birch);
-      // the printer: its back posts and top, the bed, a spool on top
-      const { u0: p0, u1: p1, v0: q0, v1: q1, z0: pz0, z1: pz1, bed } = PR;
-      k.box(p0, q0, pz0, p1 - p0, q1 - q0, 0.5, '#2c2e33', { line: k.thin });
-      for (const [u, w] of [[p0, q0], [p1 - 0.3, q0], [p0, q1 - 0.3]] as const) k.box(u, w, pz0 + 0.5, 0.3, 0.3, pz1 - pz0 - 0.5, '#2c2e33', { line: k.thin });
-      k.box(p0 + 0.3, q0 + 0.4, bed - 0.2, p1 - p0 - 0.6, q1 - q0 - 0.8, 0.2, C.steelLight, { line: k.thin });
-      if (k.fine) {
-        const grid: Array<[P3, P3]> = [];
-        for (let u = p0 + 0.8; u < p1 - 0.4; u += 0.5) grid.push([[u, q0 + 0.45, bed + 0.01], [u, q1 - 0.45, bed + 0.01]]);
-        k.segs(grid, withAlpha('#ffffff', 0.25), 0.05 * k.s);
-      }
-      k.disc(p0 + 1.6, q0 + 0.3, pz1 + 0.45, 0.6, C.chartHot, k.thin);
     });
     // the status lights
     const n = v1 + 0.08;
@@ -414,7 +415,7 @@ const run: PropArt = {
     for (const [i, [z, uh]] of UNITS.entries()) {
       if (uh >= 2) continue;
       for (let j = 0; j < 3; j++) {
-        const lit = v.active ? hash(i, j, Math.floor(v.t * 9 + hash(i, j) * 9)) < 0.6 : hash(i, j, 3) < 0.75;
+        const lit = v.active ? hash(i, j, Math.floor(v.t * 9 + hash(i, j) * 9) % 18) < 0.6 : hash(i, j, 3) < 0.75;
         if (!lit) continue;
         const u = u0 + 0.85 + j * 0.42;
         const dot: P3[] = quad(u, z + uh / 2 - 0.13, u + 0.24, z + uh / 2 + 0.13, n);
@@ -428,15 +429,14 @@ const run: PropArt = {
       k.pen.fill();
     }
     if (v.active) k.halo((u0 + u1) / 2, n + 0.4, h / 2, 3.6, '#7ad97a', 0.1);
-    // the print: a stepped teal shape growing on the bed
+    // the print: a stepped teal shape on the bed, half done
     const { u0: p0, u1: p1, v0: q0, v1: q1, z1: pz1, bed } = PR;
     const cu = (p0 + p1) / 2;
     const cw = (q0 + q1) / 2;
-    const grown = v.active ? 0.5 + 1.1 * ((v.t * 0.05) % 1) : 1.0;
-    k.cyl(cu, cw, bed, 0.75, Math.min(grown, 0.9), C.noteTeal, { line: k.thin });
-    if (grown > 0.9) k.cyl(cu, cw, bed + 0.9, 0.5, grown - 0.9, C.noteTeal, { line: k.thin });
+    k.cyl(cu, cw, bed, 0.75, 0.9, C.noteTeal, { line: k.thin });
+    k.cyl(cu, cw, bed + 0.9, 0.5, 0.1, C.noteTeal, { line: k.thin });
     // the gantry and the head
-    const hu = v.active ? cu + Math.sin(v.t * 3.1) * 1.1 : p0 + 0.7;
+    const hu = v.active ? cu + Math.sin(v.t * Math.PI) * 1.1 : p0 + 0.7;
     const gz = pz1 - 0.9;
     k.rod([[p0 + 0.15, cw, gz], [p1 - 0.15, cw, gz]], C.chrome, 0.14);
     k.box(hu - 0.35, cw - 0.35, gz - 0.5, 0.7, 0.7, 0.9, C.chartHot, { line: k.thin });
@@ -662,15 +662,20 @@ const think: PropArt = {
 };
 
 // ── idle: the kitchen island ────────────────────────────────────────────────
-// A birch counter on white cabinets: an espresso machine (a pressure
-// gauge, two portafilters, cups stacked on top), a grinder, a vase of
-// sunflowers and a bowl of fruit; three stools along its front. It is drawn
-// once; its steam is particles, puffed off the machine all the time,
-// worked or not: the machine never sleeps.
+// A birch counter on white cabinets, an L: along the front the counter the
+// stools pull up to, a jar of biscotti, a vase of sunflowers and a bowl of
+// fruit on it; at the back on the right the espresso machine (a pressure
+// gauge, two portafilters, cups stacked on top) and the grinder; between
+// them, behind the front counter, the aisle where the office manager
+// works (see npcs.ts). It is drawn once; its steam is particles, puffed
+// off the machine all the time, worked or not: the machine never sleeps.
 
-const TOP = 7.0; // the counter's underside
+const TOP = 5.7; // the counter's underside
 const COUNTER = TOP + 0.5;
-const ESP = { u0: 1.2, u1: 5.2, v0: 1.3, v1: 3.9, z1: COUNTER + 2.9 };
+// The front counter's back edge, the back block's -u end, and where the
+// office manager stands in the aisle behind the counter.
+export const ISLAND = { z: COUNTER, edge: 3.6, block: 9.0, at: 5.9, stand: 1.9 };
+const ESP = { u0: 9.6, u1: 13.4, v0: 0.9, v1: 3.2, z1: COUNTER + 2.9 };
 
 const idle: PropArt = {
   len: 15,
@@ -678,56 +683,60 @@ const idle: PropArt = {
   height: 13,
   draw(v: PropView): void {
     const k = kitOf(v);
+    const { edge, block } = ISLAND;
     k.shadow(7.5, 5.2, 7.6, 5.4, 0.28);
-    // the cabinets: a dark kick, white doors on the front, a handle each
-    k.box(1.0, 1.0, 0, 13.0, 5.4, 0.45, C.base, { line: k.thin, stripe: false });
-    k.box(0.8, 0.8, 0.45, 13.4, 5.8, TOP - 0.45, C.white, { stripe: false });
+    // the back block under the machine: a dark kick, white doors
+    k.box(block + 0.2, 1.0, 0, 13.8 - block, edge - 0.8, 0.45, C.base, { line: k.thin, stripe: false });
+    k.box(block, 0.8, 0.45, 14.2 - block, edge - 0.6, TOP - 0.45, C.white, { stripe: false });
+    // the front cabinets: a dark kick, white doors, a handle each
+    k.box(1.0, edge + 0.2, 0, 13.0, 6.6 - edge, 0.45, C.base, { line: k.thin, stripe: false });
+    k.box(0.8, edge, 0.45, 13.4, 7.0 - edge, TOP - 0.45, C.white, { stripe: false });
     const doors: Array<[P3, P3]> = [];
     const pulls: Array<[P3, P3]> = [];
-    for (let i = 1; i < 6; i++) doors.push([[0.8 + (13.4 * i) / 6, 6.61, 0.6], [0.8 + (13.4 * i) / 6, 6.61, TOP - 0.2]]);
+    for (let i = 1; i < 6; i++) doors.push([[0.8 + (13.4 * i) / 6, 7.01, 0.6], [0.8 + (13.4 * i) / 6, 7.01, TOP - 0.2]]);
     for (let i = 0; i < 6; i++) {
       const u = 0.8 + (13.4 * (i + 0.5)) / 6 + (i & 1 ? -0.6 : 0.6);
-      pulls.push([[u, 6.65, TOP - 1.6], [u, 6.65, TOP - 0.8]]);
+      pulls.push([[u, 7.05, TOP - 1.6], [u, 7.05, TOP - 0.8]]);
     }
     k.segs(doors, withAlpha(INK, 0.45), Math.max(0.7, 0.09 * k.s));
     k.segs(pulls, INK, Math.max(1.4, 0.28 * k.s));
     k.segs(pulls, C.steelLight, Math.max(0.8, 0.16 * k.s));
-    // the counter, overhanging the front for knees
-    k.box(0.4, 0.5, TOP, 14.2, 7.9, 0.5, C.birch);
-    if (k.fine) k.segs([[[0.6, 4.1, COUNTER + 0.01], [14.4, 4.1, COUNTER + 0.01]]], withAlpha(C.birchDark, 0.5), 0.07 * k.s);
+    // the counter: the back block's top, then the front's, overhanging the
+    // front for knees
+    k.box(block - 0.2, 0.5, TOP, 14.6 - block + 0.2, edge - 0.5, 0.5, C.birch);
+    k.box(0.4, edge, TOP, 14.2, 8.8 - edge, 0.5, C.birch);
+    if (k.fine) k.segs([[[0.6, 6.2, COUNTER + 0.01], [14.4, 6.2, COUNTER + 0.01]]], withAlpha(C.birchDark, 0.5), 0.07 * k.s);
     espresso(k);
-    // the grinder: a black base, a clear hopper of beans
-    k.box(6.0, 1.8, COUNTER, 1.3, 1.3, 2.0, '#2c2e33', { line: k.thin, round: 0.15 });
-    k.box(6.25, 3.1, COUNTER + 0.6, 0.8, 0.3, 0.2, C.steelLight, { line: k.thin * 0.7 });
-    frustum(k, 6.65, 2.45, COUNTER + 2.0, 0.42, COUNTER + 2.6, 0.62, '#5a3a26', null);
-    frustum(k, 6.65, 2.45, COUNTER + 2.6, 0.62, COUNTER + 3.6, 0.75, '#c9dde6', '#e6f0f4');
-    k.disc(6.65, 2.45, COUNTER + 3.62, 0.72, '#2c2e33', k.thin);
-    // a jar of biscotti, a milk jug
-    k.cyl(8.2, 2.3, COUNTER, 0.55, 1.4, '#dce9ee', { line: k.thin });
-    k.cyl(8.2, 2.3, COUNTER + 0.1, 0.45, 0.9, '#d9a35a', { line: 0 });
-    k.cyl(8.2, 2.3, COUNTER + 1.4, 0.6, 0.25, C.birchDark, { line: k.thin });
-    k.cyl(5.9, 4.5, COUNTER, 0.32, 0.8, C.chrome, { line: k.thin });
-    // the sunflowers in a glass vase
-    sunflowers(k, 12.6, 2.2, COUNTER);
-    // the fruit bowl
-    frustum(k, 10.6, 4.1, COUNTER, 0.6, COUNTER + 0.55, 1.0, C.white, '#e8e2d6');
+    // the grinder by it: a black base, a clear hopper of beans
+    k.box(13.75, 1.2, COUNTER, 1.1, 1.2, 1.9, '#2c2e33', { line: k.thin, round: 0.15 });
+    k.box(13.95, 2.4, COUNTER + 0.6, 0.7, 0.25, 0.2, C.steelLight, { line: k.thin * 0.7 });
+    frustum(k, 14.3, 1.8, COUNTER + 1.9, 0.4, COUNTER + 2.45, 0.55, '#5a3a26', null);
+    frustum(k, 14.3, 1.8, COUNTER + 2.45, 0.55, COUNTER + 3.35, 0.66, '#c9dde6', '#e6f0f4');
+    k.disc(14.3, 1.8, COUNTER + 3.37, 0.63, '#2c2e33', k.thin);
+    // a jar of biscotti and the sunflowers in a glass vase, on the left
+    k.cyl(1.6, 4.7, COUNTER, 0.55, 1.4, '#dce9ee', { line: k.thin });
+    k.cyl(1.6, 4.7, COUNTER + 0.1, 0.45, 0.9, '#d9a35a', { line: 0 });
+    k.cyl(1.6, 4.7, COUNTER + 1.4, 0.6, 0.25, C.birchDark, { line: k.thin });
+    sunflowers(k, 1.8, 6.6, COUNTER);
+    // the fruit bowl, a milk jug and a couple of cups along the front
+    frustum(k, 12.4, 6.9, COUNTER, 0.6, COUNTER + 0.55, 1.0, C.white, '#e8e2d6');
     for (const [du, dv, dz, c] of [[-0.35, -0.2, 0.55, '#ff9f43'], [0.3, -0.25, 0.55, '#ff9f43'], [0, 0.25, 0.55, '#8bc34a'], [0.05, -0.05, 0.95, '#e53935']] as const) {
-      const [x, y] = k.p(10.6 + du, 4.1 + dv, COUNTER + dz);
+      const [x, y] = k.p(12.4 + du, 6.9 + dv, COUNTER + dz);
       k.pen.beginPath();
       k.pen.arc(x, y, 0.38 * k.s, 0, Math.PI * 2);
       k.paint(c, k.thin);
     }
-    // a couple of cups by the machine
-    mug(k, 5.6, 5.6, COUNTER, C.white, 0.3);
-    mug(k, 3.4, 6.2, COUNTER, C.noteTeal, 0.3);
+    k.cyl(11.6, 4.9, COUNTER, 0.32, 0.8, C.chrome, { line: k.thin });
+    mug(k, 8.6, 7.6, COUNTER, C.white, 0.3);
+    mug(k, 4.4, 7.9, COUNTER, C.noteTeal, 0.3);
     // the stools along the front
-    for (const [u, c] of [[2.6, C.noteTeal], [7.5, C.fabricC], [12.4, C.fabricA]] as const) stool(k, u, 9.7, COUNTER - 1.8, c, 0.9);
+    for (const [u, c] of [[2.6, C.noteTeal], [7.5, C.fabricC], [12.4, C.fabricA]] as const) stool(k, u, 9.9, COUNTER - 1.8, c, 0.9);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     const t = v.t;
     const n = due(t, dt, 3.2, v.seed);
-    for (let i = 0; i < n; i++) spawn(wisp(4.6, 2.2, ESP.z1 + 0.2, Math.floor(t * 30), i, [244, 240, 232], 0.5));
-    if (due(t, dt, 0.8, v.seed + 1)) spawn(wisp(3.4, 6.2, COUNTER + 0.7, Math.floor(t * 10), 7, [244, 240, 232], 0.2));
+    for (let i = 0; i < n; i++) spawn(wisp(11.5, 2.0, ESP.z1 + 0.2, Math.floor(t * 30), i, [244, 240, 232], 0.5));
+    if (due(t, dt, 0.8, v.seed + 1)) spawn(wisp(4.4, 7.9, COUNTER + 0.7, Math.floor(t * 10), 7, [244, 240, 232], 0.2));
   },
 };
 
@@ -781,14 +790,24 @@ function sunflowers(k: Kit, u: number, v: number, z: number): void {
 }
 
 // ── entrance: the glass door ────────────────────────────────────────────────
-// A glass door in a black steel frame with a long bar handle, glass side
-// panels over kick plates and a transom; through the glass the landing
-// outside, lit. On the right panel the startup's own plain mark: a teal
-// rounded square with a sunflower dot at its top right corner. A doormat.
-// The door swings open while someone passes.
+// A glass door in a black steel frame with a long bar handle, a glass side
+// panel over a kick plate on its hinge side and a transom; through the
+// glass the landing outside, lit. A doormat. On the brick past the door's
+// latch side, clear of its opening and its swing, the front desk with the
+// receptionist behind it (see npcs.ts): a white desk on a birch top, the
+// startup's own plain mark on its front (a teal rounded square with a
+// sunflower dot at its top right corner), a keyboard, a tray of visitor
+// badges, a bell and a little pot of succulents on it. The door swings open
+// while someone passes; the desk, nearer, is drawn over its leaf.
 
-const DOOR = { u0: 3.5, u1: 9.5, h: 16 };
+const DOOR = { u0: 3.0, u1: 8.6, h: 16 };
 const GLASS = { top: 19.4, kick: 2.6 };
+// The frame's ends: from its first jamb to the latch side's.
+const FRAME = { u0: 0.3, u1: DOOR.u1 + 0.35 };
+// The front desk: from u0 to u1, its back edge at v0 and front at v1, its
+// top `z` high; where the receptionist stands behind it (`at`, `stand`):
+// close behind its back edge, which runs past her on both sides on screen.
+export const FRONT_DESK = { u0: 9.15, u1: 14.85, v0: 1.3, v1: 2.9, z: 5.4, at: 11.8, stand: 0.95 };
 
 const entrance: PropArt = {
   len: 15,
@@ -800,41 +819,39 @@ const entrance: PropArt = {
     const k = still(v, 'entrance', 21, (k) => {
       const out = -1.2;
       const pen = k.pen;
+      const f0 = FRAME.u0;
+      const f1 = FRAME.u1;
       // the landing beyond the glass
       pen.save();
       pen.beginPath();
-      k.trace(quad(0.5, 0, 14.5, GLASS.top, 0));
+      k.trace(quad(f0 + 0.2, 0, f1 - 0.2, GLASS.top, 0));
       pen.clip();
-      k.poly(quad(0, -0.5, 15, 21, out), k.vgrad(7, out, 0, 21, [[0, '#cbb9a2'], [0.6, '#e2d4bf'], [1, '#b8a68f']]), 0);
-      k.poly([[0, out, 0], [15, out, 0], [15, 0, 0], [0, 0, 0]], '#8a7c6c', 0);
-      k.halo(7, out, 17, 5, '#fff1c6', 0.45);
-      // a plant and a bench out there, in silhouette
-      k.poly([[11.2, out, 0], [12.6, out, 0], [12.4, out, 2.2], [11.4, out, 2.2]], '#9a8a78', 0);
+      k.poly(quad(f0 - 0.3, -0.5, f1 + 0.3, 21, out), k.vgrad(7, out, 0, 21, [[0, '#cbb9a2'], [0.6, '#e2d4bf'], [1, '#b8a68f']]), 0);
+      k.poly([[f0 - 0.3, out, 0], [f1 + 0.3, out, 0], [f1 + 0.3, 0, 0], [f0 - 0.3, 0, 0]], '#8a7c6c', 0);
+      k.halo((u0 + u1) / 2, out, 17, 5, '#fff1c6', 0.45);
+      // a plant out there, in silhouette, by the side panel
+      k.poly([[1.0, out, 0], [2.4, out, 0], [2.2, out, 2.2], [1.2, out, 2.2]], '#9a8a78', 0);
       k.pen.beginPath();
-      const [px, py] = k.p(11.9, out, 4.2);
+      const [px, py] = k.p(1.7, out, 4.2);
       pen.ellipse(px, py, 1.3 * k.s, 2.0 * k.s, 0, 0, Math.PI * 2);
       pen.fillStyle = '#7f9a76';
       pen.fill();
       pen.restore();
-      // the frame: jambs, the transom bar, the head; the panels' kick plates
+      // the frame: jambs, the transom bar, the head; the side panel's kick
+      // plate
       const F = C.frame;
-      for (const [a, b] of [[0.3, 0.8], [u0 - 0.35, u0], [u1, u1 + 0.35], [14.2, 14.7]] as const) k.box(a, 0, 0, b - a, 0.6, GLASS.top, F, { line: k.thin });
-      k.box(0.3, 0, h, 14.4, 0.6, 0.45, F, { line: k.thin });
-      k.box(0.1, 0, GLASS.top, 14.8, 0.8, 0.9, F, { line: k.lw });
-      for (const [a, b] of [[0.8, u0 - 0.35], [u1 + 0.35, 14.2]] as const) {
-        k.poly(quad(a, 0, b, GLASS.kick, 0.3), k.side('#3a3c42', 0, 1, 0.1), k.thin);
-        k.box(a, 0, GLASS.kick, b - a, 0.5, 0.3, F, { line: k.thin });
-      }
-      // the glass's tint and a streak of reflection on each panel
-      for (const [a, b, z0, z1] of [[0.8, u0 - 0.35, GLASS.kick + 0.3, h], [u1 + 0.35, 14.2, GLASS.kick + 0.3, h], [0.8, 14.2, h + 0.45, GLASS.top]] as const) {
+      for (const [a, b] of [[f0, f0 + 0.5], [u0 - 0.35, u0], [u1, f1]] as const) k.box(a, 0, 0, b - a, 0.6, GLASS.top, F, { line: k.thin });
+      k.box(f0, 0, h, f1 - f0, 0.6, 0.45, F, { line: k.thin });
+      k.box(f0 - 0.2, 0, GLASS.top, f1 - f0 + 0.4, 0.8, 0.9, F, { line: k.lw });
+      const [a, b] = [f0 + 0.5, u0 - 0.35];
+      k.poly(quad(a, 0, b, GLASS.kick, 0.3), k.side('#3a3c42', 0, 1, 0.1), k.thin);
+      k.box(a, 0, GLASS.kick, b - a, 0.5, 0.3, F, { line: k.thin });
+      // the glass's tint and a streak of reflection on the side panel; the
+      // transom's tint
+      for (const [a, b, z0, z1] of [[f0 + 0.5, u0 - 0.35, GLASS.kick + 0.3, h], [f0 + 0.5, u1, h + 0.45, GLASS.top]] as const) {
         k.poly(quad(a, z0, b, z1, 0.3), withAlpha(C.glass, 0.28), 0);
         if (z1 - z0 > 4) k.poly([[a + 0.4, 0.31, z1 - 0.5], [a + 1.0, 0.31, z1 - 0.5], [a + 0.6, 0.31, z1 - 4.5], [a + 0.25, 0.31, z1 - 4.5]], withAlpha('#ffffff', 0.22), 0);
       }
-      // the mark on the right panel: a teal rounded square, a sunflower dot
-      const mu = 11.2;
-      const mz = 10.6;
-      k.poly(quad(mu, mz, mu + 1.6, mz + 1.6, 0.32), C.chart, k.thin, 0.4);
-      k.face(mu + 1.6, 0.33, mz + 1.6, 0.42, C.chartWarm, k.thin, 16);
       // the threshold and the doormat
       k.poly([[u0, 0, 0.03], [u1, 0, 0.03], [u1, 0.6, 0.03], [u0, 0.6, 0.03]], C.steel, k.thin);
       k.poly([[u0 + 0.2, 0.9, 0.04], [u1 - 0.2, 0.9, 0.04], [u1 - 0.2, 3.6, 0.04], [u0 + 0.2, 3.6, 0.04]], '#34363e', k.thin, 0.2);
@@ -843,8 +860,39 @@ const entrance: PropArt = {
     // the door: shut, or swung in while someone passes
     const th = v.active ? 0.62 + 0.05 * Math.sin(v.t * 2.2) : 0;
     doorLeaf(k, th, h);
+    // the front desk, nearer than the leaf wherever the two meet on screen
+    still(v, 'entrance-desk', 8, frontDesk);
   },
 };
+
+// The front desk past the door's latch side: a white body on a dark kick,
+// a birch top, the mark on its front, and on the top only low things (the
+// receptionist stands behind it: see npcs.ts).
+function frontDesk(k: Kit): void {
+  const { u0, u1, v0, v1, z } = FRONT_DESK;
+  k.shadow((u0 + u1) / 2, (v0 + v1) / 2 + 0.3, (u1 - u0) / 2 + 0.3, 1.3, 0.24);
+  k.box(u0 + 0.25, v0 + 0.15, 0, u1 - u0 - 0.5, v1 - v0 - 0.3, 0.4, C.base, { line: k.thin, stripe: false });
+  k.box(u0 + 0.15, v0 + 0.05, 0.4, u1 - u0 - 0.3, v1 - v0 - 0.1, z - 0.75, C.white, { stripe: false });
+  // a teal stripe along the front, the mark over it
+  k.poly(quad(u0 + 0.15, 1.3, u1 - 0.15, 1.75, v1 - 0.04), C.chart, 0);
+  const mu = (u0 + u1) / 2 - 0.65;
+  k.poly(quad(mu, 2.4, mu + 1.3, 3.7, v1 - 0.03), C.chart, k.thin, 0.35);
+  k.face(mu + 1.3, v1 - 0.02, 3.7, 0.36, C.chartWarm, k.thin, 16);
+  // the birch top, a little proud of the body
+  k.box(u0, v0, z - 0.35, u1 - u0, v1 - v0, 0.35, C.birch, { line: k.lw });
+  // on it: a keyboard, a tray of badges, a bell, a pot of succulents
+  k.box(u0 + 1.4, v0 + 0.35, z, 2.1, 0.75, 0.1, '#e8e6e0', { line: k.thin });
+  if (k.fine) {
+    const keys: Array<[P3, P3]> = [];
+    for (const w of [v0 + 0.55, v0 + 0.85]) keys.push([[u0 + 1.55, w, z + 0.11], [u0 + 3.35, w, z + 0.11]]);
+    k.segs(keys, withAlpha(INK, 0.35), 0.05 * k.s);
+  }
+  k.box(u0 + 3.8, v0 + 0.5, z, 1.0, 0.85, 0.18, '#d8dadf', { line: k.thin });
+  for (const [i, c] of [C.noteTeal, C.chartWarm].entries()) k.box(u0 + 3.95 + i * 0.4, v0 + 0.6, z + 0.18, 0.3, 0.5, 0.05, c, { line: k.thin * 0.7, stripe: false });
+  k.cyl(u0 + 0.55, v1 - 0.45, z, 0.32, 0.12, C.steel, { line: k.thin });
+  k.disc(u0 + 0.55, v1 - 0.45, z + 0.24, 0.24, C.chrome, k.thin);
+  succulent(k, u0 + 0.6, v0 + 0.55, z, 0.38);
+}
 
 // The glass door leaf on its hinge at u0, opened by th radians into the
 // room: a slim black frame round the glass, a long bar handle.

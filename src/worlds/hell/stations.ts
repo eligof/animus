@@ -13,20 +13,24 @@ import { C, INK, due, ember, hash, kitOf, mote, puff, sparkAt, still } from './k
 // they hold still when nobody is at them, so they cost nothing to show.
 
 type Spawn = (p: Particle) => void;
+const TAU = Math.PI * 2;
 const SOUL: readonly [number, number, number] = [143, 242, 208];
 const HOT: readonly [number, number, number] = [255, 150, 60];
 
 // ── write: the contract desk ─────────────────────────────────────────────────
-// An ebony desk on gilt claws: an infernal contract unrolled across it and
-// spilling over the front to a red wax seal, a skull with a candle on it,
-// an inkwell of red ink and its quill, tomes and an hourglass; a spiky iron
-// chair pulled out. Working takes up the quill: it writes line after line,
-// fresh ink glowing like embers.
+// An ebony desk on gilt claws, turned to the room, the clerk's spiky iron
+// chair behind it (see npcs.ts): an infernal contract unrolled across it
+// toward whoever signs, spilling over the front to a red wax seal; a skull
+// with a candle on it, an hourglass and an inkwell of red ink down its far
+// end, tomes at its near end, all clear of him. Worked, the clerk writes
+// (the quill is in his hand): the fresh clause at the top of the sheet
+// glows like embers and sparks rise off it. `top`: the desk top; `back`:
+// its back edge, a step out from the wall; `seat`: the chair.
 
 const DESK_Z = 7.1;
-const SHEET = { u0: 3.6, u1: 7.4, v0: 2.0, v1: 5.75 };
+export const BUREAU = { top: DESK_Z, back: 2.0, seat: [5.5, 1.2, 4.35] as const };
+const SHEET = { u0: 3.6, u1: 7.4, v0: 2.45, v1: 6.35 };
 const LINES = 6;
-const LINE_T = 1.4; // seconds a line takes
 
 const write: PropArt = {
   len: 11,
@@ -35,29 +39,33 @@ const write: PropArt = {
   animated: true,
   draw(v: PropView): void {
     const z = DESK_Z;
+    const b = BUREAU.back;
     const { u0, u1, v0, v1 } = SHEET;
     const k = still(v, 'write', 12, (k) => {
-      k.shadow(5.5, 3.4, 6.4, 3.8, 0.32);
+      k.shadow(5.5, 4.2, 6.4, 3.6, 0.32);
+      // the clerk's chair, behind the desk, facing the room
+      chairIron(k, BUREAU.seat[0], BUREAU.seat[1], Math.PI / 2, BUREAU.seat[2], 2.4);
       // legs on gilt claws, the apron with a drawer, the top
-      for (const [u, w] of [[0.9, 0.9], [9.5, 0.9], [0.9, 4.7], [9.5, 4.7]] as const) {
+      for (const [u, w] of [[0.9, b + 0.4], [9.5, b + 0.4], [0.9, b + 3.6], [9.5, b + 3.6]] as const) {
         k.box(u, w, 0.35, 0.6, 0.6, 6.1, C.ebony);
         k.cyl(u + 0.3, w + 0.3, 0, 0.5, 0.4, C.gold, { line: k.thin });
       }
-      k.box(0.9, 0.9, 5.5, 9.2, 4.4, 0.9, C.ebonyLight, { stripe: false });
-      k.poly([[3.2, 5.31, 5.65], [7.8, 5.31, 5.65], [7.8, 5.31, 6.25], [3.2, 5.31, 6.25]], shade(C.ebonyLight, -0.1), k.thin);
-      k.dot(5.5, 5.35, 5.95, 0.22 * k.s, 0.22 * k.s, C.gold, k.thin * 0.7);
-      k.box(0.4, 0.5, 6.4, 10.2, 5.2, 0.7, '#4c2c30');
-      // a skull with a candle stuck on it, two more candles behind
-      candle(k, 1.0, 1.0, z, 2.6, 0.3);
-      candle(k, 2.2, 0.95, z, 1.5, 0.28);
-      skull(k, 1.6, 2.4, z, 0.72);
-      candle(k, 1.6, 2.4, z + 1.45, 1.0, 0.26, '#d8c9a4');
-      // the contract: the roll at the back, the sheet, over the front edge
+      k.box(0.9, b + 0.4, 5.5, 9.2, 3.8, 0.9, C.ebonyLight, { stripe: false });
+      k.poly([[3.2, b + 4.21, 5.65], [7.8, b + 4.21, 5.65], [7.8, b + 4.21, 6.25], [3.2, b + 4.21, 6.25]], shade(C.ebonyLight, -0.1), k.thin);
+      k.dot(5.5, b + 4.25, 5.95, 0.22 * k.s, 0.22 * k.s, C.gold, k.thin * 0.7);
+      k.box(0.4, b, 6.4, 10.2, 4.6, 0.7, '#4c2c30');
+      // a skull with a candle stuck on it, two more candles, an hourglass,
+      // all down the far end
+      candle(k, 0.95, b + 0.5, z, 2.6, 0.3);
+      candle(k, 1.0, b + 3.9, z, 1.5, 0.28);
+      skull(k, 1.7, b + 1.9, z, 0.72);
+      candle(k, 1.7, b + 1.9, z + 1.45, 1.0, 0.26, '#d8c9a4');
+      hourglass(k, 2.4, b + 3.85, z);
+      // the contract: flat across the top, over the front edge, rolled up
+      // below
       k.poly([[u0, v0, z + 0.02], [u1, v0, z + 0.02], [u1, v1, z + 0.02], [u0, v1, z + 0.02]], C.parchment, k.thin);
       k.poly([[u0, v1 + 0.02, z], [u1, v1 + 0.02, z], [u1 + 0.1, v1 + 0.06, 2.7], [u0 - 0.1, v1 + 0.06, 2.7]], k.vgrad(u0, v1, 2.7, z, [[0, C.parchmentDark], [1, C.parchment]]), k.thin);
-      k.rod([[u0 - 0.4, v1 + 0.3, 2.5], [u1 + 0.4, v1 + 0.3, 2.5]], C.parchment, 0.62);
-      k.rod([[u0 - 0.5, v0 - 0.2, z + 0.45], [u1 + 0.5, v0 - 0.2, z + 0.45]], C.parchment, 0.9);
-      for (const u of [u0 - 0.7, u1 + 0.7]) k.dot(u, v0 - 0.2, z + 0.45, 0.32 * k.s, 0.32 * k.s, C.ebony, k.thin);
+      k.rod([[u0 - 0.4, v1 + 0.3, 2.5], [u1 + 0.4, v1 + 0.3, 2.5]], C.parchment, 0.6);
       // the old clauses down the hanging part, and the seal
       const pen = k.pen;
       pen.beginPath();
@@ -69,28 +77,9 @@ const write: PropArt = {
         pen.moveTo(x0, y0);
         pen.lineTo(x1, y1);
       }
-      pen.strokeStyle = '#5a2a2a';
-      pen.lineWidth = Math.max(0.7, 0.1 * k.s);
-      pen.stroke();
-      k.dot(u1 - 0.9, v1 + 0.08, 3.4, 0.55 * k.s, 0.55 * k.s, C.velvet, k.thin);
-      k.dot(u1 - 0.9, v1 + 0.1, 3.4, 0.3 * k.s, 0.3 * k.s, '#c8303a', 0);
-      k.line([[u1 - 1.2, v1 + 0.09, 3.0], [u1 - 1.4, v1 + 0.1, 2.0]], C.velvetDark, Math.max(0.8, 0.14 * k.s));
-      // the inkwell, tomes and an hourglass
-      k.cyl(8.5, 2.6, z, 0.5, 0.7, '#2c1c2c');
-      k.disc(8.5, 2.6, z + 0.7, 0.3, '#8c1a1a', 0);
-      tome(k, 8.4, 3.6, z, 1.9, 1.5, 0.45, '#5a2d6c');
-      tome(k, 8.6, 3.7, z + 0.45, 1.6, 1.3, 0.4, C.velvetDark);
-      hourglass(k, 9.7, 1.5, z);
-      chairIron(k, 1.9, 5.7, -Math.PI / 2 + 0.45);
-    });
-    // the quill: in its inkwell, or writing
-    const pen = k.pen;
-    if (!v.active) {
-      quill(k, [8.5, 2.6, z + 0.6], [8.1, 1.9, z + 4.4]);
-      // the clauses on the sheet, long dry
-      pen.beginPath();
-      for (let i = 0; i < LINES; i++) {
-        const w = v0 + 0.5 + i * 0.52;
+      // and the clauses on the sheet, long dry
+      for (let i = 1; i < LINES; i++) {
+        const w = v0 + 0.5 + i * 0.55;
         const l = 0.55 + hash(i, 7) * 0.4;
         const [x0, y0] = k.p(u0 + 0.35, w, z + 0.03);
         const [x1, y1] = k.p(u0 + 0.35 + (u1 - u0 - 0.7) * l, w, z + 0.03);
@@ -100,38 +89,43 @@ const write: PropArt = {
       pen.strokeStyle = '#5a2a2a';
       pen.lineWidth = Math.max(0.7, 0.1 * k.s);
       pen.stroke();
+      k.dot(u1 - 0.9, v1 + 0.08, 3.4, 0.55 * k.s, 0.55 * k.s, C.velvet, k.thin);
+      k.dot(u1 - 0.9, v1 + 0.1, 3.4, 0.3 * k.s, 0.3 * k.s, '#c8303a', 0);
+      k.line([[u1 - 1.2, v1 + 0.09, 3.0], [u1 - 1.4, v1 + 0.1, 2.0]], C.velvetDark, Math.max(0.8, 0.14 * k.s));
+      // the inkwell of red ink at the front of the far end; tomes, low,
+      // at the near end
+      k.cyl(2.2, b + 4.15, z, 0.45, 0.65, '#2c1c2c');
+      k.disc(2.2, b + 4.15, z + 0.65, 0.27, '#8c1a1a', 0);
+      tome(k, 8.3, b + 1.4, z, 1.9, 1.5, 0.45, '#5a2d6c');
+      tome(k, 8.5, b + 1.5, z + 0.45, 1.6, 1.3, 0.4, C.velvetDark);
+      tome(k, 8.6, b + 3.2, z, 1.5, 1.1, 0.35, C.leather);
+    });
+    // the newest clause at the top of the sheet: dull when he is away;
+    // glowing like embers, the glow breathing once in two seconds, while
+    // he writes
+    const w = v0 + 0.5;
+    const l = 0.55 + hash(0, 7) * 0.4;
+    const pts: P3[] = [];
+    for (let q = 0; q <= 8; q++) {
+      const uu = u0 + 0.35 + (u1 - u0 - 0.7) * l * (q / 8);
+      pts.push([uu, w + Math.sin(uu * 9) * 0.05, z + 0.03]);
+    }
+    if (!v.active) {
+      k.line(pts, '#5a2a2a', Math.max(0.7, 0.1 * k.s));
+      quill(k, [2.2, b + 4.15, z + 0.55], [1.8, b + 3.45, z + 4.3]);
       return;
     }
-    const cycle = (v.t / LINE_T) % LINES;
-    const cur = Math.floor(cycle);
-    const f = cycle - cur;
-    let tip: P3 = [u0 + 0.35, v0 + 0.5, z + 0.03];
-    for (let i = 0; i <= cur; i++) {
-      const w = v0 + 0.5 + i * 0.52;
-      const l = (0.55 + hash(i, 7) * 0.4) * (i === cur ? f : 1);
-      const pts: P3[] = [];
-      for (let q = 0; q <= 8; q++) {
-        const uu = u0 + 0.35 + (u1 - u0 - 0.7) * l * (q / 8);
-        pts.push([uu, w + Math.sin(uu * 9 + i) * 0.05, z + 0.03]);
-      }
-      const age = cur - i + (1 - f);
-      k.line(pts, age < 1.2 ? '#ff7a2a' : age < 2.5 ? '#c0301e' : '#6a2020', Math.max(0.8, 0.12 * k.s));
-      if (i === cur) tip = pts[pts.length - 1];
-    }
-    k.halo(tip[0], tip[1], tip[2] + 0.3, 1.6, '#ff6a2a', 0.5);
-    const bob = Math.sin(v.t * 22) * 0.12;
-    quill(k, [tip[0], tip[1], tip[2] + 0.05 + Math.max(0, bob)], [tip[0] + 1.3, tip[1] - 1.1, tip[2] + 3.6]);
+    const glow = 0.5 + 0.5 * Math.sin(v.t * Math.PI);
+    k.line(pts, glow > 0.5 ? '#ff8a3a' : '#ff6a2a', Math.max(0.8, 0.12 * k.s));
+    k.halo(pts[4][0], w, z + 0.3, 1.6 + 0.4 * glow, '#ff6a2a', 0.35 + 0.2 * glow);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) {
-      if (due(v.t, dt, 0.4, v.seed)) spawn(puff(1.0, 1.0, DESK_Z + 3.4, Math.floor(v.t * 10), 0, [70, 56, 60]));
+      if (due(v.t, dt, 0.4, v.seed)) spawn(puff(0.95, BUREAU.back + 0.5, DESK_Z + 3.4, Math.floor(v.t * 10), 0, [70, 56, 60]));
       return;
     }
-    const cycle = (v.t / LINE_T) % LINES;
-    const cur = Math.floor(cycle);
-    const l = (0.55 + hash(cur, 7) * 0.4) * (cycle - cur);
     const n = due(v.t, dt, 3, v.seed);
-    for (let i = 0; i < n; i++) spawn(sparkAt(SHEET.u0 + 0.35 + (SHEET.u1 - SHEET.u0 - 0.7) * l, SHEET.v0 + 0.5 + cur * 0.52, DESK_Z + 0.2, Math.floor(v.t * 20), i, 3, HOT));
+    for (let i = 0; i < n; i++) spawn(sparkAt(SHEET.u0 + 0.6 + hash(Math.floor(v.t * 20), i) * 2.0, SHEET.v0 + 0.5, DESK_Z + 0.2, Math.floor(v.t * 20), i, 3, HOT));
   },
 };
 
@@ -196,30 +190,31 @@ function hourglass(k: Kit, u: number, v: number, z: number): void {
   for (const d of [-1, 1]) k.line([[u + d * 0.5, v + 0.1, z + 0.2], [u + d * 0.5, v + 0.1, z + 1.8]], C.goldDark, Math.max(0.8, 0.1 * k.s));
 }
 
-// A spiky iron chair at (cu, cv), its sitter facing `face` (u-v plane):
-// a velvet seat, a back of bars topped with spikes.
-function chairIron(k: Kit, cu: number, cv: number, face: number): void {
+// A spiky iron chair at (cu, cv), its sitter facing `face` (u-v plane),
+// its seat `zs` up: a velvet seat, a back of bars `wide` across topped
+// with spikes, its outer posts the tallest.
+function chairIron(k: Kit, cu: number, cv: number, face: number, zs = 3.5, wide = 1.7): void {
   const du = Math.cos(face);
   const dv = Math.sin(face);
   const pu = -dv;
   const pv = du;
-  const zs = 3.5;
   const r = 1.15;
   const bu = cu - du * r * 0.85;
   const bv = cv - dv * r * 0.85;
   const behind = du + dv > 0;
   const back = () => {
     const top = zs + 4.2;
+    const half = wide / 2;
     for (const sd of [-1, -0.33, 0.33, 1]) {
-      const uu = bu + pu * sd * r * 0.75;
-      const vv = bv + pv * sd * r * 0.75;
-      k.rod([[uu, vv, zs], [uu, vv, top - (Math.abs(sd) < 0.5 ? 0 : 0.5)]], C.iron, 0.16);
-      const tz = top - (Math.abs(sd) < 0.5 ? 0 : 0.5);
+      const uu = bu + pu * sd * half;
+      const vv = bv + pv * sd * half;
+      const tz = top - (Math.abs(sd) < 0.5 ? 0.5 : 0);
+      k.rod([[uu, vv, zs], [uu, vv, tz]], C.iron, 0.16);
       const [x, y] = k.p(uu, vv, tz);
       const S = 0.3 * k.s;
       k.fill([[x - S, y], [x, y - S * 3], [x + S, y]], C.ironLight, k.thin);
     }
-    k.rod([[bu - pu * r * 0.85, bv - pv * r * 0.85, zs + 2.6], [bu + pu * r * 0.85, bv + pv * r * 0.85, zs + 2.6]], C.iron, 0.18);
+    k.rod([[bu - pu * half * 1.1, bv - pv * half * 1.1, zs + 2.6], [bu + pu * half * 1.1, bv + pv * half * 1.1, zs + 2.6]], C.iron, 0.18);
   };
   k.shadow(cu, cv, r * 1.3, r * 1.3, 0.24);
   if (behind) back();
@@ -459,12 +454,15 @@ const search: PropArt = {
 
 // ── run: the hellforge ───────────────────────────────────────────────────────
 // A squat forge of black brick with a chimney at its back and a bed of coals,
-// a great leather bellows at its side; an anvil on a stump before it with
-// an ingot on it, a quench tub, tongs and a hammer. Running it pumps the
-// bellows: the coals roar into flame, the ingot glows and sparks fly.
+// a great leather bellows at its side; an anvil on a stump at its front
+// edge with an ingot on it, the forge demon's place beside it out on the
+// floor (see npcs.ts: the hammer is in his hand), a quench tub with tongs
+// in it. Running it pumps the bellows: the coals roar into flame, the
+// ingot glows and sparks fly; each goes round once in two seconds, so a
+// worked forge loops cleanly.
 
 const COALS = { u: 3.8, v: 3.6, z: 4.5, r: 1.9 };
-const ANVIL = { u: 4.6, v: 8.3, z: 3.9 };
+export const ANVIL = { u: 4.6, v: 9.8, z: 3.9 };
 
 const run: PropArt = {
   len: 11,
@@ -501,8 +499,9 @@ const run: PropArt = {
       k.disc(9.4, 8.8, 2.05, 1.1, '#2a1a2a', 0);
       k.rod([[9.0, 8.6, 1.4], [8.4, 8.2, 4.2]], C.iron, 0.12);
       k.rod([[9.3, 8.7, 1.4], [8.9, 8.1, 4.3]], C.iron, 0.12);
-      // the anvil on its stump, a hammer by it
-      const { u, v: w, z } = ANVIL;
+      // the anvil on its stump at the front edge (its hammer is in the
+      // forge demon's hand)
+      const { u, v: w } = ANVIL;
       k.shadow(u, w, 2.6, 1.7, 0.3);
       k.cyl(u, w, 0, 1.2, 2.2, '#5a3424');
       k.disc(u, w, 2.2, 1.0, '#8a5a3a', 0);
@@ -512,22 +511,20 @@ const run: PropArt = {
       // the horn
       const horn: P3[] = [[u + 1.5, w - 0.55, 3.9], [u + 3.0, w, 3.75], [u + 1.5, w + 0.55, 3.9], [u + 1.5, w + 0.55, 3.25], [u + 1.5, w - 0.55, 3.25]];
       k.poly(horn, k.side(C.ironLight, 1, 0), k.lw);
-      k.rod([[u - 1.0, w + 1.3, 0.3], [u + 0.6, w + 1.6, 0.3]], C.ebonyLight, 0.18);
-      k.box(u - 1.5, w + 1.0, 0.1, 0.8, 0.6, 0.5, C.iron, { line: k.thin });
     });
     const on = v.active;
     const t = v.t;
     // the coals, and fire over them when the bellows blow
     const { u, v: w, z, r } = COALS;
-    const breath = on ? 0.5 + 0.5 * Math.sin(t * 3.4) : 0;
+    const breath = on ? 0.5 + 0.5 * Math.sin(t * Math.PI) : 0;
     coals(k, u, w, z + 0.02, r, 7, on ? 0.7 + 0.3 * breath : 0.2);
     k.halo(u, w, z + 0.6, on ? 4 + breath : 3, '#ff7a2a', on ? 0.45 : 0.25);
     if (on) fire(k, u, w, z, r * 0.9, 1.6 + breath * 1.4, t, 3);
     // the bellows: two boards hinged at the nozzle, the top one pumping
-    bellows(k, on ? 0.18 + 0.2 * Math.sin(t * 3.4) : 0.18);
+    bellows(k, on ? 0.18 + 0.2 * Math.sin(t * Math.PI) : 0.18);
     // the ingot on the anvil: cold iron, or glowing
     const { u: au, v: av, z: az } = ANVIL;
-    const glow = on ? 0.6 + 0.4 * Math.sin(t * 2.1) : 0;
+    const glow = on ? 0.6 + 0.4 * Math.sin(t * Math.PI) : 0;
     k.box(au - 0.7, av - 0.25, az, 1.4, 0.5, 0.3, on ? (glow > 0.5 ? '#ffd060' : '#ff9a30') : '#5a4a4a', { line: k.thin, stripe: false });
     if (on) k.halo(au, av, az + 0.3, 2.2, '#ffb040', 0.4 * glow + 0.2);
   },
@@ -616,11 +613,13 @@ function bellows(k: Kit, open: number): void {
 
 // ── web: the scrying cauldron ────────────────────────────────────────────────
 // A great black cauldron on clawed feet over a fire of bones, brimming with
-// green soulfire, a bone ladle in it, skulls round its foot. Looking into it
-// stirs a vortex in the brew, the fire under it roars and wisps of soul
-// rise off it.
+// green soulfire, skulls round its foot, its bone ladle leaning in it (in
+// the witch's hand while she works it: she stands at its side, see
+// npcs.ts). Worked, a vortex turns in the brew, the fire under it roars and
+// wisps of soul rise off it; each goes round in two seconds, so a worked
+// cauldron loops cleanly.
 
-const POT = { u: 4.5, v: 4.4, z0: 1.6, z1: 6.6, r: 3.2, rim: 2.75 };
+export const POT = { u: 4.5, v: 4.4, z0: 1.6, z1: 6.6, r: 3.2, rim: 2.75 };
 
 const web: PropArt = {
   len: 9,
@@ -667,7 +666,7 @@ const web: PropArt = {
     for (const [i, a] of [0.2, 1.4, 2.6].entries()) {
       const fu = u + Math.cos(a + 0.6) * r * 0.95;
       const fv = w + Math.sin(a + 0.6) * r * 0.95;
-      flame(k, fu, fv, 0.4, 0.6, (1.6 + (on ? 0.5 * Math.sin(t * 7 + i * 2) : 0)) * lick, on ? Math.sin(t * 5 + i) * 0.25 : 0, ['#3fbf8a', '#8ff2d0', '#e8fff4']);
+      flame(k, fu, fv, 0.4, 0.6, (1.6 + (on ? 0.5 * Math.sin(t * TAU + i * 2) : 0)) * lick, on ? Math.sin(t * TAU * 1.5 + i) * 0.25 : 0, ['#3fbf8a', '#8ff2d0', '#e8fff4']);
     }
     // the brew: still, or turning into a vortex
     const zb = z1 + 0.27;
@@ -679,7 +678,7 @@ const web: PropArt = {
       for (let arm = 0; arm < 3; arm++) {
         for (let i = 0; i <= 14; i++) {
           const f = i / 14;
-          const a = t * 2.4 + arm * ((Math.PI * 2) / 3) + f * 3.2;
+          const a = t * (TAU / 3) + arm * (TAU / 3) + f * 3.2;
           const rr = br * (0.12 + f * 0.8);
           const [x, y] = k.p(u + Math.cos(a) * rr, w + Math.sin(a) * rr, zb + 0.01);
           if (i) pen.lineTo(x, y);
@@ -692,29 +691,31 @@ const web: PropArt = {
       pen.stroke();
       // an eye opening in the middle of it
       const [ex, ey] = k.p(u, w, zb + 0.02);
-      const open = 0.6 + 0.4 * Math.sin(t * 1.3);
+      const open = 0.6 + 0.4 * Math.sin(t * Math.PI);
       pen.beginPath();
       pen.ellipse(ex, ey, 0.9 * k.s, 0.42 * k.s * open, 0, 0, Math.PI * 2);
       k.paint('#fff6d8', k.thin);
       pen.beginPath();
-      pen.ellipse(ex + Math.sin(t * 0.9) * 0.25 * k.s, ey, 0.34 * k.s, 0.34 * k.s * open, 0, 0, Math.PI * 2);
+      pen.ellipse(ex + Math.sin(t * Math.PI) * 0.25 * k.s, ey, 0.34 * k.s, 0.34 * k.s * open, 0, 0, Math.PI * 2);
       k.paint('#c03a1e', 0);
       pen.beginPath();
-      pen.ellipse(ex + Math.sin(t * 0.9) * 0.25 * k.s, ey, 0.1 * k.s, 0.26 * k.s * open, 0, 0, Math.PI * 2);
+      pen.ellipse(ex + Math.sin(t * Math.PI) * 0.25 * k.s, ey, 0.1 * k.s, 0.26 * k.s * open, 0, 0, Math.PI * 2);
       k.paint(INK, 0);
     }
     // bubbles: swelling and bursting while it boils, two resting when not
     for (let i = 0; i < (on ? 5 : 2); i++) {
-      const ph = on ? (t * 1.4 + hash(i, 41)) % 1 : 0.4 + i * 0.3;
+      const ph = on ? (t * 1.5 + hash(i, 41)) % 1 : 0.4 + i * 0.3;
       const a = hash(i, 42) * Math.PI * 2;
       const rr = br * (0.3 + hash(i, 43) * 0.55);
       const R = (0.15 + ph * 0.3) * k.s;
       k.dot(u + Math.cos(a) * rr, w + Math.sin(a) * rr, zb + 0.05, R, R * 0.7, '#d8fff0', k.thin * 0.6);
     }
     k.halo(u, w, zb + 1.2, on ? 5 : 3.6, '#7ff0c8', on ? 0.42 : 0.26);
-    // the ladle leaning in it
-    bone(k, [u + 1.2, w - 1.0, zb - 0.4], [u + 2.6, w - 2.0, zb + 3.2], 0.28);
-    k.dot(u + 1.1, w - 0.9, zb, 0.5 * k.s, 0.3 * k.s, C.boneShade, k.thin);
+    // the ladle leaning in it, while the witch is away
+    if (!on) {
+      bone(k, [u + 1.2, w - 1.0, zb - 0.4], [u + 2.6, w - 2.0, zb + 3.2], 0.28);
+      k.dot(u + 1.1, w - 0.9, zb, 0.5 * k.s, 0.3 * k.s, C.boneShade, k.thin);
+    }
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     const n = due(v.t, dt, v.active ? 2.4 : 0.5, v.seed);
@@ -805,7 +806,7 @@ const think: PropArt = {
     // the braziers' fire
     for (const [i, [bu, bv]] of BRAZIERS.entries()) {
       const h = on ? 2.6 + 0.5 * Math.sin(t * 6 + i * 2) : 1.6;
-      fire(k, bu, bv, 5.3, 0.95, h, on ? t + i : 0, i);
+      fire(k, bu, bv, 5.3, 0.95, h, on ? t + i / 2 : 0, i);
       k.halo(bu, bv, 6.2, on ? 4.5 : 3.2, '#ff8a3a', on ? 0.42 : 0.3);
     }
     // the crown skull's eyes, burning while someone broods

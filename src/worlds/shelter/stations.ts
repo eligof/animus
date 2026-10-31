@@ -189,10 +189,11 @@ const read: PropArt = {
 // ── search: the radar console ───────────────────────────────────────────────
 // A steel console with a sloped panel of knobs, toggles and small lamps,
 // a round green scope (rings and a cross) set in a tall housing, a desk
-// microphone. Searching turns the sweep, a blip lighting up behind it;
-// idle, the scope glows dim with its rings.
+// microphone. Searching turns the sweep, once round in two seconds, a blip
+// lighting up behind it; idle, the scope glows dim with its rings. The
+// overseer watches it from the floor before the console (see npcs.ts).
 
-const SCOPE = { u: 6, n: 2.45, z: 8.6, r: 2.0 };
+export const SCOPE = { u: 6, n: 2.45, z: 8.6, r: 2.0 };
 
 const search: PropArt = {
   len: 12,
@@ -261,7 +262,7 @@ const search: PropArt = {
     k.face(SCOPE.u, SCOPE.n + 0.03, SCOPE.z, SCOPE.r - 0.05, '#0f3a1c', 0, 28);
     scopeMarks(k, 0.9);
     // the sweep and its fading trail
-    const a = -v.t * 2.6;
+    const a = -v.t * Math.PI;
     const R = SCOPE.r - 0.1;
     for (let i = 6; i >= 0; i--) {
       const b = a + i * 0.11;
@@ -306,18 +307,25 @@ function scopeMarks(k: Kit, a: number): void {
 }
 
 // ── run: the water purifier ────────────────────────────────────────────────
-// Two teal tanks banded in steel on a skid, glass sight tubes up
-// their fronts, a manifold between them dropping through a valve wheel to
-// a pump, a cabinet of round gauges before them and a spigot over a pail.
-// Running it bubbles the water up the sight tubes, turns the wheel, sets
-// the needles wobbling and blows steam off the vents.
+// Two teal tanks banded in steel on a skid, glass sight tubes up their
+// fronts, a manifold out of them over the pump to a riser at the skid's
+// front corner and down it through a valve into the pump; the valve's
+// wheel and a gauge over it on the riser face out of the front, by where
+// the mechanic stands (see npcs.ts; VALVE the wheel's middle, TOP_GAUGE
+// the gauge's). A cabinet of round gauges before the tanks, a spigot over
+// a pail. Running it bubbles the water up the sight tubes, turns the
+// wheel, sets the needles wobbling and blows steam off the vents, all
+// round in two seconds.
 
 const TANKS = [[2.7, 2.7], [7.9, 2.7]] as const;
 const TANK = { r: 2.1, z0: 0.7, h: 10.0 };
 const SIGHT = (cu: number, cv: number): [number, number] => [cu + 0.75, cv + TANK.r + 0.12];
 const PANEL = { u0: 0.9, u1: 5.3, v: 7.6, z1: 6.0 };
 const GAUGES = [[2.0, PANEL.v + 0.01, 4.4], [4.2, PANEL.v + 0.01, 4.4]] as const;
-const VALVE: P3 = [7.9, 5.95, 5.0];
+export const VALVE: P3 = [9.95, 10.9, 4.6];
+const RISER = { u: VALVE[0], v: VALVE[1] - 0.95 };
+export const TOP_GAUGE: P3 = [10.35, 10.85, 7.05];
+const POUR = { u: 6.8, v: 10.0 }; // the pail under the spigot
 
 const run: PropArt = {
   len: 11,
@@ -352,24 +360,17 @@ const run: PropArt = {
         k.cyl(su, sv, 4.45, 0.22, 5.45, '#d8eef6', { line: k.thin });
         k.cyl(su, sv, 4.45, 0.16, 3.2, C.water, { line: 0, top: '#bfe8f8' });
       }
-      // the manifold: out of each tank, across, and down through the valve to the pump
-      k.rod([[TANKS[0][0] + 1.4, 4.4, 7.4], [TANKS[0][0] + 1.4, 5.95, 7.4], [VALVE[0], 5.95, 7.4]], C.pipe, 0.4);
-      k.rod([[TANKS[1][0], 4.75, 7.4], [VALVE[0], 5.95, 7.4]], C.pipe, 0.4);
-      k.rod([[VALVE[0], 5.95, 7.4], [VALVE[0], 5.95, 3.2]], C.pipe, 0.4);
-      k.box(VALVE[0] - 0.7, VALVE[1] - 0.6, VALVE[2] - 0.8, 1.4, 1.2, 1.6, C.steelDark, { line: k.lw, round: 0.2 });
-      k.rod([[VALVE[0], VALVE[1] + 0.6, VALVE[2]], [VALVE[0], VALVE[1] + 1.0, VALVE[2]]], C.steelDark, 0.18);
-      // the pump: a green motor housing with fins, the spigot off its end over a pail
+      // the manifold: out of each tank and over the pump to the front corner
+      const { u: ru, v: rv } = RISER;
+      k.rod([[TANKS[0][0] + 1.4, 4.4, 7.4], [TANKS[0][0] + 1.4, 5.95, 7.4], [ru, 5.95, 7.4], [ru, rv, 7.4]], C.pipe, 0.4);
+      k.rod([[TANKS[1][0], 4.75, 7.4], [TANKS[1][0], 5.95, 7.4]], C.pipe, 0.4);
+      // the pump: a green motor housing with fins
       k.box(6.2, 6.6, 0.7, 3.4, 2.2, 2.6, '#5f7f4f', { round: 0.25 });
       if (k.fine) {
         const fins: Array<[P3, P3]> = [];
         for (let z = 1.2; z < 3.0; z += 0.42) fins.push([[6.5, 8.81, z], [8.6, 8.81, z]]);
         k.segs(fins, withAlpha(INK, 0.5), 0.09 * k.s);
       }
-      k.cyl(VALVE[0], 6.4, 3.2, 0.55, 0.35, C.steelDark);
-      k.rod([[9.4, 7.5, 2.6], [9.65, 8.9, 2.9], [9.65, 9.3, 2.6]], C.copper, 0.2);
-      k.cyl(9.65, 9.55, 0.7, 0.8, 1.5, '#a9b3a6');
-      k.disc(9.65, 9.55, 2.21, 0.66, C.water, 0);
-      k.rod([[8.85, 9.55, 2.25], [9.65, 10.35, 2.8], [10.45, 9.55, 2.25]], C.steelDark, 0.06);
       // the gauge cabinet before the tanks: two round gauges, lamps, a lever
       const pc = '#c9b48a';
       k.box(PANEL.u0, 6.2, 0.7, PANEL.u1 - PANEL.u0, PANEL.v - 6.2, PANEL.z1 - 0.7, pc, { round: 0.15 });
@@ -378,26 +379,40 @@ const run: PropArt = {
       k.rect(3.8, 1.6, 4.9, 3.2, PANEL.v + 0.01, k.side(shade(pc, -0.1), 0, 1, 0.1), k.thin);
       k.rod([[4.35, PANEL.v + 0.05, 2.6], [4.35, PANEL.v + 0.4, 3.6]], C.chrome, 0.12);
       k.disc(4.35, PANEL.v + 0.4, 3.7, 0.22, C.red, k.thin);
+      // the spigot off the pump's front over the pail
+      k.rod([[POUR.u, 8.75, 2.6], [POUR.u, 9.4, 2.9], [POUR.u, POUR.v - 0.25, 2.6]], C.copper, 0.2);
+      k.cyl(POUR.u, POUR.v, 0.7, 0.8, 1.5, '#a9b3a6');
+      k.disc(POUR.u, POUR.v, 2.21, 0.66, C.water, 0);
+      k.rod([[POUR.u - 0.8, POUR.v, 2.25], [POUR.u, POUR.v + 0.8, 2.8], [POUR.u + 0.8, POUR.v, 2.25]], C.steelDark, 0.06);
+      // the riser at the front corner (in front of all that), down through
+      // the valve and in to the pump's end; the gauge on a stub off it
+      k.rod([[ru, rv, 7.4], [ru, rv, 2.0], [ru, 7.7, 2.0], [9.6, 7.7, 2.0]], C.pipe, 0.4);
+      k.rod([[ru, rv, TOP_GAUGE[2]], [TOP_GAUGE[0], rv, TOP_GAUGE[2]], [TOP_GAUGE[0], TOP_GAUGE[1] - 0.05, TOP_GAUGE[2]]], C.pipe, 0.25);
+      gauge(k, TOP_GAUGE[0], TOP_GAUGE[1], TOP_GAUGE[2], 0.6, Math.PI * 0.75);
+      // the valve's body on the riser, its stem out to the wheel
+      k.box(ru - 0.6, rv - 0.6, VALVE[2] - 0.8, 1.2, 1.2, 1.6, C.steelDark, { line: k.lw, round: 0.2 });
+      k.rod([[ru, rv + 0.6, VALVE[2]], [ru, VALVE[1], VALVE[2]]], C.steelDark, 0.18);
     });
-    // the valve wheel turns while it runs
-    wheel(k, VALVE[0], VALVE[1] + 1.05, VALVE[2], 1.05, v.active ? v.t * 1.6 : 0.3, C.orange, 4);
+    // the valve wheel turns while it runs (a quarter turn a second)
+    wheel(k, VALVE[0], VALVE[1], VALVE[2], 1.0, v.active ? (v.t * Math.PI) / 2 : 0.3, C.orange, 4);
     // the needles: wobbling while it runs, resting low otherwise
     for (const [i, [gu, gv, gz]] of GAUGES.entries()) {
-      const a = v.active ? Math.PI * (0.45 - 0.1 * i) + Math.sin(v.t * (7 + i * 3) + i) * 0.18 : Math.PI * 0.95;
+      const a = v.active ? Math.PI * (0.45 - 0.1 * i) + Math.sin(v.t * Math.PI * (2 + i) + i) * 0.18 : Math.PI * 0.95;
       needleOf(k, gu, gv, gz, 0.85, a);
     }
+    needleOf(k, TOP_GAUGE[0], TOP_GAUGE[1], TOP_GAUGE[2], 0.6, v.active ? Math.PI * 0.5 + Math.sin(v.t * Math.PI * 4) * 0.12 : Math.PI * 0.95);
     if (!v.active) return;
     // bubbles rising up the sight tubes
     for (const [ti, [cu, cv]] of TANKS.entries()) {
       const [su, sv] = SIGHT(cu, cv);
       for (let i = 0; i < 4; i++) {
-        const ph = (v.t * (0.9 + hash(ti, i, 3) * 0.6) + hash(ti, i, 4)) % 1;
+        const ph = (v.t * (1 + 0.5 * ((ti + i) % 2)) + hash(ti, i, 4)) % 1;
         dot(k, su + (hash(ti, i, 5) - 0.5) * 0.1, sv + 0.16, 4.6 + ph * 2.9, 0.07 + ph * 0.05, '#f0faff', Math.max(0.5, k.thin * 0.4));
       }
     }
     // a drip falling from the spigot into the pail
-    const ph = (v.t * 1.3) % 1;
-    dot(k, 9.65, 9.3, 2.4 - ph * 0.2, 0.1, C.water, 0);
+    const ph = (v.t * 1.5) % 1;
+    dot(k, POUR.u, POUR.v - 0.25, 2.4 - ph * 0.2, 0.1, C.water, 0);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
@@ -618,8 +633,12 @@ function ovalPts(cu: number, cv: number, ru: number, rv: number, z: number): P3[
 // benches facing across a pale table with milkshakes, a napkin box and
 // squeeze bottles; beside it a jukebox with a rounded top, a chrome grille
 // and bands of coloured light round its face (no name, no badge). While
-// someone lounges here the light bands cycle.
+// someone lounges here the light bands cycle. The waitress stands on the
+// checker at the booth's open end (see npcs.ts; BOOTH where), by a cup of
+// coffee on the table's corner that she tops up (`cup`: where, and its
+// rim's height).
 
+export const BOOTH = { u: 5.0, v: 10.1, cup: [5.95, 7.85, 5.5] as const };
 const JUKE = { u0: 10.6, u1: 14.4, v0: 1.4, v1: 4.6, top: 8.6 };
 const BANDS: readonly Color[] = ['#ff5a4a', '#ffb347', '#ffe066', '#7fe07a', '#5ac8ff', '#c87aff'];
 
@@ -649,6 +668,12 @@ const idle: PropArt = {
       k.cyl(5.6, 4.3, zt, 0.24, 1.0, C.red, { line: k.thin });
       k.cyl(5.65, 4.85, zt, 0.24, 1.0, C.mustard, { line: k.thin });
       k.cyl(4.2, 7.6, zt, 0.6, 0.12, '#f4f6ec', { line: k.thin });
+      // the cup of coffee on its saucer
+      const [qu, qv] = BOOTH.cup;
+      k.cyl(qu, qv, zt, 0.55, 0.1, C.cream, { line: k.thin });
+      k.rod([[qu + 0.35, qv, zt + 0.7], [qu + 0.6, qv, zt + 0.55], [qu + 0.35, qv, zt + 0.3]], C.cream, 0.08);
+      k.cyl(qu, qv, zt + 0.1, 0.36, 0.7, C.cream, { line: k.thin });
+      k.disc(qu, qv, zt + 0.79, 0.28, '#5a3420', 0);
       // the near bench, its back toward the viewer's right
       bench(k, 7.1, 1);
       // the jukebox: an arched cabinet seen from the front and its +u end

@@ -57,8 +57,10 @@ export const C = {
 
 export const NEONS: readonly Color[] = [C.pink, C.cyan, C.lime, C.violet, C.amber];
 
-// ── the beat: 128 BPM ─────────────────────────────────────────────────────
-export const BEAT = 60 / 128;
+// ── the beat: 120 BPM ─────────────────────────────────────────────────────
+// Four beats in two seconds: a station a local works is shown as a 2 s loop
+// (see PropArt.animated), and comes round on the beat.
+export const BEAT = 60 / 120;
 export const beatOf = (t: number): number => Math.floor(t / BEAT);
 // 1 on the kick, falling off sharply to the next.
 export const kick = (t: number): number => (1 - (t / BEAT - Math.floor(t / BEAT))) ** 3;

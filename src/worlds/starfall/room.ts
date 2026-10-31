@@ -208,8 +208,9 @@ function reach(f: Feature, H: number): { a0: number; a1: number; z0: number; z1:
 
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots, but a drink either side of the food processor on the
-// mess bench, warm either side of the refiner's glow, and a look out
-// through the glass bays.
+// mess bench, warm either side of the refiner's glow (the one on the
+// refinery tech's side a step further out, clear of whoever it serves: see
+// npcs.ts), and a look out through the glass bays.
 export function starfallPois(L: Layout): Poi[] {
   const { features: fs } = planFor(L.W, L.D, L.H, L.T);
   const pt = (wall: Wall, a: number, out: number) => (wall === 'right' ? { x: a, y: L.T + out } : { x: L.T + out, y: a });
@@ -223,7 +224,7 @@ export function starfallPois(L: Layout): Poi[] {
   const mess = slot('idle');
   const refiner = slot('run');
   if (mess) out.push({ ...at(mess, -6, 0), kind: 'drink', face: mid(mess) }, { ...at(mess, 6, 0), kind: 'drink', face: mid(mess) });
-  if (refiner) out.push({ ...at(refiner, -7, 0), kind: 'warm', face: mid(refiner) }, { ...at(refiner, 7, 0), kind: 'warm', face: mid(refiner) });
+  if (refiner) out.push({ ...at(refiner, -7, 0), kind: 'warm', face: mid(refiner) }, { ...at(refiner, 7, 3), kind: 'warm', face: mid(refiner) });
   for (const f of fs.filter((g) => g.kind === 'glass').slice(0, 3)) out.push({ ...pt(f.wall, f.a, 7), kind: 'view', face: pt(f.wall, f.a, 0) });
   return out.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) }));
 }

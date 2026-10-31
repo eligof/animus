@@ -3,6 +3,7 @@ import { hex } from '../term/color.ts';
 import type { Block, Construction, Works } from './build.ts';
 import type { Emote, Pose } from './character.ts';
 import type { Critter } from './critter.ts';
+import { NATTER_CHANCE, NATTER_EVERY, NATTER_LOOK, NATTER_S, SERVE_WAIT, SHOW_S, type Locals } from './npcs.ts';
 import { Rng, hashString } from './rng.ts';
 import type { Actor } from './stage.ts';
 import type { Facing, Particle, Poi, Spot } from './types.ts';
@@ -106,15 +107,23 @@ export type Errand =
   | { kind: 'nap'; wake: number } // clock time it next gets up for a moment
   // office life (see OFFICE)
   | { kind: 'huddle'; lead: string; arrived: boolean; since: number }
-  | { kind: 'coffee'; step: 'go' | 'pour' | 'back'; poi: Poi; from: Spot; until: number; since: number }
+  | { kind: 'coffee'; step: 'go' | 'pour' | 'back'; poi: Poi; from: Spot; until: number; since: number; local?: number } // `local`: to its counter (see npcs.ts)
   | { kind: 'five'; lead: string; at: Spot; to: Spot; arrived: boolean; until: number; since: number; clap: number }
-  | { kind: 'standup'; crew: string; arrived: boolean; since: number };
+  | { kind: 'standup'; crew: string; arrived: boolean; since: number }
+  // the locals (see LOCAL)
+  | { kind: 'order'; local: number; arrived: boolean; since: number }
+  | { kind: 'watch'; local: number; arrived: boolean; since: number; until: number }
+  | { kind: 'natter'; local: number; since: number; until: number; beat: number };
 
 // Office life's errands: dropped when it is turned off; a working agent
 // that ends one goes straight back to its station. And its poses (see
 // hush).
 const OFFICE: ReadonlySet<Errand['kind']> = new Set(['huddle', 'coffee', 'five', 'standup']);
 const OFFICE_POSES: ReadonlySet<Pose> = new Set(['talk', 'sip', 'highfive']);
+// The locals' errands (see npcs.ts): an order at a local's counter, a show
+// watched, a word with one. Dropped when the locals go (n); a working
+// agent that ends one goes straight back to its station.
+const LOCAL: ReadonlySet<Errand['kind']> = new Set(['order', 'watch', 'natter']);
 // A lead's kick-off huddle: when it opened, where the lead stands (or is
 // heading), who is in it and where each stands, when the first got there,
 // when it ends (0: not started). A crew's stand-up: who is in it, the
@@ -140,6 +149,8 @@ export type Mind = {
   mug: number; // carries a mug of coffee until this clock time (0: none)
   sip: number; // its next sip from it
   coffee: number; // when it last went for one
+  natter: number; // when it last stopped for a word with a local
+  natterLook: number; // no other roll for a word with a local before this clock time
 };
 
 export function newMind(id: string, clock: number): Mind {
@@ -161,6 +172,8 @@ export function newMind(id: string, clock: number): Mind {
     mug: 0,
     sip: 0,
     coffee: -Infinity,
+    natter: -Infinity,
+    natterLook: 0,
   };
 }
 
@@ -199,6 +212,8 @@ export class Life {
   pois: Poi[] = [];
   works: Works | null = null;
   critter: Critter | null = null;
+  // The locals on duty (the stage's, see npcs.ts and setLocals), or none.
+  locals: Locals | null = null;
   private host: LifeHost;
   private rng: Rng;
   private byId = new Map<string, Actor>();
@@ -249,6 +264,17 @@ export class Life {
     this.standups.clear();
   }
 
+  // The locals on duty (see npcs.ts), or none (n turned them off): every
+  // errand with one ends at once (an order, a show watched, a word, a
+  // coffee run to a counter).
+  setLocals(l: Locals | null): void {
+    for (const a of this.byId.values()) {
+      const e = a.mind.errand;
+      if (e && 'local' in e && e.local !== undefined) this.end(a);
+    }
+    this.locals = l;
+  }
+
   // ── events from the stage ─────────────────────────────────────────────
   // Someone walked in: idle characters wave hello; a subagent's lead waves.
   arrived(a: Actor, actors: Iterable<Actor>): void {
@@ -262,6 +288,7 @@ export class Life {
         this.gesture(o, 'wave', 1.1, { delay: o.mind.rng.range(0.2, 1), face: a });
       }
     }
+    this.locals?.greet(a, c);
     a.mind.think = Math.max(a.mind.think, c + 1);
     if (this.office) this.kickOff(a);
   }
@@ -305,6 +332,7 @@ export class Life {
       if (!(working(o) && o.path.length)) this.gesture(o, 'idle', 1.4, { delay: d + 0.7, face: at });
       this.emote(o, m.rng.chance(0.5) ? 'excl' : 'sweat', 1.8, m.rng.range(0.1, 0.6));
     }
+    this.locals?.flinch(x, y, this.clock);
   }
 
   // Someone finished: those near (and every idle character) cheer them;
@@ -318,6 +346,7 @@ export class Life {
       if (!(working(o) && o.path.length)) this.gesture(o, 'cheer', 1.2, { delay: d, face: a });
       this.emote(o, m.rng.chance(0.5) ? 'star' : 'heart', 1.8, d);
     }
+    this.locals?.celebrate(this.clock);
   }
 
   // A lead's bolt reached its subagent: it startles and waves back.
@@ -365,6 +394,8 @@ export class Life {
     if (!e) return;
     m.errand = null;
     m.think = this.clock + m.rng.range(0.8, 2.4);
+    // out of a local's queue, or its word over (see npcs.ts)
+    if ('local' in e && e.local !== undefined) this.locals?.leave(e.local, a);
     if (e.kind === 'chat') {
       m.lastChat = this.clock;
       const b = this.byId.get(e.with);
@@ -378,7 +409,59 @@ export class Life {
       // its poses go with it; work comes first: straight to its station
       this.hush(a);
       if (working(a) && a.state !== 'leave' && !a.gone) this.host.back(a);
+    } else if (LOCAL.has(e.kind)) {
+      // work comes first: straight to its station
+      if (working(a) && a.state !== 'leave' && !a.gone) this.host.back(a);
     }
+  }
+
+  // ── the locals (see npcs.ts) ──────────────────────────────────────────
+  // Who has id `id` this frame, if anyone does.
+  actor(id: string): Actor | undefined {
+    return this.byId.get(id);
+  }
+
+  // Free for a local (a word, a show): idle and awake, in the room, hands
+  // free, nothing holding it, not about to be high-fived, and doing
+  // nothing much (wandering, or at a spot); for a show (see
+  // Locals.perform), out of anything else that can wait for one too: a
+  // chat, the critter, a haul between trips (idle agents are seldom doing
+  // nothing at all, and a show is over in SHOW_S).
+  spare(a: Actor, show = false): boolean {
+    return !this.held(a) && this.loose(a, show);
+  }
+
+  // Free for a show, or will be in a moment (a gesture holding it is soon
+  // over): those a local counts on before it starts one (see
+  // Locals.perform).
+  audience(a: Actor): boolean {
+    return this.loose(a, true);
+  }
+
+  // As spare, a gesture holding it or not.
+  private loose(a: Actor, show: boolean): boolean {
+    if (a.info.activity !== 'idle' || !present(a) || a.mind.exit || this.sleeping(a) || this.carrying(a) || this.awaited(a)) return false;
+    const e = a.mind.errand;
+    return !e || e.kind === 'visit' || (show && (e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul'));
+  }
+
+  // Off to local k's counter for what it serves (see Locals.join): false
+  // when there is no room there.
+  order(a: Actor, k: number): boolean {
+    this.end(a);
+    const spot = this.locals?.join(k, a);
+    if (!spot) return false;
+    a.mind.errand = { kind: 'order', local: k, arrived: false, since: this.clock };
+    this.host.walk(a, spot);
+    return true;
+  }
+
+  // A show at local k (see Locals.perform): off to `spot` in its ring, to
+  // dance or watch until `until`, then a cheer and off.
+  watch(a: Actor, k: number, spot: Spot, until: number): void {
+    this.end(a);
+    a.mind.errand = { kind: 'watch', local: k, arrived: false, since: this.clock, until };
+    this.host.walk(a, spot);
   }
 
   // ── per frame ─────────────────────────────────────────────────────────
@@ -413,6 +496,8 @@ export class Life {
       this.standing();
     }
     this.mingle(actors);
+    this.natters(actors);
+    this.locals?.update(this, actors);
     const cr = this.critter;
     if (cr) {
       if (cr.claimedBy && !this.byId.has(cr.claimedBy)) cr.claimedBy = null;
@@ -531,6 +616,10 @@ export class Life {
     if (site) opts.push(['haul', this.haulers(site) ? 2.5 : 6]);
     const cr = this.critter;
     if (cr && !cr.claimedBy) opts.push(['pet', 1.5]);
+    // Something from a local's counter (see npcs.ts): a ticket, a pastry, a
+    // drink.
+    const counter = this.locals?.counter(a) ?? null;
+    if (counter !== null) opts.push(['order', 1.2]);
     // A coffee run: likeliest early in a wait (the kettle goes on when the
     // work stops), at most one every COFFEE_EVERY seconds.
     const brew = this.office && !m.mug && c - m.coffee >= COFFEE_EVERY ? this.brew(a) : null;
@@ -556,10 +645,30 @@ export class Life {
         this.host.walk(a, this.petSpot(cr!, a));
         break;
       }
-      case 'coffee':
+      case 'coffee': {
+        // to the drink server's counter (its place there taken now), or to
+        // a drink spot
+        const b = brew!;
+        let poi = 'poi' in b ? b.poi : null;
+        if ('local' in b) {
+          const L = this.locals;
+          const l = L?.of(b.local);
+          const spot = L && l ? L.join(b.local, a) : null;
+          if (l && spot) poi = { x: spot.x, y: spot.y, kind: 'drink', face: { x: l.at.x, y: l.at.y } };
+        }
+        if (!poi) {
+          m.think = c + 1;
+          break;
+        }
         m.coffee = c;
-        m.errand = { kind: 'coffee', step: 'go', poi: brew!, from: { x: a.x, y: a.y }, until: 0, since: c };
-        this.host.walk(a, brew!);
+        const e: Extract<Errand, { kind: 'coffee' }> = { kind: 'coffee', step: 'go', poi, from: { x: a.x, y: a.y }, until: 0, since: c };
+        if ('local' in b) e.local = b.local;
+        m.errand = e;
+        this.host.walk(a, poi);
+        break;
+      }
+      case 'order':
+        if (!this.order(a, counter!)) m.think = c + 1;
         break;
       default:
         this.gesture(a, 'stretch', 1.6);
@@ -770,10 +879,27 @@ export class Life {
         if (e.step === 'go') {
           if (here) {
             e.step = 'pour';
-            e.until = c + COFFEE_POUR;
-            this.emote(a, 'cup', 1.6, COFFEE_POUR - 1.6);
+            // at a local's counter it waits its turn (see npcs.ts); at a
+            // drink spot it pours its own
+            e.until = c + (e.local === undefined ? COFFEE_POUR : SERVE_WAIT);
+            this.emote(a, 'cup', 1.6, e.local === undefined ? COFFEE_POUR - 1.6 : 0);
           } else if (c - e.since > COFFEE_LEG) this.end(a);
         } else if (e.step === 'pour') {
+          if (e.local !== undefined) {
+            // served, or gone without once SERVE_WAIT is over: counted
+            // from its turn, never while it is being served
+            const L = this.locals;
+            if (!L || !L.served(e.local, a)) {
+              if (L && !L.turn(e.local, a)) e.until = c + SERVE_WAIT;
+              else if (c >= e.until) this.end(a);
+              return;
+            }
+            L.leave(e.local, a);
+            e.local = undefined;
+            e.until = c;
+            // (being served was its word with the local: see natters)
+            m.natter = c;
+          }
           // poured, it waits there for a subagent on its way to high-five it
           if (c < e.until || this.awaited(a)) return;
           m.mug = c + m.rng.range(...MUG);
@@ -833,6 +959,65 @@ export class Life {
         else if (!e.arrived && c - e.since > STANDUP_GATHER + STANDUP_S) this.end(a);
         return;
       }
+      case 'order': {
+        // at a local's counter, served in its turn (see npcs.ts), or gone
+        // without once SERVE_WAIT is over: counted from its turn, never
+        // while it is being served
+        const L = this.locals;
+        if (!L?.of(e.local)) {
+          this.end(a);
+          return;
+        }
+        if (!e.arrived) {
+          if (here) {
+            e.arrived = true;
+            e.since = c;
+          } else if (c - e.since > COFFEE_LEG) this.end(a);
+          return;
+        }
+        if (L.served(e.local, a)) {
+          // a drink goes back with it as a mug (office life's: see
+          // sipping), anything else as a heart
+          if (L.drink(e.local) && this.office && !m.mug) {
+            m.mug = c + m.rng.range(...MUG);
+            m.sip = c + m.rng.range(2, 4);
+            m.coffee = c;
+          } else this.emote(a, 'heart', 1.6);
+          // (being served was its word with the local: see natters)
+          m.natter = c;
+          this.end(a);
+        } else if (!L.turn(e.local, a)) e.since = c;
+        else if (c - e.since > SERVE_WAIT) this.end(a);
+        return;
+      }
+      case 'watch': {
+        // a show (see npcs.ts): there, dancing or watching until it ends,
+        // then a cheer and off
+        const l = this.locals?.of(e.local);
+        if (!l?.show) {
+          this.end(a);
+          return;
+        }
+        if (!e.arrived) {
+          if (here) e.arrived = true;
+          else if (c - e.since > SHOW_S) this.end(a);
+          return;
+        }
+        if (c >= e.until) {
+          this.gesture(a, 'cheer', 1.4, { face: { x: l.at.x, y: l.at.y } });
+          this.emote(a, m.rng.chance(0.5) ? 'star' : 'heart', 1.6);
+          this.end(a);
+        }
+        return;
+      }
+      case 'natter':
+        if (c >= e.until || !this.locals?.of(e.local)) this.end(a);
+        else if (c >= e.beat) {
+          // a laugh back
+          e.beat = Infinity;
+          this.emote(a, 'note', 1.4);
+        }
+        return;
       default:
     }
   }
@@ -922,15 +1107,18 @@ export class Life {
     }
   }
 
-  // A drink spot nearby nobody is at or heading for, for a coffee run (the
-  // world's espresso counter, bar or mess bench); in a room with none open,
-  // a warm one (by the hearth, the stove or the fire, where every world
-  // keeps a kettle on).
-  private brew(a: Actor): Poi | null {
+  // Where a coffee run goes: the drink server's counter, if a local serves
+  // drinks and has room (see Locals.counter); else a drink spot nearby
+  // nobody is at or heading for (the world's espresso counter, bar or mess
+  // bench); in a room with none open, a warm one (by the hearth, the stove
+  // or the fire, where every world keeps a kettle on).
+  private brew(a: Actor): { poi: Poi } | { local: number } | null {
+    const bar = this.locals?.counter(a, true) ?? null;
+    if (bar !== null) return { local: bar };
     const open = this.openPois(a);
     const pots = open.filter((p) => p.kind === 'drink');
     const warm = open.filter((p) => p.kind === 'warm');
-    return pots.length ? this.pickPoi(a, pots) : warm.length ? this.pickPoi(a, warm) : null;
+    return pots.length ? { poi: this.pickPoi(a, pots) } : warm.length ? { poi: this.pickPoi(a, warm) } : null;
   }
 
   // Carrying a mug: a sip now and then (standing about, or at work: a
@@ -1029,11 +1217,13 @@ export class Life {
   }
 
   // Free for a stand-up: idle, awake, in the room, not leaving, not hauling
-  // a block, not about to be high-fived (a coffee run can wait).
+  // a block, not about to be high-fived, not watching a local's show (a
+  // coffee run, an order or a word can wait; a show is over in SHOW_S, and
+  // its ring would empty the moment it formed: see Locals.perform).
   private waiting(a: Actor): boolean {
     const e = a.mind.errand;
     if (a.info.activity !== 'idle' || !present(a) || a.mind.exit || this.sleeping(a) || this.carrying(a) || this.awaited(a)) return false;
-    return !e || e.kind === 'visit' || e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul' || e.kind === 'coffee';
+    return !e || e.kind === 'visit' || e.kind === 'chat' || e.kind === 'pet' || e.kind === 'haul' || e.kind === 'coffee' || (LOCAL.has(e.kind) && e.kind !== 'watch');
   }
 
   // Stand-ups: a crew with STANDUP_N or more agents waiting gathers in a
@@ -1289,6 +1479,30 @@ export class Life {
     }
   }
 
+  // Idle agents passing a local free for a word (see Locals.near) stop now
+  // and then (NATTER_CHANCE, once a pass), at most once every NATTER_EVERY
+  // seconds an agent: speech marks both ways, a nod, a laugh.
+  private natters(actors: Actor[]): void {
+    const L = this.locals;
+    if (!L) return;
+    const c = this.clock;
+    for (const a of actors) {
+      const m = a.mind;
+      if (c < m.natterLook || c - m.natter < NATTER_EVERY) continue;
+      // (a local in reach first: it is the cheaper look)
+      const k = L.near(a, c);
+      if (k === null || !this.spare(a)) continue;
+      m.natterLook = c + NATTER_LOOK;
+      if (!m.rng.chance(NATTER_CHANCE)) continue;
+      m.natter = c;
+      this.end(a);
+      m.errand = { kind: 'natter', local: k, since: c, until: c + NATTER_S, beat: c + 3.4 };
+      this.host.walk(a, { x: a.x, y: a.y });
+      this.emote(a, 'speech', 1.3);
+      L.natter(k, a, c);
+    }
+  }
+
   // ── state queries ─────────────────────────────────────────────────────
   private awake(a: Actor): boolean {
     return a.state !== 'enter' && a.state !== 'leave' && !a.gone && !this.sleeping(a);
@@ -1311,6 +1525,7 @@ export class Life {
     const e = a.mind.errand;
     if (!e || e.kind === 'visit' || e.kind === 'haul') return true;
     if (e.kind === 'nap') return false;
+    if (e.kind === 'natter') return false; // a word with a local
     if (e.kind === 'coffee') return e.step !== 'pour';
     return !e.arrived; // on the way to a chat, the critter or an office moment
   }
@@ -1412,8 +1627,17 @@ export class Life {
       const lead = this.byId.get(e.lead);
       return lead ? { pose: 'idle', face: { x: lead.x, y: lead.y } } : { pose: 'idle' };
     }
+    if (e?.kind === 'order' && e.arrived) return this.facing('idle', e.local);
+    if (e?.kind === 'watch' && e.arrived) return this.facing(this.locals?.of(e.local)?.art.show?.crowd === 'dance' ? 'dance' : 'idle', e.local);
+    if (e?.kind === 'natter') return this.facing('chat', e.local);
     // Only sleepers lie down: anyone awake, however long the wait, stands.
     return { pose: base === 'sleep' && !this.sleeping(a) ? 'idle' : base };
+  }
+
+  // `pose`, facing local k (none once it is gone).
+  private facing(pose: Pose, k: number): Look {
+    const l = this.locals?.of(k);
+    return l ? { pose, face: { x: l.at.x, y: l.at.y } } : { pose };
   }
 }
 

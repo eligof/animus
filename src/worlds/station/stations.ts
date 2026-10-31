@@ -18,8 +18,9 @@ type Spawn = (p: Particle) => void;
 // ── write: the helm ─────────────────────────────────────────────────────────
 // A white helm console against the wall: a sloped deck of buttons, toggles
 // and a trackball, a canted main screen with two side screens on arms; the
-// captain's chair turned out to one side. Working it wakes the screens
-// (code scrolling up the main one) and sets the buttons blinking.
+// captain's chair turned out to one side, the captain in it (see
+// npcs.ts). Working it wakes the screens (code scrolling up the main one)
+// and sets the buttons blinking, all round every two seconds.
 
 const MAIN: Quad = [[3.0, 1.3, 7.9], [8.0, 1.3, 7.9], [8.0, 0.8, 11.6], [3.0, 0.8, 11.6]];
 const DECK: Quad = [[0.9, 3.9, 5.0], [10.1, 3.9, 5.0], [10.1, 1.7, 6.6], [0.9, 1.7, 6.6]];
@@ -82,21 +83,21 @@ const write: PropArt = {
       k.cyl(1.4, 0.95, 7.1, 0.45, 0.65, C.white, { line: k.thin });
       sprouts(k, 1.4, 0.95, 7.7, 5, 1.1, 3);
       // the captain's chair, swung out to the left
-      chair(k, 2.0, 5.4);
+      chair(k, CHAIR.u, CHAIR.v);
     });
     const lit = v.active;
     const scr = sub(MAIN, 0.06, 0.07, 0.94, 0.93);
     glass(k, scr, lit);
     for (const [i, q] of SIDES.entries()) glass(k, sub(q, 0.12, 0.1, 0.88, 0.9), lit, i ? '#9effc4' : '#ffd08a');
     if (lit) {
-      codeRows(k, scr, v.t * 2.2);
+      codeRows(k, scr, v.t * 4.5, 7, undefined, 9);
       // a radar arc on the left screen, a level meter on the right
       const ls = sub(SIDES[0], 0.12, 0.1, 0.88, 0.9);
-      const sw = (v.t * 1.6) % 1;
+      const sw = v.t % 1;
       k.line([on(ls, 0.5, 0.15), on(ls, 0.5 + 0.35 * Math.cos(sw * Math.PI * 2), 0.5 + 0.35 * Math.sin(sw * Math.PI * 2))], '#b35a1e', Math.max(0.8, 0.12 * k.s));
       const rs = sub(SIDES[1], 0.12, 0.1, 0.88, 0.9);
       for (let i = 0; i < 4; i++) {
-        const hgt = 0.2 + 0.6 * (0.5 + 0.5 * Math.sin(v.t * (3 + i) + i * 1.7));
+        const hgt = 0.2 + 0.6 * (0.5 + 0.5 * Math.sin(v.t * Math.PI * (1 + i) + i * 1.7));
         k.poly([on(rs, 0.12 + i * 0.2, 0.1), on(rs, 0.26 + i * 0.2, 0.1), on(rs, 0.26 + i * 0.2, 0.1 + hgt * 0.8), on(rs, 0.12 + i * 0.2, 0.1 + hgt * 0.8)], '#1f7a4a', 0);
       }
       const [cu, cv, cz] = on(MAIN, 0.5, 0.5);
@@ -107,7 +108,7 @@ const write: PropArt = {
     }
     // the buttons: a steady few, or blinking while worked
     const pen = k.pen;
-    const tick = Math.floor(v.t * 3);
+    const tick = Math.floor(v.t * 3) % 6;
     for (const c of new Set(KEYS.map((q) => q[2]))) {
       pen.beginPath();
       let any = false;
@@ -131,6 +132,9 @@ const write: PropArt = {
 
 // The captain's chair: a swivel seat turned side-on to the room, a tall
 // white back with an orange cushion and headrest, armrests, five feet.
+// Where it stands on the helm, and its cushion's top.
+export const CHAIR = { u: 2.0, v: 5.4, seat: 3.75 };
+
 function chair(k: Kit, cu: number, cv: number): void {
   k.shadow(cu, cv, 1.9, 1.7, 0.25);
   for (let i = 0; i < 5; i++) {
@@ -343,10 +347,17 @@ const search: PropArt = {
 // ── run: the reactor core ───────────────────────────────────────────────────
 // A glowing column of plasma in a glass sleeve, held in three steel
 // collars over a round plinth striped in hazard paint, fed by thick pipes;
-// a capped head with vents on top and a little control post in front.
-// Running it sets bands of light climbing the core and throws sparks.
+// a capped head with vents on top and a little control post in front; by
+// the plinth's end a riser pipe with a valve wheel, a gauge and a vent,
+// worked by the engineer standing beside it (see npcs.ts). Running
+// it sets bands of light climbing the core (one band's step a second, so
+// it comes round in two) and throws sparks.
 
 const CORE = { c: 5.5, r: 1.9, z0: 2.7, z1: 15.0, mids: [6.8, 10.9] };
+// The riser on the floor by the plinth (the engineer stands beyond it,
+// outside the hazard ring painted round the reactor: see room.ts): where
+// it stands, its wheel's and its gauge's heights, the vent's top.
+const RISER = { u: 10.5, v: 9.1, wheel: 3.6, gauge: 5.4, top: 6.4 };
 
 // A coolant loop out of the head, arching down to the plinth at angle a.
 function loop(k: Kit, a: number, col: Color): void {
@@ -416,6 +427,30 @@ const run: PropArt = {
         const sa = Math.sin(a);
         k.rod([[c + ca * (r + 0.6), c + sa * (r + 0.6), 2.2], [c + ca * 3.0, c + sa * 3.0, 2.0], [c + ca * 3.3, c + sa * 3.3, 1.6]], C.orange, 0.42);
       }
+      // the riser: a pipe up off the floor, fed from the core's foot, a
+      // red valve wheel and a gauge toward the engineer, a vent on top
+      {
+        const { u, v: w, wheel, gauge, top } = RISER;
+        const a = Math.atan2(w - c, u - c);
+        k.rod([[c + (r + 0.75) * Math.cos(a), c + (r + 0.75) * Math.sin(a), 2.1], [u, w, 2.1]], C.steel, 0.36);
+        k.shadow(u, w, 0.7, 0.6, 0.25);
+        k.cyl(u, w, 0, 0.45, 0.35, C.steelDark, { line: k.thin });
+        k.rod([[u, w, 0.3], [u, w, top - 0.6]], C.steel, 0.36);
+        k.cyl(u, w, 1.9, 0.48, 0.4, C.steelDark, { line: k.thin });
+        k.rod([[u, w, top - 0.65], [u, w, top - 0.1], [u - 0.25, w - 0.2, top + 0.25]], C.steelDark, 0.3);
+        k.rod([[u, w, wheel], [u + 0.45, w, wheel]], C.steelDark, 0.14);
+        for (const a of [0.4, 0.4 + Math.PI / 2]) k.rod([[u + 0.48, w + Math.cos(a) * 0.6, wheel + Math.sin(a) * 0.6], [u + 0.48, w - Math.cos(a) * 0.6, wheel - Math.sin(a) * 0.6]], C.red, 0.07);
+        const wh = ring(k, [u + 0.48, w, wheel], [1, 0, 0], 0.62, 18);
+        for (const [col, wd] of [[INK, 0.2 * k.s + 2 * k.thin], [C.red, 0.2 * k.s]] as const) {
+          fillPts(k, wh, null, 0);
+          k.pen.lineWidth = Math.max(1, wd);
+          k.pen.strokeStyle = col;
+          k.pen.stroke();
+        }
+        k.rod([[u, w, gauge], [u + 0.3, w + 0.15, gauge]], C.steelDark, 0.14);
+        fillPts(k, ring(k, [u + 0.35, w + 0.15, gauge], [0.8, 0.6, 0], 0.42, 16), C.white, k.thin);
+        k.line([[u + 0.37, w + 0.17, gauge], [u + 0.37, w - 0.05, gauge + 0.25]], C.red, Math.max(0.7, 0.08 * k.s));
+      }
       // the control post in front, to one side
       k.shadow(1.6, 9.0, 1.0, 0.8, 0.25);
       k.box(1.0, 8.4, 0, 1.2, 1.2, 3.2, C.white, { round: 0.2 });
@@ -431,7 +466,7 @@ const run: PropArt = {
     band(k, c, c, r, z0, z1);
     pen.clip();
     for (let i = 0; i < 4; i++) {
-      const zz = z0 + (((i / 4) * (z1 - z0) + (lit ? v.t * 3.2 : 0.6)) % (z1 - z0));
+      const zz = z0 + (((i / 4) * (z1 - z0) + (lit ? (v.t * (z1 - z0)) / 4 : 0.6)) % (z1 - z0));
       const e = k.ell(c, c, zz, r);
       pen.beginPath();
       pen.ellipse(e.cx, e.cy, e.rx, e.ry * 1.4 + 0.3 * k.s, 0, 0, Math.PI);
@@ -451,7 +486,7 @@ const run: PropArt = {
     }
     // the post's screen, and the glow
     k.poly([[1.05, 8.45, 3.25], [2.15, 8.45, 3.25], [2.15, 9.55, 3.55], [1.05, 9.55, 3.55]], lit ? '#8fe6ff' : C.screenMid, 0);
-    k.halo(c, c, (z0 + z1) / 2, lit ? 7.5 + Math.sin(v.t * 5) * 0.6 : 6.5, '#5ce8ff', lit ? 0.45 : 0.3);
+    k.halo(c, c, (z0 + z1) / 2, lit ? 7.5 + Math.sin(v.t * 2 * Math.PI) * 0.6 : 6.5, '#5ce8ff', lit ? 0.45 : 0.3);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
@@ -466,12 +501,19 @@ const run: PropArt = {
 };
 
 // ── web: the comms station ──────────────────────────────────────────────────
-// A comms console on a pedestal, a round screen showing the planet laced
-// with links, a mast with a dish on top and an antenna whip. Browsing turns
+// A comms console on a pedestal, the comms officer behind it (see
+// npcs.ts); behind the officer a screen showing the planet laced with
+// links, on a mast with a dish on top and an antenna whip. Browsing turns
 // the dish to and fro, sends rings of signal off it and sets the level
-// lights dancing; signals glint up off the dish.
+// lights dancing, all round every two seconds; signals glint up off the
+// dish.
 
-const DISH = { c: [5.6, 3.2, 15.4] as P3, r: 2.4 };
+// The console's top, high at its back edge; the mast and the screen on
+// it, at the station's back, out of the officer's way.
+export const CONSOLE = { z: 6.2, back: 3.2 };
+const MAST = { u: 5.0, v: 0.4 };
+const PANEL = { u0: 4.0, u1: 8.2, v: 0.3, z0: 6.0, z1: 9.6 };
+const DISH = { c: [MAST.u, MAST.v, 15.4] as P3, r: 2.4 };
 
 const web: PropArt = {
   len: 9,
@@ -481,17 +523,19 @@ const web: PropArt = {
   draw(v: PropView): void {
     const k = still(v, 'web', 19, (k) => {
       k.shadow(4.5, 4.6, 4.4, 4.2, 0.3);
-      // the mast behind the console
-      k.cyl(5.6, 3.2, 0, 0.9, 0.4, C.steelDark);
-      k.rod([[5.6, 3.2, 0.4], [5.6, 3.2, 14.0]], C.steel, 0.36);
-      for (let z = 2; z < 13.5; z += 2.2) k.rod([[5.3, 3.2, z], [5.9, 3.2, z + 1.1]], C.steelDark, 0.08);
-      k.rod([[6.0, 3.0, 11.8], [7.8, 2.4, 16.8]], C.steelDark, 0.07);
-      k.dot(7.8, 2.4, 16.8, 0.2, C.red);
+      // the mast at the back, the screen on it
+      const { u: mu, v: mv } = MAST;
+      k.cyl(mu, mv, 0, 0.55, 0.4, C.steelDark);
+      k.rod([[mu, mv, 0.4], [mu, mv, 14.0]], C.steel, 0.36);
+      for (let z = 2; z < 13.5; z += 2.2) k.rod([[mu - 0.3, mv, z], [mu + 0.3, mv, z + 1.1]], C.steelDark, 0.08);
+      k.rod([[mu + 0.4, mv - 0.2, 11.8], [mu + 2.0, mv - 0.6, 16.6]], C.steelDark, 0.07);
+      k.dot(mu + 2.0, mv - 0.6, 16.6, 0.2, C.red);
+      k.box(PANEL.u0, PANEL.v, PANEL.z0, PANEL.u1 - PANEL.u0, 0.35, PANEL.z1 - PANEL.z0, C.navy, { round: 0.3 });
       // the console: a pedestal, a sloped top, the round screen on an arm
       k.box(1.4, 3.4, 0, 5.4, 3.6, 0.6, C.hullDark, { stripe: false });
       k.box(1.2, 3.2, 0.6, 5.8, 4.0, 4.2, C.white, { round: 0.25 });
       k.line([[1.3, 7.22, 3.6], [7.0, 7.22, 3.6], [7.0, 3.3, 3.6]], C.orange, Math.max(1, 0.3 * k.s));
-      const top: Quad = [[1.2, 7.2, 4.8], [7.0, 7.2, 4.8], [7.0, 3.2, 6.2], [1.2, 3.2, 6.2]];
+      const top: Quad = [[1.2, 7.2, 4.8], [7.0, 7.2, 4.8], [7.0, CONSOLE.back, CONSOLE.z], [1.2, CONSOLE.back, CONSOLE.z]];
       k.poly([...top], k.lgrad(top[0], top[3], [1, 0, 0], [[0, '#3a4766'], [1, '#2b3754']]), k.lw);
       k.poly([[7.0, 7.2, 4.8], [7.0, 7.2, 0.6], [7.0, 3.2, 0.6], [7.0, 3.2, 6.2]], shade(C.white, -0.18), k.thin);
       // dials and a handset in its cradle
@@ -502,7 +546,6 @@ const web: PropArt = {
         k.paint(C.chrome, k.thin);
       }
       k.rod([on(top, 0.62, 0.62), on(top, 0.9, 0.62)], '#2a2f3d', 0.35);
-      k.box(1.8, 1.9, 6.0, 4.4, 0.35, 3.6, C.navy, { round: 0.3 });
       // a stool and a crate of spares
       stool(k, 2.4, 8.2, C.orange, 3.2);
       crate(k, 7.0, 7.0, 0, 1.8, 1.8, 1.6, '#d9dfe8', '#3f6096', v.seed);
@@ -510,7 +553,8 @@ const web: PropArt = {
     const pen = k.pen;
     const lit = v.active;
     // the screen: the planet with links over it
-    const scr: Quad = [[2.1, 2.27, 6.4], [5.9, 2.27, 6.4], [5.9, 2.27, 9.3], [2.1, 2.27, 9.3]];
+    const sv = PANEL.v + 0.37;
+    const scr: Quad = [[PANEL.u0 + 0.3, sv, PANEL.z0 + 0.4], [PANEL.u1 - 0.3, sv, PANEL.z0 + 0.4], [PANEL.u1 - 0.3, sv, PANEL.z1 - 0.3], [PANEL.u0 + 0.3, sv, PANEL.z1 - 0.3]];
     glass(k, scr, lit, '#5fb2e8');
     const [gx, gy] = k.p(...on(scr, 0.5, 0.5));
     const gr = 1.1 * k.s;
@@ -518,10 +562,10 @@ const web: PropArt = {
     pen.arc(gx, gy, gr, 0, Math.PI * 2);
     k.paint(lit ? '#2f78c8' : '#1d4258', 0);
     if (lit) {
-      const ph = v.t * 0.8;
+      const ph = 0.15 * Math.sin(v.t * Math.PI);
       pen.beginPath();
       for (let i = 0; i < 5; i++) {
-        const a0 = hash(i, 31) * Math.PI * 2 + ph * 0.2;
+        const a0 = hash(i, 31) * Math.PI * 2 + ph;
         const a1 = a0 + 1 + hash(i, 32) * 2;
         pen.moveTo(gx + Math.cos(a0) * gr * 0.8, gy + Math.sin(a0) * gr * 0.6);
         pen.quadraticCurveTo(gx + Math.cos((a0 + a1) / 2) * gr * 1.7, gy + Math.sin((a0 + a1) / 2) * gr * 1.3, gx + Math.cos(a1) * gr * 0.8, gy + Math.sin(a1) * gr * 0.6);
@@ -529,22 +573,22 @@ const web: PropArt = {
       pen.strokeStyle = '#ffd27a';
       pen.lineWidth = Math.max(0.7, 0.08 * k.s);
       pen.stroke();
-      for (let i = 0; i < 5; i++) k.dot(...on(scr, 0.14 + i * 0.06, 0.12), 0.08, (i + Math.floor(v.t * 4)) % 3 ? '#5ee08f' : '#ffb04a');
+      for (let i = 0; i < 5; i++) k.dot(...on(scr, 0.14 + i * 0.06, 0.12), 0.08, (i + Math.floor(v.t * 3)) % 3 ? '#5ee08f' : '#ffb04a');
     }
     // level lights along the console's top
-    const top: Quad = [[1.2, 7.2, 4.8], [7.0, 7.2, 4.8], [7.0, 3.2, 6.2], [1.2, 3.2, 6.2]];
+    const top: Quad = [[1.2, 7.2, 4.8], [7.0, 7.2, 4.8], [7.0, CONSOLE.back, CONSOLE.z], [1.2, CONSOLE.back, CONSOLE.z]];
     for (let i = 0; i < 6; i++) {
-      const lvl = lit ? 0.5 + 0.5 * Math.sin(v.t * (4 + i) + i * 2) : 0.2;
+      const lvl = lit ? 0.5 + 0.5 * Math.sin(v.t * Math.PI * (1 + (i % 3)) + i * 2) : 0.2;
       k.dot(...on(top, 0.45 + i * 0.07, 0.22), 0.15, lvl > 0.5 ? (i > 3 ? C.amber : C.green) : '#2f3a50');
     }
     // the dish: turned by browsing, its feed on a tripod
-    const yaw = lit ? -0.6 + Math.sin(v.t * 0.9) * 0.55 : -0.6;
+    const yaw = lit ? -0.6 + Math.sin(v.t * Math.PI) * 0.55 : -0.6;
     const pitch = 0.75;
     const nrm: P3 = [Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch)];
     const ctr = DISH.c;
     const rim = ring(k, ctr, nrm, DISH.r, 24);
     const back = ring(k, [ctr[0] - nrm[0] * 0.5, ctr[1] - nrm[1] * 0.5, ctr[2] - nrm[2] * 0.5], nrm, DISH.r * 0.55, 16);
-    k.rod([[5.6, 3.2, 13.8], [ctr[0] - nrm[0] * 0.5, ctr[1] - nrm[1] * 0.5, ctr[2] - nrm[2] * 0.5]], C.steelDark, 0.3);
+    k.rod([[MAST.u, MAST.v, 13.8], [ctr[0] - nrm[0] * 0.5, ctr[1] - nrm[1] * 0.5, ctr[2] - nrm[2] * 0.5]], C.steelDark, 0.3);
     fillPts(k, hull([...rim, ...back]), C.chrome, k.lw);
     fillPts(k, rim, k.grad([ctr[0] - 1, ctr[1], ctr[2] + 1], [ctr[0] + 1, ctr[1], ctr[2] - 1], [[0, '#ffffff'], [1, '#b9c4d2']]), k.thin);
     const feed: P3 = [ctr[0] + nrm[0] * 1.3, ctr[1] + nrm[1] * 1.3, ctr[2] + nrm[2] * 1.3];
@@ -557,7 +601,7 @@ const web: PropArt = {
     if (!lit) return;
     // rings of signal off the dish
     for (let i = 0; i < 3; i++) {
-      const f = (v.t * 0.9 + i / 3) % 1;
+      const f = ((v.t * 3 + i) % 3) / 3;
       const cc: P3 = [feed[0] + nrm[0] * f * 2.4, feed[1] + nrm[1] * f * 2.4, feed[2] + nrm[2] * f * 2.4];
       fillPts(k, ring(k, cc, nrm, 0.5 + f * 1.6, 18), null, 0);
       pen.strokeStyle = withAlpha('#8ff6ff', 0.8 * (1 - f));

@@ -227,3 +227,8 @@ test('The Vault: its desks have things of their own to pick from, and something 
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test('The Vault: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(vault.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['teller', 'write', 'seated'], ['safecracker', 'search', 'standing'], ['guard', 'entrance', 'standing']]);
+  assert.ok(vault.npcs!.some((n) => n.show), 'no show');
+});

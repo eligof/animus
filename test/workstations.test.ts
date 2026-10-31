@@ -362,3 +362,19 @@ test('twenty at their workstations: the stage\'s frame and the scene\'s plate st
   scene.plate(f);
   budget('a plate of twenty at their workstations', (k) => scene.plate({ ...f, t: f.t + k / 30 }), 16, { runs: 5, calls: 1 });
 });
+
+test("twenty at their workstations with the club's locals at work: the plate stays within budget", () => {
+  const start = Date.UTC(2026, 9, 22, 21, 30, 0);
+  const w = new World({ theme: getTheme('club')!, live: new StressSource(4, 4, start), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start, images: true });
+  w.full = true;
+  w.resize(150, 46);
+  let t = start;
+  for (let i = 0; i < 15 * 18; i++) w.tick((t = start + i * (1000 / 18)));
+  w.draw(new Screen(150, 46), t);
+  const f = w.scene()!;
+  assert.equal(f.desks!.length, 20);
+  assert.ok(f.npcs && f.npcs.length >= 1, 'no locals');
+  const scene = new Scene();
+  scene.plate(f);
+  budget('a plate of twenty with the locals', (k) => scene.plate({ ...f, t: f.t + k / 30 }), 16, { runs: 5, calls: 1 });
+});

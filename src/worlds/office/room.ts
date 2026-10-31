@@ -12,6 +12,7 @@ import { dome, hull, succulent } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, circle, hash, withAlpha } from './kit.ts';
+import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The Startup's shell, a loft at dusk: polished concrete in big slabs with
@@ -69,14 +70,15 @@ const PLANS = new Map<string, Plan>();
 // The stage's layout for a room this size (planLayout is a pure function of
 // the room's side, so the shell can find the stations without being told),
 // the furniture it stands along the walls (planRoom seeded by the world's
-// id, as the stage furnishes it), and what hangs on the walls between them.
+// id, its locals in, as the stage furnishes it), and what hangs on the
+// walls between them.
 export function planFor(W: number, D: number, H: number, T: number): Plan {
   const key = `${W}x${D}x${H}x${T}`;
   const hit = PLANS.get(key);
   if (hit) return hit;
   let L = planLayout(2 * W + 12, W + H + 12, 'office');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
-  const decor = L.slots.length ? planRoom({ id: 'office', stations: STATIONS, decor: DECOR } as unknown as WorldDef, L, hashString('office')).props.filter((p) => !p.slot) : [];
+  const decor = L.slots.length ? planRoom({ id: 'office', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('office')).props.filter((p) => !p.slot) : [];
   const plan = { L, features: features(L, decor) };
   PLANS.set(key, plan);
   return plan;
@@ -254,9 +256,10 @@ const NEON = { z0: 20, z1: 26 };
 // The defaults (warm either side of the espresso counter, a look at the
 // dashboards and the shelves, a dance at the hub, the dog's spot in the
 // yard) less their drink by the run prop (a server rack here) and their
-// seat out on the floor: coffee at the espresso counter instead, at either
-// end of it, seats at two of its stools (just off the island, by the stools
-// along its front), and a look out of up to three windows at the city.
+// seat out on the floor: coffee at the espresso counter instead, either
+// side of where the office manager serves and the next waits (see npcs.ts),
+// seats at two of its stools (just off the island, by the stools along its
+// front), and a look out of up to three windows at the city.
 const STOOLS = [7.5, 12.4]; // the stools sat at, along the island (see idle in stations.ts)
 const STOOL_OUT = 9.7; // the stools' line, out from the island's back
 
@@ -273,7 +276,7 @@ export function officePois(L: Layout): Poi[] {
   const bar = slot('idle');
   if (bar) {
     out.push({ ...at(bar, -4, 0), kind: 'drink', face: mid(bar) });
-    out.push({ ...at(bar, 4, 0), kind: 'drink', face: mid(bar) });
+    out.push({ ...at(bar, 7, 0), kind: 'drink', face: mid(bar) });
     // a step off the footprint (spots inside a prop or a unit of it are dropped)
     const by = Math.max(STOOL_OUT + 2, bar.dep + 1);
     for (const u of STOOLS) {

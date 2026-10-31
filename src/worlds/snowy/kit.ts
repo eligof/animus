@@ -90,7 +90,7 @@ export const C = {
 // its two sides along the wall and the top of its arch).
 export const SPOT = {
   fire: [9.2, 6.2],
-  stove: [5.2, 4.4],
+  stove: [3.7, 4.4],
   hole: [4.4, 4.4],
   gate: [3.6, 10.4, 12.2],
 } as const;

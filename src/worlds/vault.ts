@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './vault/decor.ts';
 import { INK } from './vault/kit.ts';
+import { NPCS } from './vault/npcs.ts';
 import { room, vaultPois } from './vault/room.ts';
 import { STATIONS } from './vault/stations.ts';
 import { WORKSTATION } from './vault/workstation.ts';
@@ -11,7 +12,8 @@ import { WORKSTATION } from './vault/workstation.ts';
 // old bank vault in outlined cartoon (gunmetal ink): gold and amber against
 // cool steel. The shell in vault/room.ts (deposit banks, gold niches, the
 // great round door), the stations in vault/stations.ts, the furniture in
-// vault/decor.ts, all drawn with the kit in vault/kit.ts and vault/bits.ts.
+// vault/decor.ts, its locals in vault/npcs.ts, all drawn with the kit in
+// vault/kit.ts and vault/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#08090a'),
@@ -45,6 +47,7 @@ export const vault: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'guard',
   critter: { kind: 'drone', body: hex('#a9b3bf') }, // a security drone
   finale: { colors: [[255, 211, 74]] }, // gold dust

@@ -2,12 +2,16 @@ import { hex } from '../term/color.ts';
 import type { Palette } from '../themes/types.ts';
 import { DECOR } from './hell/decor.ts';
 import { INK } from './hell/kit.ts';
+import { NPCS } from './hell/npcs.ts';
 import { hellPois, room } from './hell/room.ts';
 import { STATIONS } from './hell/stations.ts';
 import { WORKSTATION } from './hell/workstation.ts';
 import type { WorldDef } from './types.ts';
 
-// Hell: lava lakes, brimstone and the bones of the damned.
+// Hell: lava lakes, brimstone and the bones of the damned. The shell in
+// hell/room.ts, the stations in hell/stations.ts, the furniture in
+// hell/decor.ts, its locals in hell/npcs.ts, all drawn with the kit in
+// hell/kit.ts and hell/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#0c0404'),
@@ -41,6 +45,7 @@ export const hell: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'demon',
   critter: { kind: 'imp', body: hex('#d2402a') }, // an imp
   finale: { colors: [[255, 211, 74]] }, // gold dust
