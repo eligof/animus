@@ -334,6 +334,36 @@ It is all for show: nothing is sent or changed, a working agent never
 leaves its workstation for it, and anyone given work drops it at once. `o`
 turns office life off and on, for pure status, and is remembered.
 
+## The locals
+
+![The locals at work: the club's DJ at the decks, the café's barista and old regular, the startup's Friday cake, the vault's teller and safecracker](docs/screenshots/locals.png)
+
+Every world has three locals: people who are not agents, each working one
+of its stations where the job puts them. The club has its DJ behind the
+decks, a bartender shaking cocktails and a coat-check attendant at her
+hatch; the café a barista, a pastry chef and an old regular with his paper
+in the wingback; the mines a blacksmith, an assayer and an old prospector;
+hell a contract clerk, a fire-breathing forge demon and a witch at her
+cauldron; and so on in all sixteen worlds, each drawn in its world's own
+style. Some stand behind their counter, some sit, some stand at their work.
+
+They live alongside the crew:
+
+- **They react.** The one by the door greets each newcomer; all three
+  celebrate a finished task their own way, flinch at an error and applaud
+  a level-up.
+- **They serve.** A coffee run goes to the world's barista, bartender or
+  cook, who hands over the cup; an idle agent may also order something (a
+  croissant, a coat ticket, a slice of pizza) and gets it handed over, one
+  at a time, the next one waiting its turn.
+- **They put on a show.** Every few minutes one of them performs (the DJ's
+  drop, latte art, a forged blade, Friday cake, a big catch) and idle
+  agents gather round in a ring to watch or dance, then applaud.
+- **They chat.** An idle agent passing by sometimes stops for a word.
+
+A working agent is never pulled away for any of it. `n` turns the locals
+off and on, and is remembered.
+
 ## Keys
 
 | key | action |
@@ -351,6 +381,7 @@ turns office life off and on, for pure status, and is remembered.
 | `r` | scene / dashboard (remembered) |
 | `l` | lighting on / off (remembered) |
 | `o` | office life on / off (remembered) |
+| `n` | locals on / off (remembered) |
 | `d` | demo crew on / off (mixes with live agents) |
 | `space` | pause |
 | `?` | help |
@@ -375,7 +406,7 @@ Claude Code already keeps on disk:
   for growth.
 
 It writes only its own files: `~/.config/animus/config.json` (world, view,
-lighting, office life) and `~/.config/animus/crews.json` (growth). The one
+lighting, office life, locals) and `~/.config/animus/crews.json` (growth). The one
 thing it ever sends is a chat message you type, to the session you picked,
 through that session's local socket (see
 [Talking to an agent](#talking-to-an-agent)).
@@ -478,6 +509,11 @@ Layout:
    few) and `loops` (one or two things that move while its agent works):
    `node scripts/desk-spots.ts <id> <r> <h>` maps where a thing of a given
    size may stand.
+   Its `npcs` are its three locals (see `src/worlds/club/npcs.ts`): each
+   names its station, where it stands (behind its counter, seated, or
+   standing beside it), its parts drawn on the shared puppet
+   (`src/art/npc/`) and its work, show and serve; look at them with
+   `node scripts/npc-sheet.ts <id> /tmp/<id>-npcs.png`.
 2. A new costume holds a tool in each of the five grip files in
    `src/art/figure/tools/` (`write.ts`, `read.ts`, `run.ts`, `search.ts`,
    `web.ts`; today's for everyone until it gets its own) and a row in the
