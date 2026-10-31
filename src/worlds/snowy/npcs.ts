@@ -243,7 +243,7 @@ function cookFore(sk: Sketch, p: Puppet, k: 0 | 1): void {
     // stirring, turned back to the lips for a taste, held up high in a
     // cheer
     const work = p.act === 'work' ? 1 : 0;
-    const taste = work * (ease(p.u, 0.62, 0.72) - ease(p.u, 0.9, 1));
+    const taste = work * cookTaste(p.u);
     const high = p.act === 'celebrate' ? env(p.u, 0.2, 0.8) : 0;
     const tip = work * (-0.15 - 0.95 * taste) + (1 - work) * (0.3 + (Math.PI - 0.5) * high);
     const grip = 1.0 + 0.9 * taste;
@@ -263,15 +263,20 @@ function cookFore(sk: Sketch, p: Puppet, k: 0 | 1): void {
   }
 }
 
+// How far the cook has the ladle up at his lips, at u round his work:
+// lifted out of the pot over three frames, a taste and a nod, lowered back
+// into it over three.
+const cookTaste = (u: number): number => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
+
 // At the stove: two rounds of the ladle in the pot, the near fist on the
 // hip, then the ladle up to the lips, a happy taste, a nod.
 const cookWork: NpcLoop = {
   secs: 2.4,
   frames: 12,
   pose(u) {
-    const taste = ease(u, 0.62, 0.72) - ease(u, 0.9, 1);
+    const taste = cookTaste(u);
     const stir = 1 - taste;
-    const a = Math.min(1, u / 0.62) * TAU * 2;
+    const a = Math.min(1, u / 0.5) * TAU * 2;
     return {
       ...rest(),
       bob: 0.05 * Math.sin(a) * stir,
@@ -287,8 +292,9 @@ const cookWork: NpcLoop = {
   },
 };
 
-// A cheer: the ladle up high like a toast, the near hand on the belly, a
-// laugh and a bounce; from rest and back.
+// A cheer: both arms up and out, the ladle up high like a toast in the far
+// hand (up in front of him), the near hand up behind his head, clear of
+// his face; a laugh and a bounce; from rest and back.
 const cookCelebrate: NpcLoop = {
   secs: 1.6,
   frames: 8,
@@ -300,7 +306,7 @@ const cookCelebrate: NpcLoop = {
       bob: 0.25 * laugh * k,
       lean: -0.06 * k,
       tilt: -0.12 * k,
-      arms: [{ sh: 0.12 + 0.5 * k, el: 0.2 + 1.5 * k }, { sh: 0.12 + 2.6 * k, el: 0.2 + 0.1 * k }],
+      arms: [{ sh: 0.12 - (1.8 + 0.15 * laugh) * k, el: 0.2 - 0.9 * k }, { sh: 0.12 + 1.75 * k, el: 0.2 + 0.6 * k }],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'smile',
     };
@@ -597,7 +603,8 @@ const fisherWork: NpcLoop = {
 
 // The big catch: a bite (it sits up), a tug of war (leaning back on the
 // rod bent hard, rocking), the yank (the fish flies out), and the fish
-// shown off in both hands, lifted again and again, a grin.
+// shown off in both hands, lifted again and again, a grin, and lowered
+// over the last three frames, back to the rod as the loop comes round.
 const fisherShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
   frames: 16,
@@ -607,7 +614,7 @@ const fisherShow: NpcLoop & { crowd: 'watch' } = {
     const tug = bump(u, 0.1, 0.64);
     const rock = Math.sin(u * TAU * 5) * tug;
     const yank = bump(u, 0.5, 0.7);
-    const held = ease(u, 0.6, 0.7);
+    const held = ease(u, 0.6, 0.7) - ease(u, 0.82, 1);
     const lift = held * Math.abs(Math.sin(u * TAU * 3));
     return {
       ...rest(),
@@ -657,7 +664,7 @@ const RADIO_BONES: Bones = { neck: [0.15, -5.7], shoulders: [[-1.75, -5.1], [1.9
 const RADIO_PLACE: NpcPlace = { mode: 'seated', u: RADIO_STOOL.u, v: RADIO_STOOL.v, z: RADIO_STOOL.top - 1, look: 'back' };
 
 // How far its near hand has gone from the dial up to its ear (0 to 1).
-const earOf = (u: number) => ease(u, 0.35, 0.5) - ease(u, 0.85, 0.97);
+const earOf = (u: number) => ease(u, 0.3, 0.55) - ease(u, 0.76, 1);
 
 // How the signal comes in at the ear (0 none to 1) at this frame.
 const signal = (p: Puppet) => (p.act === 'work' ? earOf(p.u) : 0);

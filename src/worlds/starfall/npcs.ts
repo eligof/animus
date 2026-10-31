@@ -94,9 +94,14 @@ const GLOVE_D = '#b09766';
 
 const TECH_BONES: Bones = { neck: [0.1, -7.8], shoulders: [[-1.95, -7.2], [2.05, -7.2]], upper: 1.75, fore: 1.55 };
 
-// How far into its work the tech scoops (0..1) and reads its slate.
-const scooping = (u: number) => ease(u, 0.02, 0.12) - ease(u, 0.42, 0.52);
-const reading = (u: number) => ease(u, 0.5, 0.6) - ease(u, 0.9, 0.99);
+// How far into its work the tech scoops (0..1) and reads its slate, by
+// the frame (f = u * 12): the scoop up out of rest over two frames, down
+// over two (6) as the slate comes up over two (7), and the slate down over
+// two (11) to rest at frame 0; the dip into the bin eased in and out round
+// frame 3.
+const scooping = (u: number) => ease(u * 12, 0, 2) - ease(u * 12, 5, 7);
+const reading = (u: number) => ease(u * 12, 6, 8) - ease(u * 12, 10, 12);
+const dipping = (u: number) => bump(u * 12, 1.5, 4.5);
 
 const techParts: NpcParts = {
   body(sk, _p, back) {
@@ -201,7 +206,7 @@ const techParts: NpcParts = {
     sk.blob(circ(0, f, 0.72), k ? GLOVE_D : GLOVE, { dark: GLOVE_D, d: 0.25 });
     if (p.act !== 'work') return;
     // the scoop in the near hand while it samples, nuggets in it once dipped
-    if (k === 0 && scooping(p.u) > 0.5) {
+    if (k === 0 && scooping(p.u) > 0.3) {
       held(sk, f, () => {
         sk.limb([0, 0, 0.9, 0.5], 0.32, '#8c939b');
         sk.blob((q) => {
@@ -238,7 +243,7 @@ const techWork: NpcLoop = {
   pose(u) {
     const s = scooping(u);
     const r = reading(u);
-    const dip = bump(u, 0.08, 0.3);
+    const dip = dipping(u);
     const sift = u > 0.25 && u < 0.42 ? Math.sin(u * TAU * 12) : 0;
     const tap = bump(u, 0.62, 0.72) + bump(u, 0.72, 0.82);
     return {
@@ -451,7 +456,7 @@ const pilotWork: NpcLoop = {
   pose(u) {
     const w = Math.sin(u * TAU);
     const w2 = Math.sin(u * TAU * 2 + 0.6);
-    const reach = ease(u, 0.08, 0.2) - ease(u, 0.36, 0.46);
+    const reach = ease(u * 12, 0.5, 3) - ease(u * 12, 4, 6);
     const tap = bump(u, 0.22, 0.3) + bump(u, 0.3, 0.38);
     const a = bump(u, 0.5, 0.92);
     return {
@@ -642,7 +647,7 @@ const cookParts: NpcParts = {
           sk.blob((q) => q.roundRect(0.3, 0.05, 1.4, 0.3, 0.12), C.cyan, { line: 0, sil: false });
         });
       } else {
-        const taste = bump(p.u, 0.62, 0.95) > 0.4;
+        const taste = cookTaste(p.u) > 0.4;
         sk.at(move(0, f), () => {
           sk.limb([0, 0, 0, 1.9], 0.26, '#cfd6de');
           if (taste) sk.blob(ell(0, 2.15, 0.42, 0.55), '#cfd6de', { dark: '#8c939b', d: 0.1 });
@@ -678,14 +683,19 @@ const cookParts: NpcParts = {
   },
 };
 
+// How far the cook has the spoon up for a taste at u round its work
+// (f = u * 12, the frame): up over three frames from 5, a taste, down over
+// three from 9 (the whisk swapped for the spoon halfway up).
+const cookTaste = (u: number): number => ease(u * 12, 5.5, 8.5) - ease(u * 12, 9, 12);
+
 // Whisks the bowl, round and round, then tastes from the spoon, pleased.
 const cookWork: NpcLoop = {
   secs: 2.4,
   frames: 12,
   pose(u) {
-    const stir = 1 - ease(u, 0.55, 0.65) + ease(u, 0.92, 1);
+    const taste = cookTaste(u);
+    const stir = 1 - taste;
     const ph = (u / 0.6) * TAU * 3;
-    const taste = bump(u, 0.62, 0.95);
     return {
       ...rest(),
       bob: 0.12 * Math.abs(Math.sin(ph)) * stir,
@@ -703,7 +713,8 @@ const cookWork: NpcLoop = {
 
 // The low-gravity pancake: a dip and a flick of the pan, the pancake
 // floating up high and turning, watched all the way, caught, and the far
-// arm up.
+// arm up and out (over two frames, and down over two as the loop comes
+// round).
 const cookShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4,
   frames: 16,
@@ -711,13 +722,13 @@ const cookShow: NpcLoop & { crowd: 'watch' } = {
   pose(u) {
     const h = flight(u);
     const flick = bump(u, 0.08, 0.2);
-    const ta = ease(u, 0.82, 0.9) - ease(u, 0.96, 1);
+    const ta = ease(u * 16, 12, 14) - ease(u * 16, 14, 16);
     return {
       ...rest(),
       bob: -0.2 * bump(u, 0.02, 0.12) + 0.2 * flick,
       lean: -0.06 * h,
       tilt: -0.22 * h + 0.06 * bump(u, 0.74, 0.84),
-      arms: [{ sh: 1.05 + 0.35 * flick - 0.15 * bump(u, 0.74, 0.86), el: 0.45 - 0.2 * flick }, { sh: 0.12 + 0.5 * h + 2.5 * ta, el: 0.2 + 0.4 * h - 0.1 * ta }],
+      arms: [{ sh: 1.05 + 0.35 * flick - 0.15 * bump(u, 0.74, 0.86), el: 0.45 - 0.2 * flick }, { sh: 0.12 + 0.5 * h + 1.6 * ta, el: 0.2 + 0.4 * h + 0.5 * ta }],
       eyes: ta > 0.3 ? 'happy' : 'open',
       mouth: h > 0.3 ? 'o' : ta > 0.3 ? 'open' : 'smile',
     };

@@ -203,8 +203,8 @@ const herbParts: NpcParts = {
     sk.blob(circ(0, f, 0.6), k ? H_SKIN_D : H_SKIN, { dark: H_SKIN_D, d: 0.2 });
     if (k === 0 && (work || p.act === 'celebrate')) {
       // the pestle slanting down into the mortar, or a sprig to sniff (or
-      // to wave)
-      const sniff = p.act === 'celebrate' || p.u >= 0.62;
+      // to wave): swapped halfway up to the nose and halfway back down
+      const sniff = p.act === 'celebrate' || herbSniff(p.u) > 0.5;
       sk.at(upright(p, 0, f), () => {
         if (sniff) sprig(sk, 0.15, 0.2, 1.9, 0.5);
         else {
@@ -217,13 +217,17 @@ const herbParts: NpcParts = {
   },
 };
 
+// How far the herbalist has a sprig up at his nose, at u round his work:
+// lifted over three frames, a long sniff, lowered over three.
+const herbSniff = (u: number): number => ease(u, 0.43, 0.68) - ease(u, 0.76, 1);
+
 // At the chest: the pestle going round in the mortar, then a sprig lifted
 // to the nose, a long sniff, eyes shut, and back to grinding.
 const herbWork: NpcLoop = {
   secs: 3.2,
   frames: 12,
   pose(u) {
-    const sniff = ease(u, 0.6, 0.7) - ease(u, 0.92, 1);
+    const sniff = herbSniff(u);
     const g = 1 - sniff;
     const round = u * TAU * 3;
     return {
@@ -240,8 +244,9 @@ const herbWork: NpcLoop = {
   },
 };
 
-// A little jig: a sprig held high, the other hand on the hip, a hop on
-// each foot; from rest and back.
+// A little jig: a sprig waved high beside his head (the near arm up
+// behind it, clear of his face), the other hand on the hip, a hop on each
+// foot; from rest and back.
 const herbCelebrate: NpcLoop = {
   secs: 1.6,
   frames: 8,
@@ -253,7 +258,7 @@ const herbCelebrate: NpcLoop = {
       bob: 0.35 * hop * k,
       lean: 0.06 * Math.sin(u * TAU * 2) * k,
       tilt: -0.08 * k,
-      arms: [{ sh: 0.12 + 2.55 * k, el: 0.2 + 0.2 * k }, { sh: 0.12 + 0.35 * k, el: 0.2 + 1.6 * k }],
+      arms: [{ sh: 0.12 - (2.1 + 0.15 * hop) * k, el: 0.2 - 0.85 * k }, { sh: 0.12 + 0.35 * k, el: 0.2 + 1.6 * k }],
       eyes: k > 0.4 ? 'happy' : 'open',
       mouth: k > 0.4 ? 'open' : 'smile',
     };
@@ -530,8 +535,9 @@ const witchWork: NpcLoop = {
   },
 };
 
-// A cackle: both arms flung up, the ladle swung high, head thrown back,
-// shaking with laughter; from rest and back.
+// A cackle: both arms flung up and out (the near one up behind her head,
+// the far one up in front, hands clear of her face), the ladle swung high,
+// head thrown back, shaking with laughter; from rest and back.
 const witchCelebrate: NpcLoop = {
   secs: 1.8,
   frames: 10,
@@ -544,8 +550,8 @@ const witchCelebrate: NpcLoop = {
       lean: -0.1 * k,
       tilt: -0.22 * k + 0.05 * shake * k,
       arms: [
-        { sh: 0.12 + 2.55 * k, el: 0.2 + 0.25 * k },
-        { sh: 0.12 + 2.35 * k, el: 0.2 + 0.45 * k },
+        { sh: 0.12 - 1.95 * k, el: 0.2 - 0.95 * k },
+        { sh: 0.12 + 1.7 * k, el: 0.2 + 0.7 * k },
       ],
       eyes: k > 0.35 ? 'happy' : 'open',
       mouth: k > 0.35 ? 'open' : 'smile',
@@ -741,8 +747,10 @@ const mycWork: NpcLoop = {
   },
 };
 
-// The spore dance: up off the moss, bouncing on every beat, arms waving in
-// turn, a burst of spores off its cap each bounce.
+// The spore dance: up off the moss, bouncing on every beat, arms out to
+// either side and waving up in turn (the near one up behind its head, the
+// far one up in front, its stubby hands never over its face), a burst of
+// spores off its cap each bounce.
 const mycShow: NpcLoop & { crowd: 'dance' } = {
   secs: 3.2,
   frames: 16,
@@ -757,8 +765,8 @@ const mycShow: NpcLoop & { crowd: 'dance' } = {
       lean: 0.12 * side,
       tilt: -0.1 * side,
       arms: [
-        { sh: 1.6 + 1.0 * Math.max(0, side), el: 0.4 + 0.5 * Math.max(0, -side) },
-        { sh: 1.6 + 1.0 * Math.max(0, -side), el: 0.4 + 0.5 * Math.max(0, side) },
+        { sh: -1.3 - 0.5 * side, el: -0.6 - 0.3 * Math.max(0, side) },
+        { sh: 1.4 - 0.5 * side, el: 0.6 + 0.3 * Math.max(0, -side) },
       ],
       eyes: 'happy',
       mouth: hop > 0.5 ? 'open' : 'smile',
@@ -766,14 +774,15 @@ const mycShow: NpcLoop & { crowd: 'dance' } = {
   },
 };
 
-// A hop and a great puff, both arms up; from rest and back.
+// A hop and a great puff, both arms up and out (the near one up behind
+// its head, the far one up in front, hands beside its face); from rest
+// and back.
 const mycCelebrate: NpcLoop = {
   secs: 1.6,
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
-    const up = { sh: 0.12 + 2.6 * k, el: 0.2 + 0.1 * k };
-    return { ...rest(), bob: 0.9 * bump(u, 0.15, 0.6), tilt: -0.1 * k, arms: [up, up], eyes: k > 0.3 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.9 * bump(u, 0.15, 0.6), tilt: -0.1 * k, arms: [{ sh: 0.12 - 1.9 * k, el: 0.2 - 0.9 * k }, { sh: 0.12 + 1.7 * k, el: 0.2 + 0.7 * k }], eyes: k > 0.3 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'smile' };
   },
 };
 

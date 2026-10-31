@@ -45,10 +45,10 @@ function fizz(sk: Sketch, x: number, y: number, t: number, color: Color, rise = 
 // ── the assistant ────────────────────────────────────────────────────────
 // A hunchback in a patched, ragged burlap smock with a rope belt, his hump
 // high on his back, a big bald head with three hairs and a single bushy
-// brow, one snaggle tooth, big ears, long arms. He stands on the floor at
-// the end of the coil's console, a hand on its great lever, rubbing his
-// hands in glee; his show is "it's alive!": the lever yanked, arms flung
-// up, a cackle.
+// brow, one snaggle tooth, big ears, long arms. He stands on the floor
+// before the near end of the coil's low console, a hand on its great lever,
+// rubbing his hands in glee; his show is "it's alive!": the lever yanked,
+// arms flung up, a cackle.
 
 const AS = {
   skin: '#d6c9a6',
@@ -135,18 +135,22 @@ const assistantParts: NpcParts = {
 };
 
 // The near hand on the lever's knob (thrown back toward him), as solved
-// for its place: the upper arm back, the forearm reaching down to it.
-const ON_LEVER = { sh: -0.16, el: 1.59 };
+// for its place: the arm out before him, the knob at his belly, the rod
+// running down from it to the console at his side; the far hand down on
+// the console's top.
+const ON_LEVER = { sh: 0.6, el: 1.32 };
+const ON_CONSOLE = { sh: 0.5, el: 0.6 };
 // Both hands together before his chest, rubbing.
 const RUB: readonly [{ sh: number; el: number }, { sh: number; el: number }] = [{ sh: 0.71, el: 1.17 }, { sh: -0.48, el: 2.71 }];
 
 // A hand on the lever, the other drumming the console; then both hands
-// together, rubbing, and a giggle.
+// together (over three frames), rubbing, and a giggle, and back to the
+// lever (over three).
 const assistantWork: NpcLoop = {
   secs: 2.4,
   frames: 12,
   pose(u) {
-    const rub = ease(u, 0.42, 0.52) - ease(u, 0.9, 1);
+    const rub = ease(u, 0.35, 0.6) - ease(u, 0.78, 1);
     const wring = Math.sin(u * TAU * 5) * bump(u, 0.5, 0.92);
     const drum = Math.sin(u * TAU * 4) * (1 - rub);
     return {
@@ -156,7 +160,7 @@ const assistantWork: NpcLoop = {
       tilt: 0.05 + 0.08 * rub + 0.05 * Math.abs(wring),
       arms: [
         { sh: ON_LEVER.sh + (RUB[0].sh - ON_LEVER.sh) * rub + 0.08 * wring, el: ON_LEVER.el + (RUB[0].el - ON_LEVER.el) * rub },
-        { sh: 0.75 + (RUB[1].sh - 0.75) * rub + 0.05 * drum, el: 0.9 + (RUB[1].el - 0.9) * rub - 0.12 * wring },
+        { sh: ON_CONSOLE.sh + (RUB[1].sh - ON_CONSOLE.sh) * rub + 0.05 * drum, el: ON_CONSOLE.el + (RUB[1].el - ON_CONSOLE.el) * rub - 0.12 * wring },
       ],
       eyes: rub > 0.5 ? 'happy' : 'open',
       mouth: rub > 0.5 ? (wring > 0 ? 'open' : 'smile') : 'smile',
@@ -165,14 +169,16 @@ const assistantWork: NpcLoop = {
 };
 
 // "It's alive!": both hands on the lever, a yank, then his arms flung up
-// and waving, head thrown back, cackling; then back to the lever.
+// and waving (over three frames: the near one swung back and up behind his
+// head, never across his face), head thrown back, cackling; then back to
+// the lever over three.
 const assistantShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
   frames: 16,
   crowd: 'watch',
   pose(u) {
     const yank = bump(u, 0.02, 0.22);
-    const up = ease(u, 0.2, 0.3) - ease(u, 0.85, 0.97);
+    const up = ease(u * 16, 2.5, 5.5) - ease(u * 16, 12.5, 15.5);
     const wave = Math.sin(u * TAU * 4);
     const both = { sh: ON_LEVER.sh, el: ON_LEVER.el };
     const lever: [{ sh: number; el: number }, { sh: number; el: number }] = [both, { sh: 0.1, el: 1.2 + 0.2 * yank }];
@@ -184,7 +190,7 @@ const assistantShow: NpcLoop & { crowd: 'watch' } = {
       // flung up and out past his great head: the near one up behind it,
       // the far one up before his face
       arms: [
-        { sh: lever[0].sh * (1 - up) + (3.65 + 0.2 * wave) * up, el: lever[0].el * (1 - up) - 0.2 * up },
+        { sh: lever[0].sh * (1 - up) + (3.65 - TAU + 0.2 * wave) * up, el: lever[0].el * (1 - up) - 0.2 * up },
         { sh: lever[1].sh * (1 - up) + (2.0 - 0.2 * wave) * up, el: lever[1].el * (1 - up) - 0.15 * up },
       ],
       eyes: up > 0.5 ? 'happy' : yank > 0.5 ? 'shut' : 'open',
@@ -207,8 +213,9 @@ const assistant: Npc = {
 
 // ── the professor ────────────────────────────────────────────────────────
 // An old professor with a wild white halo of hair round a bald crown, a
-// great white moustache, round wire spectacles, a tweed jacket with elbow
-// patches over a white shirt and a red bow tie. He stands on the floor
+// great white moustache, round wire spectacles, a blue-grey tweed jacket
+// (apart from the assistant's brown smock) with elbow patches over a white
+// shirt and a red bow tie, dark trousers. He stands on the floor
 // before the near end of the chalkboard, turned along it, tapping a line
 // of working with a short pointer, then pushing his spectacles up his
 // nose; he celebrates with a finger up: eureka.
@@ -218,13 +225,13 @@ const PF = {
   skinD: '#c99f7a',
   hair: '#f2f1ec',
   hairD: '#c9ccc8',
-  tweed: '#7d6a48',
-  tweedD: '#5c4d33',
-  patch: '#5a4630',
+  tweed: '#56657e',
+  tweedD: '#3f4b5f',
+  patch: '#323c4e',
   shirt: '#f6f2e6',
   tie: C.red,
-  trousers: '#6a6c72',
-  trousersD: '#505257',
+  trousers: '#4c4a48',
+  trousersD: '#383634',
   shoe: '#5a3a24',
 };
 
@@ -334,14 +341,17 @@ const AT_BOARD = { sh: 1.7, el: 1.41 };
 const AT_GLASSES = { sh: 1.89, el: 1.16 };
 
 // Two taps on the board, a nod at the working, then the spectacles pushed
-// back up his nose.
+// back up his nose; by the frame (f = u * 12): the taps in frames 0 to 5,
+// the pointer off the board and the near hand up to the spectacles over
+// frames 7 and 8, back over 10 and 11.
 const professorWork: NpcLoop = {
   secs: 2.8,
   frames: 12,
   pose(u) {
-    const tap = u < 0.55 ? Math.abs(Math.sin(u * TAU * (2 / 0.55) * 0.5)) : 0;
-    const specs = bump(u, 0.62, 0.95);
-    const away = ease(u, 0.55, 0.65) - ease(u, 0.92, 1);
+    const f = u * 12;
+    const tap = f < 6 ? Math.abs(Math.sin((f * Math.PI) / 3)) : 0;
+    const specs = ease(f, 6, 9) - ease(f, 9.5, 12);
+    const away = ease(f, 6, 8.5) - ease(f, 9.5, 12);
     return {
       ...rest(),
       lean: 0.08 - 0.04 * specs,
@@ -356,13 +366,14 @@ const professorWork: NpcLoop = {
   },
 };
 
-// A finger up and a little hop: eureka.
+// A finger up beside his head (the far arm up and out in front of him,
+// clear of his face) and a little hop: eureka.
 const professorCelebrate: NpcLoop = {
   secs: 1.6,
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
-    return { ...rest(), bob: 0.4 * bump(u, 0.25, 0.6), lean: -0.04 * k, tilt: -0.15 * k, arms: [{ sh: 0.12 + 0.3 * k, el: 0.2 + 1.2 * k }, { sh: 0.12 + 2.6 * k, el: 0.2 + 0.2 * k }], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'o' };
+    return { ...rest(), bob: 0.4 * bump(u, 0.25, 0.6), lean: -0.04 * k, tilt: -0.15 * k, arms: [{ sh: 0.12 + 0.3 * k, el: 0.2 + 1.2 * k }, { sh: 0.12 + 1.75 * k, el: 0.2 + 0.55 * k }], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'o' };
   },
 };
 
@@ -497,7 +508,7 @@ const chemistParts: NpcParts = {
     sk.limb([0, 0.05, 0, 0.35], 1.25, k ? CH.gloveD : CH.glove, { line: 0.5 });
     if (k === 1 && p.act === 'work') {
       // swirled: rocked a little on her palm
-      const rock = 0.18 * Math.sin(p.u * TAU * 4) * (1 - ease(p.u, 0.38, 0.5));
+      const rock = 0.18 * Math.sin(p.u * TAU * 4) * (1 - ease(p.u, 0.33, 0.5));
       level(sk, p, 1, f, () => sk.at(mul(turn(rock), zoom(1.3)), () => flask(sk, p.u, bump(p.u, 0.7, 0.9))));
     }
     sk.blob(circ(0, f, 0.58), k ? CH.gloveD : CH.glove, { dark: CH.gloveD, d: 0.2 });
@@ -522,7 +533,7 @@ const chemistWork: NpcLoop = {
   secs: 3,
   frames: 12,
   pose(u) {
-    const up = ease(u, 0.38, 0.55) - ease(u, 0.88, 1);
+    const up = ease(u, 0.33, 0.58) - ease(u, 0.78, 1);
     const swirl = 1 - up;
     const s = Math.sin(u * TAU * 4);
     const c = Math.cos(u * TAU * 4);

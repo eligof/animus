@@ -130,10 +130,14 @@ function stock(sk: Sketch, blade: boolean): void {
   sk.limb([...pt(1.5), ...pt(2.8)], 0.14, SM.white, { line: 0, sil: false });
 }
 
+// How far into his show the blows go (four, landing at frames 0, 3, 6
+// and 9 of its 16).
+const SHOW_BLOWS = 0.6;
+
 // The frame of local p's last blow landing, if this is one (sparks fly).
 function landed(p: Puppet): boolean {
   if (p.act === 'work') return (p.u * 2) % 1 < 0.05;
-  return p.act === 'show' && p.u < 0.55 && ((p.u * 16) / 3) % 1 < 0.05;
+  return p.act === 'show' && p.u < SHOW_BLOWS && ((p.u * 16) / 3) % 1 < 0.05;
 }
 
 const smithParts: NpcParts = {
@@ -245,16 +249,22 @@ const horseshoe: NpcServe = {
   },
 };
 
-// One blow, k from 0 (the hammer's face on the bar) to 1 (drawn back over
-// the shoulder, behind the head): the elbow bends on the way so the hammer
-// passes by the ear, not across the face; the body leans into the blow and
-// the far hand keeps the bar on the anvil.
+// One blow, k from 0 (the hammer's face on the bar) to 1 (drawn back
+// behind his head). The strike, from beside his ear down onto the bar, is
+// the way from k = 0.3 to 0 and falls between frames (no frame of a blow
+// has k under 0.3 but its landing), for his fist could not come down over
+// his short arm's arc without crossing his face; from 0.3 up the fist stays
+// by his ear and goes back behind his head, the elbow up, the hammer
+// cocked. The body leans into the blow and the far hand keeps the bar on
+// the anvil.
 function blow(k: number): Pick<Puppet, 'bob' | 'lean' | 'arms'> {
+  const strike = ease(k, 0, 0.3);
+  const back = ease(k, 0.3, 1);
   return {
     bob: -0.15 * (1 - k),
     lean: 0.15 - 0.1 * k,
     arms: [
-      { sh: 0.85 + 2.55 * k, el: 0.72 + 0.13 * k + 0.9 * Math.sin(Math.PI * k) },
+      { sh: 0.85 + 2.15 * strike + 0.4 * back, el: 0.72 - 0.02 * strike + 0.15 * back },
       { sh: -0.35 + 0.28 * k, el: 2.19 - 0.5 * k },
     ],
   };
@@ -277,27 +287,27 @@ const smithWork: NpcLoop = {
   },
 };
 
-// Forging a blade: three quick blows, harder and faster than at work,
-// then the blade held up high, glowing, and a laugh; then back to the
-// anvil.
+// Forging a blade: four quick blows, harder and faster than at work, the
+// last landing at frame 9; then the blade lifted high over two frames,
+// glowing, held there with a laugh, and lowered over two more to the
+// anvil, where the next loop's first blow lands.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
   frames: 16,
   crowd: 'watch',
   pose(u) {
-    if (u < 0.55) {
+    if (u < SHOW_BLOWS) {
       const k = swing(((u * 16) / 3) % 1);
       return { ...rest(), ...blow(k), tilt: 0.16 - 0.12 * k, eyes: k < 0.1 ? 'shut' : 'open', mouth: k < 0.1 ? 'o' : 'closed' };
     }
-    const up = ease(u, 0.54, 0.6) - ease(u, 0.9, 0.96);
-    const down = ease(u, 0.9, 1);
-    const shake = Math.sin(u * TAU * 5) * bump(u, 0.6, 0.9);
-    const b = blow(0.8 * down);
+    const up = ease(u, 0.57, 0.72) - ease(u, 0.8, 0.95);
+    const shake = Math.sin(u * TAU * 5) * bump(u, 0.62, 0.9);
+    const b = blow(0);
     return {
       ...rest(),
       bob: 0.25 * up + b.bob * (1 - up),
       lean: b.lean * (1 - up) - 0.08 * up,
-      tilt: 0.1 - 0.32 * up,
+      tilt: 0.16 - 0.48 * up,
       arms: [
         { sh: b.arms[0].sh * (1 - up) + 0.35 * up, el: b.arms[0].el * (1 - up) + 0.45 * up },
         { sh: b.arms[1].sh * (1 - up) + 2.3 * up, el: b.arms[1].el * (1 - up) + (0.1 + 0.06 * shake) * up },
@@ -308,14 +318,15 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
   },
 };
 
-// The hammer up over his head, the other fist pumping, and a roar.
+// The hammer up behind his head (swung back and up, never across his
+// face), the other fist pumping out in front, and a roar.
 const smithCelebrate: NpcLoop = {
   secs: 1.6,
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 1.5));
-    return { ...rest(), bob: 0.3 * pump * k, lean: -0.06 * k, tilt: -0.15 * k, arms: [{ sh: 0.12 + 3.2 * k, el: 0.2 + 0.45 * k }, { sh: 0.12 + (2.1 + 0.25 * pump) * k, el: 0.2 + 0.3 * k }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.3 * pump * k, lean: -0.06 * k, tilt: -0.15 * k, arms: [{ sh: 0.12 - 2.5 * k, el: 0.2 - 0.8 * k }, { sh: 0.12 + 1.65 * k, el: 0.2 + (0.6 + 0.3 * pump) * k }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 
@@ -481,11 +492,13 @@ const assayerParts: NpcParts = {
     sk.limb([0, 0, 0, f - 0.35], 1.0, k ? AS.shirtD : AS.shirt, { dark: k ? null : AS.shirtD });
     sk.blob(circ(0, f, 0.55), k ? AS.skinD : AS.skin, { dark: AS.skinD, d: 0.2 });
     if (p.act !== 'work') return;
+    const look = assayLook(p.u);
     if (k === 1) {
-      // the scales, weighed: tipping while the dust goes in, then level
-      const tip = 0.28 * (1 - ease(p.u, 0.3, 0.55)) * (0.7 + 0.3 * Math.sin(p.u * TAU * 3));
+      // the scales, weighed: tipping while the dust goes in, settling
+      // level, and tipping again as the next pinch comes
+      const tip = 0.28 * (1 - ease(p.u, 0.3, 0.55) + ease(p.u, 0.85, 1)) * (0.7 + 0.3 * Math.sin(p.u * TAU * 3));
       level(sk, p, 1, f, () => scales(sk, tip));
-    } else if (p.u < 0.5) {
+    } else if (look < 0.15) {
       // a pinch of gold dust falling into the pan
       level(sk, p, 0, f, () => {
         sk.draw((q) => {
@@ -521,13 +534,18 @@ const goldNugget: NpcServe = {
   },
 };
 
+// How far the assayer has the loupe up to his eye at u round his work: up
+// over three frames, a long look, down over three (his near hand pinches
+// dust while it is down, holds the loupe while it is up).
+const assayLook = (u: number): number => ease(u, 0.38, 0.68) - ease(u, 0.76, 1);
+
 // Weighing: dust pinched into the pan while the beam tips, the beam
 // settling level, then the loupe up to the eye and a long look.
 const assayerWork: NpcLoop = {
   secs: 3.2,
   frames: 12,
   pose(u) {
-    const look = ease(u, 0.48, 0.6) - ease(u, 0.88, 0.98);
+    const look = assayLook(u);
     const pinch = Math.sin(u * TAU * 4) * (1 - ease(u, 0.35, 0.45));
     return {
       ...rest(),

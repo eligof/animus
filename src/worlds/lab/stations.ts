@@ -57,8 +57,9 @@ function codeRows(k: Kit, scr: readonly [P3, P3, P3, P3], t: number, colors: rea
 
 const ZT = 6.2; // the bench top
 const BENCH = { back: 2.3, front: 6.9 };
-// Where the chemist stands: behind the bench, toward its terminal end.
-export const CHEMIST = { u: 3.2, v: 1.85, top: ZT, edge: BENCH.back };
+// Where the chemist stands: behind the bench, in its middle between the
+// terminal and the glassware, so neither hides her flask.
+export const CHEMIST = { u: 5.6, v: 1.85, top: ZT, edge: BENCH.back };
 const CRT = quad(0.75, 2.45, 6.53, ZT + 0.45, ZT + 2.05);
 const FLASK = { u: 7.9, v: 3.2, z: ZT + 2.3, R: 0.95 };
 const COIL = { u: 9.75, v: 3.2, z0: ZT + 3.3, z1: ZT + 5.3, r: 0.45 };
@@ -695,21 +696,23 @@ function scaled(k: Kit, u: number, v: number, z: number, sc: number): Kit {
 // ── run: the tesla coil ─────────────────────────────────────────────────────
 // A tesla coil on a hazard-striped square: a steel base, a primary of fat
 // copper turns round the tall wound secondary, a chrome toroid on top; a
-// grounding ball on a post and, at the front corner, a console with a big
-// lever at its end, where the assistant stands (ASSISTANT, see npcs.ts).
-// Running it, the lever is pulled back toward him and arcs crack off the
-// toroid to the ball and the air.
+// grounding ball on a post and, along the front edge at its near corner, a
+// low console with a big lever in it, the assistant standing on the floor
+// before it (ASSISTANT, see npcs.ts), clear of the floor round the coil
+// that the room keeps for seats and the yard. Running it, the lever is
+// pulled back toward him and arcs crack off the toroid to the ball and the
+// air.
 
 const TC = { u: 4.6, v: 4.4, top: 13.2, R: 2.0, r: 0.7 };
 const BALL: P3 = [9.0, 2.2, 8.2];
 // The console (u0 to u1, v0 to v1, its top sloping from z0 at the back to
 // z1 at the front) and its lever's pivot.
-const CONSOLE = { u0: 0.3, u1: 3.7, v0: 7.7, v1: 9.7, z0: 3.45, z1: 2.9 };
-const LEVER = { u: 1.2, v: 8.7, z: 3.2 };
+const CONSOLE = { u0: 0.3, u1: 3.7, v0: 8.6, v1: 10.6, z0: 2.25, z1: 1.85 };
+const LEVER = { u: 2.2, v: 9.6, z: 2.05 };
 const consoleTop = (v: number) => CONSOLE.z0 + ((CONSOLE.z1 - CONSOLE.z0) * (v - CONSOLE.v0)) / (CONSOLE.v1 - CONSOLE.v0);
-// Where the assistant stands: on the floor past the console's end, the
-// lever's knob a step ahead of him.
-export const ASSISTANT = { u: -1.5, v: LEVER.v };
+// Where the assistant stands: on the floor before the console's near end,
+// the lever's knob (thrown back) at his chest, a reach ahead of him.
+export const ASSISTANT = { u: 1.0, v: 12.6 };
 
 const run: PropArt = {
   len: 11,
@@ -781,16 +784,16 @@ const run: PropArt = {
       const { u0, u1, v0, v1, z0, z1 } = CONSOLE;
       k.box(u0, v0, 0.05, u1 - u0, v1 - v0, z0 - 0.05, '#4f6f78', { stripe: false });
       k.poly([[u0, v0, z0], [u1, v0, z0], [u1, v1, z1], [u0, v1, z1]], shade('#4f6f78', 0.12), k.lw);
-      gauge(k, 2.75, v1 + 0.02, 1.9, 0.55, null);
+      gauge(k, 2.75, v1 + 0.02, 1.2, 0.55, null);
       // the lever's slot, along the console from its end
       const a = LEVER.v - 0.28;
       const b = LEVER.v + 0.28;
       k.poly([[LEVER.u - 0.85, a, consoleTop(a) - 0.04], [LEVER.u + 0.85, a, consoleTop(a) - 0.04], [LEVER.u + 0.85, b, consoleTop(b) - 0.04], [LEVER.u - 0.85, b, consoleTop(b) - 0.04]], '#1e2629', 0);
-      k.face(0.5, 1.95, v1 + 0.02, 1.0, 2.5, '#20292d', k.thin, 0.1);
+      k.face(0.5, 1.95, v1 + 0.02, 0.55, 1.6, '#20292d', k.thin, 0.1);
     });
     // the console's needle and lights, the lever up or thrown
-    needle(k, 2.75, CONSOLE.v1 + 0.05, 1.9, 0.55, v.active ? 1.0 + Math.sin(v.t * 17) * 0.25 : -1.6);
-    for (let i = 0; i < 3; i++) pilot(k, 0.75 + i * 0.47, CONSOLE.v1 + 0.04, 1.75, 0.13, [C.red, C.amber, C.green][i], v.active ? i === 2 || (Math.floor(v.t * 6) + i) % 3 === 0 : i === 0);
+    needle(k, 2.75, CONSOLE.v1 + 0.05, 1.2, 0.55, v.active ? 1.0 + Math.sin(v.t * 17) * 0.25 : -1.6);
+    for (let i = 0; i < 3; i++) pilot(k, 0.75 + i * 0.47, CONSOLE.v1 + 0.04, 1.15, 0.13, [C.red, C.amber, C.green][i], v.active ? i === 2 || (Math.floor(v.t * 6) + i) % 3 === 0 : i === 0);
     // the lever: pushed away, or pulled back toward the assistant (-u)
     const th = v.active ? 0.72 : -0.65;
     const top: P3 = [LEVER.u - Math.sin(th) * 1.6, LEVER.v, LEVER.z + Math.cos(th) * 1.6];

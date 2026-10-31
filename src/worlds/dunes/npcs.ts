@@ -357,13 +357,20 @@ const lookParts: NpcParts = {
   },
 };
 
-// How far in to the glass it is at u of its work: in most of the loop,
-// sitting back for a while.
-const peer = (u: number) => 1 - ease(u, 0.5, 0.6) + ease(u, 0.9, 1.0);
-// Its lean and nod at the glass (its eye then sits at SPY's eyepiece), and
-// its near hand on its knee.
+// Its work, each change eased over two frames (f = u * 12, the frame): at
+// the glass (frames 0 to 4); back from it (5), rubbing its eye with its
+// near hand (6 and 7), its far hand still on the tube; that hand to its
+// brow as the other goes back to its knee (8), looking out bare-eyed (9
+// and 10); and in again (11).
+const peer = (u: number) => 1 - ease(u * 12, 4, 6) + ease(u * 12, 10, 12);
+const rubbing = (u: number) => ease(u * 12, 4, 6) - ease(u * 12, 7, 9);
+const shading = (u: number) => ease(u * 12, 7, 9) - ease(u * 12, 10, 12);
+// Its lean and nod at the glass (its eye then sits at SPY's eyepiece), its
+// near hand on its knee and up at its eye, its far hand up at its brow.
 const PEER = { lean: 0.12, tilt: 0.1 };
 const ON_KNEE: Swing = { sh: 0.45, el: 0.55 };
+const AT_EYE: Swing = { sh: 1.75, el: 2.05 };
+const AT_BROW: Swing = { sh: 2.55, el: 2.1 };
 
 // Peering, its far hand under the draw tube twisting the focus back and
 // forth; then back from the glass for a rub of the eye and a hand to its
@@ -373,17 +380,15 @@ const lookWork: NpcLoop = {
   frames: 12,
   pose(u) {
     const k = peer(u);
+    const rub = rubbing(u);
+    const shadeIt = shading(u);
     const p: Puppet = { ...rest(), u, lean: 0.02 + (PEER.lean - 0.02) * k, tilt: PEER.tilt * k };
     // at the glass
     const twist = Math.sin(u * TAU * 3);
     const ring = onTube(1.35 + 0.12 * twist);
     const at = reach(LOOK_BONES.shoulders[1] as Pt, toBody(p, [ring[0], ring[1] + 0.5]), LOOK_BONES.upper, LOOK_BONES.fore);
-    // back from it
-    const b = Math.max(0, Math.min(1, (u - 0.55) / 0.37));
-    const rub = bump(b, 0.0, 0.45);
-    const shadeIt = bump(b, 0.4, 1.0) ** 0.5;
-    const near: Swing = { sh: ON_KNEE.sh + (1.75 - ON_KNEE.sh) * rub, el: ON_KNEE.el + (2.05 - ON_KNEE.el) * rub + 0.12 * Math.sin(b * TAU * 4) * rub };
-    const far: Swing = { sh: at.sh * k + (0.3 + 2.25 * shadeIt) * (1 - k), el: at.el * k + (0.5 + 1.6 * shadeIt) * (1 - k) };
+    const near: Swing = { sh: ON_KNEE.sh + (AT_EYE.sh - ON_KNEE.sh) * rub, el: ON_KNEE.el + (AT_EYE.el - ON_KNEE.el) * rub + 0.12 * Math.sin(u * TAU * 8) * rub };
+    const far: Swing = { sh: at.sh + (AT_BROW.sh - at.sh) * shadeIt, el: at.el + (AT_BROW.el - at.el) * shadeIt };
     return {
       ...p,
       tilt: p.tilt - (0.05 + 0.06 * shadeIt) * (1 - k),
@@ -629,8 +634,8 @@ const star = (x: number, y: number, r: number) => (q: Pen) => {
 };
 
 // How far into holding the cup up to the light the barkeep is, at u of
-// its work.
-const inspecting = (u: number) => ease(u, 0.58, 0.68) - ease(u, 0.9, 0.98);
+// its work: out over three frames, a look, back over three.
+const inspecting = (u: number) => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
 // Where it holds the cup to polish it, in front of its belly over the
 // counter, and out to the side to look it over.
 const POLISH: Pt = [1.75, -5.9];

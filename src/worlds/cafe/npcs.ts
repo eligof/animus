@@ -182,17 +182,22 @@ function portafilter(sk: Sketch, press: number | null): void {
   sk.blob(circ(1.75, y - 1.1, 0.36), C.walnut, { dark: C.walnutDark, d: 0.1 });
 }
 
-// The work loop's beats (see baristaWork): the tamp (0 to 0.42), the
-// portafilter away under the bar, the jug up at the wand (0.5 to 0.92).
-const tampOf = (u: number) => 1 - ease(u, 0.38, 0.48) + ease(u, 0.94, 1);
-const steamOf = (u: number) => ease(u, 0.46, 0.56) - ease(u, 0.86, 0.94);
+// The work loop's beats (see baristaWork), by the frame (f = u * 12): the
+// tamp (frames 0 to 4), the portafilter away under the bar as the jug comes
+// up to the wand (over frames 5 and 6), the jug swirled there (7 to 9),
+// and the jug away as the portafilter comes back (over 10 and 11): each
+// hand-over eased across two frames, never a cut.
+const tampOf = (u: number) => 1 - ease(u * 12, 4, 6.5) + ease(u * 12, 9.5, 12);
+const steamOf = (u: number) => ease(u * 12, 5, 7.5) - ease(u * 12, 9, 11.5);
 const pressOf = (u: number) => Math.max(0, Math.sin(u * TAU * 2.6));
 
-// The show's beats (see baristaShow): the pour (heart growing), the flick,
-// the cup held up.
-const pourOf = (u: number) => ease(u, 0.12, 0.2) - ease(u, 0.58, 0.66);
-const heartOf = (u: number) => ease(u, 0.22, 0.6);
-const showOf = (u: number) => ease(u, 0.62, 0.74) - ease(u, 0.92, 1);
+// The show's beats (see baristaShow), by the frame (f = u * 16): into the
+// pour (over frames 1 to 3), the heart growing (4 to 9), the jug flicked
+// away (10), the cup lifted high (over 10 and 11) and held, and down again
+// (over 14 and 15) as it comes back to rest.
+const pourOf = (u: number) => ease(u * 16, 1.5, 4) - ease(u * 16, 8.5, 10.5);
+const heartOf = (u: number) => ease(u * 16, 3.5, 9.5);
+const showOf = (u: number) => ease(u * 16, 9.5, 12) - ease(u * 16, 13, 15.5);
 
 const baristaParts: NpcParts = {
   body(sk) {
@@ -343,10 +348,10 @@ const baristaShow: NpcLoop & { crowd: 'watch' } = {
   frames: 16,
   crowd: 'watch',
   pose(u) {
-    const k = env(u, 0.1, 0.94);
+    const k = ease(u * 16, 0, 2.5) - ease(u * 16, 13, 16);
     const pour = pourOf(u);
     const up = showOf(u);
-    const flick = bump(u, 0.56, 0.7);
+    const flick = bump(u * 16, 9, 11.5);
     const near = reach(TALL_BONES, 0, mix(-0.4, mix(1.2, -2.5, up), k), mix(-4.6, mix(-6.6, -9.9, up), k));
     const far = reach(TALL_BONES, 1, mix(2.0, mix(3.6 - 0.15 * pour, 4.3, up), k), mix(-4.8, mix(-8.4 - 0.9 * flick, -7.4, up), k));
     return {
@@ -738,9 +743,10 @@ function teacup(sk: Sketch): void {
 }
 
 // The work loop's beats (see regularWork): a page turned; the tea sipped
-// (the near hand off the paper); a glance up over it.
+// (the near hand off the paper, up over three frames and down over three);
+// a glance up over it.
 const pageOf = (u: number) => ease(u, 0.22, 0.42);
-const sipOf = (u: number) => ease(u, 0.55, 0.65) - ease(u, 0.82, 0.92);
+const sipOf = (u: number) => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
 
 const regularParts: NpcParts = {
   body(sk, p) {

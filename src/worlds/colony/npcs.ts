@@ -216,14 +216,15 @@ const tailorParts: NpcParts = {
 };
 
 // Feeding cloth under the needle, both hands on it, head bent to the seam:
-// two pushes, then a look up at the work and back.
+// two pushes, then a look up at the work (the head raised over three
+// frames and lowered over three) and back.
 const tailorWork: NpcLoop = {
   secs: 2.4,
   frames: 12,
   pose(u) {
-    const look = bump(u, 0.58, 1);
+    const look = ease(u, 0.5, 0.75) - ease(u, 0.75, 1);
     const k = 1 - look;
-    const push = Math.sin(u * TAU * 2) * (1 - ease(u, 0.42, 0.58));
+    const push = Math.sin(u * TAU * 2) * (1 - ease(u, 0.4, 0.55));
     return {
       ...rest(),
       lean: 0.08 * k + 0.02,
@@ -436,7 +437,7 @@ const smithParts: NpcParts = {
       // the tongs, reaching from the fist to the work on the anvil (or up
       // for the show's horseshoe)
       const [hx, hy] = handAt(S_BONES, p, 0);
-      const high = p.act === 'show' ? ease(p.u, FLURRY, FLURRY + 0.1) - ease(p.u, 0.9, 1) : 0;
+      const high = p.act === 'show' ? showHigh(p.u) : 0;
       const [tx, ty] = toBody(p, ANVIL_DX - 0.9 + (SHOW_SHOE[0] - ANVIL_DX + 0.9) * high, -ANVIL_DY + (SHOW_SHOE[1] + ANVIL_DY) * high);
       const a = Math.atan2(tx - hx, ty - hy);
       const L = Math.min(4.6, Math.max(2.0, Math.hypot(tx - hx, ty - hy) - 0.5));
@@ -502,6 +503,11 @@ const smithWork: NpcLoop = {
   },
 };
 
+// How high the show has the new horseshoe at u: lifted in the tongs over
+// three frames once the flurry is done, held up, lowered back to the anvil
+// over three as the loop comes round.
+const showHigh = (u: number): number => ease(u, FLURRY - 0.02, FLURRY + 0.16) - ease(u, 0.82, 1);
+
 // A horseshoe forged: a flurry of three quick blows, then the shoe lifted
 // in the tongs, glowing, the smith beaming at it, and back to the anvil.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
@@ -510,7 +516,7 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
   crowd: 'watch',
   pose(u) {
     const f = u < FLURRY ? blow(((u / FLURRY) * 3) % 1) : { ...STRIKE, hit: 0 };
-    const high = ease(u, FLURRY, FLURRY + 0.1) - ease(u, 0.9, 1);
+    const high = showHigh(u);
     return {
       ...rest(),
       lean: 0.08 * (1 - high) - 0.06 * high,
@@ -523,14 +529,16 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
   },
 };
 
-// The hammer thrust up high, twice, with a whoop.
+// The hammer thrust up high, twice, with a whoop: the far arm up and out
+// in front of him, the fist beside his face (not over it), the hammer
+// standing up from it.
 const smithCelebrate: NpcLoop = {
   secs: 1.4,
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 2));
-    return { ...rest(), bob: 0.25 * pump * k, tilt: -0.12 * k, arms: [{ sh: 0.12 + 0.4 * k, el: 0.2 + 0.9 * k }, { sh: 0.12 + (2.5 + 0.2 * pump) * k, el: 0.2 }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.25 * pump * k, tilt: -0.12 * k, arms: [{ sh: 0.12 + 0.4 * k, el: 0.2 + 0.9 * k }, { sh: 0.12 + (1.55 + 0.25 * pump) * k, el: 0.2 + (0.75 - 0.15 * pump) * k }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 
@@ -693,7 +701,7 @@ const cookParts: NpcParts = {
       // the long spoon: into the pot stirring, or up for a taste
       const [hx, hy] = handAt(K_BONES, p, 1);
       const [tx, ty] = toBody(p, POT_DX - 0.2, -POT_DY + 0.6);
-      const taste = ease(p.u, 0.55, 0.7) - ease(p.u, 0.9, 1);
+      const taste = cookTaste(p.u);
       const a = Math.atan2(tx - hx, ty - hy) * (1 - taste) + Math.PI * 0.82 * taste;
       along(sk, K_BONES, p, 1, a, () => {
         sk.limb([0, -0.4, 0, 2.6], 0.3, C.plankLight, { dark: C.plank });
@@ -705,22 +713,27 @@ const cookParts: NpcParts = {
   },
 };
 
+// How far the cook has the spoon up for a taste at u round her work:
+// lifted out of the pot over three frames, a blow on it and a hum, lowered
+// back into it over three.
+const cookTaste = (u: number): number => ease(u, 0.47, 0.72) - ease(u, 0.78, 1);
+
 // Stirring the pot, round and round, then the spoon up for a taste, a
 // blow on it, and a happy hum.
 const cookWork: NpcLoop = {
   secs: 3.2,
   frames: 12,
   pose(u) {
-    const taste = ease(u, 0.55, 0.7) - ease(u, 0.9, 1);
+    const taste = cookTaste(u);
     const stir = 1 - taste;
-    const a = (u / 0.55) * TAU;
+    const a = Math.min(1, u / 0.47) * TAU;
     return {
       ...rest(),
       lean: (0.12 + 0.04 * Math.sin(a)) * stir - 0.04 * taste,
       tilt: 0.1 * stir - 0.05 * taste,
       arms: [{ sh: 0.55 * stir + 0.3 * taste, el: 1.4 * stir + 1.2 * taste }, { sh: (1.0 + 0.12 * Math.cos(a)) * stir + 1.75 * taste, el: (0.55 + 0.12 * Math.sin(a)) * stir + 1.45 * taste }],
-      eyes: u > 0.72 && u < 0.92 ? 'happy' : 'open',
-      mouth: u > 0.66 && u < 0.76 ? 'o' : u >= 0.76 && u < 0.92 ? 'smile' : 'closed',
+      eyes: taste > 0.6 && u >= 0.72 ? 'happy' : 'open',
+      mouth: taste > 0.6 ? (u < 0.72 ? 'o' : 'smile') : 'closed',
     };
   },
 };
