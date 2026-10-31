@@ -1,4 +1,4 @@
-import { ACTS, loopOf, once } from '../art/npc/acts.ts';
+import { ACTS, framesOf, loopOf, once } from '../art/npc/acts.ts';
 import type { Npc, NpcAct, WorldDef } from '../worlds/types.ts';
 import type { Emote } from './character.ts';
 import type { NpcFrame } from './frame.ts';
@@ -278,11 +278,13 @@ export class Locals {
     const a = l.acts.find((q) => q.at <= c && c < q.until);
     if (!a) {
       const w = l.art.work;
-      return { act: 'work', frame: Math.floor(frac(c / w.secs + l.k * 0.37) * w.frames) % w.frames };
+      const n = framesOf(w);
+      return { act: 'work', frame: Math.floor(frac(c / w.secs + l.k * 0.37) * n) % n };
     }
     const lp = loopOf(l.art, a.act);
+    const n = framesOf(lp);
     const k = (c - a.at) / lp.secs;
-    return { act: a.act, frame: once(a.act) ? Math.min(lp.frames - 1, Math.floor(k * lp.frames)) : Math.floor(frac(k) * lp.frames) % lp.frames };
+    return { act: a.act, frame: once(a.act) ? Math.min(n - 1, Math.floor(k * n)) : Math.floor(frac(k) * n) % n };
   }
 
   // The locals as a frame shows them (see NpcFrame).

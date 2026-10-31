@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import { bump, ease, env, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
 import { atHand, toward } from '../../art/npc/helpers.ts';
@@ -224,9 +225,8 @@ const HOLD = { sh: 0.35, el: 0.87 };
 // server, a nod, and typing again.
 const adminWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
-    // (the reach out and back each over two frames)
+    // (the reach out and back each over a fifth of the loop)
     const reach = ease(u, 0.42, 0.62) - ease(u, 0.78, 0.98);
     const tap = Math.sin(u * TAU * 3) * (1 - reach);
     return {
@@ -243,7 +243,6 @@ const adminWork: NpcLoop = {
 // A thumbs-up and a grin, the laptop still on its arm.
 const adminCelebrate: NpcLoop = {
   secs: 1.4,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     return { ...rest(), bob: 0.15 * bump(u, 0.3, 0.7), tilt: -0.08 * k, arms: [toward(k, HOLD), swing(1.3 * k, 1.25 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
@@ -452,9 +451,9 @@ const receptionistParts: NpcParts = {
 const TALK: ReadonlyArray<Puppet['mouth']> = ['open', 'smile', 'o', 'open', 'closed', 'smile'];
 const receptionistWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
-    // (the hand up to the headset over three frames, down over two)
+    // (the hand up to the headset over about a quarter of the loop, down
+    // over about a fifth; the mouth and a blink go by twelfths of it)
     const call = ease(u, 0.34, 0.6) - ease(u, 0.82, 1);
     const tap = Math.sin(u * TAU * 3) * (1 - call);
     const i = Math.floor(u * 12);
@@ -537,6 +536,7 @@ const torsoM = (q: Pen) => {
 // The Friday cake, level on the palm of the far hand (the frame's origin
 // at the hand): a plate, two layers of sponge and cream, pink icing
 // dripping, sprinkles, three candles with flames that flicker with `u`.
+const FLICK = [0, 0.15, -0.1, 0.1, -0.15, 0.05];
 function cake(sk: Sketch, u: number): void {
   sk.blob((q) => q.roundRect(-2.1, -0.85, 4.2, 0.4, 0.18), C.white, { dark: '#d8d4cc', d: 0.1 });
   sk.blob((q) => q.roundRect(-1.7, -3.05, 3.4, 2.25, 0.35), '#f3d9a8', { dark: '#d9b47c', d: 0.25 });
@@ -559,10 +559,11 @@ function cake(sk: Sketch, u: number): void {
       q.fillRect(x, y, 0.28, 0.12);
     }
   });
-  const flick = [0, 0.15, -0.1, 0.1, -0.15, 0.05];
+  // each flame's lean, a smooth curve through FLICK three times round the
+  // show, each candle a third of the way on from the last
   for (const [i, x] of [-0.9, 0, 0.9].entries()) {
     sk.blob((q) => q.roundRect(x - 0.15, -4.05, 0.3, 0.95, 0.08), [C.noteTeal, C.noteYellow, C.noteLilac][i], { line: 0.45 });
-    const w = flick[(Math.floor(u * 16) + i * 2) % flick.length];
+    const w = through(FLICK, u * 3 + i / 3);
     sk.blob((q) => {
       q.moveTo(x, -4.15);
       q.quadraticCurveTo(x + 0.35, -4.4, x + w, -4.95);
@@ -707,7 +708,6 @@ const managerParts: NpcParts = {
 // cloth, round and round.
 const managerWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const shot = 1 - ease(u, 0.42, 0.55) + ease(u, 0.92, 1);
     const twist = Math.sin(u * TAU * 2) * bump(u, 0.0, 0.4);
@@ -731,7 +731,6 @@ const managerWork: NpcLoop = {
 const SING: ReadonlyArray<Puppet['mouth']> = ['open', 'o', 'open', 'smile'];
 const managerShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const tada = ease(u, 0.58, 0.68) - ease(u, 0.88, 0.98);

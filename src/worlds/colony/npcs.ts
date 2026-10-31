@@ -191,11 +191,10 @@ const tailorParts: NpcParts = {
 };
 
 // Feeding cloth under the needle, both hands on it, head bent to the seam:
-// two pushes, then a look up at the work (the head raised over three
-// frames and lowered over three) and back.
+// two pushes, then a look up at the work (the head raised over a quarter
+// of the loop and lowered over the last quarter) and back.
 const tailorWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const look = ease(u, 0.5, 0.75) - ease(u, 0.75, 1);
     const k = 1 - look;
@@ -322,7 +321,8 @@ const smithParts: NpcParts = {
       q.ellipse(1.6, -6.0, 0.55, 0.3, 0.3, 0, TAU);
       q.fill();
     });
-    // sparks off the work during the show's flurry
+    // sparks off the work during the show's flurry, each flying out once a
+    // blow, a seventh of a blow apart
     if (p.act === 'show' && p.u < FLURRY) {
       sk.draw((q, c) => {
         const [ax, ay] = toBody(p, ANVIL_DX, -ANVIL_DY);
@@ -332,7 +332,7 @@ const smithParts: NpcParts = {
         q.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = -0.4 - i * 0.45 + p.u * 9;
-          const r0 = 0.7 + ((i * 37 + Math.floor(p.u * 16) * 11) % 7) * 0.12;
+          const r0 = 0.7 + ((((i * 37) % 7) / 7 + (p.u / FLURRY) * 3) % 1) * 0.72;
           q.moveTo(ax + Math.cos(a) * r0, ay - Math.abs(Math.sin(a)) * r0);
           q.lineTo(ax + Math.cos(a) * (r0 + 0.6), ay - Math.abs(Math.sin(a)) * (r0 + 0.6));
         }
@@ -463,7 +463,6 @@ function blow(u: number): { sh: number; el: number; hit: number } {
 // Two blows, the tongs turning the bar between them.
 const smithWork: NpcLoop = {
   secs: 1.5,
-  frames: 12,
   pose(u) {
     const b = blow((u * 2) % 1);
     return {
@@ -478,16 +477,15 @@ const smithWork: NpcLoop = {
   },
 };
 
-// How high the show has the new horseshoe at u: lifted in the tongs over
-// three frames once the flurry is done, held up, lowered back to the anvil
-// over three as the loop comes round.
+// How high the show has the new horseshoe at u: lifted in the tongs over a
+// sixth of the loop once the flurry is done, held up, lowered back to the
+// anvil over the last sixth as the loop comes round.
 const showHigh = (u: number): number => ease(u, FLURRY - 0.02, FLURRY + 0.16) - ease(u, 0.82, 1);
 
 // A horseshoe forged: a flurry of three quick blows, then the shoe lifted
 // in the tongs, glowing, the smith beaming at it, and back to the anvil.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 2.4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const f = u < FLURRY ? blow(((u / FLURRY) * 3) % 1) : { ...STRIKE, hit: 0 };
@@ -509,7 +507,6 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
 // standing up from it.
 const smithCelebrate: NpcLoop = {
   secs: 1.4,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 2));
@@ -689,15 +686,14 @@ const cookParts: NpcParts = {
 };
 
 // How far the cook has the spoon up for a taste at u round her work:
-// lifted out of the pot over three frames, a blow on it and a hum, lowered
-// back into it over three.
+// lifted out of the pot over a quarter of the loop, a blow on it and a
+// hum, lowered back into it over the last fifth.
 const cookTaste = (u: number): number => ease(u, 0.47, 0.72) - ease(u, 0.78, 1);
 
 // Stirring the pot, round and round, then the spoon up for a taste, a
 // blow on it, and a happy hum.
 const cookWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const taste = cookTaste(u);
     const stir = 1 - taste;

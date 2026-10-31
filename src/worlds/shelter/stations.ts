@@ -1,5 +1,5 @@
 import type { At } from '../../art/iso.ts';
-import { shade } from '../../art/iso.ts';
+import { mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
 import type { PropArt, PropView } from '../types.ts';
@@ -700,19 +700,23 @@ const idle: PropArt = {
       // the buttons under the window
       for (let i = 0; i < 6; i++) dot(k, u0 + 1.05 + i * 0.34, v1 + 0.03, 5.05, 0.1, '#f4f6ec', 0);
     });
-    // the light bands round its face: still while nobody is here, cycling while they are
+    // the light bands round its face: still while nobody is here, their
+    // colours flowing round while they are, a band a sixth of a second
+    // (each band blends into the next as it goes)
     const { u0, u1, v1, top } = JUKE;
-    const shift = v.active ? Math.floor(v.t * 6) : 0;
+    const flow = v.active ? v.t * 6 : 0;
+    const shift = Math.floor(flow);
+    const bands = BANDS.map((c, j) => mix(c, BANDS[(j + 1) % BANDS.length], flow - shift));
     const arc: P3[] = [[u1 - 0.22, v1 + 0.04, 0.9], ...jukeFace(u0 + 0.22, u1 - 0.22, v1 + 0.04, top, 0.22, 22).slice(2), [u0 + 0.22, v1 + 0.04, 0.9]];
     const seg: Array<[P3, P3, Color]> = [];
-    for (let i = 0; i + 1 < arc.length; i++) seg.push([arc[i], arc[i + 1], BANDS[(i + shift) % BANDS.length]]);
+    for (let i = 0; i + 1 < arc.length; i++) seg.push([arc[i], arc[i + 1], bands[(i + shift) % bands.length]]);
     const w = Math.max(1, 0.32 * k.s);
     k.segs(seg.map(([a, b]) => [a, b] as [P3, P3]), INK, w + k.thin * 1.2, 'round');
-    for (const c of BANDS) {
+    for (const c of bands) {
       const mine = seg.filter((q) => q[2] === c).map(([a, b]) => [a, b] as [P3, P3]);
       k.segs(mine, c, w, 'round');
     }
-    const glow = BANDS[shift % BANDS.length];
+    const glow = bands[shift % bands.length];
     k.halo((u0 + u1) / 2, v1 + 0.6, top + 0.4, 3.0, v.active ? glow : '#ffc8e8', v.active ? 0.32 : 0.18);
   },
 };

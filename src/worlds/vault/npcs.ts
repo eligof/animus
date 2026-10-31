@@ -68,6 +68,10 @@ const NOTE_D = '#6a8a5c';
 
 const TELLER_BONES: Bones = { neck: [0.25, -5.6], shoulders: [[-1.45, -5.0], [1.75, -5.0]], upper: 1.65, fore: 1.6 };
 
+// How far her thumb is into a flick at u round her work: four flicks over
+// the first two thirds of the loop, each up and back, none after.
+const flicking = (u: number): number => (u < 2 / 3 ? Math.sin(u * 6 * Math.PI) ** 2 : 0);
+
 const tellerParts: NpcParts = {
   body(sk) {
     // seated: thighs forward to the knees, shins down to small shoes (the
@@ -164,10 +168,10 @@ const tellerParts: NpcParts = {
     const work = p.act === 'work';
     // the bundle of notes in the near hand, held low before her at the
     // desk's edge while she counts, lying long-ways: a note fanned forward
-    // off its top by her thumb every other frame, never up past her chin
+    // off its top by her thumb at each flick, never up past her chin
     if (k === 0 && work) {
       atHand(sk, p, 0, f, () => {
-        if (Math.floor(p.u * 12) % 2 === 1) {
+        if (flicking(p.u) > 0.5) {
           sk.blob((q) => {
             q.moveTo(-0.35, -1.2);
             q.lineTo(1.55, -1.25);
@@ -198,9 +202,10 @@ const tellerParts: NpcParts = {
 };
 
 // Counting: the near hand holds the bundle low before her at the desk's
-// edge, its thumb flicking a note over every other frame, her lips moving
-// with the count; then the far hand takes up the stamp from the desk and
-// brings it down on the page with a thump, and lays it by again.
+// edge, its thumb flicking a note over four times in the first two thirds
+// of the loop, her lips moving with the count; then the far hand takes up
+// the stamp from the desk and brings it down on the page with a thump, and
+// lays it by again.
 const T_HOLD: Swing = reach(TELLER_BONES, 0, 1.3, -3.75);
 const T_FLICK: Swing = reach(TELLER_BONES, 0, 1.38, -3.9);
 const T_REST: Swing = { sh: 0.08, el: 1.64 };
@@ -208,9 +213,8 @@ const T_UP: Swing = { sh: 0.66, el: 2.14 };
 const T_DOWN: Swing = { sh: -0.06, el: 1.83 };
 const tellerWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
-    const flick = u < 0.6 && Math.floor(u * 12) % 2 === 1 ? 1 : 0;
+    const flick = flicking(u);
     const up = ease(u, 0.58, 0.68);
     const down = ease(u, 0.7, 0.78);
     const back = ease(u, 0.88, 1);
@@ -222,7 +226,7 @@ const tellerWork: NpcLoop = {
       lean: 0.04 + 0.04 * thump,
       arms: [mix(T_HOLD, T_FLICK, flick), far],
       eyes: thump > 0.6 ? 'happy' : 'open',
-      mouth: u < 0.6 ? (flick ? 'o' : 'closed') : thump > 0.4 ? 'smile' : 'closed',
+      mouth: flick > 0.5 ? 'o' : thump > 0.4 ? 'smile' : 'closed',
     };
   },
 };
@@ -431,7 +435,6 @@ const S_BELL: Swing = reach(SAFE_BONES, 0, 1.9, -6.15);
 const S_DIAL: Swing = { sh: 0.31, el: 2.03 };
 const safeWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const twist = Math.sin(u * TAU * 2);
     const listen = bump(u, 0.2, 0.55) + bump(u, 0.7, 0.98);
@@ -452,10 +455,9 @@ const safeWork: NpcLoop = {
 // behind: both hands clear of his face.
 const safeShow: NpcLoop & { crowd: 'watch' } = {
   secs: 5,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
-    // (the bag lowered and the breath held again over the last frames, so
+    // (the bag lowered and the breath held again over the last eighth, so
     // the show goes round without a jump)
     const hold = 1 - ease(u, 0.32, 0.4) + ease(u, 0.88, 1);
     const click = bump(u, 0.34, 0.5);
@@ -482,7 +484,6 @@ const safeShow: NpcLoop & { crowd: 'watch' } = {
 // shared cheer has them), pumped twice, a hop on each, grinning.
 const safeCelebrate: NpcLoop = {
   secs: 1.2,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = 0.2 * Math.abs(Math.sin(u * TAU * 2)) * k;
@@ -533,9 +534,13 @@ const MOUSTACHE_D = '#a8a49a';
 const LIFT = 1.0;
 const GUARD_BONES: Bones = { neck: [0.15, -6.85 - LIFT], shoulders: [[-2.2, -6.2 - LIFT], [2.35, -6.2 - LIFT]], upper: 2.0, fore: 1.85 };
 
-// How far out his pocket watch is, at u of his work (out over three
-// frames, back over two).
+// How far out his pocket watch is, at u of his work (out from halfway
+// round over a fifth of the loop, put away over the last sixth).
 const watchOut = (u: number) => ease(u, 0.5, 0.72) - ease(u, 0.84, 1);
+
+// How far down his near fingers are drumming at u of his work: three taps
+// over the first half of the loop, each down and up, none after.
+const drumming = (u: number): number => (u < 0.5 ? Math.sin(u * 6 * Math.PI) ** 2 : 0);
 
 const guardParts: NpcParts = {
   body(sk, p) {
@@ -705,21 +710,20 @@ const guardParts: NpcParts = {
   },
 };
 
-// At his post: hands folded on his belly, the near fingers drumming every
-// other frame, rocking on his heels, looking one way and the other; then
-// the near hand brings out his pocket watch at his chest, his head bowed
-// to it, and puts it away again (each over two frames or more).
+// At his post: hands folded on his belly, the near fingers drumming three
+// times, rocking on his heels, looking one way and the other; then the
+// near hand brings out his pocket watch at his chest, his head bowed to
+// it, and puts it away again (see watchOut).
 const G_BELLY: Swing = { sh: 0.71, el: 0.33 };
 const G_DRUM: Swing = { sh: 0.8, el: 0.45 };
 const G_REST: Swing = { sh: 0.8, el: -1.42 };
 const G_WATCH: Swing = reach(GUARD_BONES, 0, 2.7, -6.1 - LIFT * 0.2);
 const guardWork: NpcLoop = {
   secs: 3,
-  frames: 12,
   pose(u) {
     const w = watchOut(u);
     const rock = Math.sin(u * TAU * 2) * (1 - w);
-    const drum = u < 0.5 && Math.floor(u * 12) % 2 === 1 ? 1 : 0;
+    const drum = drumming(u);
     return {
       ...rest(),
       bob: 0.06 * drum + 0.14 * Math.max(0, rock),
@@ -737,7 +741,6 @@ const guardWork: NpcLoop = {
 // them), and the cap tossed into the air, caught on his head again.
 const guardCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.15, 0.85);
     const pump = 0.15 * bump(u, 0.3, 0.7);

@@ -1,6 +1,7 @@
 import type { Emote } from '../../world/character.ts';
 import type { Pen } from '../types.ts';
 import { alpha, mix, shade } from '../iso.ts';
+import { framesFor } from '../motion.ts';
 import { heart } from './body.ts';
 import { hole, move, mul, zoom, Sketch } from './paint.ts';
 
@@ -11,21 +12,25 @@ import { hole, move, mul, zoom, Sketch } from './paint.ts';
 const TAU = Math.PI * 2;
 const POP = 0.24;
 const BOB = 1.6; // seconds a bob
-const BOB_N = 8;
+const BOB_N = framesFor(BOB);
 
 // The frame to show `t` seconds after it popped up: a key and the sketch.
 export function emoteArt(kind: Emote, t: number): { key: string; draw: () => Sketch } {
   let k: number;
   let y: number;
   let key: string;
+  // the icon's own beats (dots lighting in turn, rays flashing): the pop's
+  // four steps, then eight a bob
+  let beat: string;
   if (t < POP) {
     const i = Math.max(0, Math.floor((t / POP) * 4));
-    key = `p${i}`;
+    key = beat = `p${i}`;
     k = [0.45, 0.95, 1.16, 1.06][i];
     y = 0;
   } else {
     const i = Math.floor((((t - POP) % BOB) / BOB) * BOB_N);
     key = `b${i}`;
+    beat = `b${Math.floor((i * 8) / BOB_N)}`;
     k = 1;
     y = -0.28 * Math.sin((i / BOB_N) * TAU);
   }
@@ -34,7 +39,7 @@ export function emoteArt(kind: Emote, t: number): { key: string; draw: () => Ske
     draw: () => {
       const sk = new Sketch();
       sk.push(mul(move(0, y), zoom(k)));
-      icon(sk, kind, key);
+      icon(sk, kind, beat);
       sk.pop();
       return sk;
     },

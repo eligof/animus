@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
-import { ACTS, puppetOf, rest } from '../src/art/npc/acts.ts';
+import { ACTS, framesOf, puppetOf, rest } from '../src/art/npc/acts.ts';
 import { hub } from '../src/world/layout.ts';
 import { NPC_R } from '../src/world/npc-place.ts';
 import { Stage } from '../src/world/stage.ts';
@@ -93,7 +93,7 @@ test('the locals stand at their stations at work, the stations worked, each to i
     all++;
     if (g.every((n) => n.frame === g[0].frame)) together++;
   });
-  for (const [k, s] of frames) assert.equal(s.size, world.npcs![k].work.frames, `${world.npcs![k].name} skipped frames of its work`);
+  for (const [k, s] of frames) assert.equal(s.size, framesOf(world.npcs![k].work), `${world.npcs![k].name} skipped frames of its work`);
   assert.ok(together < all / 2, 'the locals work in step');
 });
 
@@ -152,7 +152,7 @@ test('an act played once is seen through to its last frame, back at rest', () =>
     if (n.act === 'applaud') seen.push(n.frame);
   });
   const last = Math.max(...seen);
-  assert.equal(last, ACTS.applaud.frames - 1, 'its last frame never shown');
+  assert.equal(last, framesOf(ACTS.applaud) - 1, 'its last frame never shown');
   const p = puppetOf(clerk.art, 'applaud', last);
   const r = rest();
   const off = Math.abs(p.bob - r.bob) + Math.abs(p.lean - r.lean) + Math.abs(p.tilt - r.tilt) + p.arms.reduce((n, a, k) => n + Math.abs(a.sh - r.arms[k].sh) + Math.abs(a.el - r.arms[k].el), 0);

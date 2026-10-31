@@ -169,7 +169,6 @@ const skaldParts: NpcParts = {
 // the far one behind the lyre's arm, swaying and humming.
 const skaldWork: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const sweep = (u * 2) % 1;
     const down = ease(sweep, 0, 0.5) - ease(sweep, 0.5, 1);
@@ -184,7 +183,6 @@ const skaldWork: NpcLoop = {
 // wide and back, singing out, swaying.
 const skaldShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const sw = Math.sin(u * TAU * 2);
@@ -488,9 +486,9 @@ const smithParts: NpcParts = {
       const [ex, ey] = [hx + HAFT * Math.cos(dir), hy + HAFT * Math.sin(dir)];
       sk.limb([hx - 0.45 * Math.cos(dir), hy - 0.45 * Math.sin(dir), ex, ey], 0.32, C.timberLight, { dark: C.timber });
       sk.at(mul(move(ex, ey), turn(dir)), () => sk.blob((q) => q.roundRect(-0.45, -0.95, 0.9, 1.9, 0.18), F.iron, { dark: F.ironD, d: 0.2 }));
+      // flying out and fading for a quarter of a second after it lands
       const s = (p.u * 2) % 1;
-      if (s < 0.05) sparks(sk, STRIKE[0] + 0.35, STRIKE[1] + 0.25, 1);
-      else if (s < 0.25) sparks(sk, STRIKE[0] + 0.35, STRIKE[1] + 0.25, 0.3);
+      if (s < 0.3) sparks(sk, STRIKE[0] + 0.35, STRIKE[1] + 0.25, 1 - 3 * s);
     });
   },
 };
@@ -499,11 +497,11 @@ const smithParts: NpcParts = {
 // the bar, a lean into each, its eyes on the work; the tongs steady.
 const smithWork: NpcLoop = {
   secs: 1.6,
-  frames: 10,
   pose(u) {
     const w = lift(u);
     const s = (u * 2) % 1;
-    const p: Puppet = { ...rest(), u, bob: -0.12 * (1 - w) * (s < 0.1 ? 1 : 0), lean: 0.08 - 0.12 * w, tilt: 0.14 - 0.08 * w, eyes: s < 0.1 ? 'shut' : 'open', mouth: s < 0.1 ? 'closed' : w > 0.8 ? 'o' : 'smile' };
+    // a dip into the blow, deepest as it lands
+    const p: Puppet = { ...rest(), u, bob: -0.12 * (1 - w) ** 3, lean: 0.08 - 0.12 * w, tilt: 0.14 - 0.08 * w, eyes: s < 0.1 ? 'shut' : 'open', mouth: s < 0.1 ? 'closed' : w > 0.8 ? 'o' : 'smile' };
     return { ...p, arms: [reach(SMITH_BONES, 0, ...toBody(p, ...GRIP), true), reach(SMITH_BONES, 1, ...toBody(p, ...swingAt(w).hand), true)] };
   },
 };
@@ -679,9 +677,9 @@ const chiefParts: NpcParts = {
   },
 };
 
-// How far up in a toast the horn is, at u of its work (up over three
-// frames, down over two), and how far its near hand has left its beard for
-// its lap (over two frames each way).
+// How far up in a toast the horn is, at u of its work (up over a fifth of
+// the loop, down over a sixth), and how far its near hand has left its
+// beard for its lap (over a sixth each way).
 const quaff = (u: number) => ease(u, 0.5, 0.72) - ease(u, 0.82, 0.98);
 const off = (u: number) => ease(u, 0.38, 0.55) - ease(u, 0.85, 1);
 // Where its far hand holds the horn on its knee, and up beside its head
@@ -696,7 +694,6 @@ const LAP_HAND: Pt = [-1.6, -2.9];
 // lifted beside its head in a toast and a nod.
 const chiefWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const q = quaff(u);
     const o = off(u);
@@ -714,7 +711,6 @@ const chiefWork: NpcLoop = {
 const HORN_HIGH: Pt = [4.4, -8.9];
 const chiefCelebrate: NpcLoop = {
   secs: 2.0,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const shake = Math.sin(u * TAU * 3);

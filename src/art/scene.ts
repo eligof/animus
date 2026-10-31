@@ -52,6 +52,8 @@ import { workstationOf } from '../worlds/workstation.ts';
 import { Canvas } from './canvas.ts';
 import { critterSprite, emoteSprite, figureSprite, npcSprite, spriteStats, trinketSprite } from './figure.ts';
 import { hexOf, ink as inkFrom, inkWidth } from './iso.ts';
+import { ANIM_FPS, framesFor } from './motion.ts';
+import { framesOf } from './npc/acts.ts';
 import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
@@ -74,13 +76,13 @@ export type SceneImage = { bitmap: Bitmap; rect: Cells; cell: { w: number; h: nu
 // How often what only animates in place is drawn again: animated props,
 // the room's overlay and drifting bits (steam, embers, smoke, drops, z's).
 // Everything else moves at the loop's rate.
-export const AMBIENT_FPS = 6;
+export const AMBIENT_FPS = ANIM_FPS;
 // An animated prop a local works (see SceneFrame.npcs) goes round a loop of
 // CYCLE ambient steps (two seconds), each step's picture drawn once and
 // kept (see cyclePic): the step prop i shows at scene time t. Its worked
 // motion is seen as that 2 s loop, so it should repeat within 2 s (its
 // beats and turns; see PropArt.animated).
-export const CYCLE = 12;
+export const CYCLE = 2 * AMBIENT_FPS;
 const cycleStep = (t: number, i: number) => Math.floor(t * AMBIENT_FPS + phaseOf(i)) % CYCLE;
 
 // Room round a prop's box for what it paints past it (its shadow, a pool of
@@ -766,7 +768,7 @@ export class Scene {
         made(sp.img, spriteStats.misses > m);
       };
       yield one(n.act, n.frame);
-      for (let i = 0; i < art.work.frames; i++) yield one('work', i);
+      for (let i = 0; i < framesOf(art.work); i++) yield one('work', i);
     }
     const warmed = new Set<string>();
     for (const d of f.desks ?? []) {
@@ -783,10 +785,11 @@ export class Scene {
         const mark = `${d.wall}|${k}`;
         if (warmed.has(mark)) continue;
         warmed.add(mark);
-        for (let i = 0; i <= lp.frames; i++) {
+        const n = framesFor(lp.secs);
+        for (let i = 0; i <= n; i++) {
           yield () => {
             const m = deskStats.misses;
-            const sp = loopSprite(f.world, k, i % lp.frames, i < lp.frames, d.wall, s, ink);
+            const sp = loopSprite(f.world, k, i % n, i < n, d.wall, s, ink);
             made(sp.img, deskStats.misses > m);
           };
         }
@@ -1143,10 +1146,11 @@ export class Scene {
   }
 
   // An animated prop drawn whole on its own (world pixels), again per
-  // ambient step (each prop at its own phase) or when worked or left.
+  // ambient step (each prop at its own phase) while it moves, or when
+  // worked or left; idle and still (see PropArt.movesIdle), once.
   private animPic(it: Item, f: SceneFrame, l: Layer, s: number, t: Tint): Vol {
     const { p, i, active } = it.anim!;
-    const tick = Math.floor(f.t * AMBIENT_FPS + phaseOf(i));
+    const tick = active || p.art.movesIdle ? Math.floor(f.t * AMBIENT_FPS + phaseOf(i)) : 0;
     return this.vol(it.id, `${l.key}|${tick}|${active ? 1 : 0}`, () => this.animDrawn(p, i, f, l, s, f.t, active, t));
   }
 

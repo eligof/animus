@@ -2,13 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
+import { framesFor } from '../src/art/motion.ts';
+import { DESK } from '../src/world/desks.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
 import { planRoom, toWorld } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import { den } from '../src/worlds/den.ts';
 import { DECOR_ART } from '../src/worlds/den/decor.ts';
 import { planFor } from '../src/worlds/den/room.ts';
-import type { PropArt } from '../src/worlds/types.ts';
+import type { DeskLoop, PropArt } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
 
@@ -206,6 +208,34 @@ test('Hacker\'s Den: its desks have things of their own to pick from, and someth
   const art = workstationOf(den);
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
+});
+
+// Every picture of a desk loop, lit, at 12 px a unit, its anchor in the
+// middle.
+function loopShots(lp: DeskLoop): Canvas[] {
+  const s = 12;
+  const [ax, ay] = project(0, 0, s)(...lp.at);
+  const at = frame(project(100 - ax, 150 - ay, s), 'right', 0, 0);
+  const n = framesFor(lp.secs);
+  return Array.from({ length: n }, (_, i) => {
+    const c = new Canvas(200, 200);
+    lp.draw({ pen: c, s, at, len: DESK.len, dep: DESK.dep, wall: 'right', island: true, t: 0, active: true, seed: 1 }, i / n);
+    return c;
+  });
+}
+
+test("Hacker's Den's desk loops: the lamp's wax moves on every picture; the router's lights blink in even steps", () => {
+  const loops = workstationOf(den).loops!;
+  const lamp = loopShots(loops.find((l) => l.name === 'lavaLamp')!);
+  lamp.forEach((c, i) => assert.ok(!same(c, lamp[(i + 1) % lamp.length]), `the wax stands still from picture ${i} to the next`));
+  // eight steps of four pictures each, none like the one before
+  const router = loopShots(loops.find((l) => l.name === 'router')!);
+  const runs: number[] = [];
+  router.forEach((c, i) => {
+    if (i > 0 && same(c, router[i - 1])) runs[runs.length - 1]++;
+    else runs.push(1);
+  });
+  assert.deepEqual(runs, Array(8).fill(4), 'the lights do not blink in eight even steps');
 });
 
 test("Hacker's Den: three locals at work, each where its job puts it", () => {

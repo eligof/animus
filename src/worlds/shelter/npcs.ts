@@ -201,7 +201,6 @@ const overseerParts: NpcParts = {
 // speaks, nodding, then lowers it. The other hand stays behind its back.
 const overseerWork: NpcLoop = {
   secs: 4,
-  frames: 12,
   pose(u) {
     const m = miked(u);
     const speak = u > 0.5 && u < 0.85;
@@ -262,8 +261,8 @@ const WHEEL_R = 0.85;
 const GAUGE = seen(MECH_AT, TOP_GAUGE);
 
 // How far into its work the mechanic cranks the wheel (the rest it knocks
-// on the gauge).
-// (each change over two frames or more, round the loop too)
+// on the gauge): each change over a sixth of the loop or more, round the
+// loop too.
 const cranking = (u: number) => 1 - ease(u, 0.54, 0.7) + ease(u, 0.8, 1);
 
 const mechParts: NpcParts = {
@@ -387,7 +386,6 @@ function wrench(sk: Sketch): void {
 // again.
 const mechWork: NpcLoop = {
   secs: 2.8,
-  frames: 12,
   pose(u) {
     const c = cranking(u);
     const t = 1 - c;
@@ -415,7 +413,6 @@ const mechWork: NpcLoop = {
 // beside its head (as the shared cheer has them), a hop, and back.
 const mechCelebrate: NpcLoop = {
   secs: 1.8,
-  frames: 9,
   pose(u) {
     const puff = bump(u, 0.0, 0.35);
     const up = ease(u, 0.2, 0.45) - ease(u, 0.75, 1);
@@ -473,10 +470,15 @@ const musing = (u: number) => ease(u, 0.5, 0.66) - ease(u, 0.82, 1);
 const waitressParts: NpcParts = {
   body(sk, p, back) {
     // bare legs, white socks, two-tone shoes; a kick now and then in her
-    // dance; the far leg first
-    const beat = p.act === 'show' ? Math.floor(p.u * 8) % 4 : -1;
+    // dance, out and back over a bounce (the near foot on the second of
+    // every four, the far one on the fourth); the far leg first
+    const show = p.act === 'show';
+    const kicks = {
+      near: show ? bump(p.u, 1 / 8, 2 / 8) + bump(p.u, 5 / 8, 6 / 8) : 0,
+      far: show ? bump(p.u, 3 / 8, 4 / 8) + bump(p.u, 7 / 8, 1) : 0,
+    };
     for (const [x, near] of [[0.9, false], [-0.75, true]] as const) {
-      const kick = (near && beat === 1) || (!near && beat === 3) ? 1 : 0;
+      const kick = near ? kicks.near : kicks.far;
       const fx = x + 0.9 * kick;
       const fy = -0.5 * kick;
       sk.limb([x, -3.2, fx + 0.05, fy - 1.0], 1.0, near ? W_SKIN : W_SKIN_D, { dark: near ? W_SKIN_D : null });
@@ -639,7 +641,6 @@ function pourAt(tip: number): { x: number; y: number } {
 // at her side and the pencil tapped to her chin over the order.
 const waitressWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const po = pouring(u);
     const m = musing(u);
@@ -663,7 +664,6 @@ const waitressWork: NpcLoop = {
 // beside her head.
 const waitressShow: NpcLoop & { crowd: 'dance' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'dance',
   pose(u) {
     const beat = Math.abs(Math.sin(u * TAU * 4));

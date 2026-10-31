@@ -431,6 +431,7 @@ const run: PropArt = {
   dep: 11,
   height: 15,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const { u: cu, v: cv, z: cz, h } = POT;
     // behind: the back stones, the embers, the stump of bottles, the basket
@@ -621,6 +622,7 @@ const web: PropArt = {
   dep: 9,
   height: 15,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const [ou, ov, oz] = ORB;
     const k = still(v, 'web', 13, (k) => {

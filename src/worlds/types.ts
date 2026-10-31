@@ -50,6 +50,11 @@ export type PropArt = {
   // seconds, its pictures drawn once and kept (see CYCLE in art/scene.ts):
   // what moves on it while worked (beats, turns) should repeat within 2 s.
   animated?: boolean;
+  // An animated prop that moves while nobody works it (`v.active` false: a
+  // lava pool, a hearth, a cabinet's attract screen), so it is drawn again
+  // every ambient step. Without it, one idle draws the same whatever the
+  // clock, and is drawn once until it is worked.
+  movesIdle?: boolean;
   draw(v: PropView): void;
   emit?(v: PropView, dt: number, spawn: (p: Particle) => void): void;
 };
@@ -69,15 +74,16 @@ export type Quad = readonly [P3, P3, P3, P3];
 export type Clutter = { name: string; r: number; h: number; draw(v: PropView, at: P3): void };
 
 // Something on a workstation that moves while its agent works (a
-// lantern's flame, a cauldron's bubbles, steam off a cup): `frames`
-// pictures (4 to 8) shown `fps` a second (at most 8), standing at `at` in
-// the desk's frame, inside `r` round it and `h` over it. `draw` paints
-// frame `i`; frame 0 is the still one shown while the screen is off
-// (`v.active` false: unlit). It never reads `v.t`, and every frame paints
+// lantern's flame, a cauldron's bubbles, steam off a cup): a loop `secs`
+// seconds long (0.4 to 3), drawn 15 pictures a second (see framesFor in
+// art/motion.ts), standing at `at` in the desk's frame, inside `r` round it
+// and `h` over it. `draw` paints it `u` round the loop (0 to 1, a smooth
+// function of u); u = 0 is also the still one shown while the screen is
+// off (`v.active` false: unlit). It never reads `v.t`, and every frame paints
 // something, lit or not (a loop of steam draws its cup too). Loops draw the
 // same on every look of the desk (they get look 0), and stand clear of the
 // clutter's spots. The desk's own draw leaves out what its loops paint.
-export type DeskLoop = { name: string; at: P3; r: number; h: number; frames: number; fps: number; draw(v: PropView, i: number): void };
+export type DeskLoop = { name: string; at: P3; r: number; h: number; secs: number; draw(v: PropView, u: number): void };
 
 // A world's workstation (see world/desks.ts): a prop DESK.len x DESK.dep
 // that stands at most DESK.height tall. Its own picture is never animated
@@ -156,12 +162,14 @@ export type NpcParts = {
   fore(sk: Sketch, p: Puppet, k: 0 | 1, back: boolean): void;
 };
 
-// A loop of a local's own: `frames` pictures over `secs` seconds, at most
-// 12 a second; `pose` its puppet at `u` (its act and u are set for it:
-// start from rest() in art/npc/acts.ts). Work and a show go round, frame i
-// at i / frames; the rest play once, frame i at i / (frames - 1), so the
-// last frame shown is the end (u = 1): a celebration ends as it began.
-export type NpcLoop = { secs: number; frames: number; pose(u: number): Omit<Puppet, 'act' | 'u'> };
+// A loop of a local's own: `secs` seconds long, drawn in framesOf (see
+// art/npc/acts.ts: 15 pictures a second); `pose` its puppet at `u` (its act
+// and u are set for it: start from rest() there). Work and a show go round,
+// frame i at i / frames; the rest play once, frame i at i / (frames - 1),
+// so the last frame shown is the end (u = 1): a celebration ends as it
+// began. Make every motion a smooth function of u: it is seen 15 times a
+// second.
+export type NpcLoop = { secs: number; pose(u: number): Omit<Puppet, 'act' | 'u'> };
 
 // Which way a local faces (see facingOf in world/npc-place.ts): `out` into
 // the room and `along` its station (+u) show its front; `back` (into its

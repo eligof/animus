@@ -143,19 +143,19 @@ function portafilter(sk: Sketch, press: number | null): void {
   sk.blob(circ(1.75, y - 1.1, 0.36), C.walnut, { dark: C.walnutDark, d: 0.1 });
 }
 
-// The work loop's beats (see baristaWork), by the frame (f = u * 12): the
-// tamp (frames 0 to 4), the portafilter away under the bar as the jug comes
-// up to the wand (over frames 5 and 6), the jug swirled there (7 to 9),
-// and the jug away as the portafilter comes back (over 10 and 11): each
-// hand-over eased across two frames, never a cut.
+// The work loop's beats (see baristaWork), in twelfths of the loop (u * 12):
+// the tamp (to 4/12), the portafilter away under the bar as the jug comes
+// up to the wand (over 5/12 to 7/12), the jug swirled there (to 9/12),
+// and the jug away as the portafilter comes back (over the last 2/12):
+// each hand-over eased across a fifth of the loop, never a cut.
 const tampOf = (u: number) => 1 - ease(u * 12, 4, 6.5) + ease(u * 12, 9.5, 12);
 const steamOf = (u: number) => ease(u * 12, 5, 7.5) - ease(u * 12, 9, 11.5);
 const pressOf = (u: number) => Math.max(0, Math.sin(u * TAU * 2.6));
 
-// The show's beats (see baristaShow), by the frame (f = u * 16): into the
-// pour (over frames 1 to 3), the heart growing (4 to 9), the jug flicked
-// away (10), the cup lifted high (over 10 and 11) and held, and down again
-// (over 14 and 15) as it comes back to rest.
+// The show's beats (see baristaShow), in sixteenths of the loop (u * 16):
+// into the pour (over 1/16 to 4/16), the heart growing (to 9/16), the jug
+// flicked away (at 10/16), the cup lifted high (to 12/16) and held, and
+// down again (over the last 3/16) as it comes back to rest.
 const pourOf = (u: number) => ease(u * 16, 1.5, 4) - ease(u * 16, 8.5, 10.5);
 const heartOf = (u: number) => ease(u * 16, 3.5, 9.5);
 const showOf = (u: number) => ease(u * 16, 9.5, 12) - ease(u * 16, 13, 15.5);
@@ -281,7 +281,6 @@ const baristaParts: NpcParts = {
 // to the steam wand, swirling it, and back.
 const baristaWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const tamp = tampOf(u);
     const steam = steamOf(u);
@@ -306,7 +305,6 @@ const baristaWork: NpcLoop = {
 // the far hand out (voila), and down.
 const baristaShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const k = ease(u * 16, 0, 2.5) - ease(u * 16, 13, 16);
@@ -575,7 +573,6 @@ const pastryChefParts: NpcParts = {
 // sight, behind the counter, so the loop joins up unseen).
 const pastryChefWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const ice = iceOf(u);
     const down = downOf(u);
@@ -704,8 +701,8 @@ function teacup(sk: Sketch): void {
 }
 
 // The work loop's beats (see regularWork): a page turned; the tea sipped
-// (the near hand off the paper, up over three frames and down over three);
-// a glance up over it.
+// (the near hand off the paper, up over a quarter of the loop and down
+// over the last fifth); a glance up over it.
 const pageOf = (u: number) => ease(u, 0.22, 0.42);
 const sipOf = (u: number) => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
 
@@ -834,19 +831,19 @@ const regularParts: NpcParts = {
 // eyes shut; and back to the paper.
 const regularWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const page = bump(u, 0.2, 0.45);
     const sip = sipOf(u);
     const near = reach(RG_BONES, 0, mix(0.8, 1.45, sip), mix(-3.3, -4.35, sip));
     const far = reach(RG_BONES, 1, 3.75 - 0.7 * page, -3.55 - 0.7 * page);
-    const i = Math.round(u * 12) % 12;
+    // a blink a sixth of the way in, for a twelfth of the loop
+    const blink = Math.abs(u - 1 / 6) < 1 / 24;
     return {
       ...rest(),
       lean: -0.04,
       tilt: 0.1 - 0.06 * sip + 0.03 * Math.sin(u * TAU),
       arms: [near, far],
-      eyes: sip > 0.5 ? 'shut' : i === 2 ? 'blink' : 'open',
+      eyes: sip > 0.5 ? 'shut' : blink ? 'blink' : 'open',
       mouth: sip > 0.5 ? 'o' : page > 0.5 ? 'open' : 'closed',
     };
   },
@@ -855,7 +852,6 @@ const regularWork: NpcLoop = {
 // The paper lowered to its lap, a little clap, a beam.
 const regularCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.85);
     const clap = 0.5 + 0.5 * Math.sin(u * TAU * 3);

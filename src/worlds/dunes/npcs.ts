@@ -161,7 +161,6 @@ const ON_HIP: Swing = { sh: -0.5, el: 1.3 };
 // pull, a bob with the effort.
 const mechWork: NpcLoop = {
   secs: 2.0,
-  frames: 12,
   pose(u) {
     const a = A0 - TAU * u;
     const push = Math.cos(a);
@@ -173,7 +172,6 @@ const mechWork: NpcLoop = {
 // Done: a gloved hand wiped across its brow, then a thumbs-up and a grin.
 const mechCelebrate: NpcLoop = {
   secs: 2.0,
-  frames: 10,
   pose(u) {
     const wipe = bump(u, 0.05, 0.5);
     const across = ease(u, 0.12, 0.42);
@@ -311,14 +309,14 @@ const lookParts: NpcParts = {
   },
 };
 
-// Its work, each change eased over two frames (f = u * 12, the frame): at
-// the glass (frames 0 to 4); back from it (5), rubbing its eye with its
-// near hand (6 and 7), its far hand still on the tube; that hand to its
-// brow as the other goes back to its knee (8), looking out bare-eyed (9
-// and 10); and in again (11).
-const peer = (u: number) => 1 - ease(u * 12, 4, 6) + ease(u * 12, 10, 12);
-const rubbing = (u: number) => ease(u * 12, 4, 6) - ease(u * 12, 7, 9);
-const shading = (u: number) => ease(u * 12, 7, 9) - ease(u * 12, 10, 12);
+// Its work, in twelfths of the loop, each change eased over two of them:
+// at the glass (the first third); back from it (to a half), rubbing its
+// eye with its near hand (to 7/12), its far hand still on the tube; that
+// hand to its brow as the other goes back to its knee (to 3/4), looking
+// out bare-eyed (to 5/6); and in again (to the end).
+const peer = (u: number) => 1 - ease(u, 4 / 12, 6 / 12) + ease(u, 10 / 12, 1);
+const rubbing = (u: number) => ease(u, 4 / 12, 6 / 12) - ease(u, 7 / 12, 9 / 12);
+const shading = (u: number) => ease(u, 7 / 12, 9 / 12) - ease(u, 10 / 12, 1);
 // Its lean and nod at the glass (its eye then sits at SPY's eyepiece), its
 // near hand on its knee and up at its eye, its far hand up at its brow.
 const PEER = { lean: 0.12, tilt: 0.1 };
@@ -331,7 +329,6 @@ const AT_BROW: Swing = { sh: 2.55, el: 2.1 };
 // brow, looking out bare-eyed; and in again.
 const lookWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const k = peer(u);
     const rub = rubbing(u);
@@ -588,7 +585,8 @@ const star = (x: number, y: number, r: number) => (q: Pen) => {
 };
 
 // How far into holding the cup up to the light the barkeep is, at u of
-// its work: out over three frames, a look, back over three.
+// its work: out from halfway round the loop to three quarters, a look,
+// back from 0.78 to its end.
 const inspecting = (u: number) => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
 // Where it holds the cup to polish it, in front of its belly over the
 // counter, and out to the side to look it over.
@@ -599,7 +597,6 @@ const OUT: Pt = [3.6, -7.4];
 // out to look it over, a squint, a glint, and back to it.
 const barWork: NpcLoop = {
   secs: 2.8,
-  frames: 12,
   pose(u) {
     const up = inspecting(u);
     const c = Math.cos(u * TAU * 2);
@@ -616,7 +613,6 @@ const barWork: NpcLoop = {
 // following them up.
 const barShow: NpcLoop & { crowd: 'watch' } = {
   secs: 2.4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const p: Puppet = { ...rest(), u, bob: 0.12 * Math.abs(Math.sin(u * TAU * 3)), tilt: -0.2 };

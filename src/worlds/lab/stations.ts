@@ -1116,8 +1116,12 @@ const think: PropArt = {
       k.pen.strokeStyle = '#c9b0ff';
       k.pen.lineWidth = Math.max(0.6, 0.08 * k.s);
       k.pen.stroke();
-      const j = Math.floor((((t * (1 + i * 0.5) + i * 0.33) % 1) + 1) % 1 * pr.length);
-      const [ex, ey] = pr[j];
+      // round its ring, between the ring's points
+      const x = ((((t * (1 + i * 0.5) + i * 0.33) % 1) + 1) % 1) * pr.length;
+      const j = Math.floor(x) % pr.length;
+      const [a, b] = [pr[j], pr[(j + 1) % pr.length]];
+      const ex = a[0] + (b[0] - a[0]) * (x - Math.floor(x));
+      const ey = a[1] + (b[1] - a[1]) * (x - Math.floor(x));
       k.pen.beginPath();
       k.pen.arc(ex, ey, Math.max(1.2, 0.2 * k.s), 0, Math.PI * 2);
       k.paint('#7fe0ff', k.thin * 0.7);

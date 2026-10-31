@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import { DESK } from '../../world/desks.ts';
 import type { Clutter, DeskLoop, PropView, Quad, WorkstationArt } from '../types.ts';
 import { bone, bonePile, flame, frustum, rock, skull, spike, tome } from './bits.ts';
@@ -487,14 +488,18 @@ const SPOTS: P3[] = [
 // wick smokes no more than a dark tip.
 const CANDLE: P3 = [6.3, 2.3, TOP];
 const SKULL_R = 0.42;
+// The flame round its loop, a smooth curve through these: its lean, its
+// height and its glow.
+const SWAY = [0, 0.04, 0.07, 0.05, 0.01, -0.03];
+const TALL = [0.62, 0.66, 0.6, 0.57, 0.62, 0.65];
+const GLOW = [0.42, 0.45, 0.4, 0.38, 0.42, 0.44];
 const blackCandle: DeskLoop = {
   name: 'blackCandle',
   at: CANDLE,
   r: 0.55,
   h: 2.6,
-  frames: 6,
-  fps: 6,
-  draw(v, i) {
+  secs: 1,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = CANDLE;
     const zc = z + SKULL_R * 1.95;
@@ -510,11 +515,8 @@ const blackCandle: DeskLoop = {
       k.line([wick, [u, w, zc + ch + 0.18]], INK, Math.max(0.8, 0.08 * k.s));
       return;
     }
-    const sway = [0, 0.04, 0.07, 0.05, 0.01, -0.03][i];
-    const tall = [0.62, 0.66, 0.6, 0.57, 0.62, 0.65][i];
-    const glow = [0.42, 0.45, 0.4, 0.38, 0.42, 0.44][i];
-    k.halo(u, w, zc + ch + 0.3, 1.05, '#ffb060', glow);
-    flame(k, u, w, zc + ch + 0.04, 0.17, tall, sway);
+    k.halo(u, w, zc + ch + 0.3, 1.05, '#ffb060', through(GLOW, phase));
+    flame(k, u, w, zc + ch + 0.04, 0.17, through(TALL, phase), through(SWAY, phase));
   },
 };
 

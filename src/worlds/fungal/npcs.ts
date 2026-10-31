@@ -214,14 +214,14 @@ const herbParts: NpcParts = {
 };
 
 // How far the herbalist has a sprig up at his nose, at u round his work:
-// lifted over three frames, a long sniff, lowered over three.
+// lifted over a quarter of the loop, a long sniff, lowered over the last
+// quarter.
 const herbSniff = (u: number): number => ease(u, 0.43, 0.68) - ease(u, 0.76, 1);
 
 // At the chest: the pestle going round in the mortar, then a sprig lifted
 // to the nose, a long sniff, eyes shut, and back to grinding.
 const herbWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const sniff = herbSniff(u);
     const g = 1 - sniff;
@@ -245,7 +245,6 @@ const herbWork: NpcLoop = {
 // foot; from rest and back.
 const herbCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const hop = Math.abs(Math.sin(u * TAU * 2));
@@ -512,7 +511,6 @@ const witchParts: NpcParts = {
 // in to peer at the brew, a sniff now and then.
 const witchWork: NpcLoop = {
   secs: 2.0,
-  frames: 10,
   pose(u) {
     const a = u * TAU;
     const peer = bump(u, 0.45, 0.85);
@@ -536,7 +534,6 @@ const witchWork: NpcLoop = {
 // head thrown back, shaking with laughter; from rest and back.
 const witchCelebrate: NpcLoop = {
   secs: 1.8,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.18, 0.82);
     const shake = Math.sin(u * TAU * 5);
@@ -604,8 +601,8 @@ const BLUSH = '#f0a0b8';
 
 const MYC_BONES: Bones = { neck: [0.1, -5.5], shoulders: [[-1.85, -4.3], [1.95, -4.3]], upper: 1.15, fore: 1.1 };
 
-// How squeezed its cap is (0 to 1) and how far its spores have risen (0
-// none, then 0 to 1) at this frame.
+// How squeezed its cap is (0 to 1) and how far its spores have risen (-1
+// none, then 0 to 1) at this point of its loop.
 function puffOf(p: Puppet): { squeeze: number; rise: number } {
   if (p.act === 'work') return { squeeze: bump(p.u, 0.5, 0.68), rise: p.u > 0.58 ? (p.u - 0.58) / 0.42 : -1 };
   if (p.act === 'show') {
@@ -727,7 +724,6 @@ const mycParts: NpcParts = {
 // cap and a puff of spores drifting up.
 const mycWork: NpcLoop = {
   secs: 2.0,
-  frames: 12,
   pose(u) {
     const sway = Math.sin(u * TAU);
     const sq = bump(u, 0.5, 0.68);
@@ -749,7 +745,6 @@ const mycWork: NpcLoop = {
 // spores off its cap each bounce.
 const mycShow: NpcLoop & { crowd: 'dance' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'dance',
   pose(u) {
     const b = (u * 4) % 1;
@@ -775,7 +770,6 @@ const mycShow: NpcLoop & { crowd: 'dance' } = {
 // and back.
 const mycCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     return { ...rest(), bob: 0.9 * bump(u, 0.15, 0.6), tilt: -0.1 * k, arms: [swing(-1.9 * k, -0.9 * k), swing(1.7 * k, 0.7 * k)], eyes: k > 0.3 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'smile' };

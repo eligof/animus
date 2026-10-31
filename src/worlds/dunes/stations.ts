@@ -339,11 +339,15 @@ const search: PropArt = {
     // a band of leather round the barrel where the tripod holds it
     fillPts(k, ring(k, at(SPY.pivot + 0.4), d, 0.62, 16), null, Math.max(1, 0.2 * k.s));
     if (!v.active) return;
-    // a glint running round the rim now and then
+    // a glint running round the rim now and then, sliding between its
+    // points
     const ph = (v.t * 0.5) % 1;
     if (ph < 0.35) {
-      const [gx, gy] = rim[Math.floor((ph / 0.35) * rim.length) % rim.length];
-      sparkle(k, gx, gy, (0.5 + Math.sin((ph / 0.35) * Math.PI) * 0.6) * k.s);
+      const f = (ph / 0.35) * rim.length;
+      const j = Math.floor(f);
+      const [ax, ay] = rim[j % rim.length];
+      const [bx, by] = rim[(j + 1) % rim.length];
+      sparkle(k, ax + (bx - ax) * (f - j), ay + (by - ay) * (f - j), (0.5 + Math.sin((ph / 0.35) * Math.PI) * 0.6) * k.s);
     }
   },
 };

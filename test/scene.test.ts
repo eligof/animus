@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { clearSprites, spriteStats } from '../src/art/figure.ts';
+import { LOOP } from '../src/art/figure/rig.ts';
 import { Scene } from '../src/art/scene.ts';
 import { buildSprite } from '../src/art/scene/build.ts';
 import { compare, depthOrder, pointVsBox } from '../src/art/scene/depth.ts';
@@ -558,7 +559,7 @@ test('a picture keeps its key while its pixels stay the same: frame to frame, th
   const breath = (t: number) => at(scene.plate(frame(r, { t, figures: [figure('a', 20, 40, { poseT: t })] })), 'fig:a').pic.key;
   const seen = new Map<string, number>();
   for (let t = 0; t < 6; t += 0.1) seen.set(breath(t), (seen.get(breath(t)) ?? 0) + 1);
-  assert.ok(seen.size > 1 && seen.size < 30, `${seen.size} sprites in 60 frames`);
+  assert.ok(seen.size > 1 && seen.size <= LOOP.idle[1], `${seen.size} sprites in 60 frames, round a loop of ${LOOP.idle[1]}`);
   // Selected, the ring is a new picture under the figure.
   const d = scene.plate(frame(r, { figures: [figure('a', 20, 40, { selected: true })] }));
   assert.ok(at(d, 'ring:a'));

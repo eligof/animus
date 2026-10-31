@@ -53,6 +53,7 @@ const write: PropArt = {
   dep: 7,
   height: 16,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 16, (k) => {
       k.shadow(5.5, 3.6, 6.2, 3.8, 0.3);
@@ -380,6 +381,7 @@ const search: PropArt = {
   dep: 4,
   height: 14,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'search', 14, (k) => {
       k.shadow(6, 2.2, 6.4, 2.4, 0.3);
@@ -749,6 +751,7 @@ const think: PropArt = {
   dep: 7,
   height: 11,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const at = (fu: number, fv: number): P3 => [MAP[0] + (MAP[1] - MAP[0]) * fu, MAP[2] + (MAP[3] - MAP[2]) * fv, TOP + 0.02];
     const k = still(v, 'think', 11, (k) => {
@@ -850,6 +853,7 @@ const idle: PropArt = {
   dep: 11,
   height: 10,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'idle', 10, (k) => {
       k.shadow(7.5, 5.5, 7.6, 5.4, 0.22);

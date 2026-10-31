@@ -39,7 +39,6 @@ export function standIn(name: string, station: SlotKind, place: NpcPlace, o: Sta
   const color = o.color ?? '#5a8ad8';
   const work: NpcLoop = {
     secs: 1,
-    frames: 8,
     pose: (u) => ({ ...rest(), tilt: 0.1 * Math.sin(u * TAU), arms: [HANG, { sh: 0.6 + 0.5 * Math.sin(u * TAU), el: 0.6 }] }),
   };
   const n: Npc = {
@@ -71,12 +70,11 @@ export function standIn(name: string, station: SlotKind, place: NpcPlace, o: Sta
   if (o.show) {
     n.show = {
       secs: 2,
-      frames: 12,
       crowd: o.show,
       pose: (u) => ({ ...rest(), bob: 0.3 * Math.abs(Math.sin(u * TAU * 2)), arms: [{ sh: 2.6, el: 0.3 }, { sh: 2.6 + 0.3 * Math.sin(u * TAU * 2), el: 0.3 }], eyes: 'happy', mouth: 'open' }),
     };
   }
-  if (o.celebrate) n.celebrate = { secs: 1, frames: 6, pose: (u) => ({ ...rest(), bob: 0.5 * Math.sin(u * Math.PI), eyes: 'happy', mouth: 'open' }) };
+  if (o.celebrate) n.celebrate = { secs: 1, pose: (u) => ({ ...rest(), bob: 0.5 * Math.sin(u * Math.PI), eyes: 'happy', mouth: 'open' }) };
   return n;
 }
 

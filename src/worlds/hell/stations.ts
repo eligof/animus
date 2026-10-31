@@ -1,4 +1,4 @@
-import { shade } from '../../art/iso.ts';
+import { mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
 import type { PropArt, PropView } from '../types.ts';
@@ -116,7 +116,7 @@ const write: PropArt = {
       return;
     }
     const glow = 0.5 + 0.5 * Math.sin(v.t * Math.PI);
-    k.line(pts, glow > 0.5 ? '#ff8a3a' : '#ff6a2a', Math.max(0.8, 0.12 * k.s));
+    k.line(pts, mix('#ff6a2a', '#ff8a3a', glow), Math.max(0.8, 0.12 * k.s));
     k.halo(pts[4][0], w, z + 0.3, 1.6 + 0.4 * glow, '#ff6a2a', 0.35 + 0.2 * glow);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
@@ -525,7 +525,7 @@ const run: PropArt = {
     // the ingot on the anvil: cold iron, or glowing
     const { u: au, v: av, z: az } = ANVIL;
     const glow = on ? 0.6 + 0.4 * Math.sin(t * Math.PI) : 0;
-    k.box(au - 0.7, av - 0.25, az, 1.4, 0.5, 0.3, on ? (glow > 0.5 ? '#ffd060' : '#ff9a30') : '#5a4a4a', { line: k.thin, stripe: false });
+    k.box(au - 0.7, av - 0.25, az, 1.4, 0.5, 0.3, on ? mix('#ff9a30', '#ffd060', (glow - 0.2) / 0.8) : '#5a4a4a', { line: k.thin, stripe: false });
     if (on) k.halo(au, av, az + 0.3, 2.2, '#ffb040', 0.4 * glow + 0.2);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {

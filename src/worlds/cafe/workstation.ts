@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import type { Color } from '../../art/types.ts';
 import { DESK } from '../../world/desks.ts';
 import type { Clutter, DeskLoop, PropView, WorkstationArt } from '../types.ts';
@@ -376,6 +377,8 @@ function grown(c: Clutter, f: number): Clutter {
 // desk is worked its flame sways and flickers tall and short, its warm
 // light swelling and ebbing with it, and the glass glows; off, it is out.
 const CANDLE: P3 = [6.45, 1.85, ZT];
+// the flame's tip leaning aside, and how much taller or shorter than at
+// rest it stands, evenly round its second (see through)
 const SWAY = [0, 0.03, 0.05, 0.03, 0, -0.03] as const;
 const TALL = [0, 0.09, -0.04, 0.07, 0.02, -0.06] as const;
 const candle: DeskLoop = {
@@ -383,13 +386,12 @@ const candle: DeskLoop = {
   at: CANDLE,
   r: 0.25,
   h: 0.8,
-  frames: 6,
-  fps: 6,
-  draw(v, i) {
+  secs: 1,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = CANDLE;
     const on = v.active;
-    const tall = on ? TALL[i] : 0;
+    const tall = on ? through(TALL, phase) : 0;
     if (on) {
       // the warm light it throws on the table, swelling and ebbing with the
       // flame (painted over the wood, so it shows on the palest top)
@@ -415,7 +417,7 @@ const candle: DeskLoop = {
     k.halo(u, w, z + 0.55, 0.85 + tall * 1.5, '#ffb04a', 0.6 + tall * 2);
     k.halo(u, w, z + 0.55, 0.32, '#fff0c0', 0.5 + tall * 2);
     const [x, y] = k.p(u, w, z + 0.62 + tall / 2);
-    const sx = SWAY[i] * k.s;
+    const sx = through(SWAY, phase) * k.s;
     const h = (0.22 + tall / 2) * k.s;
     const wd = 0.13 * k.s;
     k.pen.beginPath();
@@ -436,16 +438,15 @@ const candle: DeskLoop = {
 
 // The latte at the front right corner, on its saucer, a heart in its
 // crema: while its desk is worked two wisps of steam curl up off it,
-// rising a step each frame; off, it has gone cold.
+// their waves rising as they go; off, it has gone cold.
 const LATTE: P3 = [6.25, 2.5, ZT];
 const latte: DeskLoop = {
   name: 'latte',
   at: LATTE,
   r: 0.35,
   h: 1.35,
-  frames: 8,
-  fps: 5,
-  draw(v, i) {
+  secs: 1.6,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = LATTE;
     k.disc(u, w, z + 0.04, 0.33, shade(C.china, -0.04), fine(k));
@@ -462,12 +463,12 @@ const latte: DeskLoop = {
     k.pen.fill();
     if (!v.active) return;
     // the steam: each wisp a wavy line fading as it rises, its wave
-    // moving up an eighth of a turn a frame
+    // moving up a whole turn round the loop
     for (const [ph, du] of [[0, -0.05], [2.4, 0.07]] as const) {
       const pts: P3[] = [];
       for (let j = 0; j <= 12; j++) {
         const t = j / 12;
-        const a = Math.PI * 2 * (t * 1.4 - i / 8) + ph;
+        const a = Math.PI * 2 * (t * 1.4 - phase) + ph;
         pts.push([u + du + Math.sin(a) * 0.06 * (0.4 + t) + t * 0.12, w, z + 0.42 + t * 0.9]);
       }
       for (let j = 0; j < 12; j++) k.line([pts[j], pts[j + 1]], withAlpha('#fffaf0', 0.85 * (1 - j / 12)), Math.max(1, (0.07 - 0.03 * (j / 12)) * k.s));

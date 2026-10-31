@@ -1,4 +1,5 @@
 import { mix, shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import type { Color } from '../../art/types.ts';
 import { DESK } from '../../world/desks.ts';
 import type { Clutter, DeskLoop, PropView, WorkstationArt } from '../types.ts';
@@ -313,18 +314,17 @@ function grown(c: Clutter, f: number): Clutter {
 
 // A holo emitter at the deck's front right: a steel puck with a lens. While
 // its desk is worked the lens glows and throws up a hologram of a ringed
-// planet that turns, a little each frame (its three meridians repeat every
-// sixty degrees, so eight frames go round seamlessly); off, the lens is
-// dark and nothing shows above it.
+// planet that turns, sixty degrees a loop (its three meridians repeat every
+// sixty, so it goes round seamlessly); off, the lens is dark and nothing
+// shows above it.
 const HOLO: P3 = [5.75, 2.4, deckZ(2.4)];
 const holoPlanet: DeskLoop = {
   name: 'holoPlanet',
   at: HOLO,
   r: 0.4,
   h: 1.45,
-  frames: 8,
-  fps: 4,
-  draw(v, i) {
+  secs: 2,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = HOLO;
     foot(k, u, w, z, 0.35);
@@ -358,7 +358,7 @@ const holoPlanet: DeskLoop = {
     pen.beginPath();
     pen.ellipse(cx, cy, r, r * 0.3, 0, 0, Math.PI * 2);
     for (let m = 0; m < 3; m++) {
-      const a = (m * Math.PI) / 3 + (i / 8) * (Math.PI / 3);
+      const a = ((m + phase) * Math.PI) / 3;
       const rx = Math.abs(Math.cos(a)) * r;
       if (rx < 0.5) continue;
       pen.moveTo(cx + rx, cy);
@@ -381,15 +381,15 @@ const holoPlanet: DeskLoop = {
 // dome, and its red light swells out round it and ebbs (never out); while
 // it is not, the dome is dark glass and throws no light.
 const BEACON: P3 = [4.65, 0.77, 9.69];
+// how bright, evenly round the loop (a smooth swell through these)
 const GLOW = [0.3, 0.55, 0.85, 1, 0.85, 0.55] as const;
 const beacon: DeskLoop = {
   name: 'beacon',
   at: BEACON,
   r: 0.3,
   h: 0.7,
-  frames: 6,
-  fps: 4,
-  draw(v, i) {
+  secs: 1.5,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = BEACON;
     k.box(u - 0.12, w - 0.1, z - 0.03, 0.24, 0.2, 0.1, C.steelDark, { line: fine(k), stripe: false });
@@ -399,7 +399,7 @@ const beacon: DeskLoop = {
       k.dot(...lamp, 0.12, '#3a2630', fine(k) * 0.8);
       return;
     }
-    const b = GLOW[i];
+    const b = through(GLOW, phase);
     // the swell: red light painted over what is behind (so it shows on a
     // pale wall as on a dark one), out to most of a unit at its height
     const [x, y] = k.p(...lamp);

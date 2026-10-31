@@ -22,16 +22,15 @@ export function square(name: string, color: string): Clutter {
   };
 }
 
-export function blink(name: string, at: P3, frames = 8, fps = 8): DeskLoop {
+export function blink(name: string, at: P3, secs = 1): DeskLoop {
   return {
     name,
     at,
     r: 0.5,
     h: 1.2,
-    frames,
-    fps,
-    draw(v, i) {
-      const [x, y] = v.at(at[0], at[1], at[2] + 0.2 + (0.8 * i) / frames);
+    secs,
+    draw(v, u) {
+      const [x, y] = v.at(at[0], at[1], at[2] + 0.2 + 0.8 * u);
       v.pen.fillStyle = v.active ? '#ffd34a' : '#7a6a3a';
       v.pen.beginPath();
       v.pen.arc(x, y, 0.2 * v.s, 0, Math.PI * 2);

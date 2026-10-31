@@ -28,6 +28,12 @@ const on = (q: readonly [P3, P3, P3, P3], fu: number, fz: number): P3 => {
   return [a[0] + (b[0] - a[0]) * fu + (d[0] - a[0]) * fz, a[1] + (b[1] - a[1]) * fu + (d[1] - a[1]) * fz, a[2] + (b[2] - a[2]) * fu + (d[2] - a[2]) * fz];
 };
 
+// 0 to 1, eased in and out, as x goes from a to b.
+const ease = (x: number, a: number, b: number): number => {
+  const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
 // A row of handwriting: a tight wobble along u at (v, z), u0 to u1.
 function script(u0: number, u1: number, v: number, z: number, seed: number): P3[] {
   const pts: P3[] = [];
@@ -301,6 +307,8 @@ const LEDGER: readonly [P3, P3, P3, P3] = [[11.1, 1.25, 6.62], [13.5, 1.25, 6.62
 
 export const SAFE = { u0: 0.6, u1: 7.0, v0: 0.4, v1: 3.7, z0: 0.7, z1: 10.2 };
 export const DIAL: P3 = [3.8, SAFE.v1 + 0.02, 6.2];
+// The three numbers the dial is turned to (its turn at each).
+const NUMBERS = [0, 1, 2].map((n) => hash(n, 3) * 6.28 + (hash(n, 4) - 0.5) * 1.6);
 
 const search: PropArt = {
   len: 12,
@@ -397,11 +405,12 @@ const search: PropArt = {
       k.wash(4.6, v1 + 0.05, 6.4, 2.8, 2.6, '#ffe7b0', 0.42);
       k.halo(lc[0] + dir[0] * 1.0, lc[1] + dir[1] * 1.0, lc[2] + dir[2] * 1.0, 2.2, '#ffe2a0', 0.5);
     }
-    // the dial: worked back and forth, a pause at each of three numbers
-    // (round in two seconds)
-    const t = v.t;
-    const step = Math.floor(t * 1.5);
-    const turn = lit ? hash(step % 3, 3) * 6.28 + (hash(step % 3, 4) - 0.5) * 1.6 * Math.min(1, (t * 1.5 - step) * 3) : 0.7;
+    // the dial: worked back and forth, turned to each of three numbers in
+    // turn and a pause at each (round in two seconds)
+    const x = (((v.t * 1.5) % 3) + 3) % 3;
+    const at = Math.floor(x);
+    const was = NUMBERS[(at + 2) % 3];
+    const turn = lit ? was + (NUMBERS[at] - was) * ease(x - at, 0, 0.55) : 0.7;
     dial(k, DIAL[0], DIAL[1], DIAL[2], 1.25, turn, '#efe6cf', C.brass);
     // the pointer mark over the dial
     k.poly([[DIAL[0] - 0.15, DIAL[1] + 0.02, DIAL[2] + 1.4], [DIAL[0] + 0.15, DIAL[1] + 0.02, DIAL[2] + 1.4], [DIAL[0], DIAL[1] + 0.02, DIAL[2] + 1.15]], C.gold, Math.max(0.6, k.thin * 0.6));
@@ -470,7 +479,8 @@ const run: PropArt = {
     const roar = act ? 0.55 + 0.25 * Math.sin(t * 9.3) * Math.sin(t * 5.1 + 1) : 0.25;
     k.halo(2.9, 4.8, 1.6, act ? 3.6 : 2.6, '#ff8a2a', roar + 0.1);
     flamelets(k, 2.9, 4.64, 0.7, act ? 1 : 0.6, act ? t : 0.4);
-    // the moulds: cooled gold, or filling with molten
+    // the moulds: cooled gold, or filling with molten, one after another
+    // (a mould every two seconds)
     const { v0, z } = TABLE;
     const pour = act ? Math.floor(t * 0.5) % MOULDS.length : -1;
     for (const [i, m] of MOULDS.entries()) {
@@ -481,11 +491,14 @@ const run: PropArt = {
       } else if (act && (i + MOULDS.length - pour) % MOULDS.length === 1) k.poly(pts, k.grad(pts[0], pts[2], [[0, '#ffd27a'], [1, '#d8781e']]), 0);
       else k.poly(pts, k.grad(pts[0], pts[2], [[0, C.goldLight], [1, C.goldDeep]]), 0);
     }
-    // the ladle: upright, or tipped to pour over the mould
-    const tip = act ? 0.8 + 0.06 * Math.sin(t * 3.1) : 0;
-    const mu = act ? MOULDS[pour] : LADLE.u;
-    ladle(k, act ? mu : LADLE.u, tip);
-    if (act) {
+    // the ladle: upright, or tipped to pour over the mould; done, it rights
+    // itself, slides along the frame to the next and tips again
+    const s = t * 0.5 - Math.floor(t * 0.5);
+    const tipped = act ? (s < 0.5 ? ease(s, 0, 0.12) : 1 - ease(s, 0.72, 0.84)) : 0;
+    const tip = tipped * (0.8 + 0.06 * Math.sin(t * 3.1));
+    const mu = act ? MOULDS[pour] + (MOULDS[(pour + 1) % MOULDS.length] - MOULDS[pour]) * ease(s, 0.8, 1) : LADLE.u;
+    ladle(k, mu, tip);
+    if (tipped > 0.7) {
       // the stream from the lip down into the mould
       const lip = rot(0, 1.25, 1.15, tip);
       const top: P3 = [mu, LADLE.v + lip[1], LADLE.z + lip[2]];

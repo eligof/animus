@@ -5,6 +5,7 @@ import { loadWorld } from '../scripts/scene-shot.ts';
 import { Canvas } from '../src/art/canvas.ts';
 import { TRINKET_BOX } from '../src/art/figure.ts';
 import { frame, project as iso } from '../src/art/iso.ts';
+import { framesFor } from '../src/art/motion.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { Theme } from '../src/themes/types.ts';
 import { PROP_SIZE, planLayout, type Rect } from '../src/world/layout.ts';
@@ -12,7 +13,7 @@ import { footprint, planRoom, toWorld } from '../src/world/room.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { DESK, DESK_SPOT, deskZone } from '../src/world/desks.ts';
 import { FIGURE_H, FIGURE_HALF_W, project } from '../src/world/frame.ts';
-import type { P3, PropView } from '../src/worlds/types.ts';
+import type { P3, PropArt, PropView } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { S, canvasBox, partCheck, viewOf } from './desk-contract.ts';
 import { recordingPen } from './helpers.ts';
@@ -198,8 +199,7 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
     assert.equal(new Set(loops.map((l) => l.name)).size, loops.length, 'two loops of one name');
     loops.forEach((lp, k) => {
       const [u, v, z] = lp.at;
-      assert.ok(Number.isInteger(lp.frames) && lp.frames >= 4 && lp.frames <= 8, `${lp.name}: ${lp.frames} frames`);
-      assert.ok(lp.fps > 0 && lp.fps <= 8, `${lp.name}: ${lp.fps} a second`);
+      assert.ok(lp.secs >= 0.4 && lp.secs <= 3, `${lp.name}: ${lp.secs} s round`);
       assert.ok(lp.r > 0 && lp.r <= 1.5 && lp.h > 0 && u - lp.r >= 0 && u + lp.r <= DESK.len && v - lp.r >= 0 && v + lp.r <= DESK.dep && z >= 0 && z + lp.h <= art.height + 0.5, `${lp.name} at ${lp.at} is not on its desk`);
       assert.ok(Math.hypot(u - art.top[0], v - art.top[1]) >= lp.r + 1, `${lp.name} is on the upgrade's spot`);
       for (const p of spots) assert.ok(Math.hypot(u - p[0], v - p[1]) >= lp.r + maxR, `${lp.name} is on the spot ${p}`);
@@ -211,7 +211,7 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
     for (const wall of ['right', 'left'] as const) {
       const parts: Array<{ what: string; box: [P3, number, number]; draw: (v: PropView) => void }> = [];
       for (const it of items) for (const p of spots) parts.push({ what: `${it.name} at ${p}`, box: [p, it.r, it.h], draw: (v) => it.draw(v, p) });
-      for (const lp of loops) for (let i = 0; i < lp.frames; i++) parts.push({ what: `${lp.name} frame ${i}`, box: [lp.at, lp.r, lp.h], draw: (v) => lp.draw(v, i) });
+      for (const lp of loops) for (let i = 0, n = framesFor(lp.secs); i < n; i++) parts.push({ what: `${lp.name} frame ${i}`, box: [lp.at, lp.r, lp.h], draw: (v) => lp.draw(v, i / n) });
       for (const part of parts) {
         for (const active of [false, true]) {
           const what = `${wall}${active ? ' (on)' : ''}: ${part.what}`;
@@ -241,17 +241,39 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
         return hashOf(c);
       };
       for (const it of items.slice(0, 12)) if (spots[0]) assert.equal(atTime((v) => it.draw(v, spots[0]), 0), atTime((v) => it.draw(v, spots[0]), 7.3), `${wall}: ${it.name} draws with the clock`);
-      for (const lp of loops) for (let i = 0; i < lp.frames; i++) assert.equal(atTime((v) => lp.draw(v, i), 0), atTime((v) => lp.draw(v, i), 7.3), `${wall}: ${lp.name} frame ${i} draws with the clock`);
+      for (const lp of loops) for (let i = 0, n = framesFor(lp.secs); i < n; i++) assert.equal(atTime((v) => lp.draw(v, i / n), 0), atTime((v) => lp.draw(v, i / n), 7.3), `${wall}: ${lp.name} frame ${i} draws with the clock`);
       // A loop's frame is the same picture every time; lit, its frames differ.
       for (const lp of loops) {
         const shot = (i: number) => {
           const c = new Canvas(160, 160);
-          lp.draw(viewOf(art, wall, c, true), i);
+          lp.draw(viewOf(art, wall, c, true), i / framesFor(lp.secs));
           return hashOf(c);
         };
-        const frames = Array.from({ length: lp.frames }, (_, i) => shot(i));
-        assert.deepEqual(Array.from({ length: lp.frames }, (_, i) => shot(i)), frames, `${wall}: ${lp.name} drew a frame two ways`);
+        const frames = Array.from({ length: framesFor(lp.secs) }, (_, i) => shot(i));
+        assert.deepEqual(Array.from({ length: framesFor(lp.secs) }, (_, i) => shot(i)), frames, `${wall}: ${lp.name} drew a frame two ways`);
         assert.ok(new Set(frames).size >= 2, `${wall}: ${lp.name} does not move`);
+      }
+    }
+  });
+
+  // Idle and still, an animated prop is drawn once (see PropArt.movesIdle).
+  test(`world ${w.id}: its animated props hold still while nobody works them, unless they say they move`, () => {
+    const s = 6;
+    const shot = (art: PropArt, wall: 'left' | 'right', island: boolean, t: number) => {
+      const c = new Canvas(Math.ceil((art.len + art.dep) * s + 12 * s), Math.ceil(((art.len + art.dep) / 2 + art.height) * s + 12 * s));
+      const at = frame(iso(art.dep * s + 6 * s, art.height * s + 6 * s, s), wall, 0, 0);
+      art.draw({ pen: c, s, at, len: art.len, dep: art.dep, wall, island, t, active: false, seed: 1234 });
+      return createHash('sha256').update(c.data).digest('hex');
+    };
+    const props: Array<[string, PropArt]> = [...Object.entries(w.stations), ...(w.decor ?? []).map((d, k): [string, PropArt] => [`decor ${k}`, d.art])];
+    for (const [name, art] of props) {
+      if (!art.animated) continue;
+      // every 0.4 s over 12 s, off the beat of anything that blinks
+      for (const wall of ['left', 'right'] as const) for (const island of [false, true]) {
+        const seen = new Set(Array.from({ length: 30 }, (_, k) => shot(art, wall, island, 0.013 + 0.4 * k)));
+        const what = `${name} (${wall} wall${island ? ', an island' : ''})`;
+        if (art.movesIdle) assert.ok(seen.size > 1, `${what} says it moves while idle, but holds still`);
+        else assert.equal(seen.size, 1, `${what} moves while idle: say so (movesIdle), or hold it still`);
       }
     }
   });

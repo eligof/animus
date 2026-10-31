@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import type { Color } from '../../art/types.ts';
 import { DESK } from '../../world/desks.ts';
 import type { Clutter, DeskLoop, PropView, WorkstationArt } from '../types.ts';
@@ -504,16 +505,19 @@ const SPOTS: P3[] = [
 
 // A candle on an iron stand at the front of the top's right end: a foot, a
 // stem with a ring to hold it by, a dish. While the desk is worked its
-// flame flickers; out, a dark wick.
+// flame flickers; out, a dark wick. Its flame's sway, stretch and glow
+// round the loop: a smooth curve through these.
 const CANDLE: P3 = [6.5, 2.5, TOP];
+const SWAY = [0, 0.02, 0.04, 0.02, 0, -0.02];
+const STRETCH = [0.5, 0.62, 0.75, 0.6, 0.42, 0.36];
+const GLOW = [0.3, 0.31, 0.33, 0.31, 0.29, 0.28];
 const candle: DeskLoop = {
   name: 'candle',
   at: CANDLE,
   r: 0.5,
   h: 1.9,
-  frames: 6,
-  fps: 6,
-  draw(v, i) {
+  secs: 1,
+  draw(v, phase) {
     const k = kitOf(v);
     const [cu, cv, z] = CANDLE;
     const e = edge(k);
@@ -529,10 +533,7 @@ const candle: DeskLoop = {
       k.line([[cu, cv, top], [cu, cv, top + 0.14]], INK, Math.max(0.8, 0.07 * k.s));
       return;
     }
-    const sway = [0, 0.02, 0.04, 0.02, 0, -0.02][i];
-    const f = [0.5, 0.62, 0.75, 0.6, 0.42, 0.36][i];
-    const glow = [0.3, 0.31, 0.33, 0.31, 0.29, 0.28][i];
-    flame(k, cu + sway, cv, top + 0.2, 0.95, f, glow);
+    flame(k, cu + through(SWAY, phase), cv, top + 0.2, 0.95, through(STRETCH, phase), through(GLOW, phase));
   },
 };
 

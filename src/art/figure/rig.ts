@@ -1,4 +1,5 @@
 import type { Pose } from '../../world/character.ts';
+import { framesFor } from '../motion.ts';
 
 // Poses as rigs: where the pelvis, hands and feet go, how the body leans and
 // the head tilts, the face, and what is held, for one frame of a pose's
@@ -56,16 +57,18 @@ const FEET: readonly [V, V] = [[-0.85, -0.65], [1.0, -0.65]];
 const REST: readonly [V, V] = [[-2.3, -1.0], [2.45, -1.0]];
 const TAU = Math.PI * 2;
 
-// Loop length (seconds) and frames per loop, by pose: about 12 a second for
-// quick loops, fewer for slow ones (ambient frames are shown at 2 fps).
-export const LOOP: Record<Pose, readonly [number, number]> = {
-  idle: [3.2, 12], walk: [0.5, 8], write: [0.6, 8], read: [3, 12], think: [3.2, 12], run: [0.7, 8],
-  search: [1.6, 12], web: [2, 12], delegate: [1.2, 12], talk: [1.2, 12], done: [0.9, 10], error: [0.8, 8],
-  sleep: [3.2, 8], sit: [3.2, 8], carry: [1, 6], place: [1.6, 12], cheer: [0.6, 8], wave: [0.6, 6],
-  drink: [2.4, 12], stretch: [2.4, 12], chat: [1.6, 16], flinch: [0.4, 4], dance: [0.9, 12], pet: [1.2, 12],
-  highfive: [0.8, 8], sip: [2, 12],
-  glance: [1.6, 12], lean: [2.2, 12], scratch: [1.2, 12], tap: [0.9, 9],
+// Loop length (seconds) by pose, and the frames it is drawn in (see
+// ANIM_FPS in art/motion.ts).
+const SECS: Record<Pose, number> = {
+  idle: 3.2, walk: 0.5, write: 0.6, read: 3, think: 3.2, run: 0.7,
+  search: 1.6, web: 2, delegate: 1.2, talk: 1.2, done: 0.9, error: 0.8,
+  sleep: 3.2, sit: 3.2, carry: 1, place: 1.6, cheer: 0.6, wave: 0.6,
+  drink: 2.4, stretch: 2.4, chat: 1.6, flinch: 0.4, dance: 0.9, pet: 1.2,
+  highfive: 0.8, sip: 2,
+  glance: 1.6, lean: 2.2, scratch: 1.2, tap: 0.9,
 };
+export const LOOP = {} as Record<Pose, readonly [number, number]>;
+for (const pose of Object.keys(SECS) as Pose[]) LOOP[pose] = [SECS[pose], framesFor(SECS[pose])];
 
 // The poses a carried mug of coffee shows in (see FigureFrame.mug), always
 // in hand B: held before the belly standing about, walking or pondering, on
@@ -165,6 +168,11 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
   r.t = u * per;
   const s1 = Math.sin(u * TAU);
   const c1 = Math.cos(u * TAU);
+  // what flaps (a mouth, an eye) changes every other picture, 7.5 times a
+  // second, and a shake goes side to side every picture (the loops that
+  // shake are an even number of pictures, so it holds round the end)
+  const flap = Math.floor(i / 2);
+  const side = i % 2 ? 1 : -1;
   switch (pose) {
     case 'idle': {
       r.chest = 0.14 * (0.5 - 0.5 * c1);
@@ -309,7 +317,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.arms[0] = arm([0.7 - 0.9 * p, -2.6 - 2.0 * p], 1, { fwd: true, high: p > 0.5, grip: 'open' });
       r.arms[1] = arm([3.2 + 0.4 * q, -2.5 - 2.3 * q], 1, { fwd: true, high: q > 0.5, grip: 'open' });
       r.lean = 0.04 * (p - q);
-      r.face.mouth = ['open', 'o', 'smile', 'open', 'small', 'open', 'o', 'smile', 'open', 'open', 'smile', 'small'][i % 12] as Mouth;
+      r.face.mouth = ['open', 'o', 'smile', 'open', 'small', 'open', 'o', 'smile', 'open', 'open', 'smile', 'small'][flap % 12] as Mouth;
       r.face.brows = u > 0.5 ? 'up' : 'none';
       r.tilt = 0.05 * Math.sin(a * 2);
       break;
@@ -329,7 +337,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       break;
     }
     case 'error': {
-      const j = i % 2 ? 1 : -1;
+      const j = side;
       r.shake = 0.22 * j;
       r.lean = -0.16;
       r.pelvis[1] += 0.2;
@@ -340,7 +348,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       break;
     }
     case 'flinch': {
-      const j = i % 2 ? 1 : -1;
+      const j = side;
       r.shake = 0.1 * j;
       r.lean = -0.2;
       r.tilt = 0.1;
@@ -362,7 +370,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       r.legs[1] = { foot: [1.35, -1.0], ang: -0.2, bend: -1 };
       r.arms[0] = arm([1.0, -2.2], 1, { fwd: true });
       r.arms[1] = arm([1.75, -2.6], 1, { fwd: true });
-      r.face = { eyes: 'closed', look: [0, 0], mouth: i % 8 < 4 ? 'small' : 'o', brows: 'none', blush: true };
+      r.face = { eyes: 'closed', look: [0, 0], mouth: u < 0.5 ? 'small' : 'o', brows: 'none', blush: true };
       break;
     }
     case 'sit': {
@@ -450,8 +458,8 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       const a = u * TAU * 2;
       r.arms[1] = arm([2.6 + 0.3 * Math.sin(a), -2.3 - (talking ? 0.6 * Math.max(0, Math.sin(a)) : 0)], 1, { fwd: true, grip: 'open' });
       r.arms[0] = arm([-1.6, -1.75], 1);
-      r.face.mouth = talking ? (['open', 'smile', 'o', 'open', 'smile', 'small', 'open', 'smile', 'o'] as Mouth[])[i % 9] : 'smile';
-      r.face.eyes = talking ? 'open' : i % 4 < 2 ? 'happy' : 'open';
+      r.face.mouth = talking ? (['open', 'smile', 'o', 'open', 'smile', 'small', 'open', 'smile', 'o'] as Mouth[])[flap % 9] : 'smile';
+      r.face.eyes = talking ? 'open' : flap % 4 < 2 ? 'happy' : 'open';
       r.tilt = talking ? 0 : 0.07 * Math.max(0, Math.sin(a * 1.5));
       break;
     }
@@ -465,7 +473,7 @@ export function rigFor(pose: Pose, i: number, c: RigCtx): Rig {
       const p = Math.sin(a) > 0;
       r.arms[0] = p ? arm([-3.15, -6.6], -1, { high: true, grip: 'point' }) : arm([-2.6, -1.6], 1);
       r.arms[1] = p ? arm([2.9, -1.7], 1) : arm([3.1, -6.7], 1, { high: true, grip: 'point' });
-      r.face = { eyes: 'happy', look: [0, 0], mouth: i % 6 < 3 ? 'grin' : 'open', brows: 'none', blush: true };
+      r.face = { eyes: 'happy', look: [0, 0], mouth: flap % 6 < 3 ? 'grin' : 'open', brows: 'none', blush: true };
       r.sway = Math.sin(a);
       break;
     }

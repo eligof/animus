@@ -29,6 +29,7 @@ const write: PropArt = {
   dep: 7,
   height: 14,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 14, (k) => {
       k.shadow(5.5, 3.2, 6.6, 3.8, 0.32);
@@ -98,8 +99,9 @@ const write: PropArt = {
       k.halo(5.3, 3.0, 9.5, 5.5, C.green, 0.2);
       k.pool(5.5, 3.6, 3.6, 1.5, C.green, 0.25, W_TOP + 0.52);
     }
-    // the tower's glass side: two fans and its glow
-    const spin = v.active ? t * 9 : 0.4;
+    // the tower's glass side: two fans and its glow, turning a quarter of
+    // a blade a picture (faster, they would seem to stand or run back)
+    const spin = v.active ? t * 1.6 * Math.PI : 0.4;
     for (const fz of [1.7, 3.9]) {
       const fc: P3 = [10.53, 3.1, fz];
       fillPts(k, ring(k, fc, [1, 0, 0], 0.95, 16), v.active ? '#1f3a2a' : '#151c1e', k.thin * 0.7);
@@ -298,6 +300,7 @@ const search: PropArt = {
   dep: 4,
   height: 20,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'search', 20, (k) => {
       k.shadow(5.8, 2.2, 6.8, 2.6, 0.32);
@@ -517,7 +520,7 @@ const run: PropArt = {
       k.rod([[10.0, 9.8, 3.45], [10.6, 9.6, 3.6], [10.9, 9.3, 2.0]], '#2a2f33', 0.12);
     });
     const t = pace(v, 1);
-    // the card's fans turn a fifth of a blade a step, the box fan's a sixth
+    // the card's fans turn four blades in two seconds, the box fan's two
     // (see CYCLE in art/scene.ts: round in two seconds)
     const spin = v.active ? v.t * 0.8 * Math.PI : 0.3;
     // the reservoir: coolant glowing, bubbles rising while it runs
@@ -538,9 +541,13 @@ const run: PropArt = {
       fanBlades(k, fc[0], fc[1], fc[2], FANS.r - 0.08, spin + i, v.active ? '#5a6a70' : '#3a4448');
       k.dot(fc[0], fc[1], fc[2], 0.16, '#2a2f33');
     }
-    // the RAM's lights, cycling while it runs
+    // the RAM's lights, their colours flowing along the sticks while it
+    // runs (a stick through all four a second)
+    const rgb = [C.magenta, C.cyan, C.green, C.amber];
     for (let i = 0; i < 4; i++) {
-      const hue = v.active ? [C.magenta, C.cyan, C.green, C.amber][(i + Math.floor(t * 4)) % 4] : '#3a4448';
+      const x = i + t * 4;
+      const j = Math.floor(x);
+      const hue = v.active ? mix(rgb[j % 4], rgb[(j + 1) % 4], x - j) : '#3a4448';
       k.line([[u0 + 3.55 + i * 0.32, back + 0.66, z0 + 5.4], [u0 + 3.55 + i * 0.32, back + 0.66, z0 + 5.6]], hue, Math.max(1, 0.16 * k.s));
     }
     // the fan controller's lights, up and down with the knob
@@ -583,6 +590,7 @@ const web: PropArt = {
   dep: 9,
   height: 14,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'web', 14, (k) => {
       k.shadow(4.6, 4.6, 4.6, 4.4, 0.3);
@@ -695,6 +703,7 @@ const think: PropArt = {
   dep: 7,
   height: 16,
   animated: true,
+  movesIdle: true,
   draw(v: PropView): void {
     const k = still(v, 'think', 16, (k) => {
       k.shadow(6, 2.4, 6.6, 3.0, 0.32);

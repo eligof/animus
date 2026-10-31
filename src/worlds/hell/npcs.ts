@@ -234,10 +234,9 @@ const C_BLOT: Swing = { sh: -0.05, el: 1.75 };
 const C_LIFT: Swing = { sh: 0.95, el: 1.45 };
 const clerkWork: NpcLoop = {
   secs: 3,
-  frames: 12,
   pose(u) {
     const along = u < 0.6 ? 0.5 - 0.5 * Math.cos((u / 0.6) * TAU) : 0;
-    const scratch = u < 0.6 ? Math.sin(u * TAU * 4) : 0;
+    const scratch = Math.sin(u * TAU * 4) * (1 - ease(u, 0.5, 0.6));
     const blot = ease(u, 0.56, 0.64) - ease(u, 0.92, 1);
     const rock = Math.sin((u - 0.6) * TAU * 3) * blot;
     const near = mix(mix(C_WRITE, C_WRITE2, along), C_LIFT, blot);
@@ -304,11 +303,15 @@ const SMITH_BONES: Bones = { neck: [0.3, -8.15], shoulders: [[-2.6, -7.7], [2.85
 const SMITH: [number, number] = [Math.round((ANVIL.u - 3.3) * 10) / 10, 12.6];
 const INGOT: [number, number] = [ANVIL.u - SMITH[0] - (ANVIL.v - SMITH[1]), (ANVIL.u - SMITH[0] + ANVIL.v - SMITH[1]) / 2 - ANVIL.z - 0.3];
 // His show's beats, at u of it: the ingot flaring white-hot under his
-// fire (and dimming as it is worked), the blows of the flurry (1 on a
-// frame the hammer lands), and the roar at its end.
+// fire (and dimming as it is worked), the blows of the flurry (the hammer
+// 0 raised, 1 down on the ingot: it lands at u = 0.5 and 0.625), and the
+// roar at its end.
 const flareOf = (u: number) => (ease(u, 0.27, 0.36) - 0.45 * ease(u, 0.5, 0.75)) * (1 - ease(u, 0.92, 1));
-const blowOf = (u: number) => (u >= 0.47 && u < 0.72 && Math.floor(u * 16) % 2 === 0 ? 1 : 0);
+const blowOf = (u: number) => (u > 0.4375 && u < 0.6875 ? 0.5 + 0.5 * Math.cos((u - 0.5) * TAU * 8) : 0);
 const roarOf = (u: number) => ease(u, 0.7, 0.8) - ease(u, 0.86, 1);
+// How far after a blow lands, 0 to 1 of the time to the next (sparks fly
+// off it for the first part).
+const sinceBlow = (u: number) => (((u - 0.5) * 8) % 1 + 1) % 1;
 
 // A spray of sparks flying off (x, y) up and out, `n` of them `r` long,
 // `k` 1 as they burst and fading out further off; `seed` turns the spray.
@@ -345,7 +348,7 @@ function flare(sk: Sketch, x: number, y: number, f: number): void {
   sk.blob(ell(x, y, 0.95, 0.38), f > 0.6 ? C.lavaWhite : C.lavaHot, { line: 0.5, sil: false });
 }
 
-// Fire at frame u: three tongues of flame.
+// Fire at u round its loop: three tongues of flame.
 function fireTuft(sk: Sketch, x: number, y: number, s: number, u: number): void {
   const f = (i: number) => 1 + 0.18 * Math.sin(u * TAU * 2 + i * 2.1);
   for (const [col, k] of [[C.fire, 1], [C.flame, 0.68], [C.flameHot, 0.38]] as const) {
@@ -485,12 +488,13 @@ const smithParts: NpcParts = {
     }
     if (k === 0 && own(p.act)) {
       // the tongs: on the ingot at work and through the show's fire and
-      // flurry, then flung up with his arm as he roars
+      // flurry, then swung off it and up with his arm (straight out of
+      // his fist) as he roars, and back onto it as the arm comes down
       const show = p.act === 'show' ? p.u : -1;
-      const held = p.act === 'work' || (show >= 0 && roarOf(show) < 0.3);
-      let tx = 0;
-      let ty = f + 3.2;
-      if (held) [tx, ty] = apply(invert(sk.m), INGOT[0] - 0.6, INGOT[1] + 0.1);
+      const up = show >= 0 ? ease(roarOf(show), 0.15, 0.5) : 0;
+      const [ix, iy] = apply(invert(sk.m), INGOT[0] - 0.6, INGOT[1] + 0.1);
+      const tx = ix * (1 - up);
+      const ty = iy + (f + 3.2 - iy) * up;
       const a = Math.atan2(ty - f, tx);
       const l = Math.hypot(tx, ty - f);
       sk.at(mul(move(0, f), turn(a)), () => {
@@ -505,8 +509,9 @@ const smithParts: NpcParts = {
           const [x, y] = INGOT;
           if (fl > 0.05) flare(sk, x, y, fl);
           const burst = bump(show, 0.3, 0.5);
-          if (burst > 0.1) sparkSpray(sk, x, y - 0.2, 11, 1.4 + 2.2 * burst, burst, Math.floor(show * 16));
-          if (blowOf(show)) sparkSpray(sk, x + 0.3, y - 0.2, 8, 1.6, 1, Math.floor(show * 16) + 3);
+          if (burst > 0.1) sparkSpray(sk, x, y - 0.2, 11, 1.4 + 2.2 * burst, burst, 6);
+          const since = sinceBlow(show);
+          if (show >= 0.5 && show < 0.6875 && since < 0.4) sparkSpray(sk, x + 0.3, y - 0.2, 8, 1.6, 1 - since / 0.4, show < 0.6 ? 11 : 13);
         });
       }
     }
@@ -522,7 +527,6 @@ const H_HIT: Swing = { sh: 1.41, el: -0.84 };
 const T_HOLD: Swing = { sh: 1.0, el: 0.45 };
 const smithWork: NpcLoop = {
   secs: 1.2,
-  frames: 8,
   pose(u) {
     const down = ease(u, 0.25, 0.5) - ease(u, 0.62, 0.95);
     const hit = bump(u, 0.42, 0.68);
@@ -541,11 +545,13 @@ const smithWork: NpcLoop = {
 // The show: a deep breath, cheeks full; a gout of fire on the ingot, which
 // flares; a flurry of blows on it; and a roar, the hammer and the tongs
 // flung up and out beside his head (never over his face), the fire on his
-// head blazing up, a grin. Each change eased over two frames or more,
-// back to the start at its end.
+// head blazing up, a grin. Each change eased over a third of a second or
+// more, back to the start at its end. The tongs' forearm leads its arm up
+// and comes down last, so the tongs stay up by his head rather than swept
+// out behind him.
+const T_UP = swing(-1.9, -1.0);
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const breathe = bump(u, 0.0, 0.24);
@@ -553,15 +559,18 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
     const flurrying = ease(u, 0.4, 0.47) - ease(u, 0.66, 0.74);
     const blow = blowOf(u);
     const roar = roarOf(u);
-    const hammer = mix(mix({ sh: 2.0, el: 0.85 }, blow ? H_HIT : H_UP, flurrying), swing(1.75, 0.75), roar);
-    const tongs = mix(T_HOLD, swing(-1.9, -1.0), roar);
+    const hammer = mix(mix({ sh: 2.0, el: 0.85 }, mix(H_UP, H_HIT, blow), flurrying), swing(1.75, 0.75), roar);
+    const lead = 1 - (1 - roar) ** 2;
+    const sh = T_HOLD.sh + (T_UP.sh - T_HOLD.sh) * roar;
+    const fore = T_HOLD.sh + T_HOLD.el + (T_UP.sh + T_UP.el - T_HOLD.sh - T_HOLD.el) * lead;
+    const tongs = { sh, el: fore - sh };
     return {
       ...rest(),
       bob: 0.25 * breathe + 0.35 * roar * Math.abs(Math.sin(u * TAU * 4)),
       lean: -0.08 * breathe + 0.1 * fire + 0.05 * flurrying - 0.06 * roar,
       tilt: -0.16 * breathe + 0.2 * fire - 0.16 * roar,
       arms: [tongs, hammer],
-      eyes: breathe > 0.5 ? 'shut' : fire > 0.3 || roar > 0.5 || blow ? 'happy' : 'open',
+      eyes: breathe > 0.5 ? 'shut' : fire > 0.3 || roar > 0.5 || blow > 0.5 ? 'happy' : 'open',
       mouth: breathe > 0.3 ? 'o' : 'open',
     };
   },
@@ -766,7 +775,6 @@ const W_PINCH: Swing = { sh: 0.84, el: 1.44 };
 const W_REST: Swing = { sh: 0.2, el: 0.6 };
 const witchWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const a = u * TAU * 2;
     const pinch = ease(u, 0.4, 0.6) - ease(u, 0.8, 1);
@@ -784,7 +792,6 @@ const witchWork: NpcLoop = {
 // A cackle: head thrown back, arms flung wide, shoulders shaking.
 const witchCelebrate: NpcLoop = {
   secs: 1.4,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const shake = Math.sin(u * TAU * 4) * k;

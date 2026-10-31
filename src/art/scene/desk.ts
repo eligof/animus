@@ -23,6 +23,7 @@ import type { DeskLoop, P3, PropView, WorkstationArt, WorldDef } from '../../wor
 import { clutterOf, workstationOf, type OnTop } from '../../worlds/workstation.ts';
 import { Canvas } from '../canvas.ts';
 import type { At } from '../iso.ts';
+import { ANIM_FPS, framesFor } from '../motion.ts';
 import { drawScreen } from '../screen.ts';
 import { cropped } from './pixels.ts';
 
@@ -191,7 +192,7 @@ export function loopSprite(world: WorldDef, k: number, i: number, on: boolean, w
       const lp = art.loops?.[k];
       if (!lp) return;
       pen.save();
-      lp.draw(viewOf(art, pen, at, s, wall, on, 0), i);
+      lp.draw(viewOf(art, pen, at, s, wall, on, 0), i / framesFor(lp.secs));
       pen.restore();
     }),
   );
@@ -202,8 +203,9 @@ export function loopSprite(world: WorldDef, k: number, i: number, on: boolean, w
 // do not flicker in step); the still one, 0, while it is off.
 export function loopFrame(lp: DeskLoop, k: number, id: number, on: boolean, t: number): number {
   if (!on) return 0;
-  const lag = (((id + 1) * 0.618 + k * 0.29) % 1) * lp.frames;
-  return Math.floor(t * lp.fps + lag) % lp.frames;
+  const n = framesFor(lp.secs);
+  const lag = (((id + 1) * 0.618 + k * 0.29) % 1) * n;
+  return Math.floor(t * ANIM_FPS + lag) % n;
 }
 
 // Workstation d's pictures as the scene places them at time t, back to

@@ -15,7 +15,7 @@ import { parseArgs } from 'node:util';
 import { Canvas } from '../src/art/canvas.ts';
 import { npcSprite } from '../src/art/figure.ts';
 import { frame, project } from '../src/art/iso.ts';
-import { ACTS, loopOf } from '../src/art/npc/acts.ts';
+import { ACTS, framesOf, loopOf } from '../src/art/npc/acts.ts';
 import { encodeRgb } from '../src/art/png.ts';
 import { inkOf, propParts } from '../src/art/scene.ts';
 import { compare } from '../src/art/scene/depth.ts';
@@ -38,10 +38,10 @@ export function sheet(world: WorldDef, s: number): { img: Canvas; notes: string[
   };
   const rows = npcs.map((n) => {
     const pics: Array<[NpcAct, number]> = [];
-    for (let i = 0; i < n.work.frames; i++) pics.push(['work', i]);
-    if (n.show) for (let i = 0; i < n.show.frames; i += 2) pics.push(['show', i]);
-    if (n.celebrate) for (let i = 0; i < n.celebrate.frames; i += 2) pics.push(['celebrate', i]);
-    for (const a of shared) pics.push([a, Math.floor(loopOf(n, a).frames / 2)]);
+    for (let i = 0; i < framesOf(n.work); i++) pics.push(['work', i]);
+    if (n.show) for (let i = 0; i < framesOf(n.show); i += 2) pics.push(['show', i]);
+    if (n.celebrate) for (let i = 0; i < framesOf(n.celebrate); i += 2) pics.push(['celebrate', i]);
+    for (const a of shared) pics.push([a, Math.floor(framesOf(loopOf(n, a)) / 2)]);
     return pics;
   });
   const img = new Canvas(Math.max(1, ...rows.map((r) => r.length * cell.w), npcs.length * bay), Math.max(1, rows.length * cell.h + bay));

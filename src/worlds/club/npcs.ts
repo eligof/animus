@@ -1,6 +1,7 @@
 import type { Sketch } from '../../art/figure/paint.ts';
 import { move, mul, turn, zoom } from '../../art/figure/paint.ts';
 import { shade } from '../../art/iso.ts';
+import { through } from '../../art/motion.ts';
 import { bump, ease, env, HANG, rest, swing, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
 import { atHand, fromHand, reach, toward } from '../../art/npc/helpers.ts';
@@ -113,7 +114,6 @@ const djParts: NpcParts = {
 // far one riding a fader, the head nodding on the beat (two a loop).
 const djWork: NpcLoop = {
   secs: 2 * BEAT,
-  frames: 8,
   pose(u) {
     const beat = Math.abs(Math.sin(u * TAU));
     const scratch = Math.sin(u * TAU * 2);
@@ -127,7 +127,6 @@ const djWork: NpcLoop = {
 // it, mouth open, eyes squeezed happy.
 const djShow: NpcLoop & { crowd: 'dance' } = {
   secs: 4 * BEAT,
-  frames: 16,
   crowd: 'dance',
   pose(u) {
     const pump = Math.abs(Math.sin(u * TAU * 2));
@@ -140,7 +139,6 @@ const djShow: NpcLoop & { crowd: 'dance' } = {
 // cheer, see art/npc/acts.ts).
 const djCelebrate: NpcLoop = {
   secs: 4 * BEAT,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.25, 0.75);
     const pump = Math.abs(Math.sin(u * TAU * 2)) * k;
@@ -235,10 +233,12 @@ function shaker(sk: Sketch): void {
   sk.pop();
 }
 
-// The work loop's beats (see bartenderWork): the shake, frame by frame,
-// and how far into the pour (0 shaking, 1 tipped over the glass).
-const BT_SHAKE = [0, 0, 1, -1, 1, -1, 1];
-const shakeOf = (u: number) => BT_SHAKE[Math.round(u * 12) % 12] ?? 0;
+// The work loop's beats (see bartenderWork): the shake, evenly round the
+// loop in twelfths (see through: hard back and forth from 2/12 to 6/12,
+// still for the pour), and how far into the pour (0 shaking, 1 tipped
+// over the glass).
+const BT_SHAKE = [0, 0, 1, -1, 1, -1, 1, 0, 0, 0, 0, 0] as const;
+const shakeOf = (u: number) => through(BT_SHAKE, u);
 const pourOf = (u: number) => ease(u, 0.55, 0.68) - ease(u, 0.82, 0.95);
 
 // Where the bartender stands (v out from the back-bar), and the rim of the
@@ -394,7 +394,6 @@ const bartenderParts: NpcParts = {
 // pink pour, and back up.
 const bartenderWork: NpcLoop = {
   secs: 1.8,
-  frames: 12,
   pose(u) {
     const s = shakeOf(u);
     const k = pourOf(u);
@@ -407,7 +406,8 @@ const bartenderWork: NpcLoop = {
       lean: 0.03 * s + 0.06 * k,
       tilt: 0.04 * s + 0.18 * k,
       arms: [near, far],
-      eyes: Math.round(u * 12) === 4 ? 'happy' : 'open',
+      // squeezed happy a third of the way in, for a twelfth of the loop
+      eyes: Math.abs(u - 1 / 3) < 1 / 24 ? 'happy' : 'open',
       mouth: k > 0.9 ? 'o' : 'smile',
     };
   },
@@ -417,7 +417,6 @@ const bartenderWork: NpcLoop = {
 // follow it round, and it catches it, grinning.
 const bartenderCelebrate: NpcLoop = {
   secs: 1.5,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.2, 0.85);
     const fly = bump(u, 0.25, 0.75);
@@ -533,7 +532,7 @@ function coatOnHanger(sk: Sketch, sway: number): void {
 // The work loop's beats (see coatCheckWork): the coat lifted up on its
 // hanger and handed down over the counter (0 out of sight, 1 held high);
 // the ticket torn; the bell tapped.
-// Each hands over to the next across two frames or more.
+// Each hands over to the next across a tenth of the loop or more.
 const liftOf = (u: number) => ease(u, 0.0, 0.2) - ease(u, 0.3, 0.5);
 const tearOf = (u: number) => ease(u, 0.42, 0.6) - ease(u, 0.66, 0.84);
 const tapOf = (u: number) => ease(u, 0.68, 0.8) - ease(u, 0.84, 1);
@@ -678,7 +677,6 @@ const coatCheckParts: NpcParts = {
 // down out of sight, so the loop joins up unseen.
 const coatCheckWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const lift = liftOf(u);
     const tear = tearOf(u);
@@ -704,7 +702,6 @@ const coatCheckWork: NpcLoop = {
 // tight.
 const coatCheckCelebrate: NpcLoop = {
   secs: 1.2,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.15, 0.85);
     const ring = Math.abs(Math.sin(u * TAU * 2));

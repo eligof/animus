@@ -351,9 +351,8 @@ const lavaLamp: DeskLoop = {
   at: LAMP,
   r: 0.4,
   h: 2.05,
-  frames: 8,
-  fps: 3,
-  draw(v, i) {
+  secs: 8 / 3,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = LAMP;
     const on = v.active;
@@ -390,7 +389,7 @@ const lavaLamp: DeskLoop = {
         [0.85, 0.08, 4.4, 0.055],
       ];
       blobs.forEach(([f, amp, ph, r], j) => {
-        const t = (i / 8) * Math.PI * 2 + ph;
+        const t = phase * Math.PI * 2 + ph;
         const zb = g0 + (g1 - g0) * (f + amp * Math.sin(t));
         const [bx, by] = k.p(u + (j - 1) * 0.04, w, zb);
         const stretch = 1.25 + 0.2 * Math.cos(t);
@@ -418,7 +417,9 @@ const lavaLamp: DeskLoop = {
 
 // A white router beside the lamp: two antennas at its back, a row of
 // lights along its front that blink while its desk is worked (power
-// steady), all dark while it is not. Each frame turns one or two of them.
+// steady), all dark while it is not. Lights blink, so they go in steps:
+// eight round the loop (a column of BLINK each), four pictures apiece,
+// each turning one or two of them.
 const ROUTER: P3 = [5.3, 2.3, TOP];
 const BLINK: ReadonlyArray<ReadonlyArray<0 | 1>> = [
   [1, 1, 1, 1, 1, 1, 1, 1],
@@ -432,15 +433,15 @@ const router: DeskLoop = {
   at: ROUTER,
   r: 0.45,
   h: 1.05,
-  frames: 8,
-  fps: 4,
-  draw(v, i) {
+  secs: 32 / 15,
+  draw(v, phase) {
     const k = kitOf(v);
     const [u, w, z] = ROUTER;
+    const step = Math.floor(phase * BLINK[0].length) % BLINK[0].length;
     for (const s of [-1, 1]) stick(k, [[u + s * 0.3, w - 0.1, z + 0.16], [u + s * 0.4, w - 0.2, z + 0.98]], '#3a4045', 0.07);
     k.box(u - 0.42, w - 0.2, z, 0.84, 0.4, 0.2, '#e9ecea', { line: fine(k), round: 0.06 });
     BLINK.forEach((row, j) => {
-      const lit = v.active && row[i] === 1;
+      const lit = v.active && row[step] === 1;
       const p: P3 = [u - 0.28 + j * 0.14, w + 0.205, z + 0.1];
       k.dot(...p, 0.035, lit ? (j ? C.green : C.amber) : '#9aa3a0');
       if (lit) k.halo(...p, 0.22, j ? C.green : C.amber, 0.45);
