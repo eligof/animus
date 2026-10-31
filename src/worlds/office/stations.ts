@@ -791,20 +791,24 @@ function sunflowers(k: Kit, u: number, v: number, z: number): void {
 }
 
 // ── entrance: the glass door ────────────────────────────────────────────────
-// A glass door in a black steel frame with a long bar handle, glass side
-// panels over kick plates and a transom; through the glass the landing
-// outside, lit. A doormat. Inside, before the right panel, the front desk
-// with the receptionist behind it (see npcs.ts): a white desk on a birch
-// top, the startup's own plain mark on its front (a teal rounded square
-// with a sunflower dot at its top right corner), a keyboard, a tray of
-// visitor badges, a bell and a little pot of succulents on it. The door
-// swings open while someone passes.
+// A glass door in a black steel frame with a long bar handle, a glass side
+// panel over a kick plate on its hinge side and a transom; through the
+// glass the landing outside, lit. A doormat. On the brick past the door's
+// latch side, clear of its opening and its swing, the front desk with the
+// receptionist behind it (see npcs.ts): a white desk on a birch top, the
+// startup's own plain mark on its front (a teal rounded square with a
+// sunflower dot at its top right corner), a keyboard, a tray of visitor
+// badges, a bell and a little pot of succulents on it. The door swings open
+// while someone passes; the desk, nearer, is drawn over its leaf.
 
-const DOOR = { u0: 3.5, u1: 9.5, h: 16 };
+const DOOR = { u0: 3.0, u1: 8.6, h: 16 };
 const GLASS = { top: 19.4, kick: 2.6 };
+// The frame's ends: from its first jamb to the latch side's.
+const FRAME = { u0: 0.3, u1: DOOR.u1 + 0.35 };
 // The front desk: from u0 to u1, its back edge at v0 and front at v1, its
-// top `z` high; where the receptionist stands behind it (`at`, `stand`).
-export const FRONT_DESK = { u0: 10.3, u1: 14.6, v0: 2.3, v1: 3.9, z: 5.4, at: 12.2, stand: 1.25 };
+// top `z` high; where the receptionist stands behind it (`at`, `stand`):
+// close behind its back edge, which runs past her on both sides on screen.
+export const FRONT_DESK = { u0: 9.15, u1: 14.85, v0: 1.3, v1: 2.9, z: 5.4, at: 11.8, stand: 0.95 };
 
 const entrance: PropArt = {
   len: 15,
@@ -816,33 +820,36 @@ const entrance: PropArt = {
     const k = still(v, 'entrance', 21, (k) => {
       const out = -1.2;
       const pen = k.pen;
+      const f0 = FRAME.u0;
+      const f1 = FRAME.u1;
       // the landing beyond the glass
       pen.save();
       pen.beginPath();
-      k.trace(quad(0.5, 0, 14.5, GLASS.top, 0));
+      k.trace(quad(f0 + 0.2, 0, f1 - 0.2, GLASS.top, 0));
       pen.clip();
-      k.poly(quad(0, -0.5, 15, 21, out), k.vgrad(7, out, 0, 21, [[0, '#cbb9a2'], [0.6, '#e2d4bf'], [1, '#b8a68f']]), 0);
-      k.poly([[0, out, 0], [15, out, 0], [15, 0, 0], [0, 0, 0]], '#8a7c6c', 0);
-      k.halo(7, out, 17, 5, '#fff1c6', 0.45);
-      // a plant and a bench out there, in silhouette
-      k.poly([[11.2, out, 0], [12.6, out, 0], [12.4, out, 2.2], [11.4, out, 2.2]], '#9a8a78', 0);
+      k.poly(quad(f0 - 0.3, -0.5, f1 + 0.3, 21, out), k.vgrad(7, out, 0, 21, [[0, '#cbb9a2'], [0.6, '#e2d4bf'], [1, '#b8a68f']]), 0);
+      k.poly([[f0 - 0.3, out, 0], [f1 + 0.3, out, 0], [f1 + 0.3, 0, 0], [f0 - 0.3, 0, 0]], '#8a7c6c', 0);
+      k.halo((u0 + u1) / 2, out, 17, 5, '#fff1c6', 0.45);
+      // a plant out there, in silhouette, by the side panel
+      k.poly([[1.0, out, 0], [2.4, out, 0], [2.2, out, 2.2], [1.2, out, 2.2]], '#9a8a78', 0);
       k.pen.beginPath();
-      const [px, py] = k.p(11.9, out, 4.2);
+      const [px, py] = k.p(1.7, out, 4.2);
       pen.ellipse(px, py, 1.3 * k.s, 2.0 * k.s, 0, 0, Math.PI * 2);
       pen.fillStyle = '#7f9a76';
       pen.fill();
       pen.restore();
-      // the frame: jambs, the transom bar, the head; the panels' kick plates
+      // the frame: jambs, the transom bar, the head; the side panel's kick
+      // plate
       const F = C.frame;
-      for (const [a, b] of [[0.3, 0.8], [u0 - 0.35, u0], [u1, u1 + 0.35], [14.2, 14.7]] as const) k.box(a, 0, 0, b - a, 0.6, GLASS.top, F, { line: k.thin });
-      k.box(0.3, 0, h, 14.4, 0.6, 0.45, F, { line: k.thin });
-      k.box(0.1, 0, GLASS.top, 14.8, 0.8, 0.9, F, { line: k.lw });
-      for (const [a, b] of [[0.8, u0 - 0.35], [u1 + 0.35, 14.2]] as const) {
-        k.poly(quad(a, 0, b, GLASS.kick, 0.3), k.side('#3a3c42', 0, 1, 0.1), k.thin);
-        k.box(a, 0, GLASS.kick, b - a, 0.5, 0.3, F, { line: k.thin });
-      }
-      // the glass's tint and a streak of reflection on each panel
-      for (const [a, b, z0, z1] of [[0.8, u0 - 0.35, GLASS.kick + 0.3, h], [u1 + 0.35, 14.2, GLASS.kick + 0.3, h], [0.8, 14.2, h + 0.45, GLASS.top]] as const) {
+      for (const [a, b] of [[f0, f0 + 0.5], [u0 - 0.35, u0], [u1, f1]] as const) k.box(a, 0, 0, b - a, 0.6, GLASS.top, F, { line: k.thin });
+      k.box(f0, 0, h, f1 - f0, 0.6, 0.45, F, { line: k.thin });
+      k.box(f0 - 0.2, 0, GLASS.top, f1 - f0 + 0.4, 0.8, 0.9, F, { line: k.lw });
+      const [a, b] = [f0 + 0.5, u0 - 0.35];
+      k.poly(quad(a, 0, b, GLASS.kick, 0.3), k.side('#3a3c42', 0, 1, 0.1), k.thin);
+      k.box(a, 0, GLASS.kick, b - a, 0.5, 0.3, F, { line: k.thin });
+      // the glass's tint and a streak of reflection on the side panel; the
+      // transom's tint
+      for (const [a, b, z0, z1] of [[f0 + 0.5, u0 - 0.35, GLASS.kick + 0.3, h], [f0 + 0.5, u1, h + 0.45, GLASS.top]] as const) {
         k.poly(quad(a, z0, b, z1, 0.3), withAlpha(C.glass, 0.28), 0);
         if (z1 - z0 > 4) k.poly([[a + 0.4, 0.31, z1 - 0.5], [a + 1.0, 0.31, z1 - 0.5], [a + 0.6, 0.31, z1 - 4.5], [a + 0.25, 0.31, z1 - 4.5]], withAlpha('#ffffff', 0.22), 0);
       }
@@ -850,17 +857,18 @@ const entrance: PropArt = {
       k.poly([[u0, 0, 0.03], [u1, 0, 0.03], [u1, 0.6, 0.03], [u0, 0.6, 0.03]], C.steel, k.thin);
       k.poly([[u0 + 0.2, 0.9, 0.04], [u1 - 0.2, 0.9, 0.04], [u1 - 0.2, 3.6, 0.04], [u0 + 0.2, 3.6, 0.04]], '#34363e', k.thin, 0.2);
       k.poly([[u0 + 0.7, 1.3, 0.05], [u1 - 0.7, 1.3, 0.05], [u1 - 0.7, 3.2, 0.05], [u0 + 0.7, 3.2, 0.05]], '#44474f', 0);
-      frontDesk(k);
     });
     // the door: shut, or swung in while someone passes
     const th = v.active ? 0.62 + 0.05 * Math.sin(v.t * 2.2) : 0;
     doorLeaf(k, th, h);
+    // the front desk, nearer than the leaf wherever the two meet on screen
+    still(v, 'entrance-desk', 8, frontDesk);
   },
 };
 
-// The front desk before the right glass panel: a white body on a dark
-// kick, a birch top, the mark on its front, and on the top only low
-// things (the receptionist stands behind it: see npcs.ts).
+// The front desk past the door's latch side: a white body on a dark kick,
+// a birch top, the mark on its front, and on the top only low things (the
+// receptionist stands behind it: see npcs.ts).
 function frontDesk(k: Kit): void {
   const { u0, u1, v0, v1, z } = FRONT_DESK;
   k.shadow((u0 + u1) / 2, (v0 + v1) / 2 + 0.3, (u1 - u0) / 2 + 0.3, 1.3, 0.24);

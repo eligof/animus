@@ -233,8 +233,9 @@ const adminWork: NpcLoop = {
   secs: 3.2,
   frames: 12,
   pose(u) {
-    const reach = ease(u, 0.45, 0.58) - ease(u, 0.8, 0.92);
-    const tap = u < 0.45 || u > 0.92 ? Math.sin(u * TAU * 3) : 0;
+    // (the reach out and back each over two frames)
+    const reach = ease(u, 0.42, 0.62) - ease(u, 0.78, 0.98);
+    const tap = Math.sin(u * TAU * 3) * (1 - reach);
     return {
       ...rest(),
       tilt: 0.14 * (1 - reach) - 0.12 * reach,
@@ -304,7 +305,8 @@ const itAdmin: Npc = {
 };
 
 // ── the receptionist ─────────────────────────────────────────────────────
-// Behind the front desk by the door, the first face anyone sees: a big
+// Behind the front desk past the door's latch side (clear of its opening
+// and its swing), the first face anyone sees: a big
 // round puff of hair, a slim headset with its mic at the mouth, gold hoops,
 // a sunflower cardigan over a white top, a teal pendant. At work it types,
 // then takes a call, a hand to the headset, talking, and types again.
@@ -451,22 +453,23 @@ const receptionistParts: NpcParts = {
 };
 
 // Typing at the desk (the hands kept over its back edge, where its top
-// cuts the picture), then a call on the headset: the near hand to the ear
-// cup, the far one turning a word over, the mouth going, a nod; and back
-// to typing.
+// cuts the picture), then a call on the headset: the near hand up to the
+// ear cup by her side, its elbow out (never across her face), the far one
+// turning a word over, the mouth going, a nod; and back to typing.
 const TALK: ReadonlyArray<Puppet['mouth']> = ['open', 'smile', 'o', 'open', 'closed', 'smile'];
 const receptionistWork: NpcLoop = {
   secs: 3.6,
   frames: 12,
   pose(u) {
-    const call = ease(u, 0.4, 0.52) - ease(u, 0.88, 0.98);
+    // (the hand up to the headset over three frames, down over two)
+    const call = ease(u, 0.34, 0.6) - ease(u, 0.82, 1);
     const tap = Math.sin(u * TAU * 3) * (1 - call);
     const i = Math.floor(u * 12);
     return {
       ...rest(),
       tilt: 0.1 * (1 - call) + 0.08 * call * Math.sin(u * TAU * 3),
       lean: 0.05 * (1 - call),
-      arms: [{ sh: 0.95 + 0.08 * tap + 1.95 * call, el: 0.75 - 0.08 * tap + 0.35 * call }, { sh: 0.2 + 0.06 * tap + 1.1 * call, el: 1.9 - 0.1 * tap - 1.0 * call + 0.25 * call * Math.sin(u * TAU * 3) }],
+      arms: [{ sh: 0.95 + 0.08 * tap - 3.55 * call, el: 0.75 - 0.08 * tap - 1.35 * call - 1.2 * Math.sin(Math.PI * call) }, { sh: 0.2 + 0.06 * tap + 1.3 * call, el: 2.4 - 0.1 * tap - 1.5 * call + 0.25 * call * Math.sin(u * TAU * 3) }],
       eyes: call > 0.5 && i % 4 === 2 ? 'happy' : 'open',
       mouth: call > 0.5 ? TALK[i % TALK.length] : 'smile',
     };
@@ -501,7 +504,8 @@ const badge: NpcServe = {
 const receptionist: Npc = {
   name: 'receptionist',
   station: 'entrance',
-  // behind the front desk; its top hides the receptionist's legs
+  // close behind the front desk, whose back edge runs past her on both
+  // sides on screen; its top hides her legs (cut 5.05 over her feet)
   place: { mode: 'behind', u: FRONT_DESK.at, v: FRONT_DESK.stand, top: FRONT_DESK.z, edge: FRONT_DESK.v0 },
   tall: 16,
   bones: R_BONES,

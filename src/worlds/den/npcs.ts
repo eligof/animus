@@ -1,10 +1,10 @@
 import { move, mul, turn } from '../../art/figure/paint.ts';
-import { shade } from '../../art/iso.ts';
+import { mix, shade } from '../../art/iso.ts';
 import { bump, ease, rest, TAU } from '../../art/npc/acts.ts';
 import { face } from '../../art/npc/face.ts';
 import type { Pen } from '../../art/types.ts';
-import type { Bones, Npc, NpcLoop, NpcParts, NpcServe } from '../types.ts';
-import { C } from './kit.ts';
+import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Swing } from '../types.ts';
+import { C, withAlpha } from './kit.ts';
 import { BENCH } from './stations.ts';
 
 // The den's locals (see Npc in ../types.ts), on the shared puppet, in the
@@ -183,18 +183,22 @@ const sysParts: NpcParts = {
     sk.limb([0, 0.1, 0, f - 0.3], 1.05, k ? SYS.skinD : SYS.skin, { dark: k ? null : SYS.skinD });
     // the rolled cuff at the elbow
     sk.blob((q) => q.roundRect(-0.7, -0.15, 1.4, 0.6, 0.25), k ? SYS.shirtD : SYS.shirt, { line: 0.5 });
-    // the far hand holding a cable up to be checked
-    if (k === 1 && p.act === 'work' && sysCable(p.u) > 0.5) {
-      sk.limb([-0.1, f, 0.9, f - 0.4, 1.7, f - 1.6, 1.9, f - 3.2], 0.34, '#ffd23e', { line: 0.5 });
-      sk.blob((q) => q.roundRect(-0.38, f + 0.15, 0.76, 1.05, 0.12), '#cfd6d3', { dark: '#9aa5a1', d: 0.15 });
-      sk.blob((q) => q.rect(-0.2, f + 1.15, 0.4, 0.4), '#e8b04a', { line: 0.4 });
+    // the far hand holding a cable's plug up beside its glasses, upright
+    // whatever the arm does, the cable hanging from its fist
+    if (k === 1 && p.act === 'work' && sysCable(p.u) > 0.4) {
+      sk.at(mul(move(0, f), turn(p.arms[1].sh + p.arms[1].el - p.lean)), () => {
+        sk.limb([0.1, 0.2, 0.75, 1.3, 0.55, 2.4, 0.95, 3.3], 0.34, '#ffd23e', { line: 0.5 });
+        sk.blob((q) => q.roundRect(-0.38, -1.45, 0.76, 1.05, 0.12), '#cfd6d3', { dark: '#9aa5a1', d: 0.15 });
+        sk.blob((q) => q.rect(-0.2, -1.85, 0.4, 0.42), '#e8b04a', { line: 0.4 });
+      });
     }
     sk.blob(circ(0, f, 0.66), k ? SYS.skinD : SYS.skin, { dark: SYS.skinD, d: 0.2 });
   },
 };
 
-// How far into holding up the cable it is, at u of its work.
-const sysCable = (u: number) => ease(u, 0.52, 0.62) - ease(u, 0.88, 0.98);
+// How far into holding up the cable it is, at u of its work: up over three
+// frames, down over two.
+const sysCable = (u: number) => ease(u, 0.42, 0.66) - ease(u, 0.83, 1);
 
 // Typing at the console, a key tapped with each hand by turns; then the far
 // hand comes up with a cable, its head tipped back to squint at it, and
@@ -211,7 +215,7 @@ const sysWork: NpcLoop = {
       tilt: 0.1 - 0.16 * c,
       arms: [
         { sh: 0.42 + 0.06 * tap, el: 0.9 - 0.1 * tap },
-        { sh: 0.62 - 0.06 * tap + 1.66 * c, el: 0.75 + 0.15 * c },
+        { sh: 0.62 - 0.06 * tap + 1.4 * c, el: 0.75 },
       ],
       eyes: u > 0.66 && u < 0.84 ? 'blink' : 'open',
       mouth: c > 0.5 ? 'closed' : 'smile',
@@ -231,23 +235,26 @@ const sysadmin: Npc = {
 };
 
 // ── the overclocker ──────────────────────────────────────────────────────
-// Behind the test bench at its end, the rig at its elbow: spiky hair with
-// neon green tips, amber goggles pushed up on its forehead, a red tank top,
-// big blue cryo gloves. At work it turns the fan controller's knob and
-// watches the fans; its show is the stress test: leaning in over the
-// bench, sweating, eyes shut at the last second, then both fists up.
+// Behind the test bench's far end, the rig before it at the near end:
+// spiky platinum hair with neon green tips, amber goggles pushed up on its
+// forehead, a violet tank top with a green trim, slim pale cryo gloves. At
+// work it turns the fan controller's knob and watches the fans; its show is
+// the stress test: goggles down, leaning in over the rig and cranking the
+// knob as the rig's glow comes up on its face, sweating, a held breath,
+// then goggles up and both fists up beside its head.
 
 const OC = {
-  skin: '#8d5a3b',
-  skinD: '#6c4229',
-  hair: '#1f1a1c',
+  skin: '#d39c70',
+  skinD: '#ab7550',
+  hair: '#ebe4d2',
+  hairD: '#b5aa90',
   tips: C.green,
-  top: '#c0392f',
-  topD: '#93281f',
-  trim: '#f0e6dc',
-  glove: '#3c78c8',
-  gloveD: '#2b5a9c',
-  cuff: '#a9c8ef',
+  top: '#6c4cc0',
+  topD: '#4d3592',
+  trim: C.green,
+  glove: '#d9eef8',
+  gloveD: '#9fc8de',
+  cuff: '#7fd8f0',
   pants: '#3a4045',
   pantsD: '#2a2f33',
   lens: C.amber,
@@ -255,9 +262,14 @@ const OC = {
 
 const OC_BONES: Bones = { neck: [0.1, -7.85], shoulders: [[-1.6, -7.3], [1.75, -7.3]], upper: 1.6, fore: 1.65 };
 
-// The stress test's last second, eyes shut, before it holds.
-const ocHold = (u: number) => bump(u, 0.42, 0.56);
-const ocWin = (u: number) => ease(u, 0.52, 0.6) - ease(u, 0.9, 0.99);
+// The stress test (see ocShow), at u of the show: how far it leans in over
+// the rig, its goggles down, the rig's glow on its face, the held breath,
+// and the win.
+const ocLean = (u: number) => ease(u, 0.06, 0.2) - ease(u, 0.38, 0.48);
+const ocGoggles = (u: number) => u > 0.03 && u < 0.53;
+const ocGlow = (u: number) => ease(u, 0.06, 0.38) - ease(u, 0.46, 0.53);
+const ocHold = (u: number) => bump(u, 0.37, 0.57);
+const ocWin = (u: number) => ease(u, 0.53, 0.63) - ease(u, 0.88, 0.99);
 
 const ocParts: NpcParts = {
   body(sk, _p, back) {
@@ -266,7 +278,7 @@ const ocParts: NpcParts = {
       sk.blob((q) => q.roundRect(x - 0.6, -1.0, 1.65, 1.0, 0.45), '#e9ecea', { dark: shade('#e9ecea', -0.2), d: 0.2 });
       sk.blob((q) => q.rect(x - 0.45, -0.45, 1.4, 0.22), C.green, { line: 0, sil: false });
     }
-    // a red tank top over bare shoulders
+    // a violet tank top over bare shoulders
     sk.blob((q) => {
       q.moveTo(-1.75, -7.9);
       q.quadraticCurveTo(0.1, -8.4, 2.0, -7.85);
@@ -284,7 +296,7 @@ const ocParts: NpcParts = {
       q.closePath();
     }, OC.top, { dark: OC.topD, d: 0.5 });
     if (back) return;
-    // the white trim round its neck
+    // the green trim round its neck and a green bolt across the chest
     sk.draw((q, c) => {
       q.beginPath();
       q.moveTo(-0.75, -8.1);
@@ -293,11 +305,23 @@ const ocParts: NpcParts = {
       q.strokeStyle = OC.trim;
       q.stroke();
     });
+    sk.blob((q) => {
+      q.moveTo(0.9, -6.6);
+      q.lineTo(-0.1, -5.1);
+      q.lineTo(0.55, -5.1);
+      q.lineTo(-0.2, -3.9);
+      q.lineTo(1.35, -5.55);
+      q.lineTo(0.7, -5.55);
+      q.lineTo(1.5, -6.6);
+      q.closePath();
+    }, OC.trim, { line: 0.4, sil: false });
   },
   head(sk, p, back) {
     const cx = 0.1;
     const cy = -2.95;
-    // spiky hair behind the head, its tips dyed
+    const show = p.act === 'show';
+    const down = show && ocGoggles(p.u);
+    // spiky platinum hair behind the head, its tips dyed
     const spikes: Array<[number, number]> = [[-3.6, 0.6], [-3.6, -1.8], [-2.4, -3.9], [-0.6, -4.9], [1.4, -4.8], [3.1, -3.7], [3.9, -1.7]];
     const hair = (q: Pen) => {
       q.moveTo(cx - 3.2, cy + 1.2);
@@ -310,7 +334,7 @@ const ocParts: NpcParts = {
       q.lineTo(cx + 3.2, cy - 0.6);
       q.closePath();
     };
-    sk.blob(hair, OC.hair, { dark: shade(OC.hair, -0.3), d: 0.3 });
+    sk.blob(hair, OC.hair, { dark: OC.hairD, d: 0.3 });
     sk.draw((q, c) => {
       q.beginPath();
       for (const [sx, sy] of spikes.slice(1, -1)) {
@@ -337,24 +361,41 @@ const ocParts: NpcParts = {
       q.lineTo(cx - 0.3, cy - 1.1);
       q.quadraticCurveTo(cx - 1.8, cy - 1.6, cx - 3.1, cy - 0.7);
       q.closePath();
-    }, OC.hair, { dark: shade(OC.hair, -0.3), d: 0.25 });
-    // the goggles' strap round its head, their lenses up on its forehead
-    sk.limb([cx - 3.3, cy - 0.6, cx - 1.4, cy - 2.0, cx + 0.2, cy - 2.4], 0.6, '#2a2f33', { line: 0.5 });
-    if (!back) {
-      // the goggles: a rubber frame, two round amber lenses, a bridge
-      sk.limb([cx - 0.1, cy - 2.4, cx + 2.6, cy - 2.4], 1.85, '#3a4045', { line: 0.6 });
-      for (const [x, r] of [[cx + 0.15, 0.78], [cx + 2.4, 0.68]] as const) {
-        sk.blob(circ(x, cy - 2.4, r), OC.lens, { dark: shade(OC.lens, -0.3), d: 0.22, line: 0.6 });
-        sk.blob(ell(x - r * 0.3, cy - 2.65, r * 0.3, r * 0.18), '#fff2c8', { line: 0, sil: false });
-      }
-    }
+    }, OC.hair, { dark: OC.hairD, d: 0.25 });
+    // the goggles' strap round its head: up over the forehead, or down
+    // round it at the eyes in the stress test
+    const gy = down ? cy + 0.7 : cy - 2.4;
+    sk.limb(down ? [cx - 3.3, cy + 0.4, cx - 1.4, cy + 0.65, cx + 0.2, gy] : [cx - 3.3, cy - 0.6, cx - 1.4, cy - 2.0, cx + 0.2, gy], 0.6, '#2a2f33', { line: 0.5 });
     if (back) return;
     face(sk, { x: cx + 0.85, y: cy + 0.75, eyes: p.eyes, mouth: p.mouth });
+    // the rig's green glow coming up on its face as it leans in
+    const glow = show ? ocGlow(p.u) : 0;
+    if (glow > 0.05) {
+      sk.draw((q) => {
+        q.save();
+        q.beginPath();
+        q.ellipse(cx, cy, 3.3, 3.15, 0, 0, TAU);
+        q.clip();
+        q.beginPath();
+        q.ellipse(cx + 2.9, cy + 2.2, 2.6, 2.4, 0, 0, TAU);
+        q.fillStyle = withAlpha(C.green, 0.08 + 0.2 * glow);
+        q.fill();
+        q.restore();
+      });
+    }
+    // the goggles: a rubber frame, two round lenses, a bridge; amber up on
+    // its forehead, lit green from the rig when down over its eyes
+    const lens = down ? mix(OC.lens, C.glyph, 0.35 + 0.65 * glow) : OC.lens;
+    sk.limb([cx - 0.1, gy, cx + 2.6, gy], 1.85, '#3a4045', { line: 0.6 });
+    for (const [x, r] of [[cx + 0.15, 0.78], [cx + 2.4, 0.68]] as const) {
+      sk.blob(circ(x, gy, r), lens, { dark: shade(lens, -0.3), d: 0.22, line: 0.6 });
+      sk.blob(ell(x - r * 0.3, gy - 0.25, r * 0.3, r * 0.18), down ? '#eaffef' : '#fff2c8', { line: 0, sil: false });
+    }
     // a bead of sweat in the stress test
-    if (p.act === 'show' && p.u > 0.12 && p.u < 0.56) {
+    if (show && p.u > 0.22 && p.u < 0.6) {
       sk.blob((q) => {
-        const x = cx + 3.0;
-        const y = cy - 1.0 + (p.u - 0.12) * 2.5;
+        const x = cx + 3.05;
+        const y = cy - 1.2 + (p.u - 0.22) * 4;
         q.moveTo(x, y - 0.6);
         q.quadraticCurveTo(x + 0.45, y + 0.05, x, y + 0.35);
         q.quadraticCurveTo(x - 0.45, y + 0.05, x, y - 0.6);
@@ -364,63 +405,101 @@ const ocParts: NpcParts = {
   },
   upper(sk, _p, k) {
     // bare arms
-    sk.limb([0, 0, 0, OC_BONES.upper], 1.1, k ? OC.skinD : OC.skin, { dark: k ? null : OC.skinD });
+    sk.limb([0, 0, 0, OC_BONES.upper], 1.05, k ? OC.skinD : OC.skin, { dark: k ? null : OC.skinD });
   },
-  fore(sk, _p, k) {
+  fore(sk, p, k) {
     const f = OC_BONES.fore;
-    sk.limb([0, 0, 0, f - 0.6], 1.0, k ? OC.skinD : OC.skin, { dark: k ? null : OC.skinD });
-    // a big insulated glove, its cuff up the forearm
-    sk.blob((q) => q.roundRect(-0.75, f - 1.0, 1.5, 0.75, 0.3), OC.cuff, { dark: shade(OC.cuff, -0.2), d: 0.15 });
-    sk.blob(ell(0, f + 0.15, 0.9, 0.85), k ? OC.gloveD : OC.glove, { dark: OC.gloveD, d: 0.25 });
-    sk.blob(ell(0.55, f - 0.2, 0.35, 0.45), k ? OC.gloveD : OC.glove, { line: 0.5, sil: false });
+    sk.limb([0, 0, 0, f - 0.5], 0.95, k ? OC.skinD : OC.skin, { dark: k ? null : OC.skinD });
+    // a slim cryo glove, pale, its cuff banded up the wrist
+    sk.limb([0, f - 0.75, 0, f - 0.2], 1.0, k ? OC.gloveD : OC.glove, { dark: OC.gloveD });
+    sk.blob((q) => q.rect(-0.5, f - 0.62, 1.0, 0.22), OC.cuff, { line: 0, sil: false });
+    sk.blob(ell(0.05, f + 0.1, 0.62, 0.58), k ? OC.gloveD : OC.glove, { dark: OC.gloveD, d: 0.2 });
+    sk.blob(ell(0.5, f - 0.15, 0.22, 0.32), k ? OC.gloveD : OC.glove, { line: 0.5, sil: false });
+    // sparks off the knob as it cranks it at the peak
+    if (k === 1 && p.act === 'show' && ocGlow(p.u) > 0.6 && ocLean(p.u) > 0.5) {
+      sk.draw((q, c) => {
+        q.beginPath();
+        // (the forearm's -x is away from its head)
+        for (const [x, y, r] of [[-1.2, f + 0.5, 0.5], [-1.5, f - 0.7, 0.35], [-0.5, f + 1.4, 0.3]] as const) {
+          q.moveTo(x - r, y);
+          q.lineTo(x + r, y);
+          q.moveTo(x, y - r);
+          q.lineTo(x, y + r);
+        }
+        q.lineWidth = thin(0.16, c.px);
+        q.strokeStyle = '#ffe680';
+        q.stroke();
+      });
+    }
   },
 };
 
-// At the bench: the far glove on the fan controller's knob, turning it a
-// notch and back; the near one on the bench's edge; head down toward the
-// fans, a blink.
+// The far glove on the fan controller's knob (high on the rig's far post,
+// over the bench), the near one on the bench's edge.
+const OC_KNOB = { sh: 1.3, el: 1.4 };
+const HANG = rest().arms[0];
+const OC_EDGE = { sh: 0.8, el: 0.85 };
+
+// At the bench: turning the knob a notch up and back, eyes down on the fans
+// and up at the controller's lights, a blink.
 const ocWork: NpcLoop = {
-  secs: 1.6,
-  frames: 8,
+  secs: 2,
+  frames: 10,
   pose(u) {
     const turn = Math.sin(u * TAU);
+    const look = Math.sin(u * TAU + 1);
     return {
       ...rest(),
       lean: 0.05,
-      bob: -0.05 * Math.abs(turn),
-      tilt: 0.12 + 0.05 * Math.sin(u * TAU * 2),
-      arms: [{ sh: 0.8, el: 0.6 }, { sh: 1.26 + 0.05 * turn, el: 1.29 - 0.12 * turn }],
-      eyes: u > 0.7 && u < 0.85 ? 'blink' : 'open',
+      bob: -0.06 * Math.abs(turn),
+      tilt: 0.06 + 0.07 * look,
+      arms: [{ sh: OC_EDGE.sh + 0.03 * look, el: OC_EDGE.el }, { sh: OC_KNOB.sh + 0.07 * turn, el: OC_KNOB.el - 0.14 * turn }],
+      eyes: u > 0.65 && u < 0.75 ? 'blink' : 'open',
       mouth: turn > 0.6 ? 'o' : 'closed',
     };
   },
 };
 
-// The stress test: leaning in over the bench, both gloves clasped under
-// its chin, sweating; eyes shut for the last second; then both fists up,
-// bouncing.
+// The stress test: goggles down, crouched in over the rig, the far glove
+// cranking the knob as the rig's glow comes up on its face, a bead of
+// sweat, sparks; a held breath, pulled back upright, fists clenched at its
+// chest; then goggles up and both fists up and out beside its head,
+// bouncing; back to the knob.
 const ocShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
   frames: 16,
   crowd: 'watch',
   pose(u) {
-    const lean = ease(u, 0, 0.12) - ease(u, 0.5, 0.58);
+    const lean = ocLean(u);
     const hold = ocHold(u);
     const win = ocWin(u);
-    const pump = Math.abs(Math.sin(u * TAU * 4)) * win;
-    // the gloves clasped, then both fists up in a V: the near one swung up
-    // behind, the far one up in front
-    const clasp = [{ sh: 0.12 + 0.88 * lean, el: 0.2 + 1.2 * lean }, { sh: 0.12 + 0.23 * lean, el: 0.2 + 1.9 * lean }];
-    const fists = [{ sh: -2.3 - 0.15 * pump, el: -0.3 }, { sh: 2.4 + 0.15 * pump, el: 0.3 }];
-    const arm = (k: 0 | 1) => ({ sh: clasp[k].sh + (fists[k].sh - clasp[k].sh) * win, el: clasp[k].el + (fists[k].el - clasp[k].el) * win });
+    const crank = lean * Math.sin(u * TAU * 4);
+    const pump = win * (0.5 - 0.5 * Math.cos(u * TAU * 4));
+    // at the rig (crouched in, the far glove kept on the knob), clenched,
+    // then the fists up in a V: the near one swung up behind, the far one
+    // up in front, beside its head
+    const mixed = (a: Swing, b: Swing, k: number): Swing => ({ sh: a.sh + (b.sh - a.sh) * k, el: a.el + (b.el - a.el) * k });
+    const rig: Swing[] = [
+      { sh: OC_EDGE.sh + 0.12 * lean, el: OC_EDGE.el + 0.4 * lean },
+      { sh: OC_KNOB.sh + 0.33 * lean - 0.04 * crank, el: OC_KNOB.el - 0.27 * lean + 0.1 * crank },
+    ];
+    const clench: Swing[] = [{ sh: 0.55, el: 1.55 }, { sh: 0.0, el: 2.6 }];
+    const fists: Swing[] = [{ sh: -1.85 - 0.15 * pump, el: -0.95 - 0.1 * pump }, { sh: 1.75 + 0.12 * pump, el: 0.85 + 0.12 * pump }];
+    // (clenched from the held breath until the fists go up; the near arm
+    // swings by its side between the bench and its fist, never out over
+    // the bench's end)
+    const tense = ease(u, 0.37, 0.45) - ease(u, 0.66, 0.8);
+    const base = (k: 0 | 1) => mixed(rig[k], clench[k], tense);
+    const near = win < 0.5 ? mixed(base(0), HANG, win * 2) : mixed(HANG, fists[0], win * 2 - 1);
+    const arms: [Swing, Swing] = [near, mixed(base(1), fists[1], win)];
     return {
       ...rest(),
-      lean: 0.14 * lean - 0.06 * win,
-      bob: 0.45 * pump - 0.15 * hold + 0.05 * Math.sin(u * TAU * 12) * hold,
-      tilt: 0.16 * lean - 0.12 * win,
-      arms: [arm(0), arm(1)],
-      eyes: hold > 0.3 ? 'shut' : win > 0.4 ? 'happy' : 'open',
-      mouth: hold > 0.3 ? 'closed' : win > 0.4 ? 'open' : lean > 0.5 ? 'o' : 'closed',
+      lean: 0.05 - 0.08 * hold - 0.08 * win,
+      bob: 0.55 * pump - 0.55 * lean + 0.15 * hold,
+      tilt: 0.06 + 0.08 * lean - 0.12 * hold - 0.14 * win,
+      arms,
+      eyes: win > 0.4 ? 'happy' : 'open',
+      mouth: win > 0.4 ? 'open' : hold > 0.3 ? 'closed' : lean > 0.5 ? 'o' : 'closed',
     };
   },
 };
@@ -428,8 +507,10 @@ const ocShow: NpcLoop & { crowd: 'watch' } = {
 const overclocker: Npc = {
   name: 'overclocker',
   station: 'run',
-  // behind the bench's end, beside the rig; the bench's top hides its legs
-  place: { mode: 'behind', u: 9.4, v: 0.6, top: BENCH.z, edge: BENCH.back },
+  // behind the middle of the bench's far end, the rig at its elbow toward
+  // the front: the bench's back edge runs past it on both sides on screen
+  // and its top hides its legs (cut 5.5 over its feet)
+  place: { mode: 'behind', u: 6.6, v: 1.3, top: BENCH.z, edge: BENCH.back },
   tall: 15.5,
   bones: OC_BONES,
   parts: ocParts,

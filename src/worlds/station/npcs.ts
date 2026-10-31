@@ -44,8 +44,11 @@ const CAP = {
 // Seated: its seat line at y = -1, so its shoulders are low.
 const CAP_BONES: Bones = { neck: [0.05, -5.6], shoulders: [[-1.7, -5.0], [1.75, -5.0]], upper: 1.75, fore: 1.7 };
 
-// The order: the far arm out pointing ahead, at u of its work.
-const capPoint = (u: number) => ease(u, 0.34, 0.44) - ease(u, 0.7, 0.8);
+// The order: the far arm out pointing ahead, at u of its work (out over
+// three frames, back over two).
+const capPoint = (u: number) => ease(u, 0.3, 0.5) - ease(u, 0.68, 0.84);
+// How far up the salute is, at u of its celebration.
+const capSalute = (u: number) => env(u, 0.25, 0.75);
 
 const capParts: NpcParts = {
   body(sk, _p, back) {
@@ -159,8 +162,12 @@ const capParts: NpcParts = {
     // gold rings round the cuff
     for (const y of [f - 0.75, f - 0.45]) sk.blob((q) => q.rect(-0.56, y, 1.12, 0.16), CAP.gold, { line: 0, sil: false });
     if (k === 1 && p.act === 'celebrate') {
-      // a flat hand, its fingertips to the visor
-      sk.at(mul(move(0, f - 0.2), turn(0.35)), () => sk.blob(ell(0, 0.85, 0.36, 1.0), CAP.skin, { dark: CAP.skinD, d: 0.12 }));
+      // a flat hand, upright in the room as the arm comes up, its
+      // fingertips to the visor's tip, beside the face
+      const a = capSalute(p.u) * (Math.PI + 0.2);
+      sk.at(mul(move(0, f - 0.2), turn(p.arms[1].sh + p.arms[1].el - p.lean)), () =>
+        sk.blob((q) => q.ellipse(0.9 * Math.sin(a), 0.9 * Math.cos(a), 0.36, 1.0, -a, 0, TAU), CAP.skin, { dark: CAP.skinD, d: 0.12 }),
+      );
       return;
     }
     if (k === 1 && p.act === 'work' && capPoint(p.u) > 0.5) {
@@ -193,13 +200,15 @@ const capWork: NpcLoop = {
   },
 };
 
-// A salute: the far hand up flat at the brim, held, and down again.
+// A salute: the far arm up and out behind its head (swung short of
+// overhead, so the head stays in front of it), the flat hand at the
+// visor's tip beside its face, not over it; chin up, held, and down again.
 const capCelebrate: NpcLoop = {
   secs: 1.8,
   frames: 8,
   pose(u) {
-    const k = env(u, 0.25, 0.75);
-    return { ...rest(), tilt: -0.06 * k, arms: [{ sh: 0.3, el: 1.0 }, { sh: 0.12 + 2.38 * k, el: 0.2 + 0.05 * k }], mouth: k > 0.5 ? 'closed' : 'smile' };
+    const k = capSalute(u);
+    return { ...rest(), tilt: -0.1 * k, arms: [{ sh: 0.3, el: 1.0 }, { sh: 0.12 + 2.03 * k, el: 0.2 + 0.15 * k }], mouth: k > 0.5 ? 'closed' : 'smile' };
   },
 };
 
@@ -376,7 +385,8 @@ const engWork: NpcLoop = {
   frames: 12,
   pose(u) {
     const crank = u < 0.5 ? Math.sin(u * TAU * 3) : 0;
-    const peer = ease(u, 0.48, 0.58) - ease(u, 0.9, 1.0);
+    // (leaning in to the gauge over two frames, back over two)
+    const peer = ease(u, 0.42, 0.62) - ease(u, 0.84, 1);
     const tap = peer * Math.max(0, Math.sin(u * TAU * 5));
     return {
       ...rest(),
@@ -423,9 +433,10 @@ const engShow: NpcLoop & { crowd: 'watch' } = {
 const engineer: Npc = {
   name: 'engineer',
   station: 'run',
-  // on the floor beside the plinth's end, the riser at arm's (and
-  // wrench's) length in front of it on screen
-  place: { mode: 'standing', u: 12.5, v: 6 },
+  // on the floor off the plinth's end, outside the hazard ring painted
+  // round the reactor (see room.ts), the riser at arm's (and wrench's)
+  // length in front of it on screen
+  place: { mode: 'standing', u: 13.2, v: 7.3 },
   tall: 15,
   bones: ENG_BONES,
   parts: engParts,
@@ -436,8 +447,9 @@ const engineer: Npc = {
 // ── the comms officer ────────────────────────────────────────────────────
 // Behind the comms console: a plum uniform with a white yoke and a round
 // amber comm badge, black hair in a neat bun, a headset with a mic on a
-// boom. At work it keys at the console and puts a hand to its headset,
-// talking. It hands over a data chip.
+// boom. At work it keys at the console with both hands, leans in to read
+// the screen with a nod, and puts a hand to its headset, talking. It hands
+// over a data chip.
 
 const COM = {
   skin: '#7a4e34',
@@ -455,8 +467,9 @@ const COM = {
 
 const COM_BONES: Bones = { neck: [0.1, -7.8], shoulders: [[-1.55, -7.3], [1.7, -7.3]], upper: 1.6, fore: 1.55 };
 
-// A hand to the headset, listening and answering, at u of its work.
-const comCall = (u: number) => ease(u, 0.5, 0.6) - ease(u, 0.9, 1.0);
+// A hand to the headset, listening and answering, at u of its work: up
+// over three frames, down over two.
+const comCall = (u: number) => ease(u, 0.42, 0.62) - ease(u, 0.85, 1);
 
 const comParts: NpcParts = {
   body(sk, _p, back) {
@@ -530,25 +543,32 @@ const comParts: NpcParts = {
   },
 };
 
-// Keying at the console, both hands tapping by turns, head down to it;
-// then the near hand up to the headset, listening, a word into the mic,
-// the far hand still keying.
+// Keying at the console, both hands tapping by turns, head down to the
+// keys; leaning in to read the screen, a nod; then the near hand up to the
+// headset by its side (its elbow out, clear of its face), a word into the
+// mic and a nod, the far hand still keying; and back. Each change eased
+// over two frames or more.
 const comWork: NpcLoop = {
-  secs: 2.0,
-  frames: 10,
+  secs: 2.4,
+  frames: 12,
   pose(u) {
     const call = comCall(u);
-    const tap = Math.sin(u * TAU * 5);
+    const read = bump(u, 0.22, 0.56);
+    const nod = bump(u, 0.36, 0.5) + bump(u, 0.66, 0.82);
+    const i = Math.round(u * 12);
+    // the hands key by turns, fast while both are down
+    const tap = (i % 2 ? 1 : -1) * (1 - 0.6 * read);
     return {
       ...rest(),
-      lean: 0.04,
-      tilt: 0.08 - 0.12 * call,
+      lean: 0.04 + 0.08 * read - 0.03 * call,
+      bob: -0.15 * read,
+      tilt: 0.14 - 0.2 * read - 0.1 * call + 0.16 * nod,
       arms: [
-        { sh: 1.0 + 0.07 * tap + 1.7 * call, el: 0.65 - 0.1 * tap + 0.75 * call },
-        { sh: 0.8 - 0.07 * tap, el: 1.2 + 0.1 * tap },
+        { sh: 1.0 + 0.12 * tap * (1 - call) - 3.59 * call, el: 0.65 - 0.15 * tap * (1 - call) - 1.27 * call - 1.2 * Math.sin(Math.PI * call) },
+        { sh: 0.8 - 0.12 * tap, el: 1.2 + 0.15 * tap },
       ],
-      eyes: u > 0.3 && u < 0.4 ? 'blink' : 'open',
-      mouth: call > 0.5 ? (Math.floor(u * 10) % 2 ? 'open' : 'smile') : 'closed',
+      eyes: nod > 0.6 ? 'happy' : i === 3 ? 'blink' : 'open',
+      mouth: call > 0.5 ? (i % 2 ? 'open' : 'smile') : read > 0.6 ? 'o' : 'closed',
     };
   },
 };

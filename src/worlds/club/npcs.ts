@@ -33,8 +33,8 @@ const KICKS = '#f1e7f4';
 // Behind the decks: a pink swoop of hair, headphones on, a black tee with a
 // neon ring and bolt on it (no words), a glowing band on each wrist. At
 // work it scratches the near record and rides a fader, nodding on the
-// beat; its show is the drop, a fist pumping over its head; it celebrates
-// with both hands up, pumping.
+// beat; its show is the drop, a fist pumping beside its head; it
+// celebrates with both hands up and out, pumping.
 
 const DJ_BONES: Bones = { neck: [0.15, -7.9], shoulders: [[-1.65, -7.35], [1.8, -7.35]], upper: 1.7, fore: 1.6 };
 
@@ -119,27 +119,32 @@ const djWork: NpcLoop = {
   },
 };
 
-// The drop: the far hand still on the mixer, the near fist pumping over its
-// head, bouncing on every beat, mouth open, eyes squeezed happy.
+// The drop: the far hand still on the mixer, the near fist up and out
+// beside its head (a local's arms are short and its head big: a fist up
+// over it hides its face), pumping on every beat, the head nodding into
+// it, mouth open, eyes squeezed happy.
 const djShow: NpcLoop & { crowd: 'dance' } = {
   secs: 4 * BEAT,
   frames: 16,
   crowd: 'dance',
   pose(u) {
     const pump = Math.abs(Math.sin(u * TAU * 2));
-    return { ...rest(), bob: 0.4 * pump, lean: -0.05, tilt: -0.08 + 0.2 * pump, arms: [{ sh: 2.55 + 0.3 * pump, el: 0.35 - 0.25 * pump }, { sh: 0.9, el: 0.7 }], eyes: pump > 0.5 ? 'happy' : 'open', mouth: pump > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.4 * pump, lean: -0.05, tilt: -0.08 + 0.2 * pump, arms: [{ sh: -1.8 - 0.15 * pump, el: -0.8 - 0.25 * pump }, { sh: 0.9, el: 0.7 }], eyes: pump > 0.5 ? 'happy' : 'open', mouth: pump > 0.4 ? 'open' : 'smile' };
   },
 };
 
-// Both hands up, pumping twice, and down again.
+// Both hands up and out beside its head, pumping twice, and down again:
+// the near one swung up behind, the far one up in front (as the shared
+// cheer, see art/npc/acts.ts).
 const djCelebrate: NpcLoop = {
   secs: 4 * BEAT,
   frames: 8,
   pose(u) {
-    const k = env(u, 0.15, 0.85);
-    const pump = Math.abs(Math.sin(u * TAU * 2));
-    const up = { sh: 0.12 + (2.3 + 0.3 * pump) * k, el: 0.2 };
-    return { ...rest(), bob: 0.3 * pump * k, tilt: -0.1 * k, arms: [up, up], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    const k = env(u, 0.25, 0.75);
+    const pump = Math.abs(Math.sin(u * TAU * 2)) * k;
+    const near = { sh: 0.12 - 1.95 * k - 0.15 * pump, el: 0.2 - 1.1 * k - 0.2 * pump };
+    const far = { sh: 0.12 + 1.65 * k + 0.15 * pump, el: 0.2 + 0.7 * k + 0.15 * pump };
+    return { ...rest(), bob: 0.3 * pump, tilt: -0.1 * k, arms: [near, far], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 
@@ -560,9 +565,10 @@ function coatOnHanger(sk: Sketch, sway: number): void {
 // The work loop's beats (see coatCheckWork): the coat lifted up on its
 // hanger and handed down over the counter (0 out of sight, 1 held high);
 // the ticket torn; the bell tapped.
-const liftOf = (u: number) => ease(u, 0.0, 0.22) - ease(u, 0.38, 0.52);
-const tearOf = (u: number) => ease(u, 0.5, 0.6) - ease(u, 0.72, 0.8);
-const tapOf = (u: number) => bump(u, 0.76, 0.96);
+// Each hands over to the next across two frames or more.
+const liftOf = (u: number) => ease(u, 0.0, 0.2) - ease(u, 0.3, 0.5);
+const tearOf = (u: number) => ease(u, 0.42, 0.6) - ease(u, 0.66, 0.84);
+const tapOf = (u: number) => ease(u, 0.68, 0.8) - ease(u, 0.84, 1);
 
 const coatCheckParts: NpcParts = {
   body(sk) {
@@ -726,7 +732,9 @@ const coatCheckWork: NpcLoop = {
   },
 };
 
-// Ding, ding: the bell rung twice, a little hop, eyes shut tight with glee.
+// Ding, ding: the bell rung twice, the near hand up and out beside its
+// head in glee (its elbow out, clear of its face), a little hop, eyes shut
+// tight.
 const coatCheckCelebrate: NpcLoop = {
   secs: 1.2,
   frames: 8,
@@ -734,7 +742,7 @@ const coatCheckCelebrate: NpcLoop = {
     const k = env(u, 0.15, 0.85);
     const ring = Math.abs(Math.sin(u * TAU * 2));
     const far = toward(k, reach(CC_BONES, 1, BELL.x, BELL.y + 0.3 - 0.9 * (1 - ring)));
-    return { ...rest(), bob: 0.35 * bump(u, 0.3, 0.7), tilt: 0.1 * k * ring, arms: [{ sh: 0.12 + 2.2 * k, el: 0.2 + 0.6 * k }, far], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    return { ...rest(), bob: 0.35 * bump(u, 0.3, 0.7), tilt: 0.1 * k * ring, arms: [{ sh: 0.12 - 2.15 * k, el: 0.2 - 1.02 * k - 0.15 * ring * k }, far], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
   },
 };
 

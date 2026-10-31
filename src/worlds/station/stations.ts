@@ -354,9 +354,10 @@ const search: PropArt = {
 // it comes round in two) and throws sparks.
 
 const CORE = { c: 5.5, r: 1.9, z0: 2.7, z1: 15.0, mids: [6.8, 10.9] };
-// The riser on the floor by the plinth: where it stands, its wheel's and
-// its gauge's heights, the vent's top.
-const RISER = { u: 10.0, v: 8.0, wheel: 3.6, gauge: 5.4, top: 6.4 };
+// The riser on the floor by the plinth (the engineer stands beyond it,
+// outside the hazard ring painted round the reactor: see room.ts): where
+// it stands, its wheel's and its gauge's heights, the vent's top.
+const RISER = { u: 10.5, v: 9.1, wheel: 3.6, gauge: 5.4, top: 6.4 };
 
 // A coolant loop out of the head, arching down to the plinth at angle a.
 function loop(k: Kit, a: number, col: Color): void {

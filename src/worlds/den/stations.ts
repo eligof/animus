@@ -428,20 +428,25 @@ function unitArt(k: Kit, u0: number, u1: number, un: Unit): void {
 // A steel bench with an open test rig on it: a board on a stand, a card
 // with three fans, a reservoir of glowing coolant, tubes, a fan controller
 // with a big knob on the stand's end; a box fan, a power strip, a
-// multimeter, a fire extinguisher handy. The bench stands out from its
-// back, leaving room behind its far end for the overclocker (see
-// npcs.ts), whose glove turns the knob; the rig keeps to the near end,
-// clear of it. Running spins the fans, bubbles the coolant, runs the
-// controller's lights up and down and sends up heat, all round every two
-// seconds.
+// multimeter, a fire extinguisher handy. The rig stands toward the bench's
+// front at its near end, leaving the back of its far end clear for the
+// overclocker (see npcs.ts): the bench's back edge runs past both sides of
+// it on screen, and nothing taller than the bench stands in front of it.
+// Its glove turns the knob from behind. Running spins the fans, bubbles
+// the coolant, runs the controller's lights up and down and sends up heat,
+// all round every two seconds.
 
 // The bench's top (its height, its back edge out from the station's back)
 // and the rig's stand on it (its posts at u0 and u1, the board at back).
 export const BENCH = { z: 6.6, back: 2.4, front: 8.0 };
-const RIG = { u0: 1.0, u1: 6.6, back: 3.0, z0: BENCH.z };
-// The fan controller on the stand's far post: the middle of its face to
+const RIG = { u0: 0.45, u1: 5.45, back: 5.9, z0: BENCH.z };
+// The fan controller high on the stand's far post (where the overclocker's
+// hand reaches it over the bench's back edge): the middle of its face to
 // the bench's end, where its knob and lights are.
-const KNOB: P3 = [RIG.u1 + 0.67, RIG.back, RIG.z0 + 1.75];
+const KNOB: P3 = [RIG.u1 + 0.67, RIG.back, RIG.z0 + 3.85];
+// The card's three fans along its front: the first's middle from u0, the
+// step between them, their radius.
+const FANS = { at: 1.05, step: 1.45, r: 0.66 };
 
 const run: PropArt = {
   len: 11,
@@ -458,6 +463,11 @@ const run: PropArt = {
       crate(k, 1.4, 3.1, 1.3, 3.0, 3.6, 2.6, '#c0392f');
       k.box(5.2, 3.3, 1.3, 2.8, 3.2, 2.2, C.cardboard, { line: k.thin });
       k.box(0.2, BENCH.back, z0 - 0.6, 10.6, BENCH.front - BENCH.back, 0.6, '#8a9692');
+      // behind the rig: a power strip, its cable down the back
+      k.box(0.6, 2.7, z0, 3.2, 0.8, 0.35, '#e9ecea', { line: k.thin });
+      for (let i = 0; i < 4; i++) k.dot(1.0 + i * 0.75, 3.1, z0 + 0.36, 0.12, '#2a2f33');
+      k.dot(3.5, 3.1, z0 + 0.36, 0.12, '#ff5a4a');
+      cable(k, [[0.6, 3.1, z0 + 0.2], [0.3, 3.6, z0 + 0.02], [0.15, 4.6, z0 - 0.3], [0.1, 5.3, z0 - 2.2], [0.5, 6.0, 0.1], [1.6, 6.6, 0.1]], '#1c2226', 0.16);
       // the rig: an aluminium frame, the board standing up in it
       for (const u of [u0, u1]) k.box(u - 0.2, back - 0.2, z0, 0.4, 0.4, 6.4, '#c3ccc8', { line: k.thin });
       k.box(u0 - 0.2, back - 0.2, z0 + 6.2, u1 - u0 + 0.4, 0.4, 0.3, '#c3ccc8', { line: k.thin, stripe: false });
@@ -468,9 +478,9 @@ const run: PropArt = {
         pen.beginPath();
         for (let i = 0; i < 8; i++) {
           const zz = z0 + 1 + hash(v.seed, i, 1) * 4.5;
-          const a = u0 + 0.5 + hash(v.seed, i, 2) * 2.4;
+          const a = u0 + 0.5 + hash(v.seed, i, 2) * 2.2;
           const [x0, y0] = k.p(a, back + 0.06, zz);
-          const [x1, y1] = k.p(Math.min(u1 - 0.5, a + 0.8 + hash(v.seed, i, 3) * 2.4), back + 0.06, zz);
+          const [x1, y1] = k.p(Math.min(u1 - 0.5, a + 0.8 + hash(v.seed, i, 3) * 2.2), back + 0.06, zz);
           pen.moveTo(x0, y0);
           pen.lineTo(x1, y1);
         }
@@ -479,12 +489,12 @@ const run: PropArt = {
         pen.stroke();
       }
       // the CPU block, RAM sticks (their lights are live)
-      k.box(u0 + 2.0, back + 0.05, z0 + 3.4, 1.6, 0.6, 1.6, '#c3ccc8', { line: k.thin });
-      for (let i = 0; i < 4; i++) k.box(u0 + 3.9 + i * 0.36, back + 0.05, z0 + 3.0, 0.22, 0.6, 2.6, '#2a2f33', { line: k.thin * 0.6, stripe: false });
+      k.box(u0 + 1.8, back + 0.05, z0 + 3.4, 1.4, 0.6, 1.6, '#c3ccc8', { line: k.thin });
+      for (let i = 0; i < 4; i++) k.box(u0 + 3.45 + i * 0.32, back + 0.05, z0 + 3.0, 0.2, 0.6, 2.6, '#2a2f33', { line: k.thin * 0.6, stripe: false });
       // the reservoir's mounts (its coolant is live), the tubes
       for (const z of [3.0, 6.0]) k.box(u0 + 0.4, back + 0.05, z0 + z, 1.2, 0.5, 0.25, '#c3ccc8', { line: k.thin, stripe: false });
-      k.rod([[u0 + 1.0, back + 0.6, z0 + 6.2], [u0 + 1.9, back + 1.0, z0 + 6.4], [u0 + 2.8, back + 0.8, z0 + 5.0]], '#c3ffd8', 0.2);
-      k.rod([[u0 + 3.6, back + 0.8, z0 + 4.0], [u0 + 4.0, back + 1.1, z0 + 3.2], [u0 + 4.3, back + 1.0, z0 + 2.9]], '#c3ffd8', 0.2);
+      k.rod([[u0 + 1.0, back + 0.6, z0 + 6.2], [u0 + 1.8, back + 1.0, z0 + 6.4], [u0 + 2.5, back + 0.8, z0 + 5.0]], '#c3ffd8', 0.2);
+      k.rod([[u0 + 3.2, back + 0.8, z0 + 4.0], [u0 + 3.5, back + 1.1, z0 + 3.2], [u0 + 3.8, back + 1.0, z0 + 2.9]], '#c3ffd8', 0.2);
       // the card: a long shroud with fans on its front
       k.box(u0 + 0.3, back + 0.6, z0 + 1.0, u1 - u0 - 0.6, 1.0, 1.9, '#2a2f33', { line: k.lw });
       k.line([[u0 + 0.35, back + 1.62, z0 + 2.85], [u1 - 0.35, back + 1.62, z0 + 2.85]], C.magenta, Math.max(0.8, 0.12 * k.s));
@@ -492,18 +502,14 @@ const run: PropArt = {
       k.box(u1 + 0.2, back - 0.3, KNOB[2] - 0.75, 0.45, 0.6, 1.5, '#2a2f33', { line: k.thin });
       fillPts(k, ring(k, [KNOB[0] + 0.02, KNOB[1], KNOB[2] - 0.15], [1, 0, 0], 0.27, 14), '#c0392f', k.thin);
       k.line([[KNOB[0] + 0.03, KNOB[1], KNOB[2] - 0.15], [KNOB[0] + 0.03, KNOB[1] - 0.12, KNOB[2] + 0.05]], '#f0e6dc', Math.max(0.7, 0.07 * k.s));
-      // a box fan on the bench, a power strip, a multimeter, a can, a
+      // a box fan on the bench blowing on the rig, a multimeter, a can, a
       // screwdriver
-      k.box(7.4, 5.6, z0, 2.2, 0.6, 2.4, '#e9ecea', { line: k.lw, round: 0.2 });
-      k.box(7.8, 5.7, z0, 1.4, 0.6, 0.15, '#e9ecea', { line: k.thin });
-      k.box(1.6, 5.4, z0, 3.2, 0.8, 0.35, '#e9ecea', { line: k.thin });
-      for (let i = 0; i < 4; i++) k.dot(2.0 + i * 0.75, 5.8, z0 + 0.36, 0.12, '#2a2f33');
-      k.dot(4.5, 5.8, z0 + 0.36, 0.12, '#ff5a4a');
-      cable(k, [[1.6, 5.8, z0 + 0.2], [0.6, 6.6, z0 + 0.02], [0.15, 7.6, z0 - 0.3], [0.1, 8.3, z0 - 2.2], [0.5, 9.0, 0.1], [1.6, 9.6, 0.1]], '#1c2226', 0.16);
-      k.box(5.4, 6.4, z0, 1.0, 1.4, 0.3, '#e8b030', { line: k.thin });
-      k.rect(5.55, z0 + 0.02, 6.25, z0 + 0.3, 7.81, '#2a2f33', 0);
+      k.box(7.0, 5.9, z0, 2.2, 0.6, 2.4, '#e9ecea', { line: k.lw, round: 0.2 });
+      k.box(7.4, 6.0, z0, 1.4, 0.6, 0.15, '#e9ecea', { line: k.thin });
+      k.box(5.9, 6.5, z0, 1.0, 1.4, 0.3, '#e8b030', { line: k.thin });
+      k.rect(6.05, z0 + 0.02, 6.75, z0 + 0.3, 7.91, '#2a2f33', 0);
       can(k, 9.6, 7.0, z0, CANS[2]);
-      k.rod([[2.0, 7.3, z0 + 0.15], [3.6, 6.7, z0 + 0.15]], '#c0392f', 0.2);
+      k.rod([[7.3, 7.75, z0 + 0.15], [8.8, 7.35, z0 + 0.15]], '#c0392f', 0.2);
       // the extinguisher on the floor at the front corner
       k.shadow(10.0, 9.8, 0.9, 0.9, 0.25);
       k.cyl(10.0, 9.8, 0, 0.62, 3.0, '#c0392f');
@@ -527,26 +533,26 @@ const run: PropArt = {
     }
     // the card's fans
     for (let i = 0; i < 3; i++) {
-      const fc: P3 = [u0 + 1.15 + i * 1.65, back + 1.62, z0 + 1.95];
-      fillPts(k, ring(k, fc, [0, 1, 0], 0.74, 16), '#151a1d', k.thin * 0.7);
-      fanBlades(k, fc[0], fc[1], fc[2], 0.66, spin + i, v.active ? '#5a6a70' : '#3a4448');
+      const fc: P3 = [u0 + FANS.at + i * FANS.step, back + 1.62, z0 + 1.95];
+      fillPts(k, ring(k, fc, [0, 1, 0], FANS.r, 16), '#151a1d', k.thin * 0.7);
+      fanBlades(k, fc[0], fc[1], fc[2], FANS.r - 0.08, spin + i, v.active ? '#5a6a70' : '#3a4448');
       k.dot(fc[0], fc[1], fc[2], 0.16, '#2a2f33');
     }
     // the RAM's lights, cycling while it runs
     for (let i = 0; i < 4; i++) {
       const hue = v.active ? [C.magenta, C.cyan, C.green, C.amber][(i + Math.floor(t * 4)) % 4] : '#3a4448';
-      k.line([[u0 + 4.01 + i * 0.36, back + 0.66, z0 + 5.4], [u0 + 4.01 + i * 0.36, back + 0.66, z0 + 5.6]], hue, Math.max(1, 0.16 * k.s));
+      k.line([[u0 + 3.55 + i * 0.32, back + 0.66, z0 + 5.4], [u0 + 3.55 + i * 0.32, back + 0.66, z0 + 5.6]], hue, Math.max(1, 0.16 * k.s));
     }
     // the fan controller's lights, up and down with the knob
     const lvl = v.active ? Math.round(2.5 + 1.5 * Math.sin(v.t * Math.PI)) : 1;
     for (let i = 0; i < 4; i++) k.dot(KNOB[0], KNOB[1] + (i - 1.5) * 0.14, KNOB[2] + 0.45, 0.06, i < lvl ? [C.green, C.green, C.amber, C.magenta][i] : '#1a2a22');
     // the box fan's blades
-    const bc: P3 = [8.5, 6.22, z0 + 1.2];
+    const bc: P3 = [8.1, 6.52, z0 + 1.2];
     fillPts(k, ring(k, bc, [0, 1, 0], 0.95, 16), '#c3ccc8', k.thin * 0.7);
     fanBlades(k, bc[0], bc[1], bc[2], 0.85, v.active ? v.t * (2 / 3) * Math.PI : 0.2, '#7a8a90', 3);
     if (v.active) {
       k.halo((u0 + u1) / 2, back + 1.8, z0 + 2, 4.5, C.magenta, 0.16);
-      k.pool((u0 + u1) / 2, back + 2.8, 3.5, 2.2, C.magenta, 0.18, z0 + 0.01);
+      k.pool((u0 + u1) / 2, back + 2.1, 3.2, 1.2, C.magenta, 0.18, z0 + 0.01);
     }
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {

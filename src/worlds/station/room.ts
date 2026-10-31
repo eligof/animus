@@ -388,7 +388,9 @@ function marks(k: Kit, v: RoomView, plan: Plan): void {
     const rk = frameOf(run);
     if (rk.vis(-3, -3, 0, run.len + 3, run.dep + 3, 0, 8)) {
       rk.pool(run.len / 2, run.dep / 2, 12, 12, '#5ce8ff', 0.22);
-      hazardRing(rk, run.len / 2, run.dep / 2, 6.6);
+      // (broken where the riser stands at the plinth's end: the engineer
+      // works it from the gap, see npcs.ts)
+      hazardRing(rk, run.len / 2, run.dep / 2, 6.6, [-0.45, 1.05]);
     }
   }
   const think = slot('think');
@@ -501,15 +503,22 @@ function emblem(k: Kit, cx: number, cy: number, r: number): void {
   }
 }
 
-// Hazard dashes round a circle on the floor.
-function hazardRing(k: Kit, cu: number, cv: number, r: number): void {
+// Hazard dashes round a circle on the floor, but for the arc `gap`
+// (radians round from +u) if given.
+function hazardRing(k: Kit, cu: number, cv: number, r: number, gap?: readonly [number, number]): void {
   const z = 0.03;
   const n = 28;
   const w = 0.7;
+  const open = (a: number) => {
+    if (!gap) return false;
+    const m = (a + (Math.PI * 2) / n / 2 - gap[0] + Math.PI * 4) % (Math.PI * 2);
+    return m < gap[1] - gap[0];
+  };
   k.pen.beginPath();
   for (let i = 0; i < n; i++) {
     const a0 = (i / n) * Math.PI * 2;
     const a1 = a0 + (Math.PI * 2) / n;
+    if (open(a0)) continue;
     k.trace([[cu + Math.cos(a0) * r, cv + Math.sin(a0) * r, z], [cu + Math.cos(a1) * r, cv + Math.sin(a1) * r, z], [cu + Math.cos(a1) * (r + w), cv + Math.sin(a1) * (r + w), z], [cu + Math.cos(a0) * (r + w), cv + Math.sin(a0) * (r + w), z]]);
   }
   k.pen.fillStyle = '#22232c';
@@ -518,6 +527,7 @@ function hazardRing(k: Kit, cu: number, cv: number, r: number): void {
   for (let i = 0; i < n; i += 2) {
     const a0 = (i / n) * Math.PI * 2 + 0.03;
     const a1 = a0 + (Math.PI * 2) / n - 0.06;
+    if (open((i / n) * Math.PI * 2)) continue;
     k.trace([[cu + Math.cos(a0) * r, cv + Math.sin(a0) * r, z], [cu + Math.cos(a1) * r, cv + Math.sin(a1) * r, z], [cu + Math.cos(a1 + 0.08) * (r + w), cv + Math.sin(a1 + 0.08) * (r + w), z], [cu + Math.cos(a0 + 0.08) * (r + w), cv + Math.sin(a0 + 0.08) * (r + w), z]]);
   }
   k.pen.fillStyle = '#f2c230';
