@@ -17,8 +17,9 @@ import { C, INK, due, hash, kitOf, puff, spore, still, withAlpha } from './kit.t
 //             reading floats a book out, its pages turning
 //   search    an apothecary chest of little drawers, jars on top; searching
 //             pulls the drawers out one by one, their spores aglow
-//   run       the cauldron over a fire in a ring of stones; it boils over
-//             with green fumes while run
+//   run       the cauldron over a fire in a ring of stones, toward its far
+//             end, where the witch stands to stir it; it boils over with
+//             green fumes while run
 //   web       a scrying orb on a twisted stalk, threads of glowing mycelium
 //             running out to little mushrooms (the wood wide web); pulses
 //             run in along them while browsed
@@ -38,6 +39,7 @@ const on = (q: readonly [P3, P3, P3, P3], fu: number, fz: number): P3 => {
 };
 
 const ease = (t: number) => t * t * (3 - 2 * t);
+const TAU = Math.PI * 2;
 
 // A half-ellipse shelf jutting from the plane v = n: ru along u, rv out,
 // th thick, its top at z, ringed like a bracket fungus.
@@ -367,17 +369,18 @@ const search: PropArt = {
       k.box(9.9, 1.1, zt + 1.5, 1.2, 1.2, 0.25, C.iron, { line: k.thin });
       k.halo(10.5, 1.7, zt + 0.8, 2.6, C.lantern, 0.4);
     });
-    // the lens' glint
+    // the lens' glint (round in two seconds, the loop a worked station is
+    // drawn round: the herbalist works it whenever it is there)
     const zt = z1 + 0.5;
-    const ph = v.active ? (v.t * 0.7) % 1 : 0.3;
+    const ph = v.active ? (v.t * 0.5) % 1 : 0.3;
     const [lx, ly] = k.p(9.0 - 0.3 + ph * 0.5, 2.2, zt + 2.85 - ph * 0.4);
     k.pen.beginPath();
     k.pen.ellipse(lx, ly, 0.16 * k.s, 0.28 * k.s, -0.6, 0, Math.PI * 2);
     k.pen.fillStyle = '#ffffffb0';
     k.pen.fill();
     if (!v.active) return;
-    // a drawer out, its spores aglow: a new one every couple of seconds
-    const per = 1.8;
+    // a drawer out, its spores aglow: a new one every second
+    const per = 1;
     const n = Math.floor(v.t / per);
     const f = (v.t / per) % 1;
     const out = 1.4 * ease(Math.min(1, f * 4) - Math.max(0, f * 4 - 3));
@@ -404,7 +407,7 @@ const search: PropArt = {
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
     const n = due(v.t, dt, 2.2, v.seed);
-    const per = 1.8;
+    const per = 1;
     const idx = Math.floor(hash(Math.floor(v.t / per), 9) * ROWS * COLS);
     const q = drawer(idx % ROWS, Math.floor(idx / ROWS), 0.7);
     const m = on(q, 0.5, 1);
@@ -413,8 +416,15 @@ const search: PropArt = {
 };
 
 // ── run: the cauldron ──────────────────────────────────────────────────────
+// The pot sits toward the far end (-u) of its ring of stones, so the witch
+// standing past that end (see ./npcs.ts) can reach in with her ladle; the
+// stump of bottles and the basket stand at the near end. While she works
+// it (it is worked whenever she is there) her ladle is in her hands, not
+// in the pot. Its flames and bubbles go round in two seconds, the loop a
+// worked station is drawn round.
 
-const POT = { u: 5.5, v: 5.2, z: 2.2, r: 3.0, h: 3.6 };
+export const POT = { u: 4.6, v: 5.4, z: 2.2, r: 3.0, h: 3.6 };
+const STONES = 3.6; // the fire ring's radius
 
 const run: PropArt = {
   len: 11,
@@ -425,24 +435,24 @@ const run: PropArt = {
     const { u: cu, v: cv, z: cz, h } = POT;
     // behind: the back stones, the embers, the stump of bottles, the basket
     const k = still(v, 'run-back', 15, (k) => {
-      k.shadow(5.5, 5.4, 5.6, 5.4, 0.3);
+      k.shadow(5.6, 5.4, 4.9, 5.0, 0.3);
       stones(k, false);
       k.disc(cu, cv, 0.05, 3.0, '#2a1a22', 0);
       k.pool(cu, cv, 2.8, 2.8, '#ff8a3a', 0.6, 0.06);
-      k.shadow(1.6, 1.6, 1.4, 1.2, 0.25);
-      k.cyl(1.6, 1.6, 0, 1.25, 2.4, C.wood, { top: '#d9b98a' });
-      bottle(k, 1.2, 1.4, 2.4, 0.38, 1.0, C.red);
-      flask(k, 2.0, 1.9, 2.4, 0.45, C.blue);
-      bottle(k, 1.4, 2.2, 2.4, 0.3, 0.8, C.gold);
-      k.shadow(9.5, 1.6, 1.4, 1.1, 0.25);
-      k.cyl(9.5, 1.6, 0, 1.2, 1.3, '#b98a4e');
-      clump(k, 9.5, 1.6, 1.15, 5, 0.7, 0.55, [C.capRed, C.capTan, C.capViolet], 31);
+      k.shadow(9.4, 1.6, 1.4, 1.2, 0.25);
+      k.cyl(9.4, 1.6, 0, 1.25, 2.4, C.wood, { top: '#d9b98a' });
+      bottle(k, 9.0, 1.4, 2.4, 0.38, 1.0, C.red);
+      flask(k, 9.8, 1.9, 2.4, 0.45, C.blue);
+      bottle(k, 9.2, 2.2, 2.4, 0.3, 0.8, C.gold);
+      k.shadow(9.6, 9.6, 1.4, 1.1, 0.25);
+      k.cyl(9.6, 9.6, 0, 1.2, 1.3, '#b98a4e');
+      clump(k, 9.6, 9.6, 1.15, 5, 0.7, 0.55, [C.capRed, C.capTan, C.capViolet], 31);
     });
     const t = v.t;
     const heat = v.active ? 1 : 0.55;
     // flames behind the pot, the pot, flames licking up its front, the brew
     fire(k, heat, t, false);
-    still(v, 'run-pot', 15, (k) => cauldron(k));
+    still(v, v.active ? 'run-pot-stirred' : 'run-pot', 15, (k) => cauldron(k, !v.active));
     fire(k, heat, t, true);
     bubbles(k, v.active, t);
     still(v, 'run-front', 15, (k) => stones(k, true));
@@ -468,7 +478,7 @@ function stones(k: Kit, front: boolean): void {
   for (let i = 0; i < 11; i++) {
     const a = (i / 11) * Math.PI * 2 + 0.3;
     if (Math.sin(a) + Math.cos(a) > 0 !== front) continue;
-    boulder(k, cu + Math.cos(a) * 3.9, cv + Math.sin(a) * 3.9, 0, 0.8 + hash(i, 3) * 0.3, 0.9 + hash(i, 4) * 0.5, i & 1 ? '#7a6d92' : '#6a5d82', i * 7 + 1, i % 3 === 0);
+    boulder(k, cu + Math.cos(a) * STONES, cv + Math.sin(a) * STONES, 0, 0.8 + hash(i, 3) * 0.3, 0.9 + hash(i, 4) * 0.5, i & 1 ? '#7a6d92' : '#6a5d82', i * 7 + 1, i % 3 === 0);
   }
 }
 
@@ -491,19 +501,19 @@ function fire(k: Kit, heat: number, t: number, front: boolean): void {
     pen.fillStyle = c;
     pen.fill();
   };
-  const sw = (i: number) => Math.sin(t * 6.3 + i * 1.7) * 0.35;
+  const sw = (i: number) => Math.sin(t * TAU + i * 1.7) * 0.35;
   const at: ReadonlyArray<readonly [number, number]> = [[-2.4, 0.4], [2.3, -0.6], [-0.4, -1.8], [-1.2, 2.2], [1.6, 1.7], [0.3, 2.7]];
   for (const [i, [du, dv]] of at.entries()) {
     if (du + dv > 1 !== front) continue;
-    tongue(du, dv, 0.75, 2.6 + Math.sin(t * 5 + i) * 0.4, sw(i), '#ff7a2a');
-    tongue(du, dv, 0.45, 1.7 + Math.sin(t * 7 + i) * 0.3, sw(i + 3), C.flame);
+    tongue(du, dv, 0.75, 2.6 + Math.sin(t * TAU + i) * 0.4, sw(i), '#ff7a2a');
+    tongue(du, dv, 0.45, 1.7 + Math.sin(t * 1.5 * TAU + i) * 0.3, sw(i + 3), C.flame);
     tongue(du, dv, 0.2, 0.9, sw(i + 5), C.flameHot);
   }
 }
 
 // The cauldron: an iron belly on three legs, a thick rim, the brew inside,
-// a ladle.
-function cauldron(k: Kit): void {
+// a ladle in it unless the witch has it.
+function cauldron(k: Kit, ladle: boolean): void {
   const { u: cu, v: cv, z: cz, r, h } = POT;
   const pen = k.pen;
   for (const a of [0.9, 2.9, 4.9]) k.rod([[cu + Math.cos(a) * r * 0.6, cv + Math.sin(a) * r * 0.6, cz + 0.4], [cu + Math.cos(a) * r * 0.75, cv + Math.sin(a) * r * 0.75, 0]], C.iron, 0.4);
@@ -548,10 +558,12 @@ function cauldron(k: Kit): void {
   bg.addColorStop(1, C.sludgeDark);
   k.paint(bg, k.thin);
   k.halo(cu, cv, cz + h, 2.6, C.sludge, 0.35);
-  k.rod([[cu + 0.6, cv - 0.8, cz + h - 0.2], [cu + 1.8, cv - 2.0, cz + h + 2.6]], C.wood, 0.22);
+  if (ladle) k.rod([[cu + 0.6, cv - 0.8, cz + h - 0.2], [cu + 1.8, cv - 2.0, cz + h + 2.6]], C.wood, 0.22);
 }
 
 // Bubbles on the brew: rising, swelling, popping (a slow simmer when idle).
+// Each lives a half, two thirds or a whole second, so every two seconds
+// they come round again where they were.
 function bubbles(k: Kit, active: boolean, t: number): void {
   const { u: cu, v: cv, z: cz, r, h } = POT;
   const pen = k.pen;
@@ -559,11 +571,12 @@ function bubbles(k: Kit, active: boolean, t: number): void {
   const rings: Array<[number, number, number]> = [];
   pen.beginPath();
   for (let i = 0; i < n; i++) {
-    const per = 0.9 + hash(i, 11) * 0.7;
+    const per = 2 / (2 + Math.floor(hash(i, 11) * 3));
     const cyc = t / per + hash(i, 12);
     const ph = cyc % 1;
-    const a = hash(i, 13, Math.floor(cyc)) * Math.PI * 2;
-    const d = Math.sqrt(hash(i, 14, Math.floor(cyc))) * r * 0.55;
+    const life = Math.floor(cyc) % Math.round(2 / per);
+    const a = hash(i, 13, life) * Math.PI * 2;
+    const d = Math.sqrt(hash(i, 14, life)) * r * 0.55;
     const [x, y] = k.p(cu + Math.cos(a) * d, cv + Math.sin(a) * d, cz + h - 0.1);
     const R = (0.15 + ph * 0.4) * k.s * (active ? 1 : 0.8);
     if (ph > 0.85) {
@@ -704,8 +717,11 @@ const web: PropArt = {
 
 // ── think: the fairy ring ─────────────────────────────────────────────────────
 
+// The myconid sits on the moss in its middle (see ./npcs.ts), so the ring
+// is worked whenever it is there: its light runs round once in two
+// seconds, the loop a worked station is drawn round.
 const RING_N = 12;
-const RING = { u: 5.4, v: 4.2, ru: 3.9, rv: 2.5 };
+export const RING = { u: 5.4, v: 4.2, ru: 3.9, rv: 2.5 };
 const STONE = { u: 9.9, v: 2.1 };
 
 // The ring's mushrooms, back ones first.
@@ -754,9 +770,10 @@ const think: PropArt = {
   draw(v: PropView): void {
     const k = still(v, 'think', 16, (k) => {
       k.shadow(6, 3.6, 6.2, 3.4, 0.26);
-      // a glowing mushroom at the back left, tall as a lamp
-      k.shadow(1.6, 1.6, 1.4, 1.2, 0.26);
-      shroom(k, 1.6, 1.6, 0, 11.5, 2.3, C.glow, { glow: true, cap: 'dome', skirt: true, lean: [0.3, 0.3], seed: 5 });
+      // a glowing mushroom at the back, tall as a lamp, off to the side
+      // of the myconid on the moss (not straight behind its head)
+      k.shadow(7.0, 1.1, 1.4, 1.2, 0.26);
+      shroom(k, 7.0, 1.1, 0, 11.5, 2.3, C.glow, { glow: true, cap: 'dome', skirt: true, lean: [-0.3, 0.3], seed: 5 });
       // the rune stone
       const { u, v: sv } = STONE;
       k.shadow(u, sv + 0.5, 1.8, 1.2, 0.3);
@@ -782,15 +799,15 @@ const think: PropArt = {
     // the ring and the runes waking while someone thinks: a light running
     // round the caps, the marks aglow
     const pen = k.pen;
-    const a = v.active ? 0.5 + 0.3 * Math.sin(v.t * 3) : 0.12;
+    const a = v.active ? 0.5 + 0.3 * Math.sin(v.t * TAU) : 0.12;
     runes(k);
-    pen.strokeStyle = withAlpha(C.glowHot, v.active ? 0.6 + 0.3 * Math.sin(v.t * 2.2) : 0.15);
+    pen.strokeStyle = withAlpha(C.glowHot, v.active ? 0.6 + 0.3 * Math.sin(v.t * Math.PI) : 0.15);
     pen.lineWidth = Math.max(0.8, 0.1 * k.s);
     pen.lineCap = 'round';
     pen.stroke();
     if (v.active) k.halo(STONE.u, STONE.v + 1.1, 6.5, 3.6, C.glow, 0.25 * a + 0.15);
     if (!v.active) return;
-    const lead = (v.t * 4) % RING_N;
+    const lead = (v.t * (RING_N / 2)) % RING_N;
     for (const m of ringShrooms()) {
       const d = (m.i - lead + RING_N) % RING_N;
       const f = d < 4 ? 1 - d / 4 : 0;
