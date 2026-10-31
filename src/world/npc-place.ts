@@ -11,12 +11,13 @@ export const NPC_R = 1.5;
 
 // Where a local's picture is cut, units over its feet (none with nothing
 // in front of it): where its counter's top, `top` high from its back edge
-// at v = `edge`, crosses it on screen. The view drops half a unit down the
-// screen for each unit nearer (see worlds/types.ts), so an edge `edge - v`
-// nearer than the local shows half of that lower.
+// at v = `edge`, crosses it on screen. The point of that edge in the
+// local's own column of the screen stands `edge - v` along it as well as
+// `edge - v` nearer, and the view drops half a unit down the screen for
+// each (see worlds/types.ts): it shows `edge - v` lower in all.
 export function cutOf(pl: NpcPlace): number | undefined {
   if (pl.mode === 'standing' || pl.top === undefined || pl.edge === undefined) return undefined;
-  return pl.top - (pl.mode === 'seated' ? pl.z : 0) - (pl.edge - pl.v) / 2;
+  return pl.top - (pl.mode === 'seated' ? pl.z : 0) - (pl.edge - pl.v);
 }
 
 // Which way a local with look `look` faces on screen at a station backed

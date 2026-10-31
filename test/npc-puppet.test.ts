@@ -5,6 +5,7 @@ import { ACTS, loopOf, puppetOf, rest, type SharedAct } from '../src/art/npc/act
 import { buildNpc } from '../src/art/npc/puppet.ts';
 import { getTheme } from '../src/themes/index.ts';
 import { cutOf, facingOf } from '../src/world/npc-place.ts';
+import { toWorld } from '../src/world/room.ts';
 import type { Npc, Puppet } from '../src/worlds/types.ts';
 import { npcContract } from './npc-contract.ts';
 import { CUP, standIn, trio } from './npc-fakes.ts';
@@ -83,9 +84,9 @@ test('a puppet records its parts back to front for the view: the near arm over e
 });
 
 test('a local is cut where its counter top crosses it, and faces into the room, along its station or away, on either wall', () => {
-  assert.ok(Math.abs(cutOf({ mode: 'behind', u: 5, v: 1.3, top: 5.6, edge: 2.4 })! - 5.05) < 1e-9);
+  assert.ok(Math.abs(cutOf({ mode: 'behind', u: 5, v: 1.3, top: 5.6, edge: 2.4 })! - 4.5) < 1e-9);
   assert.equal(cutOf({ mode: 'seated', u: 5, v: 3, z: 2 }), undefined);
-  assert.equal(cutOf({ mode: 'seated', u: 5, v: 3, z: 2, top: 9, edge: 4 }), 6.5);
+  assert.equal(cutOf({ mode: 'seated', u: 5, v: 3, z: 2, top: 9, edge: 4 }), 6);
   assert.equal(cutOf({ mode: 'standing', u: -2, v: 3 }), undefined);
   assert.deepEqual(facingOf('right'), { back: false, flip: true });
   assert.deepEqual(facingOf('left'), { back: false, flip: false });
@@ -98,4 +99,20 @@ test('a local is cut where its counter top crosses it, and faces into the room, 
 test("the stand-ins meet the contract every world's locals are held to", () => {
   const w = trio(getTheme('mines')!);
   for (const n of w.npcs!) npcContract(w, n);
+});
+
+test("a local behind its counter is cut where the counter's back edge crosses it on screen, in either frame", () => {
+  const pl = { mode: 'behind' as const, u: 4, v: 1.2, top: 6, edge: 2.5 };
+  const cut = cutOf(pl)!;
+  for (const wall of ['right', 'left'] as const) {
+    const at = (u: number, v: number, z: number) => {
+      const [x, y, zz] = toWorld({ wall, x0: 0, y0: 0 }, u, v, z);
+      return [x - y, (x + y) / 2 - zz];
+    };
+    const [fx, fy] = at(pl.u, pl.v, cut);
+    // the point of the edge in the local's column of the screen
+    const [ex, ey] = at(pl.u + pl.edge - pl.v, pl.edge, pl.top);
+    assert.ok(Math.abs(ex - fx) < 1e-9, `${wall}: not the local's column`);
+    assert.ok(Math.abs(ey - fy) < 1e-9, `${wall}: the cut is ${(ey - fy).toFixed(2)} off the edge`);
+  }
 });
