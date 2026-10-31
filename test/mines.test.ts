@@ -219,3 +219,12 @@ test('The Mines: its desks have things of their own to pick from, and something 
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test('The Mines: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(mines.npcs!.map((n) => [n.name, n.station, n.place.mode]), [
+    ['blacksmith', 'write', 'standing'],
+    ['assayer', 'read', 'behind'],
+    ['prospector', 'search', 'standing'],
+  ]);
+  assert.ok(mines.npcs!.some((n) => n.show), 'no show');
+});

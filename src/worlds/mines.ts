@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './mines/decor.ts';
 import { INK } from './mines/kit.ts';
+import { NPCS } from './mines/npcs.ts';
 import { minesPois, room } from './mines/room.ts';
 import { STATIONS } from './mines/stations.ts';
 import { WORKSTATION } from './mines/workstation.ts';
@@ -10,8 +11,9 @@ import { WORKSTATION } from './mines/workstation.ts';
 // The Mines: timbered shafts, coal seams and the glint of gold. A gallery
 // cut from layered rock in outlined cartoon (coal-dust umber ink): the
 // shell in mines/room.ts, the stations in mines/stations.ts, the gear on
-// the floor in mines/decor.ts, all drawn with the kit in mines/kit.ts and
-// mines/bits.ts.
+// the floor in mines/decor.ts, the locals (a blacksmith, an assayer and an
+// old prospector) in mines/npcs.ts, all drawn with the kit in mines/kit.ts
+// and mines/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#0a0705'),
@@ -45,6 +47,7 @@ export const mines: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'miner',
   critter: { kind: 'rat', body: hex('#8a7462') }, // a mine rat
   finale: { colors: [[255, 211, 74]] }, // gold dust

@@ -46,17 +46,23 @@ function codeRows(k: Kit, scr: readonly [P3, P3, P3, P3], t: number, colors: rea
 }
 
 // ── write: the chemistry bench ──────────────────────────────────────────────
-// Teal cupboards under a black resin top against a pegboard of tools: an old
-// green-screen terminal and its keyboard, a round flask on a ring stand over
-// a Bunsen burner piped through a glass coil into a conical flask, a rack of
-// test tubes, a beaker and an open notebook; a lab stool pulled out.
-// Working lights the burner, boils the flask and drips the distillate, and
-// writes on the terminal.
+// Teal cupboards under a black resin top, brought out from a pegboard of
+// tools so the chemist stands between them (CHEMIST, see npcs.ts): an old
+// green-screen terminal at one end, facing out, its keyboard by it; at the
+// other a round flask on a ring stand over a Bunsen burner piped through a
+// glass coil into a conical flask; a rack of test tubes, a beaker and an
+// open notebook in front. The chemist's own flask is in her hand. Worked,
+// the burner lights, the flask boils, the distillate drips and the
+// terminal writes.
 
-const ZT = 6.95; // the bench top
-const CRT = quad(1.2, 3.4, 3.42, ZT + 0.55, ZT + 2.25);
-const FLASK = { u: 5.8, v: 1.8, z: ZT + 2.3, R: 1.0 };
-const COIL = { u: 7.7, v: 1.8, z0: ZT + 3.3, z1: ZT + 5.3, r: 0.45 };
+const ZT = 6.2; // the bench top
+const BENCH = { back: 2.3, front: 6.9 };
+// Where the chemist stands: behind the bench, toward its terminal end.
+export const CHEMIST = { u: 3.2, v: 1.85, top: ZT, edge: BENCH.back };
+const CRT = quad(0.75, 2.45, 6.53, ZT + 0.45, ZT + 2.05);
+const FLASK = { u: 7.9, v: 3.2, z: ZT + 2.3, R: 0.95 };
+const COIL = { u: 9.75, v: 3.2, z0: ZT + 3.3, z1: ZT + 5.3, r: 0.45 };
+const BEAKER: P3 = [10.1, 5.6, ZT];
 
 const write: PropArt = {
   len: 11,
@@ -65,14 +71,15 @@ const write: PropArt = {
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 13, (k) => {
-      k.shadow(5.5, 3.2, 6.4, 3.8, 0.3);
-      // the pegboard and what hangs on it
-      k.face(0.5, 10.5, 0.06, ZT + 0.6, ZT + 5.6, '#d8c7a2', k.thin, 0.15);
+      const { back, front } = BENCH;
+      k.shadow(5.5, 4.4, 6.4, 3.2, 0.3);
+      // the pegboard and what hangs on it, behind the chemist
+      k.face(0.5, 10.5, 0.06, ZT + 0.4, ZT + 5.4, '#d8c7a2', k.thin, 0.15);
       if (k.fine) {
         const pen = k.pen;
         pen.beginPath();
         for (let u = 0.9; u < 10.3; u += 0.6) {
-          for (let z = ZT + 1.0; z < ZT + 5.3; z += 0.6) {
+          for (let z = ZT + 0.8; z < ZT + 5.1; z += 0.6) {
             const [x, y] = k.p(u, 0.07, z);
             pen.moveTo(x + 0.06 * k.s, y);
             pen.arc(x, y, 0.06 * k.s, 0, Math.PI * 2);
@@ -82,34 +89,34 @@ const write: PropArt = {
         pen.fill();
       }
       // goggles, tongs, a funnel and a thermometer on hooks
-      k.rod([[1.0, 0.2, ZT + 4.9], [2.4, 0.2, ZT + 4.9]], '#3a4449', 0.12);
-      for (const du of [1.25, 2.1]) fillPts(k, ring(k, [du, 0.25, ZT + 4.6], [0, 1, 0], 0.42, 14), '#bfe8f0', k.thin);
-      k.rod([[4.2, 0.2, ZT + 5.0], [3.9, 0.25, ZT + 3.0]], C.steel, 0.12);
-      k.rod([[4.2, 0.2, ZT + 5.0], [4.5, 0.25, ZT + 3.0]], C.steel, 0.12);
-      k.poly([[8.8, 0.2, ZT + 5.1], [10.0, 0.2, ZT + 5.1], [9.5, 0.25, ZT + 4.2], [9.5, 0.25, ZT + 3.3], [9.3, 0.25, ZT + 3.3], [9.3, 0.25, ZT + 4.2]], '#cfe9ef', k.thin);
-      k.rod([[6.9, 0.2, ZT + 5.3], [6.9, 0.2, ZT + 2.4]], '#f2f6f6', 0.18);
-      k.dot(6.9, 0.3, ZT + 2.45, Math.max(1, 0.16 * k.s), C.red);
+      k.rod([[0.8, 0.2, ZT + 4.7], [2.2, 0.2, ZT + 4.7]], '#3a4449', 0.12);
+      for (const du of [1.05, 1.9]) fillPts(k, ring(k, [du, 0.25, ZT + 4.4], [0, 1, 0], 0.42, 14), '#bfe8f0', k.thin);
+      k.rod([[5.4, 0.2, ZT + 4.8], [5.1, 0.25, ZT + 2.8]], C.steel, 0.12);
+      k.rod([[5.4, 0.2, ZT + 4.8], [5.7, 0.25, ZT + 2.8]], C.steel, 0.12);
+      k.poly([[8.8, 0.2, ZT + 4.9], [10.0, 0.2, ZT + 4.9], [9.5, 0.25, ZT + 4.0], [9.5, 0.25, ZT + 3.1], [9.3, 0.25, ZT + 3.1], [9.3, 0.25, ZT + 4.0]], '#cfe9ef', k.thin);
+      k.rod([[6.9, 0.2, ZT + 5.1], [6.9, 0.2, ZT + 2.2]], '#f2f6f6', 0.18);
+      k.dot(6.9, 0.3, ZT + 2.25, Math.max(1, 0.16 * k.s), C.red);
       // the bench: a toe kick, the cupboards, doors and a drawer row
-      k.box(0.8, 0.8, 0, 9.4, 3.5, 0.6, C.iron, { stripe: false });
-      k.box(0.6, 0.6, 0.6, 9.8, 3.8, 5.8, C.cabinet, { stripe: false });
-      const F = 4.42;
+      k.box(0.8, back + 0.5, 0, 9.4, front - back - 1.1, 0.6, C.iron, { stripe: false });
+      k.box(0.6, back + 0.3, 0.6, 9.8, front - back - 0.8, ZT - 1.15, C.cabinet, { stripe: false });
+      const F = front - 0.48;
       for (const [u0, u1] of [[1.0, 3.9], [4.1, 7.0], [7.2, 10.1]] as const) {
-        k.face(u0, u1, F, 0.95, 4.6, k.side(shade(C.cabinet, 0.04), 0, 1), k.thin, 0.1);
-        k.face(u0, u1, F, 4.9, 6.1, k.side(shade(C.cabinet, 0.04), 0, 1), k.thin, 0.1);
-        k.rod([[(u0 + u1) / 2 - 0.5, F + 0.1, 5.5], [(u0 + u1) / 2 + 0.5, F + 0.1, 5.5]], C.chrome, 0.12);
-        k.rod([[u1 - 0.4, F + 0.1, 3.9], [u1 - 0.4, F + 0.1, 3.0]], C.chrome, 0.12);
+        k.face(u0, u1, F, 0.95, ZT - 2.35, k.side(shade(C.cabinet, 0.04), 0, 1), k.thin, 0.1);
+        k.face(u0, u1, F, ZT - 2.05, ZT - 0.85, k.side(shade(C.cabinet, 0.04), 0, 1), k.thin, 0.1);
+        k.rod([[(u0 + u1) / 2 - 0.5, F + 0.1, ZT - 1.45], [(u0 + u1) / 2 + 0.5, F + 0.1, ZT - 1.45]], C.chrome, 0.12);
+        k.rod([[u1 - 0.4, F + 0.1, ZT - 3.05], [u1 - 0.4, F + 0.1, ZT - 3.95]], C.chrome, 0.12);
       }
-      k.box(0.3, 0.3, 6.4, 10.4, 4.6, 0.55, C.resin);
-      // the terminal: a beige box, its screen's bezel, the keyboard
-      k.box(0.9, 0.9, ZT, 2.8, 2.5, 2.7, '#ddd5bd', { round: 0.25 });
-      k.box(1.3, 0.6, ZT + 0.3, 2.0, 0.6, 2.0, '#c9c0a6', { line: k.thin, stripe: false });
-      k.face(1.05, 3.55, 3.41, ZT + 0.4, ZT + 2.4, '#bdb49a', k.thin, 0.25);
-      k.box(0.9, 3.6, ZT, 2.9, 1.0, 0.3, '#ddd5bd', { line: k.thin });
+      k.box(0.3, back, ZT - 0.55, 10.4, front - back, 0.55, C.resin);
+      // the terminal at the end, facing out: a beige box, its bezel, the keyboard
+      k.box(0.5, 4.3, ZT, 2.2, 2.2, 2.5, '#ddd5bd', { round: 0.25 });
+      k.box(0.8, 3.9, ZT + 0.3, 1.6, 0.6, 1.8, '#c9c0a6', { line: k.thin, stripe: false });
+      k.face(0.6, 2.6, 6.52, ZT + 0.35, ZT + 2.15, '#bdb49a', k.thin, 0.25);
+      k.box(2.9, 5.7, ZT, 1.7, 0.9, 0.3, '#ddd5bd', { line: k.thin });
       if (k.fine) {
         const pen = k.pen;
         pen.beginPath();
-        for (let i = 0; i < 3; i++) for (let j = 0; j < 9; j++) {
-          const [x, y] = k.p(1.1 + j * 0.3, 3.75 + i * 0.25, ZT + 0.31);
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 5; j++) {
+          const [x, y] = k.p(3.05 + j * 0.3, 5.82 + i * 0.25, ZT + 0.31);
           pen.moveTo(x, y);
           pen.lineTo(x + 0.15 * k.s, y + 0.075 * k.s);
         }
@@ -117,36 +124,35 @@ const write: PropArt = {
         pen.lineWidth = 0.1 * k.s;
         pen.stroke();
       }
+      // the notebook, the tube rack
+      notebook(k, 4.4, 4.3, ZT + 0.02, v.seed);
+      k.box(6.4, 5.3, ZT, 2.0, 1.0, 0.25, C.wood, { line: k.thin });
+      for (const [i, c] of ([C.green, C.magenta, C.blue, C.amber] as const).entries()) tube(k, 6.75 + i * 0.45, 5.8, ZT + 0.15, 1.7, c, 0.5 + 0.1 * (i % 2));
+      k.box(6.4, 5.3, ZT + 1.0, 2.0, 1.0, 0.18, C.wood, { line: k.thin, stripe: false });
       // the ring stand: plate, rod, a clamp on the flask's neck
-      k.box(4.5, 0.9, ZT, 2.3, 1.6, 0.18, C.iron, { line: k.thin, stripe: false });
-      k.rod([[4.9, 1.2, ZT], [4.9, 1.2, ZT + 6.0]], C.steel, 0.16);
-      // the burner under the flask
+      k.box(FLASK.u - 1.3, FLASK.v - 0.7, ZT, 2.3, 1.5, 0.18, C.iron, { line: k.thin, stripe: false });
+      k.rod([[FLASK.u - 0.9, FLASK.v - 0.6, ZT], [FLASK.u - 0.9, FLASK.v - 0.6, ZT + 6.0]], C.steel, 0.16);
+      // the burner under the flask, its hose off along the bench
       k.cyl(FLASK.u, FLASK.v, ZT, 0.5, 0.22, C.iron, { line: k.thin });
       k.cyl(FLASK.u, FLASK.v, ZT + 0.22, 0.17, 1.35, C.brass, { line: k.thin });
       k.cyl(FLASK.u, FLASK.v, ZT + 0.6, 0.24, 0.25, C.brass, { line: k.thin });
-      k.rod([[FLASK.u - 0.4, FLASK.v, ZT + 0.12], [FLASK.u - 1.1, FLASK.v + 0.9, ZT + 0.05], [FLASK.u - 1.3, FLASK.v + 2.0, ZT + 0.05]], '#c0504a', 0.14);
+      k.rod([[FLASK.u - 0.4, FLASK.v, ZT + 0.12], [FLASK.u - 1.0, FLASK.v + 0.9, ZT + 0.05], [FLASK.u - 0.9, FLASK.v + 1.8, ZT + 0.05]], '#c0504a', 0.14);
       // the round flask and its neck, clamped
       bulb(k, FLASK.u, FLASK.v, FLASK.z, FLASK.R, 0.9, C.green, 0.48);
-      k.rod([[4.9, 1.2, ZT + 4.6], [FLASK.u, FLASK.v, ZT + 4.6]], C.steelDark, 0.14);
+      k.rod([[FLASK.u - 0.9, FLASK.v - 0.6, ZT + 4.6], [FLASK.u, FLASK.v, ZT + 4.6]], C.steelDark, 0.14);
       k.box(FLASK.u - 0.3, FLASK.v - 0.3, ZT + 4.4, 0.6, 0.6, 0.4, C.steelDark, { line: k.thin, stripe: false });
       // over the top and down the coil into the conical flask
       const neckTop: P3 = [FLASK.u, FLASK.v, ZT + 5.2];
       glassTube(k, [neckTop, [FLASK.u, FLASK.v, ZT + 5.8], [COIL.u, COIL.v, ZT + 5.8], [COIL.u, COIL.v, COIL.z1]]);
       coil(k);
       glassTube(k, [[COIL.u, COIL.v, COIL.z0], [COIL.u, COIL.v, ZT + 2.75]]);
-      k.rod([[8.7, 1.0, ZT], [8.7, 1.0, ZT + 6.0]], C.steel, 0.16);
-      k.box(8.4, 0.7, ZT, 0.9, 1.0, 0.16, C.iron, { line: k.thin, stripe: false });
-      k.rod([[8.7, 1.0, ZT + 4.3], [COIL.u + 0.4, COIL.v, ZT + 4.3]], C.steelDark, 0.12);
+      k.rod([[COIL.u + 0.6, COIL.v - 0.75, ZT], [COIL.u + 0.6, COIL.v - 0.75, ZT + 6.0]], C.steel, 0.16);
+      k.box(COIL.u + 0.2, COIL.v - 1.05, ZT, 0.75, 0.75, 0.16, C.iron, { line: k.thin, stripe: false });
+      k.rod([[COIL.u + 0.6, COIL.v - 0.75, ZT + 4.3], [COIL.u + 0.3, COIL.v, ZT + 4.3]], C.steelDark, 0.12);
       erlenmeyer(k, COIL.u, COIL.v, ZT, 2.4, C.greenGlow, 0.32);
-      // a beaker with a stirring rod, the tube rack, the notebook
-      beaker(k, 10.0, 1.5, ZT, 0.55, 1.35, C.magenta, 0.55);
-      k.rod([[9.9, 1.4, ZT + 0.4], [10.35, 1.25, ZT + 2.1]], '#e6f6f8', 0.08);
-      k.box(8.6, 3.0, ZT, 2.0, 1.0, 0.25, C.wood, { line: k.thin });
-      for (const [i, c] of ([C.green, C.magenta, C.blue, C.amber] as const).entries()) tube(k, 8.95 + i * 0.45, 3.5, ZT + 0.15, 1.7, c, 0.5 + 0.1 * (i % 2));
-      k.box(8.6, 3.0, ZT + 1.0, 2.0, 1.0, 0.18, C.wood, { line: k.thin, stripe: false });
-      notebook(k, 4.4, 3.3, ZT + 0.02, v.seed);
-      // the stool
-      stool(k, 3.0, 5.9, 4.6);
+      // a beaker with a stirring rod at the front corner
+      beaker(k, BEAKER[0], BEAKER[1], ZT, 0.55, 1.35, C.magenta, 0.55);
+      k.rod([[BEAKER[0] - 0.1, BEAKER[1] - 0.1, ZT + 0.4], [BEAKER[0] + 0.25, BEAKER[1] - 0.25, ZT + 2.1]], '#e6f6f8', 0.08);
     });
     // the terminal's screen
     if (!v.active) {
@@ -156,13 +162,13 @@ const write: PropArt = {
     }
     k.poly([...CRT], k.grad(CRT[3], CRT[1], [[0, '#14382b'], [1, '#0c241c']]), 0, 0.2);
     codeRows(k, CRT, v.t, ['#7dffb0', '#c8ffd8', '#4fd88a']);
-    k.halo(2.3, 3.8, ZT + 1.4, 3.2, C.screen, 0.3);
+    k.halo(1.6, 6.9, ZT + 1.3, 2.6, C.screen, 0.3);
     // the burner lit, the flask boiling, the distillate dripping
     const fl = 0.85 + 0.15 * Math.sin(v.t * 21);
     flame(k, FLASK.u, FLASK.v, ZT + 1.55, 0.75 * fl);
     k.halo(FLASK.u, FLASK.v, FLASK.z + 0.8, 2.6, C.greenGlow, 0.3);
     bubbles(k, FLASK.u, FLASK.v + 0.6, FLASK.z + 0.25, FLASK.z + 0.95, 1.1, v.t, 7, 17, '#eaffd8e0', 1.6);
-    const ph = (v.t * 1.4) % 1;
+    const ph = (v.t * 1.5) % 1;
     const dz = ZT + 2.7 - ph * ph * 0.6;
     k.dot(COIL.u, COIL.v, dz, Math.max(1, 0.12 * k.s), C.greenGlow);
     bubbles(k, COIL.u, COIL.v + 0.3, ZT + 0.2, ZT + 0.75, 0.9, v.t, 4, 23, '#ffffffc0', 1.1);
@@ -170,7 +176,7 @@ const write: PropArt = {
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     const n = due(v.t, dt, v.active ? 1.8 : 0.3, v.seed);
-    for (let i = 0; i < n; i++) spawn(wisp(10.0, 1.5, ZT + 1.6, Math.floor(v.t * 10), i, [236, 200, 240]));
+    for (let i = 0; i < n; i++) spawn(wisp(BEAKER[0], BEAKER[1], ZT + 1.6, Math.floor(v.t * 10), i, [236, 200, 240]));
     if (!v.active) return;
     const m = due(v.t, dt, 1.2, v.seed + 1);
     for (let i = 0; i < m; i++) spawn(wisp(COIL.u, COIL.v, ZT + 2.6, Math.floor(v.t * 10) + 5, i, [200, 255, 180]));
@@ -689,12 +695,21 @@ function scaled(k: Kit, u: number, v: number, z: number, sc: number): Kit {
 // ── run: the tesla coil ─────────────────────────────────────────────────────
 // A tesla coil on a hazard-striped square: a steel base, a primary of fat
 // copper turns round the tall wound secondary, a chrome toroid on top; a
-// grounding ball on a post and a console with a big lever. Running it
-// throws the lever and arcs crack off the toroid to the ball and the air.
+// grounding ball on a post and, at the front corner, a console with a big
+// lever at its end, where the assistant stands (ASSISTANT, see npcs.ts).
+// Running it, the lever is pulled back toward him and arcs crack off the
+// toroid to the ball and the air.
 
 const TC = { u: 4.6, v: 4.4, top: 13.2, R: 2.0, r: 0.7 };
 const BALL: P3 = [9.0, 2.2, 8.2];
-const LEVER = { u: 2.2, v: 8.8, z: 4.3 };
+// The console (u0 to u1, v0 to v1, its top sloping from z0 at the back to
+// z1 at the front) and its lever's pivot.
+const CONSOLE = { u0: 0.3, u1: 3.7, v0: 7.7, v1: 9.7, z0: 3.45, z1: 2.9 };
+const LEVER = { u: 1.2, v: 8.7, z: 3.2 };
+const consoleTop = (v: number) => CONSOLE.z0 + ((CONSOLE.z1 - CONSOLE.z0) * (v - CONSOLE.v0)) / (CONSOLE.v1 - CONSOLE.v0);
+// Where the assistant stands: on the floor past the console's end, the
+// lever's knob a step ahead of him.
+export const ASSISTANT = { u: -1.5, v: LEVER.v };
 
 const run: PropArt = {
   len: 11,
@@ -708,7 +723,7 @@ const run: PropArt = {
       k.poly([[1.3, 1.3, 0.05], [9.7, 1.3, 0.05], [9.7, 9.7, 0.05], [1.3, 9.7, 0.05]], '#33424a', k.thin);
       k.shadow(TC.u, TC.v, 3.2, 3.2, 0.32, 0.05);
       // the cable from the console to the base
-      k.rod([[LEVER.u + 0.6, LEVER.v - 0.8, 0.12], [3.4, 7.2, 0.12], [TC.u - 0.6, TC.v + 1.6, 0.12]], '#22292c', 0.32);
+      k.rod([[2.6, CONSOLE.v0 + 0.1, 0.12], [3.4, 7.2, 0.12], [TC.u - 0.6, TC.v + 1.6, 0.12]], '#22292c', 0.32);
       // the base
       k.box(TC.u - 2.1, TC.v - 2.1, 0.05, 4.2, 4.2, 2.0, '#4f6f78', { round: 0.15 });
       if (k.fine) {
@@ -763,18 +778,23 @@ const run: PropArt = {
       sphere(k, BALL[0], BALL[1], BALL[2], 0.7, C.chrome);
       k.rod([[BALL[0], BALL[1] + 0.2, 0.2], [BALL[0] - 0.8, BALL[1] + 2.4, 0.1], [TC.u + 2.1, TC.v, 0.1]], '#3a7a3a', 0.14);
       // the console: a slanted desk of dials, the lever's slot
-      k.box(LEVER.u - 1.6, LEVER.v - 1.1, 0.05, 3.4, 2.0, 3.4, '#4f6f78', { stripe: false });
-      k.poly([[LEVER.u - 1.6, LEVER.v - 1.1, 3.45], [LEVER.u + 1.8, LEVER.v - 1.1, 3.45], [LEVER.u + 1.8, LEVER.v + 0.9, 2.9], [LEVER.u - 1.6, LEVER.v + 0.9, 2.9]], shade('#4f6f78', 0.12), k.lw);
-      gauge(k, LEVER.u + 0.9, LEVER.v + 0.92, 1.9, 0.55, null);
-      k.poly([[LEVER.u - 0.35, LEVER.v - 0.6, 3.36], [LEVER.u + 0.35, LEVER.v - 0.6, 3.36], [LEVER.u + 0.35, LEVER.v + 0.5, 3.05], [LEVER.u - 0.35, LEVER.v + 0.5, 3.05]], '#1e2629', 0);
-      k.face(LEVER.u - 1.3, LEVER.u + 0.1, LEVER.v + 0.92, 1.0, 2.5, '#20292d', k.thin, 0.1);
+      const { u0, u1, v0, v1, z0, z1 } = CONSOLE;
+      k.box(u0, v0, 0.05, u1 - u0, v1 - v0, z0 - 0.05, '#4f6f78', { stripe: false });
+      k.poly([[u0, v0, z0], [u1, v0, z0], [u1, v1, z1], [u0, v1, z1]], shade('#4f6f78', 0.12), k.lw);
+      gauge(k, 2.75, v1 + 0.02, 1.9, 0.55, null);
+      // the lever's slot, along the console from its end
+      const a = LEVER.v - 0.28;
+      const b = LEVER.v + 0.28;
+      k.poly([[LEVER.u - 0.85, a, consoleTop(a) - 0.04], [LEVER.u + 0.85, a, consoleTop(a) - 0.04], [LEVER.u + 0.85, b, consoleTop(b) - 0.04], [LEVER.u - 0.85, b, consoleTop(b) - 0.04]], '#1e2629', 0);
+      k.face(0.5, 1.95, v1 + 0.02, 1.0, 2.5, '#20292d', k.thin, 0.1);
     });
     // the console's needle and lights, the lever up or thrown
-    needle(k, LEVER.u + 0.9, LEVER.v + 0.95, 1.9, 0.55, v.active ? 1.0 + Math.sin(v.t * 17) * 0.25 : -1.6);
-    for (let i = 0; i < 3; i++) pilot(k, LEVER.u - 1.0 + i * 0.45, LEVER.v + 0.94, 1.75, 0.13, [C.red, C.amber, C.green][i], v.active ? i === 2 || (Math.floor(v.t * 8) + i) % 3 === 0 : i === 0);
-    const th = v.active ? 0.9 : -0.7;
-    const top: P3 = [LEVER.u, LEVER.v - Math.sin(th) * 1.6, 3.2 + Math.cos(th) * 1.6];
-    k.rod([[LEVER.u, LEVER.v - 0.05, 3.2], top], C.chrome, 0.16);
+    needle(k, 2.75, CONSOLE.v1 + 0.05, 1.9, 0.55, v.active ? 1.0 + Math.sin(v.t * 17) * 0.25 : -1.6);
+    for (let i = 0; i < 3; i++) pilot(k, 0.75 + i * 0.47, CONSOLE.v1 + 0.04, 1.75, 0.13, [C.red, C.amber, C.green][i], v.active ? i === 2 || (Math.floor(v.t * 6) + i) % 3 === 0 : i === 0);
+    // the lever: pushed away, or pulled back toward the assistant (-u)
+    const th = v.active ? 0.72 : -0.65;
+    const top: P3 = [LEVER.u - Math.sin(th) * 1.6, LEVER.v, LEVER.z + Math.cos(th) * 1.6];
+    k.rod([[LEVER.u, LEVER.v, LEVER.z], top], C.chrome, 0.16);
     k.dot(top[0], top[1], top[2], Math.max(1.5, 0.32 * k.s), C.red, k.thin);
     if (!v.active) return;
     // the arcs, re-struck several times a second
@@ -1027,13 +1047,15 @@ function mast(k: Kit): void {
 }
 
 // ── think: the rolling chalkboard ───────────────────────────────────────────
-// A big double-sided chalkboard on an oak frame with castors, crammed with
-// working: rows of formulae, a boxed result, a graph, an atom and arrows;
-// chalk and an eraser on the tray. Beside it a model atom on a stand.
-// Thinking writes another line, chalk squeaking along, and spins the atom.
+// A big double-sided chalkboard on an oak frame with castors, rolled out to
+// the front of its floor, crammed with working: rows of formulae, a boxed
+// result, a graph, an atom and arrows; chalk and an eraser on the tray.
+// Behind it a model atom on a stand. Its professor stands out on the floor
+// before its near end with a pointer (see npcs.ts); worked, the atom spins
+// and glows.
 
-const BOARD = { u0: 0.9, u1: 9.9, v: 3.1, z0: 4.4, z1: 13.4 };
-const ATOM: P3 = [11.0, 5.4, 6.6];
+const BOARD = { u0: 0.9, u1: 9.9, v: 4.8, z0: 4.4, z1: 13.4 };
+const ATOM: P3 = [11.0, 1.7, 7.4];
 
 const think: PropArt = {
   len: 12,
@@ -1043,7 +1065,7 @@ const think: PropArt = {
   draw(v: PropView): void {
     const { u0, u1, v: bv, z0, z1 } = BOARD;
     const k = still(v, 'think', 16, (k) => {
-      k.shadow(5.6, 3.4, 6.2, 3.0, 0.28);
+      k.shadow(5.6, bv, 6.2, 2.4, 0.28);
       // the far legs (behind the board)
       for (const u of [u0 - 0.35, u1 + 0.35]) k.rod([[u, bv - 0.15, z1 + 0.4], [u, bv - 1.8, 0.5]], C.woodDark, 0.32);
       // the board in its frame
@@ -1053,6 +1075,9 @@ const think: PropArt = {
       // smudges of old rubbed-out working
       k.poly([[u0 + 0.4, F + 0.01, z0 + 4.8], [u0 + 4.2, F + 0.01, z0 + 5.2], [u0 + 4.0, F + 0.01, z0 + 6.4], [u0 + 0.6, F + 0.01, z0 + 6.0]], '#ffffff10', 0, 0.6);
       chalkWork(k, F + 0.02, v.seed);
+      const row: P3[] = [];
+      for (let u = u0 + 0.6; u <= u0 + 5.2; u += 0.12) row.push([u, F + 0.02, z0 + 0.9 + Math.sin(u * 7.3) * 0.16 + Math.sin(u * 2.1) * 0.06]);
+      k.line(row, C.chalk, Math.max(0.8, 0.11 * k.s));
       // the tray, the chalk and the eraser
       k.box(u0 - 0.2, bv + 0.18, z0 - 0.45, u1 - u0 + 0.4, 0.7, 0.25, C.wood, { line: k.thin });
       for (const [du, c] of [[1.4, C.chalk], [1.9, '#f6e08a'], [6.4, '#f2a7b8']] as const) k.rod([[u0 + du, bv + 0.55, z0 - 0.12], [u0 + du + 0.6, bv + 0.6, z0 - 0.12]], c, 0.12);
@@ -1071,18 +1096,6 @@ const think: PropArt = {
       k.cyl(ATOM[0], ATOM[1], 0, 0.75, 0.3, C.woodDark, { line: k.thin });
       k.rod([[ATOM[0], ATOM[1], 0.3], [ATOM[0], ATOM[1], ATOM[2] - 0.5]], C.brass, 0.12);
     });
-    // what is being written: a line that grows, the chalk at its end
-    const rowZ = z0 + 0.9;
-    const F = bv + 0.24;
-    const ph = v.active ? (v.t * 0.25) % 1 : 0.55;
-    const end = u0 + 0.6 + (u1 - u0 - 1.5) * ph;
-    const pts: P3[] = [];
-    for (let u = u0 + 0.6; u <= end; u += 0.12) pts.push([u, F, rowZ + Math.sin(u * 7.3) * 0.16 + Math.sin(u * 2.1) * 0.06]);
-    if (pts.length > 1) k.line(pts, C.chalk, Math.max(0.8, 0.11 * k.s));
-    if (v.active) {
-      const last = pts[pts.length - 1] ?? [end, F, rowZ];
-      k.rod([[last[0], F + 0.1, last[2]], [last[0] + 0.35, F + 0.45, last[2] - 0.4]], C.chalk, 0.13);
-    }
     // the atom: a nucleus, three rings, electrons running round them
     const t = v.active ? v.t : 0.8;
     const rings: P3[] = [[0.2, 0.3, 1], [0.9, -0.3, 0.45], [-0.5, 0.9, 0.35]];
