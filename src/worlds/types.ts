@@ -3,6 +3,7 @@ import type { Layout, Particle, Poi, SlotKind } from '../world/types.ts';
 import type { RGB } from '../term/color.ts';
 import type { Palette } from '../themes/types.ts';
 import type { Costume } from '../world/character.ts';
+import type { Sketch } from '../art/figure/paint.ts';
 
 // An illustrated world: a room drawn as outlined cartoon art in 2:1
 // isometric, its props, and how the characters live in it.
@@ -95,6 +96,105 @@ export type WorkstationArt = PropArt & {
   loops?: readonly DeskLoop[];
 };
 
+// ── the locals (see world/npcs.ts) ───────────────────────────────────────
+// Three people in every world who are not agents: each works one of its
+// stations all the time (a DJ at the booth, a barista at the espresso
+// bar), drawn by the world on a puppet of its own parts (see
+// art/npc/puppet.ts), in the figures' style and units (see
+// art/figure/rig.ts): its frame's origin between its feet on the floor, x
+// toward where it faces, y down; about an agent's height.
+
+// What a local is doing: its own loops (`work`, always, under everything
+// else; `show`, a performance a crowd gathers round; `celebrate`, its own
+// way of cheering a finish) or one of the acts every local shares (see
+// art/npc/acts.ts).
+export type NpcAct = 'work' | 'show' | 'celebrate' | 'wave' | 'cheer' | 'flinch' | 'applaud' | 'talk' | 'nod' | 'handOver' | 'beckon';
+export type NpcEyes = 'open' | 'blink' | 'happy' | 'shut';
+export type NpcMouth = 'closed' | 'open' | 'smile' | 'o';
+
+// An arm: swung `sh` radians at the shoulder from hanging straight down
+// (+ forward, toward where it faces; PI straight up), bent `el` radians at
+// the elbow the same way.
+export type Swing = { sh: number; el: number };
+
+// A local's puppet in one frame: which act and how far into it (`u`, 0 to
+// 1), its body lifted (`bob`, units) and leaning about its feet (`lean`,
+// radians, + toward where it faces), its head tilted about the neck
+// (`tilt`, + a nod forward), its arms (0 the near one, on the side away
+// from where it faces: it hands things over; 1 the far one: it waves and
+// beckons), its eyes and mouth, and whether its near hand holds out what
+// it serves (`hold`).
+export type Puppet = { act: NpcAct; u: number; bob: number; lean: number; tilt: number; arms: readonly [Swing, Swing]; eyes: NpcEyes; mouth: NpcMouth; hold: boolean };
+
+// Where a local's parts join, in its frame: its neck, its shoulders (0
+// near, 1 far) and its arm's two lengths (shoulder to elbow, elbow to
+// hand).
+export type Bones = { neck: readonly [number, number]; shoulders: readonly [readonly [number, number], readonly [number, number]]; upper: number; fore: number };
+
+// A local's parts, each drawn with the sketch API (see art/figure/paint.ts)
+// in its own frame, from behind when `back`: `body` in the local's frame
+// (it bobs and leans with the puppet: legs, torso, what hangs on it);
+// `head` with its origin at the neck (the head above it, toward -y; its
+// eyes and mouth from the puppet, see art/npc/face.ts); `upper` and `fore`,
+// arm k's upper arm and forearm, origin at the shoulder and at the elbow,
+// the arm along +y (the hand at (0, fore)). A part may read the puppet's
+// act and `u` for what moves in it (a page turning, a record spinning).
+export type NpcParts = {
+  body(sk: Sketch, p: Puppet, back: boolean): void;
+  head(sk: Sketch, p: Puppet, back: boolean): void;
+  upper(sk: Sketch, p: Puppet, k: 0 | 1, back: boolean): void;
+  fore(sk: Sketch, p: Puppet, k: 0 | 1, back: boolean): void;
+};
+
+// A loop of a local's own: `frames` pictures over `secs` seconds, at most
+// 12 a second; `pose` its puppet at `u` (frame i at i / frames; its act
+// and u are set for it: start from rest() in art/npc/acts.ts).
+export type NpcLoop = { secs: number; frames: number; pose(u: number): Puppet };
+
+// Which way a local faces (see facingOf in world/npc-place.ts): `out` into
+// the room and `along` its station (+u) show its front; `back` (into its
+// station) its back.
+export type NpcLook = 'out' | 'along' | 'back';
+
+// Where a local works, in its station's frame (u along it, v out from its
+// back, z up, as PropView): `behind` its counter, inside the station's
+// footprint at its back, the counter's top (`top` high, its back edge at
+// v = `edge`) hiding its legs (its picture is cut there: see cutOf in
+// world/npc-place.ts); `seated` on a seat that is part of its station,
+// inside its footprint, its frame lifted `z` (and cut as one behind is,
+// if something of its station stands in front: `top`, `edge`); `standing`
+// on the floor beside its station, outside every footprint, on floor the
+// room planner keeps clear (or leaves it out where it cannot, as decor
+// is: see placeNpcs in world/room.ts).
+export type NpcPlace =
+  | { mode: 'behind'; u: number; v: number; top: number; edge: number; look?: NpcLook }
+  | { mode: 'seated'; u: number; v: number; z: number; top?: number; edge?: number; look?: NpcLook }
+  | { mode: 'standing'; u: number; v: number; look?: NpcLook };
+
+// What a local hands over (see the handOver act), drawn in its near hand's
+// frame (origin at the hand, the forearm running back up -y): a `drink`
+// goes back with whoever it served as a mug of coffee while office life
+// is on; anything else (or a drink with office life off) as a heart.
+export type NpcServe = { name: string; drink: boolean; draw(sk: Sketch): void };
+
+// A local: its name (camelCase, unique in its world), the station it
+// works (one local a station), where, how tall it stands (units, 11 to 16:
+// its emotes show over that), its bones and parts, its loops (a show with
+// the crowd it draws: dancing or watching) and what it serves, if
+// anything.
+export type Npc = {
+  name: string;
+  station: SlotKind;
+  place: NpcPlace;
+  tall: number;
+  bones: Bones;
+  parts: NpcParts;
+  work: NpcLoop;
+  show?: NpcLoop & { crowd: 'dance' | 'watch' };
+  celebrate?: NpcLoop;
+  serve?: NpcServe;
+};
+
 // What the room shell draws with: the floor and the two back walls.
 // `W` x `D` is the floor (units), `H` the wall height, `T` the wall
 // thickness.
@@ -136,6 +236,8 @@ export type WorldDef = {
   // Each agent's own workstation (a plain desk with a screen in the
   // world's colours when it has none: see worlds/workstation.ts).
   workstation?: WorkstationArt;
+  // Its locals (see Npc): three, each at a station of its own.
+  npcs?: readonly Npc[];
   // A colour multiplied over the finished scene (0 = none, 1 = full).
   ambient?: { tint: RGB; strength: number };
   costume: Costume;

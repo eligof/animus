@@ -1,5 +1,5 @@
 import type { RGB } from '../term/color.ts';
-import type { CritterFrame, FigureFrame, Trinket } from '../world/frame.ts';
+import type { CritterFrame, FigureFrame, NpcFrame, Trinket } from '../world/frame.ts';
 import type { Costume, Emote, Traits, Wear } from '../world/character.ts';
 import { Canvas } from './canvas.ts';
 import { hexOf } from './iso.ts';
@@ -12,6 +12,9 @@ import { lookOf, type Look } from './figure/look.ts';
 import { render, Sketch, type Mat } from './figure/paint.ts';
 import { blinkAt, eyesAt, frameOf, LOOP, MUG_POSES, rigFor, type Eyes } from './figure/rig.ts';
 import { drawTrinket } from './figure/trinkets.ts';
+import type { Npc, WorldDef } from '../worlds/types.ts';
+import { puppetOf } from './npc/acts.ts';
+import { NPC_BOX, buildNpc } from './npc/puppet.ts';
 
 // Characters, the critter, emotes and desk upgrades as outlined cartoon
 // sprites (see the art direction in
@@ -227,6 +230,48 @@ export function emoteSprite(kind: Emote, t: number, s: number, ink: string): Spr
   const art = emoteArt(kind, t);
   const sp = cached(`e|${kind}|${art.key}|${q}|${ink}`, () => paint(art.draw(), q, ink, false, EMOTE_BOX));
   return sp;
+}
+
+// ---- the locals ---------------------------------------------------------------
+
+// Each local's art a number of its own for the keys (a test may hand in a
+// stand-in under a world's id).
+const npcIds = new WeakMap<Npc, number>();
+let npcSerial = 0;
+function npcId(n: Npc): number {
+  let k = npcIds.get(n);
+  if (k === undefined) npcIds.set(n, (k = ++npcSerial));
+  return k;
+}
+
+// A local (see world/npcs.ts) as it shows: a frame of an act, facing its
+// way, at scale s, cut along its counter's top edge if it stands behind
+// one. The anchor is the point between its feet.
+export function npcSprite(world: WorldDef, n: NpcFrame, s: number, ink: string): Sprite {
+  const art = world.npcs?.[n.k];
+  if (!art) return { img: new Canvas(1, 1), ax: 0, ay: 0 };
+  const q = quant(s);
+  const cut = n.cut ? `${Math.round(n.cut.h * 100)}/${n.cut.slope}` : '';
+  return cached(`n|${npcId(art)}|${n.act}|${n.frame}|${n.facing.back ? 1 : 0}${n.facing.flip ? 1 : 0}|${cut}|${q}|${ink}`, () => {
+    const sk = new Sketch();
+    buildNpc(sk, art, puppetOf(art, n.act, n.frame), n.facing.back);
+    const sp = paint(sk, q, ink, n.facing.flip, NPC_BOX);
+    return n.cut ? cutAt(sp, n.cut.h * q, n.cut.slope) : sp;
+  });
+}
+
+// Sprite sp with all it paints under a counter's top edge cleared (the
+// line `h` pixels over the anchor, falling `slope` pixels a pixel to the
+// right), cropped again round what is left, the anchor kept.
+function cutAt(sp: Sprite, h: number, slope: number): Sprite {
+  const { width: w, height: H } = sp.img;
+  const c = new Canvas(w, H);
+  c.data.set(sp.img.data);
+  for (let x = 0; x < w; x++) {
+    const from = Math.max(0, Math.ceil(sp.ay - h + slope * (x + 0.5 - sp.ax) - 0.5));
+    for (let y = from; y < H; y++) c.data.fill(0, (y * w + x) * 4, (y * w + x) * 4 + 4);
+  }
+  return crop(c, sp.ax, sp.ay);
 }
 
 // ---- desk upgrades -------------------------------------------------------------

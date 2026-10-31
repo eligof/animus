@@ -552,7 +552,8 @@ test('the entrance is marked active while someone comes through; with everyone a
   assert.equal(stage.frame(NOW + 50)!.active[door], true, 'the entrance is not busy');
   const now = run(stage, [agent('s', 'search'), agent('r', 'run')], 20);
   const f = stage.frame(now)!;
-  f.room.props.forEach((p, i) => assert.equal(f.active[i], false, p.slot?.kind ?? 'decor'));
+  const worked = new Set((f.npcs ?? []).filter((n) => n.works).map((n) => n.prop));
+  f.room.props.forEach((p, i) => assert.equal(f.active[i], worked.has(i), p.slot?.kind ?? 'decor'));
   assert.deepEqual(f.desks!.map((d) => d.screen).sort(), ['run', 'search']);
 });
 

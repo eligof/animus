@@ -7,15 +7,18 @@ import { TRINKET_BOX } from '../src/art/figure.ts';
 import { frame, project as iso } from '../src/art/iso.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { Theme } from '../src/themes/types.ts';
-import { PROP_SIZE, planLayout } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { PROP_SIZE, planLayout, type Rect } from '../src/world/layout.ts';
+import { footprint, planRoom, toWorld } from '../src/world/room.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
-import { DESK, DESK_SPOT } from '../src/world/desks.ts';
+import { DESK, DESK_SPOT, deskZone } from '../src/world/desks.ts';
 import { FIGURE_H, FIGURE_HALF_W, project } from '../src/world/frame.ts';
 import type { P3, PropView } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { S, canvasBox, partCheck, viewOf } from './desk-contract.ts';
 import { recordingPen } from './helpers.ts';
+import { NPC_R } from '../src/world/npc-place.ts';
+import { hashString } from '../src/world/rng.ts';
+import { differ, npcContract, npcPicture, painted } from './npc-contract.ts';
 
 // Contract every world must meet. ANIMUS_THEME_FILE=src/worlds/x.ts also
 // checks a world module that is not registered yet (its default export, or
@@ -244,9 +247,56 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
       }
     }
   });
+
+  test(`world ${w.id}: its locals work its stations, each where its job puts it, drawn inside their box in every act and frame, and look apart`, () => {
+    const npcs = w.npcs ?? [];
+    assert.ok(npcs.length <= 3, `${npcs.length} locals`);
+    assert.equal(new Set(npcs.map((n) => n.name)).size, npcs.length, 'two locals of one name');
+    assert.equal(new Set(npcs.map((n) => n.station)).size, npcs.length, 'two locals at one station');
+    assert.ok(npcs.filter((n) => n.serve?.drink).length <= 1, 'more than one serves drinks');
+    for (const n of npcs) npcContract(w, n);
+    const pics = npcs.map((n) => npcPicture(n, 'work', 0, n.place.look === 'back'));
+    for (let i = 0; i < pics.length; i++) {
+      for (let j = i + 1; j < pics.length; j++) {
+        const least = Math.min(painted(pics[i]).n, painted(pics[j]).n);
+        assert.ok(differ(pics[i], pics[j]) >= 0.25 * least, `${npcs[i].name} and ${npcs[j].name} look alike`);
+      }
+    }
+  });
+
+  test(`world ${w.id}: its locals are placed where their jobs put them, a standing one on floor kept clear, whoever each serves within reach`, () => {
+    const npcs = w.npcs ?? [];
+    const near = (r: Rect, s: { x: number; y: number }, m: number) => s.x > r.x0 - m && s.x < r.x1 + m && s.y > r.y0 - m && s.y < r.y1 + m;
+    // the smallest room, a 150 x 46 terminal's, a 200 x 60 one's
+    for (const [cw, ch] of [[200, 105], [375, 200], [500, 290]] as const) {
+      const L = planLayout(cw, ch, w.id);
+      const room = planRoom(w, L, hashString(w.id));
+      const door = L.slots.find((s) => s.kind === 'entrance')!.spot;
+      const big = cw > 200;
+      npcs.forEach((n, k) => {
+        const p = room.npcs.find((q) => q.k === k);
+        if (!p) {
+          assert.ok(!big && n.place.mode === 'standing', `${n.name} left out of a room ${L.W} across`);
+          return;
+        }
+        assert.equal(room.props[p.prop].slot?.kind, n.station);
+        if (p.mode === 'standing') {
+          for (const q of room.props) assert.ok(!near(footprint(q), p, NPC_R), `${n.name} stands on a prop in a room ${L.W} across`);
+          for (const d of room.desks) assert.ok(!near(deskZone(d), p, NPC_R), `${n.name} stands under a workstation in a room ${L.W} across`);
+        }
+        if (n.serve && big) assert.ok(p.front, `${n.name} serves, with nowhere for anyone to stand to be served in a room ${L.W} across`);
+        if (p.front) assert.ok(room.nav.find(door, p.front), `${n.name}: whoever it serves cannot get there from the way in, in a room ${L.W} across`);
+      });
+    }
+  });
 }
 
 test('every world dresses its desks: things to pick from, and something that moves', () => {
   const bare = THEMES.filter((w) => !workstationOf(w).clutter || !workstationOf(w).loops?.length).map((w) => w.id);
   assert.deepEqual(bare, []);
+});
+
+test('every world has three locals at work, one of them with a show', { todo: "the worlds' locals" }, () => {
+  const short = THEMES.filter((w) => !w.npcs || w.npcs.length !== 3 || !w.npcs.some((n) => n.show)).map((w) => w.id);
+  assert.deepEqual(short, []);
 });

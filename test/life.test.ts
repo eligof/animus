@@ -26,6 +26,7 @@ const awake = (id: string, now: number, extra: Partial<AgentInfo> = {}) => agent
 // hang on how the world itself dresses its floor.
 const lively: WorldDef = {
   ...mines,
+  npcs: [],
   pois: (L: Layout) => {
     const h = hub(L);
     return [

@@ -14,6 +14,7 @@ import { crewKey } from '../src/pet/crew.ts';
 import { CrewStore, SAVE_AFTER_MS, crewsText } from '../src/pet/store.ts';
 import type { Stage } from '../src/world/stage.ts';
 import { covers, room, tempDir } from './helpers.ts';
+import { trio } from './npc-fakes.ts';
 import { CARD_H, CARD_W, placeCard } from '../src/ui/card.ts';
 import type { Side } from '../src/ui/card.ts';
 import { computeLayout } from '../src/ui/layout.ts';
@@ -324,6 +325,34 @@ test('config keeps office life off; anything but true or false is dropped, and s
   assert.deepEqual(loadConfig(p), { theme: 'den' });
   writeFileSync(p, JSON.stringify({ theme: 'den', office: false }));
   assert.deepEqual(loadConfig(p), { theme: 'den' });
+});
+
+test('n turns the locals off and on, saved as a preference; a world can start with them off', () => {
+  const w = new World({ theme: trio(getTheme('mines')!), live: null, demo: true, account: { name: 'Ada', plan: 'max' }, rootLabel: '~/.claude', start: START, images: true });
+  w.resize(120, 36);
+  let now = advance(w, 2);
+  w.draw(new Screen(120, 36), now);
+  assert.equal(w.npcs, true);
+  assert.equal(w.scene()!.npcs!.length, 3);
+  assert.equal(w.handleKey(key('n')), 'prefs');
+  assert.equal(w.npcs, false);
+  assert.deepEqual(w.prefs(), { npcs: false });
+  now = advance(w, 1, now);
+  w.draw(new Screen(120, 36), now);
+  assert.equal(w.scene()!.npcs, undefined);
+  assert.equal(w.handleKey(key('n')), 'prefs');
+  assert.equal(w.npcs, true);
+  assert.deepEqual(w.prefs(), { npcs: true });
+  const off = new World({ theme: getTheme('mines')!, live: null, demo: true, account: null, rootLabel: '~/.claude', start: START, images: true, npcs: false });
+  assert.equal(off.npcs, false);
+});
+
+test('config keeps the locals off; anything but true or false is dropped', () => {
+  const p = join(tempDir('animus-cfg-npcs'), 'c.json');
+  saveConfig({ theme: 'club', npcs: false }, p);
+  assert.deepEqual(loadConfig(p), { theme: 'club', npcs: false });
+  writeFileSync(p, JSON.stringify({ theme: 'club', npcs: 'no' }));
+  assert.deepEqual(loadConfig(p), { theme: 'club' });
 });
 
 test('only preferences the user changed are saved', () => {

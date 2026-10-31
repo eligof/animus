@@ -84,12 +84,13 @@ test('leaving the scene takes the pictures off, and coming back places the kept 
   assert.ok(back.term.sent < back.plate.layers.length / 2, `${back.term.sent} pictures sent again for ${back.plate.layers.length} layers`);
 });
 
-// Twenty at work in a world, played into the terminal: the bytes a step
-// once every workstation is up (after 15 seconds, over the next 3), and
-// how many loop pictures the last step placed.
-function bytesAStep(theme: WorldDef): { bytes: number; loops: number } {
+// Twenty at work in a world (its locals on, or off), played into the
+// terminal: the bytes a step once every workstation is up (after 15
+// seconds, over the next 3), and how many loop pictures and locals the last
+// step placed.
+function bytesAStep(theme: WorldDef, npcs = true): { bytes: number; loops: number; npcs: number } {
   const rate = 18;
-  const world = new World({ theme, live: new StressSource(4, 4, START), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start: START, images: true, view: 'scene' });
+  const world = new World({ theme, live: new StressSource(4, 4, START), demo: false, account: { name: 'you', plan: '' }, rootLabel: '~', start: START, images: true, view: 'scene', npcs });
   world.setCell(8, 16);
   world.resize(150, 46);
   const screen = new Screen(150, 46);
@@ -104,8 +105,8 @@ function bytesAStep(theme: WorldDef): { bytes: number; loops: number } {
     const out = player.step(world, screen, now);
     if (k >= 15 * rate) bytes += out.length;
   }
-  const loops = (last as Plate | null)?.layers.filter((l) => l.id.startsWith('loop:')).length ?? 0;
-  return { bytes: bytes / (3 * rate), loops };
+  const layers = (last as Plate | null)?.layers ?? [];
+  return { bytes: bytes / (3 * rate), loops: layers.filter((l) => l.id.startsWith('loop:')).length, npcs: layers.filter((l) => l.id.startsWith('npc:')).length };
 }
 
 // `w` with no loops on its desks.
@@ -129,4 +130,15 @@ test("a world's own loops on twenty workstations, both at 8 frames a second (the
   assert.equal(own.loops, 40, 'not two loops on each of twenty desks');
   assert.ok(own.bytes > none.bytes, 'the loops cost nothing: are they moving?');
   assert.ok(own.bytes <= none.bytes + 4096, `${own.bytes.toFixed(0)} bytes a step with loops, ${none.bytes.toFixed(0)} without`);
+});
+
+// The locals' stations are worked all the time: drawn round a loop of kept
+// pictures (see cyclePic in src/art/scene.ts), they are placed, not sent.
+test("the club's locals, their stations always worked, cost at most 4 KiB a step over the same room without them", () => {
+  const club = getTheme('club')!;
+  const off = bytesAStep(club, false);
+  const on = bytesAStep(club, true);
+  assert.equal(off.npcs, 0);
+  assert.ok(on.npcs >= 1, 'no local in the plate');
+  assert.ok(on.bytes <= off.bytes + 4096, `${on.bytes.toFixed(0)} bytes a step with the locals, ${off.bytes.toFixed(0)} without`);
 });

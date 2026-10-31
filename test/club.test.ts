@@ -12,6 +12,7 @@ import { TILE, planFor } from '../src/worlds/club/plan.ts';
 import type { PropArt } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
+import { sheet } from '../scripts/npc-sheet.ts';
 
 // The Underground Club's art: every piece draws in both wall frames and as
 // an island at the fitted scale and zoomed in, inside its footprint and
@@ -218,4 +219,24 @@ test('Underground Club: its desks have things of their own to pick from, and som
   const art = workstationOf(club);
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
+});
+
+test("the club's DJ works its booth from behind the decks, cut at the booth's top, its legs hidden", () => {
+  const dj = club.npcs?.find((n) => n.name === 'dj');
+  assert.ok(dj, 'no DJ');
+  assert.equal(dj.station, 'write');
+  assert.equal(dj.place.mode, 'behind');
+  assert.ok(dj.show, 'no show at the club');
+  const L = planLayout(375, 200, 'club');
+  const room = planRoom(club, L, hashString('club'));
+  const p = room.npcs.find((q) => club.npcs![q.k] === dj);
+  assert.ok(p, 'the DJ is not in the room');
+  assert.equal(room.props[p.prop].slot?.kind, 'write');
+  assert.ok(p.cut! > 4.5 && p.cut! < 5.6, `cut ${p.cut} over its feet`);
+});
+
+test("the club's locals on a sheet: a row each, and each at its station", () => {
+  const { img, notes } = sheet(club, 4);
+  assert.equal(notes.length, club.npcs!.length);
+  assert.ok(img.width > 1 && img.data.some((v) => v > 0), 'an empty sheet');
 });

@@ -1,11 +1,12 @@
-import type { PropArt, WorldDef } from '../worlds/types.ts';
+import type { NpcPlace, PropArt, WorldDef } from '../worlds/types.ts';
 import { supplyFor } from './build.ts';
 import { deskCap, keepOut, planDesks } from './desks.ts';
 import type { Rect } from './layout.ts';
 import { boxCount, buildSites, hub, keepClear, wallGaps, yard } from './layout.ts';
+import { NPC_R, cutOf, facingOf } from './npc-place.ts';
 import { NavGrid } from './path.ts';
 import { Rng, hashString } from './rng.ts';
-import type { Desk, Layout, Poi, Slot, SlotKind, Spot } from './types.ts';
+import type { Desk, Facing, Layout, Poi, Slot, SlotKind, Spot } from './types.ts';
 
 // The furnished room: every station slot holding its world's prop, decor
 // along the walls and on the floor by them and by the stations (clear of
@@ -30,6 +31,30 @@ export type PlacedProp = {
   slot?: Slot;
 };
 
+// A local placed in the room (see WorldDef.npcs and placeNpcs): which of
+// its world's it is (`k`), the station it works and its prop (an index
+// into `props`), how it stands there (see NpcPlace) on which wall's frame,
+// where (x, y on the floor; z its frame lifted onto a seat), where its
+// picture is cut (units over its feet, see cutOf) and which way it faces;
+// where whoever it serves stands (`front`) and where the next waits
+// (`wait`), each null where the floor is not free; the middle of the ring
+// a show's crowd stands round (`ring`).
+export type PlacedNpc = {
+  k: number;
+  station: SlotKind;
+  prop: number;
+  mode: NpcPlace['mode'];
+  wall: 'left' | 'right';
+  x: number;
+  y: number;
+  z: number;
+  cut?: number;
+  facing: Facing;
+  front: Spot | null;
+  wait: Spot | null;
+  ring: Spot;
+};
+
 export type Room = {
   L: Layout;
   props: PlacedProp[]; // the stations in slot order, then the decor
@@ -39,6 +64,7 @@ export type Room = {
   pois: Poi[];
   supply: Rect[]; // each build plaza's pile (buildSites order)
   height: Float32Array; // how tall the props stand over each floor cell (x + W * y)
+  npcs: PlacedNpc[]; // the locals, where each stands (see placeNpcs)
 };
 
 export const NAV_CELL = 2; // units per routing cell
@@ -146,19 +172,82 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   }
   const all = props.map(footprint);
   const inside = (x: number, y: number, m: number) => all.some((r) => within(r, x, y, m));
-  const nav = new NavGrid(L.T, L.T, W - 1, D - 1, NAV_CELL, (x, y) => (inside(x, y, 0.8) ? 2 : inside(x, y, NAV_PAD) ? 1 : 0));
   const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot)))
     .filter((p) => p.x > L.T && p.y > L.T && p.x < W - 1 && p.y < D - 1 && !inside(p.x, p.y, 1));
+  // The locals, after the decor (a world's shell plans its furniture
+  // without them and finds the same): routing goes round a standing one;
+  // workstations keep off it and off where each serves.
+  const npcs = placeNpcs(world, L, props, pois, supply);
+  const stands = npcs.filter((n) => n.mode === 'standing').map((n) => cells(n, NPC_R));
+  const serves = npcs.flatMap((n) => [n.front, n.wait]).filter((s): s is Spot => !!s).map((s) => cells(s, 0));
+  const blocks = [...all, ...stands];
+  const blocked = (x: number, y: number, m: number) => blocks.some((r) => within(r, x, y, m));
+  const nav = new NavGrid(L.T, L.T, W - 1, D - 1, NAV_CELL, (x, y) => (blocked(x, y, 0.8) ? 2 : blocked(x, y, NAV_PAD) ? 1 : 0));
+  const taken = [...all, ...supply, ...stands, ...serves];
   // The places for workstations, their pods turned the room's own way; in
   // a room too small for all of them, turned the other way if that fits
   // more.
-  const plan = (s: number) => planDesks(L, [...all, ...supply], height, pois, s);
+  const plan = (s: number) => planDesks(L, taken, height, pois, s);
   let desks = plan(seed);
   if (desks.length < deskCap(L)) {
     const other = plan(seed ^ 1);
     if (other.length > desks.length) desks = other;
   }
-  return { L, props, desks, keepOut: keepOut(L, [...all, ...supply], pois), nav, pois, supply, height };
+  return { L, props, desks, keepOut: keepOut(L, taken, pois), nav, pois, supply, height, npcs };
+}
+
+// The whole floor cells within r of s (x1, y1 exclusive): what is handed to
+// the floor marks, which count whole cells.
+const cells = (s: Spot, r: number): Rect => ({ x0: Math.floor(s.x - r), y0: Math.floor(s.y - r), x1: Math.floor(s.x + r) + 1, y1: Math.floor(s.y + r) + 1 });
+
+// How far out a show's crowd gathers, past where a local serves.
+const RING_OUT = 7;
+
+// Where each of the world's locals stands (see WorldDef.npcs): one behind
+// its counter or seated, inside its station where its art says; one
+// standing, where its art says if that floor is free (NPC_R clear of every
+// prop and supply pile and off the plazas, 3 from the stations' spots (8
+// from the way in's), 3 from the spots idlers like, out of the yard, 5 off
+// the hub, and apart from the other standing ones), else left out, as
+// decor is. Whoever it serves stands a step out in front of it (past its
+// station's front for one inside it), the next a step along, each where
+// the floor is free (else none); a show's crowd rings a point further out.
+function placeNpcs(world: WorldDef, L: Layout, props: readonly PlacedProp[], pois: readonly Poi[], supply: readonly Rect[]): PlacedNpc[] {
+  const rects = [...props.map(footprint), ...supply];
+  const plazas = buildSites(L);
+  const h = hub(L);
+  const yd = yard(L);
+  const clear = (s: Spot, m: number, plaza: number) =>
+    s.x >= L.T + 1 && s.y >= L.T + 1 && s.x <= L.W - 2 && s.y <= L.D - 2 && !rects.some((r) => within(r, s.x, s.y, m)) && plazas.every((b) => Math.hypot(b.x - s.x, b.y - s.y) >= b.r + plaza);
+  const out: PlacedNpc[] = [];
+  const free = (s: Spot) =>
+    clear(s, NPC_R, 2) &&
+    L.slots.every((q) => Math.hypot(q.spot.x - s.x, q.spot.y - s.y) >= (q.kind === 'entrance' ? 8 : 3)) &&
+    pois.every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= 3) &&
+    Math.hypot(yd.x - s.x, yd.y - s.y) >= yd.r + 1 &&
+    Math.hypot(h.x - s.x, h.y - s.y) >= 5 &&
+    out.every((o) => o.mode !== 'standing' || Math.hypot(o.x - s.x, o.y - s.y) >= 2 * NPC_R + 1);
+  (world.npcs ?? []).forEach((n, k) => {
+    const prop = props.findIndex((p) => p.slot?.kind === n.station);
+    if (prop < 0) return;
+    const p = props[prop];
+    const pl = n.place;
+    const [x, y] = toWorld(p, pl.u, pl.v, 0);
+    if (pl.mode === 'standing' && !free({ x, y })) return;
+    const fv = pl.mode === 'standing' ? Math.max(pl.v, p.dep) + 3 : p.dep + 2.5;
+    const spot = (u: number): Spot | null => {
+      const [sx, sy] = toWorld(p, u, fv, 0);
+      return clear({ x: sx, y: sy }, 1.2, 1) ? { x: sx, y: sy } : null;
+    };
+    const front = spot(pl.u);
+    const wait = front && (spot(pl.u + 4) ?? spot(pl.u - 4));
+    const [rx, ry] = toWorld(p, pl.u, fv + RING_OUT, 0);
+    const placed: PlacedNpc = { k, station: n.station, prop, mode: pl.mode, wall: p.wall, x, y, z: pl.mode === 'seated' ? pl.z : 0, facing: facingOf(p.wall, pl.look), front, wait, ring: { x: rx, y: ry } };
+    const cut = cutOf(pl);
+    if (cut !== undefined) placed.cut = cut;
+    out.push(placed);
+  });
+  return out;
 }
 
 // Somewhere along a wall's free stretches for `art`, against the wall.

@@ -153,10 +153,10 @@ test('help offers r for the scene only where the terminal shows images, and says
   assert.doesNotMatch(kitty.toText(), /pixels|sextant|HD/);
 });
 
-test('help offers o for office life, beside the lighting', () => {
+test('help offers o for office life and n for the locals, beside the lighting', () => {
   const s = new Screen(100, 30);
   drawHelp(s, { x: 0, y: 1, w: 100, h: 27 }, mines, true);
-  assert.match(s.toText(), /l \/ o +lighting \/ office life on \/ off/);
+  assert.match(s.toText(), /l \/ o \/ n +lights, office life, locals on\/off/);
 });
 
 test('help says when the crews are not being saved, under the keys, from the smallest screen but one up', () => {

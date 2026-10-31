@@ -22,17 +22,14 @@ function note(u: number, v: number, z: number, n: number, i: number): Particle {
 }
 
 // ── write: the DJ booth ─────────────────────────────────────────────────────
-// A black booth with an LED front and a pink neon lip: two turntables and
-// a mixer, a laptop on a stand between monitor speakers, headphones and a
-// drink; a video wall on the brick behind. Playing, the records spin, the
-// meters and the front jump to the beat and the wall shows the music.
+// A black booth with an LED front and a pink neon lip: two turntables and a
+// mixer on it and a drink on the corner; tall monitor speakers on the floor
+// at its back corners, and between them, behind the booth, room for the DJ
+// (see npcs.ts); a video wall on the brick behind. Playing, the records
+// spin, the meters and the front jump to the beat and the wall shows the
+// music. `back`: where the booth's body begins, out from the wall.
 
-const DJ = { z: 5.6, front: 6.6, decks: [2.4, 8.6] as const, dv: 4.25, scr: { u0: 1.8, u1: 9.2, z0: 9.6, z1: 16.0, n: 0.4 } };
-const LID: readonly [P3, P3, P3, P3] = [[4.55, 1.55, 6.85], [6.45, 1.55, 6.85], [6.45, 1.05, 8.55], [4.55, 1.05, 8.55]];
-const on = (q: readonly [P3, P3, P3, P3], fu: number, fz: number): P3 => {
-  const [a, b, , d] = q;
-  return [a[0] + (b[0] - a[0]) * fu + (d[0] - a[0]) * fz, a[1] + (b[1] - a[1]) * fu + (d[1] - a[1]) * fz, a[2] + (b[2] - a[2]) * fu + (d[2] - a[2]) * fz];
-};
+export const DJ = { z: 5.6, back: 2.4, front: 6.6, decks: [2.4, 8.6] as const, dv: 4.25, scr: { u0: 1.8, u1: 9.2, z0: 9.6, z1: 16.0, n: 0.4 } };
 
 const write: PropArt = {
   len: 11,
@@ -40,15 +37,22 @@ const write: PropArt = {
   height: 17,
   animated: true,
   draw(v: PropView): void {
-    const { z, front, decks, dv, scr } = DJ;
+    const { z, back, front, decks, dv, scr } = DJ;
     const k = still(v, 'write', 17, (k) => {
       k.shadow(5.5, 4, 6.4, 4, 0.34);
       // the video wall on the brick
       k.box(scr.u0 - 0.5, 0, scr.z0 - 0.5, scr.u1 - scr.u0 + 1, 0.35, scr.z1 - scr.z0 + 1, '#1d1824', { stripe: false });
       k.rect(scr.u0, scr.n, scr.z0, scr.u1, scr.z1, k.vgrad(scr.u0, scr.n, scr.z0, scr.z1, [[0, '#120c20'], [1, '#221a38']]), k.thin);
       k.ring((scr.u0 + scr.u1) / 2, scr.n + 0.01, (scr.z0 + scr.z1) / 2, 1.8, null, Math.max(1, 0.12 * k.s), '#3a2a5a');
-      // the booth
-      k.box(0.3, 1.0, 0, 10.4, front - 1.0, z, C.black, { stripe: false, top: C.gear });
+      // tall monitor speakers on the floor at the back corners, the DJ
+      // between them: behind the booth, so drawn before it
+      for (const u0 of [0.45, 8.85]) {
+        k.box(u0, 0.6, 0, 1.7, 1.6, z + 3.4, '#211d28', { round: 0.15 });
+        cone(k, u0 + 0.85, 2.21, z + 1.1, 0.62);
+        cone(k, u0 + 0.85, 2.21, z + 2.55, 0.3);
+      }
+      // the booth, its back a step out from the wall
+      k.box(0.3, back, 0, 10.4, front - back, z, C.black, { stripe: false, top: C.gear });
       k.rect(0.8, front + 0.01, 0.7, 10.2, 5.0, '#120e18', k.thin);
       // a dim grid of LEDs on the front
       const pen = k.pen;
@@ -61,16 +65,6 @@ const write: PropArt = {
       pen.fillStyle = '#2e2440';
       pen.fill();
       k.neon([[0.35, front, z], [10.65, front, z]], C.pink, 0.24);
-      // monitor speakers at the back corners
-      for (const u0 of [0.45, 8.85]) {
-        k.box(u0, 1.15, z, 1.7, 1.5, 3.4, '#211d28', { round: 0.15 });
-        cone(k, u0 + 0.85, 2.66, z + 1.1, 0.62);
-        cone(k, u0 + 0.85, 2.66, z + 2.55, 0.3);
-      }
-      // the laptop on its stand, between them
-      k.box(4.5, 1.3, z, 2.0, 1.2, 1.0, '#2a2532', { round: 0.1 });
-      k.box(4.55, 1.3, z + 1.0, 1.9, 1.3, 0.18, '#c4c8d4');
-      k.poly([...LID], '#b9bec9', k.lw);
       // the decks: plinths, platters, pitch faders; the mixer between
       for (const u of decks) {
         k.box(u - 1.5, 2.65, z, 3.0, 3.2, 0.45, '#3a3446', { round: 0.15 });
@@ -84,9 +78,7 @@ const write: PropArt = {
         k.line([[u, 4.85, z + 0.52], [u, 5.65, z + 0.52]], '#121016', Math.max(0.8, 0.1 * k.s));
         k.box(u - 0.15, 5.05, z + 0.5, 0.3, 0.25, 0.14, '#e6e2ee', { line: k.thin * 0.7, stripe: false });
       }
-      // headphones on the mixer's edge, a drink on the corner
-      k.rod([[4.55, 5.6, z + 0.6], [5.5, 5.75, z + 1.25], [6.45, 5.6, z + 0.6]], '#2a2532', 0.14);
-      for (const u of [4.55, 6.45]) k.disc(u, 5.6, z + 0.62, 0.38, C.pink, k.thin);
+      // a drink on the corner
       tumbler(k, 10.3, 6.0, z, C.amber, 0.8, 0.28, C.cyan);
     });
     const t = v.t;
@@ -143,14 +135,7 @@ const write: PropArt = {
         const h = 0.4 + 2.2 * hash(b, i, 6) * (0.5 + 0.5 * kk);
         k.rect(u0, scr.n + 0.02, scr.z0 + 0.3, u0 + 0.5, scr.z0 + 0.3 + h, NEONS[i % NEONS.length], 0);
       }
-      // the laptop: a waveform running across
-      const wave: P3[] = [];
-      for (let i = 0; i <= 12; i++) wave.push(on(LID, 0.08 + i * 0.07, 0.5 + 0.3 * Math.sin(i * 1.7 + t * 9) * hash(b, i, 7)));
-      k.poly([on(LID, 0.06, 0.08), on(LID, 0.94, 0.08), on(LID, 0.94, 0.92), on(LID, 0.06, 0.92)], '#1a2440', 0);
-      k.line(wave, C.cyan, Math.max(0.8, 0.12 * k.s));
       k.halo(cu, scr.n + 0.5, cz, 4.2, C.violet, 0.3);
-    } else {
-      k.poly([on(LID, 0.06, 0.08), on(LID, 0.94, 0.08), on(LID, 0.94, 0.92), on(LID, 0.06, 0.92)], '#222a3e', 0);
     }
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {

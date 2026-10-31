@@ -47,10 +47,10 @@ import { hashString } from '../world/rng.ts';
 import type { PlacedProp } from '../world/room.ts';
 import { footprint, toWorld } from '../world/room.ts';
 import type { Particle } from '../world/types.ts';
-import type { CritterKind, RoomView, WorldDef } from '../worlds/types.ts';
+import type { CritterKind, NpcAct, RoomView, WorldDef } from '../worlds/types.ts';
 import { workstationOf } from '../worlds/workstation.ts';
 import { Canvas } from './canvas.ts';
-import { critterSprite, emoteSprite, figureSprite, spriteStats, trinketSprite } from './figure.ts';
+import { critterSprite, emoteSprite, figureSprite, npcSprite, spriteStats, trinketSprite } from './figure.ts';
 import { hexOf, ink as inkFrom, inkWidth } from './iso.ts';
 import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
@@ -75,6 +75,11 @@ export type SceneImage = { bitmap: Bitmap; rect: Cells; cell: { w: number; h: nu
 // the room's overlay and drifting bits (steam, embers, smoke, drops, z's).
 // Everything else moves at the loop's rate.
 export const AMBIENT_FPS = 6;
+// An animated prop a local works (see SceneFrame.npcs) goes round a loop of
+// CYCLE ambient steps (two seconds), each step's picture drawn once and
+// kept (see cyclePic): the step prop i shows at scene time t.
+export const CYCLE = 12;
+export const cycleStep = (t: number, i: number) => Math.floor(t * AMBIENT_FPS + phaseOf(i)) % CYCLE;
 
 // Room round a prop's box for what it paints past it (its shadow, a pool of
 // lamp light), in units; the sprite is cropped to what was drawn.
@@ -113,7 +118,7 @@ const PILL_ALPHA = 20;
 
 // A depth-sorted thing: a cached sprite, top-left at (x, y) on the canvas,
 // or an animated prop (drawn on its own, or live).
-type Item = Drawable & { id: string; img?: Bitmap; x: number; y: number; anim?: { p: PlacedProp; i: number; active: boolean } };
+type Item = Drawable & { id: string; img?: Bitmap; x: number; y: number; anim?: { p: PlacedProp; i: number; active: boolean; local?: boolean } };
 type Build = { sprite: Sprite | null; box: [number, number, number, number, number]; seen: number };
 // A prop's picture in two parts: its body (inside the outline of its box),
 // drawn in depth order, and what it lays on the floor round it (its
@@ -133,6 +138,9 @@ type Layer = {
   builds: Map<string, Build>;
   piles: Map<string, Sprite>;
   warmed: Set<number>;
+  // The steps of the stations the locals work, by prop and step (see
+  // cyclePic).
+  cycles: Map<string, { pic: Pic; x: number; y: number } | null>;
   used: number;
 };
 
@@ -315,7 +323,10 @@ export class Scene {
       if (ps) for (const { id, v } of this.bitsPics(anchor(k), ps, f, P, s, OX, OY, w, h, t)) put(id, v.pic, OX + v.x, OY + v.y, true);
       if (k === order.length) break;
       const it = items[order[k]];
-      if (it.anim) {
+      if (it.anim?.local) {
+        const v = this.cyclePic(it, f, l, s, t);
+        if (v) put(it.id, v.pic, OX + v.x, OY + v.y);
+      } else if (it.anim) {
         const v = this.animPic(it, f, l, s, t);
         put(it.id, v.pic, OX + v.x, OY + v.y, true);
       } else put(it.id, picOf(it.img!, t), it.x, it.y);
@@ -332,6 +343,12 @@ export class Scene {
       const sp = emoteSprite('heart', cr.heart, s, ink);
       const [x, y] = P(cr.x, cr.y, cr.z + critterTop(cr.kind));
       put('emote:critter', picOf(sp.img, t), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
+    }
+    for (const n of f.npcs ?? []) {
+      if (!n.emote) continue;
+      const sp = emoteSprite(n.emote.kind, n.emote.t, s, ink);
+      const [x, y] = P(n.x, n.y, n.top + EMOTE.gap);
+      put(`emote:npc:${n.k}`, picOf(sp.img, t), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
     if (f.world.room.overlay) for (const { id, v } of this.overlayPics(f, l, t, OX, OY, w, h)) put(id, v.pic, OX + v.x, OY + v.y, true);
     if (f.lit) this.glowPics(f, P, s, put);
@@ -387,8 +404,8 @@ export class Scene {
     const items = this.items(f, l, P, s, OX, OY, ink, w, h, floors);
     const draw = (it: Item) => {
       if (!it.anim) return c.drawImage(it.img!, it.x, it.y);
-      const { p, active } = it.anim;
-      this.drawProp(c, p, (u, v, z) => P(...toWorld(p, u, v, z)), s, f.t, active);
+      const { p, i, active, local } = it.anim;
+      this.drawProp(c, p, (u, v, z) => P(...toWorld(p, u, v, z)), s, local ? cycleStep(f.t, i) / AMBIENT_FPS : f.t, active);
     };
     for (const it of floors) draw(it);
     this.decals(c, f, P, s);
@@ -416,6 +433,12 @@ export class Scene {
     if (cr && cr.heart !== undefined) {
       const sp = emoteSprite('heart', cr.heart, s, ink);
       const [x, y] = P(cr.x, cr.y, cr.z + critterTop(cr.kind));
+      c.drawImage(sp.img, Math.round(x) - sp.ax, Math.round(y) - sp.ay);
+    }
+    for (const n of f.npcs ?? []) {
+      if (!n.emote) continue;
+      const sp = emoteSprite(n.emote.kind, n.emote.t, s, ink);
+      const [x, y] = P(n.x, n.y, n.top + EMOTE.gap);
       c.drawImage(sp.img, Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
     if (f.world.room.overlay) {
@@ -488,7 +511,7 @@ export class Scene {
     }
     let no = layerNos.get(key);
     if (no === undefined) layerNos.set(key, (no = layerNos.size + 1));
-    l = { key, scope, s, no, props: [], builds: new Map(), piles: new Map(), warmed: new Set(), used: this.renders };
+    l = { key, scope, s, no, props: [], builds: new Map(), piles: new Map(), warmed: new Set(), cycles: new Map(), used: this.renders };
     this.layers.push(l);
     return l;
   }
@@ -562,7 +585,7 @@ export class Scene {
     for (const a of f.active) act += a ? '1' : '0';
     let desks = '';
     for (const d of f.desks ?? []) desks += `${d.id}${d.screen}${Math.round(d.grow * POP_STEPS)};`;
-    return `${scopeOf(f)}|${span(f.camera)}|${(f.next ?? []).map(span).join(';')}|${act}|${f.figures.length}|${f.builds.map((b) => b.blocks.length).join()}|${desks}`;
+    return `${scopeOf(f)}|${span(f.camera)}|${(f.next ?? []).map(span).join(';')}|${act}|${f.figures.length}|${f.builds.map((b) => b.blocks.length).join()}|${desks}|n${f.npcs?.length ?? 0}`;
   }
 
   // The units of warming still to do, most likely needed first; each puts
@@ -706,6 +729,19 @@ export class Scene {
         made(sp.img, spriteStats.misses > m);
       };
     }
+    for (const n of f.npcs ?? []) {
+      // a local as it stands, and every frame of its work (it goes round
+      // them all the time it is on duty)
+      const art = f.world.npcs?.[n.k];
+      if (!art) continue;
+      const one = (act: NpcAct, frame: number) => () => {
+        const m = spriteStats.misses;
+        const sp = npcSprite(f.world, { ...n, act, frame }, s, ink);
+        made(sp.img, spriteStats.misses > m);
+      };
+      yield one(n.act, n.frame);
+      for (let i = 0; i < art.work.frames; i++) yield one('work', i);
+    }
     const warmed = new Set<string>();
     for (const d of f.desks ?? []) {
       if (d.grow <= 0) continue;
@@ -772,6 +808,11 @@ export class Scene {
       c.drawImage(sh.pet.img, Math.round(x - sh.pet.cx), Math.round(y - sh.pet.cy));
       c.globalAlpha = 1;
     }
+    for (const n of f.npcs ?? []) {
+      if (!n.shadow) continue;
+      const [x, y] = P(n.x, n.y, 0);
+      c.drawImage(sh.fig.img, Math.round(x - sh.fig.cx), Math.round(y - sh.fig.cy));
+    }
   }
 
   // Contact shadows and rings as sprites: a ring snapped to the pixel under
@@ -806,6 +847,11 @@ export class Scene {
               return c;
             });
       put('shadow:critter', picOf(img, t), Math.round(x - sh.pet.cx), Math.round(y - sh.pet.cy));
+    }
+    for (const n of f.npcs ?? []) {
+      if (!n.shadow) continue;
+      const [x, y] = P(n.x, n.y, 0);
+      put(`shadow:npc:${n.k}`, picOf(sh.fig.img, t), Math.round(x - sh.fig.cx), Math.round(y - sh.fig.cy));
     }
   }
 
@@ -861,6 +907,11 @@ export class Scene {
       const y = OY + sp.y;
       return { ...box, id, img: sp.img, x, y, sx0: x, sy0: y, sx1: x + sp.img.width, sy1: y + sp.img.height };
     };
+    // Each station's own item (what a local behind its counter or seated
+    // stands on, see below), and those its locals work (round a loop: see
+    // cyclePic).
+    const propItem = new Map<number, Item>();
+    const worked = new Set((f.npcs ?? []).filter((n) => n.works).map((n) => n.prop));
     f.room.props.forEach((p, i) => {
       const r = footprint(p);
       const box = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, h: p.art.height, point: false };
@@ -868,12 +919,18 @@ export class Scene {
       if (!seen(vol)) return;
       const active = !!f.active[i];
       if (p.art.animated) {
-        out.push({ ...box, ...vol, id: `prop:${i}`, x: 0, y: 0, anim: { p, i, active } });
+        const it: Item = { ...box, ...vol, id: `prop:${i}`, x: 0, y: 0, anim: { p, i, active, local: worked.has(i) } };
+        out.push(it);
+        propItem.set(i, it);
         return;
       }
       const sp = this.propSprite(l, i, p, active);
       if (sp.floor) floors.push(sprite(`floor:${i}`, sp.floor, box));
-      if (sp.body) out.push(sprite(`prop:${i}`, sp.body, box));
+      if (sp.body) {
+        const it = sprite(`prop:${i}`, sp.body, box);
+        out.push(it);
+        propItem.set(i, it);
+      }
     });
     const bodies: Item[] = [];
     for (const d of f.desks ?? []) {
@@ -935,6 +992,18 @@ export class Scene {
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
       const it: Item = { x0: g.x, y0: g.y, x1: g.x, y1: g.y, h: g.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `fig:${g.id}`, img: sp.img, x: dx, y: dy };
+      if (seen(it)) out.push(it);
+    }
+    for (const n of f.npcs ?? []) {
+      // A local is a point like a figure; one behind its counter or seated
+      // stands on its station's box (see depth.ts): drawn over it, behind
+      // whatever is behind it.
+      const sp = npcSprite(f.world, n, s, ink);
+      const [x, y] = P(n.x, n.y, n.z);
+      const dx = Math.round(x) - sp.ax;
+      const dy = Math.round(y) - sp.ay;
+      const it: Item = { x0: n.x, y0: n.y, x1: n.x, y1: n.y, h: n.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `npc:${n.k}`, img: sp.img, x: dx, y: dy };
+      if (n.on) it.on = propItem.get(n.prop);
       if (seen(it)) out.push(it);
     }
     for (const tk of f.trinkets ?? []) {
@@ -1040,39 +1109,60 @@ export class Scene {
   }
 
   // An animated prop drawn whole on its own (world pixels), again per
-  // ambient step (each prop at its own phase) or when worked or left. Light
-  // it lays on with 'screen' is lifted off the base under it (see lift).
+  // ambient step (each prop at its own phase) or when worked or left.
   private animPic(it: Item, f: SceneFrame, l: Layer, s: number, t: Tint): Vol {
     const { p, i, active } = it.anim!;
     const tick = Math.floor(f.t * AMBIENT_FPS + phaseOf(i));
-    return this.vol(it.id, `${l.key}|${tick}|${active ? 1 : 0}`, () => {
-      this.stats.animated++;
-      l.warmed.add(i);
-      const rel = (u: number, v: number, z: number): [number, number] => {
-        const [x, y, zz] = toWorld(p, u, v, z);
-        return [(x - y) * s, ((x + y) * s) / 2 - zz * s];
-      };
-      const B = new Bounds(TILE, TILE);
-      this.drawProp(B, p, rel, s, f.t, active);
-      if (!(B.x1 > B.x0 && B.y1 > B.y0)) return null;
-      const { x0, y0, x1, y1 } = B;
-      const at = (u: number, v: number, z: number): [number, number] => {
-        const q = rel(u, v, z);
-        return [q[0] - x0, q[1] - y0];
-      };
-      let img = new Canvas(x1 - x0, y1 - y0);
-      this.drawProp(img, p, at, s, f.t, active);
-      if (B.light) {
-        const under = this.ground(f, l, x0, y0, x1 - x0, y1 - y0);
-        const onto = copyOf(under);
-        this.drawProp(onto, p, at, s, f.t, active);
-        img = lift(img, onto, under);
-      }
-      const crop = cropped(img);
-      if (!crop) return null;
-      if (t) tintAll(crop.img.data, t.rgb, t.k);
-      return { img: crop.img, x: x0 + crop.x, y: y0 + crop.y };
-    });
+    return this.vol(it.id, `${l.key}|${tick}|${active ? 1 : 0}`, () => this.animDrawn(p, i, f, l, s, f.t, active, t));
+  }
+
+  // An animated prop a local works (see SceneFrame.npcs): its motion goes
+  // round a loop of CYCLE steps, each drawn once at this scale and kept, a
+  // picture the terminal keeps too. Worked all the time, it would send a
+  // new picture every ambient step; this way, once round, it is only
+  // placed.
+  private cyclePic(it: Item, f: SceneFrame, l: Layer, s: number, t: Tint): { pic: Pic; x: number; y: number } | null {
+    const { p, i } = it.anim!;
+    const step = cycleStep(f.t, i);
+    const key = `${i}|${step}`;
+    let c = l.cycles.get(key);
+    if (c === undefined) {
+      const d = this.animDrawn(p, i, f, l, s, step / AMBIENT_FPS, true, t);
+      l.cycles.set(key, (c = d ? { pic: fresh(d.img), x: d.x, y: d.y } : null));
+    }
+    return c;
+  }
+
+  // Prop p (the i-th) drawn whole at clock `time`, worked or not (world
+  // pixels), cropped: light it lays on with 'screen' is lifted off the base
+  // under it (see lift); tinted.
+  private animDrawn(p: PlacedProp, i: number, f: SceneFrame, l: Layer, s: number, time: number, active: boolean, t: Tint): Drawn {
+    this.stats.animated++;
+    l.warmed.add(i);
+    const rel = (u: number, v: number, z: number): [number, number] => {
+      const [x, y, zz] = toWorld(p, u, v, z);
+      return [(x - y) * s, ((x + y) * s) / 2 - zz * s];
+    };
+    const B = new Bounds(TILE, TILE);
+    this.drawProp(B, p, rel, s, time, active);
+    if (!(B.x1 > B.x0 && B.y1 > B.y0)) return null;
+    const { x0, y0, x1, y1 } = B;
+    const at = (u: number, v: number, z: number): [number, number] => {
+      const q = rel(u, v, z);
+      return [q[0] - x0, q[1] - y0];
+    };
+    let img = new Canvas(x1 - x0, y1 - y0);
+    this.drawProp(img, p, at, s, time, active);
+    if (B.light) {
+      const under = this.ground(f, l, x0, y0, x1 - x0, y1 - y0);
+      const onto = copyOf(under);
+      this.drawProp(onto, p, at, s, time, active);
+      img = lift(img, onto, under);
+    }
+    const crop = cropped(img);
+    if (!crop) return null;
+    if (t) tintAll(crop.img.data, t.rgb, t.k);
+    return { img: crop.img, x: x0 + crop.x, y: y0 + crop.y };
   }
 
   // The room's overlay (world pixels) per ambient step: found in pieces

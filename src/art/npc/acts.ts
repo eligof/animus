@@ -1,0 +1,132 @@
+import type { Npc, NpcAct, NpcLoop, Puppet, Swing } from '../../worlds/types.ts';
+
+// The acts every local shares (see Npc in worlds/types.ts): a wave, a
+// cheer, a flinch, applause, a word, a nod, handing over what it serves
+// and beckoning someone over. Each drives the same puppet for every local
+// with nothing drawn of its own, and starts and ends at rest, so it slots
+// in between frames of the local's work. Arm 0 is the near one (it hands
+// things over), arm 1 the far one, on the side the local faces (it waves
+// and beckons).
+
+export const TAU = Math.PI * 2;
+export type SharedAct = Exclude<NpcAct, 'work' | 'show' | 'celebrate'>;
+
+// Arms hanging easy, a soft bend at the elbow.
+const HANG: Swing = { sh: 0.12, el: 0.2 };
+const swing = (sh: number, el: number): Swing => ({ sh: HANG.sh + sh, el: HANG.el + el });
+const TALK: ReadonlyArray<Puppet['mouth']> = ['open', 'smile', 'o', 'open', 'closed'];
+
+// A local at rest: standing easy, eyes open, a small smile.
+export function rest(): Puppet {
+  return { act: 'work', u: 0, bob: 0, lean: 0, tilt: 0, arms: [HANG, HANG], eyes: 'open', mouth: 'smile', hold: false };
+}
+
+// Smoothstep from a to b.
+export function ease(u: number, a: number, b: number): number {
+  const k = Math.max(0, Math.min(1, (u - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+}
+
+// In and out: 0 at either end of the loop, 1 from a to b.
+export function env(u: number, a = 0.2, b = 0.8): number {
+  return ease(u, 0, a) - ease(u, b, 1);
+}
+
+// 0..1..0 over [a, b] of the loop.
+export function bump(u: number, a: number, b: number): number {
+  return u <= a || u >= b ? 0 : Math.sin(((u - a) / (b - a)) * Math.PI);
+}
+
+export const ACTS: Record<SharedAct, NpcLoop> = {
+  // the far hand up, waving
+  wave: {
+    secs: 1.2,
+    frames: 8,
+    pose(u) {
+      const k = env(u, 0.2, 0.85);
+      return { ...rest(), tilt: -0.04 * k, arms: [HANG, swing(2.5 * k, k * (0.45 + 0.35 * Math.sin(u * TAU * 3)))], eyes: k > 0.5 ? 'happy' : 'open' };
+    },
+  },
+  // both hands up and a little hop
+  cheer: {
+    secs: 1.2,
+    frames: 8,
+    pose(u) {
+      const k = env(u, 0.2, 0.8);
+      const up = swing(2.75 * k, -0.1 * k);
+      return { ...rest(), bob: 0.6 * bump(u, 0.25, 0.75), tilt: -0.08 * k, arms: [up, up], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    },
+  },
+  // a start: back, hands up by the face, eyes shut
+  flinch: {
+    secs: 0.8,
+    frames: 6,
+    pose(u) {
+      const k = env(u, 0.15, 0.7);
+      return { ...rest(), bob: -0.3 * k, lean: -0.22 * k, tilt: 0.08 * k, arms: [swing(1.9 * k, 1.7 * k), swing(1.7 * k, 1.8 * k)], eyes: k > 0.3 ? 'shut' : 'open', mouth: k > 0.3 ? 'o' : 'smile' };
+    },
+  },
+  // hands out in front, clapping
+  applaud: {
+    secs: 1.6,
+    frames: 10,
+    pose(u) {
+      const k = env(u, 0.15, 0.85);
+      const clap = 0.5 + 0.5 * Math.sin(u * TAU * 4);
+      return { ...rest(), tilt: 0.04 * k, arms: [swing(1.15 * k, k * (1.0 + 0.45 * clap)), swing(1.05 * k, k * (1.0 + 0.45 * clap))], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 && clap > 0.5 ? 'open' : 'smile' };
+    },
+  },
+  // a word: the far hand turning it over, the mouth going
+  talk: {
+    secs: 1.6,
+    frames: 10,
+    pose(u) {
+      const k = env(u, 0.15, 0.85);
+      return { ...rest(), tilt: 0.06 * Math.sin(u * TAU * 2) * k, arms: [HANG, swing((0.7 + 0.35 * Math.sin(u * TAU * 2)) * k, 0.9 * k)], mouth: k > 0.15 ? TALK[Math.floor(u * 10) % TALK.length] : 'smile' };
+    },
+  },
+  // two nods, eyes smiling
+  nod: {
+    secs: 1.0,
+    frames: 6,
+    pose(u) {
+      const n = Math.sin(u * TAU) ** 2;
+      return { ...rest(), tilt: 0.2 * n, eyes: n > 0.5 ? 'happy' : 'open' };
+    },
+  },
+  // the near arm out with what it serves (see Npc.serve)
+  handOver: {
+    secs: 1.6,
+    frames: 8,
+    pose(u) {
+      const k = env(u, 0.25, 0.75);
+      return { ...rest(), lean: 0.08 * k, tilt: 0.06 * k, arms: [swing(1.35 * k, 0.15 * k), HANG], eyes: k > 0.6 ? 'happy' : 'open', hold: k > 0.5 };
+    },
+  },
+  // the far hand out, curling: come over
+  beckon: {
+    secs: 1.4,
+    frames: 8,
+    pose(u) {
+      const k = env(u, 0.15, 0.85);
+      return { ...rest(), tilt: -0.06 * k, arms: [HANG, swing(1.6 * k, k * (0.5 + 0.8 * Math.max(0, Math.sin(u * TAU * 3))))] };
+    },
+  },
+};
+
+// The loop local n plays for `act`: its own (its work, its show, its way
+// of cheering, or the shared cheer for one that has none) or the shared
+// one.
+export function loopOf(n: Npc, act: NpcAct): NpcLoop {
+  if (act === 'work') return n.work;
+  if (act === 'show') return n.show ?? n.work;
+  if (act === 'celebrate') return n.celebrate ?? ACTS.cheer;
+  return ACTS[act];
+}
+
+// Local n's puppet in frame `frame` of `act`.
+export function puppetOf(n: Npc, act: NpcAct, frame: number): Puppet {
+  const lp = loopOf(n, act);
+  const u = frame / lp.frames;
+  return { ...lp.pose(u), act, u };
+}

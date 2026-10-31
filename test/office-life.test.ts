@@ -31,6 +31,7 @@ const awake = (id: string, now: number, extra: Partial<AgentInfo> = {}) => agent
 // tests do not hang on how a world dresses its floor.
 const lively: WorldDef = {
   ...mines,
+  npcs: [],
   pois: (L: Layout) => {
     const h = hub(L);
     return [
@@ -360,6 +361,7 @@ test('an agent in error never sips: its error shows, even over a sip under way',
 test('in a room with no drink spot open, a coffee run goes to a warm one', () => {
   const dry: WorldDef = {
     ...mines,
+    npcs: [],
     pois: (L: Layout) => {
       const h = hub(L);
       return [
