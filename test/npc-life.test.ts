@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Activity, AgentInfo } from '../src/agents.ts';
-import { ACTS } from '../src/art/npc/acts.ts';
+import { ACTS, framesOf } from '../src/art/npc/acts.ts';
 import { getTheme, themeIds } from '../src/themes/index.ts';
 import { hub } from '../src/world/layout.ts';
 import { COFFEE_LEG, SLEEP_AFTER } from '../src/world/life.ts';
@@ -621,7 +621,7 @@ test('a show waits for an act under way: it plays to its end, then the show', ()
   });
   const acts = seq.map(([a]) => a);
   const clap = seq.filter(([a]) => a === 'applaud').map(([, f]) => f);
-  assert.equal(Math.max(...clap), ACTS.applaud.frames - 1, 'the applause cut off');
+  assert.equal(Math.max(...clap), framesOf(ACTS.applaud) - 1, 'the applause cut off');
   assert.ok(acts.includes('show'), 'no show');
   assert.ok(acts.indexOf('show') > acts.lastIndexOf('applaud'), 'the show over the applause');
 });

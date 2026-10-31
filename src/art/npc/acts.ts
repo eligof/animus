@@ -1,4 +1,5 @@
 import type { Npc, NpcAct, NpcLoop, Puppet, Swing } from '../../worlds/types.ts';
+import { framesFor } from '../motion.ts';
 
 // The acts every local shares (see Npc in worlds/types.ts): a wave, a
 // cheer, a flinch, applause, a word, a nod, handing over what it serves
@@ -46,7 +47,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // the far hand up in front of it, waving beside its head
   wave: {
     secs: 1.2,
-    frames: 8,
     pose(u) {
       const k = env(u, 0.2, 0.85);
       return { ...rest(), tilt: -0.04 * k, arms: [HANG, swing(1.65 * k, k * (0.55 + 0.3 * Math.sin(u * TAU * 3)))], eyes: k > 0.5 ? 'happy' : 'open' };
@@ -56,7 +56,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // hop
   cheer: {
     secs: 1.2,
-    frames: 8,
     pose(u) {
       const k = env(u, 0.2, 0.8);
       const pump = 0.2 * bump(u, 0.25, 0.75);
@@ -66,7 +65,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // a start: back, hands up by the face, eyes shut
   flinch: {
     secs: 0.8,
-    frames: 6,
     pose(u) {
       const k = env(u, 0.15, 0.7);
       return { ...rest(), bob: -0.3 * k, lean: -0.22 * k, tilt: 0.08 * k, arms: [swing(1.9 * k, 1.7 * k), swing(1.7 * k, 1.8 * k)], eyes: k > 0.3 ? 'shut' : 'open', mouth: k > 0.3 ? 'o' : 'smile' };
@@ -75,7 +73,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // hands out in front at the chest, under the chin, clapping
   applaud: {
     secs: 1.6,
-    frames: 10,
     pose(u) {
       const k = env(u, 0.15, 0.85);
       const clap = 0.5 + 0.5 * Math.sin(u * TAU * 4);
@@ -85,7 +82,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // a word: the far hand turning it over, the mouth going
   talk: {
     secs: 1.6,
-    frames: 10,
     pose(u) {
       const k = env(u, 0.15, 0.85);
       return { ...rest(), tilt: 0.06 * Math.sin(u * TAU * 2) * k, arms: [HANG, swing((0.7 + 0.35 * Math.sin(u * TAU * 2)) * k, 0.9 * k)], mouth: k > 0.15 ? TALK[Math.floor(u * 10) % TALK.length] : 'smile' };
@@ -94,7 +90,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // two nods, eyes smiling
   nod: {
     secs: 1.0,
-    frames: 6,
     pose(u) {
       const n = Math.sin(u * TAU) ** 2;
       return { ...rest(), tilt: 0.2 * n, eyes: n > 0.5 ? 'happy' : 'open' };
@@ -104,7 +99,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // standing in it (see Npc.serve) under the chin
   handOver: {
     secs: 1.6,
-    frames: 8,
     pose(u) {
       const k = env(u, 0.25, 0.75);
       return { ...rest(), lean: 0.08 * k, tilt: 0.06 * k, arms: [swing(0.85 * k, 0.55 * k), HANG], eyes: k > 0.6 ? 'happy' : 'open', hold: k > 0.5 };
@@ -113,7 +107,6 @@ export const ACTS: Readonly<Record<SharedAct, NpcLoop>> = {
   // the far hand out, curling: come over
   beckon: {
     secs: 1.4,
-    frames: 8,
     pose(u) {
       const k = env(u, 0.15, 0.85);
       return { ...rest(), tilt: -0.06 * k, arms: [HANG, swing(1.6 * k, k * (0.5 + 0.8 * Math.max(0, Math.sin(u * TAU * 3))))] };
@@ -140,11 +133,15 @@ export const once = (act: NpcAct): boolean => act !== 'work' && act !== 'show';
 // (see NpcParts in worlds/types.ts).
 export const own = (act: NpcAct): boolean => act === 'work' || act === 'show' || act === 'celebrate';
 
+// The pictures loop lp is drawn in (see ANIM_FPS in art/motion.ts).
+export const framesOf = (lp: NpcLoop): number => framesFor(lp.secs);
+
 // How far into `act` frame `frame` of its loop lp is: round a loop, frame i
 // at i / frames; played once, i / (frames - 1), so its last frame is its
 // end and it is seen back at rest.
 function uOf(act: NpcAct, lp: NpcLoop, frame: number): number {
-  return once(act) ? (lp.frames > 1 ? frame / (lp.frames - 1) : 0) : frame / lp.frames;
+  const n = framesOf(lp);
+  return once(act) ? frame / (n - 1) : frame / n;
 }
 
 // Local n's puppet in frame `frame` of `act`, named for the loop it plays:

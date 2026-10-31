@@ -32,7 +32,7 @@ export const HOP = 0.9;
 // How high hats reach, units over the feet (any species, standing,
 // walking or at work; a ghost floats): a wizard's own, and the one a level
 // brings (★2) in each costume (see art/figure/look.ts).
-const WIZARD_HAT = 19.25;
+const WIZARD_HAT = 19.5;
 const LEVEL_HAT: Record<Costume, number> = {
   casual: 18.25,
   scientist: 17.5,
@@ -47,7 +47,7 @@ const LEVEL_HAT: Record<Costume, number> = {
   colonist: 17.5,
   miner: 18.5,
   forager: 17.75,
-  parka: 17.5,
+  parka: 17.75,
   guard: 17.5,
   demon: 17.75,
   startup: 18.25,

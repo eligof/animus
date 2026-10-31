@@ -205,7 +205,6 @@ const sysCable = (u: number) => ease(u, 0.42, 0.66) - ease(u, 0.83, 1);
 // down again.
 const sysWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const c = sysCable(u);
     const tap = Math.sin(u * TAU * 5) * (1 - c);
@@ -443,7 +442,6 @@ const OC_EDGE = { sh: 0.8, el: 0.85 };
 // and up at the controller's lights, a blink.
 const ocWork: NpcLoop = {
   secs: 2,
-  frames: 10,
   pose(u) {
     const turn = Math.sin(u * TAU);
     const look = Math.sin(u * TAU + 1);
@@ -466,7 +464,6 @@ const ocWork: NpcLoop = {
 // bouncing; back to the knob.
 const ocShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const lean = ocLean(u);
@@ -675,7 +672,6 @@ const crParts: NpcParts = {
 // door and back to the phone.
 const crWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const look = bump(u, 0.74, 1.0);
     return {

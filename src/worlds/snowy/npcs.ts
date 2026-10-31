@@ -247,7 +247,6 @@ const cookTaste = (u: number): number => ease(u, 0.5, 0.75) - ease(u, 0.78, 1);
 // hip, then the ladle up to the lips, a happy taste, a nod.
 const cookWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const taste = cookTaste(u);
     const stir = 1 - taste;
@@ -272,7 +271,6 @@ const cookWork: NpcLoop = {
 // his face; a laugh and a bounce; from rest and back.
 const cookCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const laugh = Math.abs(Math.sin(u * TAU * 2));
@@ -563,7 +561,6 @@ const fisherParts: NpcParts = {
 // head nodding along, a blink.
 const fisherWork: NpcLoop = {
   secs: 2.0,
-  frames: 8,
   pose(u) {
     const jig = Math.max(0, Math.sin(u * TAU * 2 - 0.5));
     return {
@@ -582,7 +579,6 @@ const fisherWork: NpcLoop = {
 // over the last three frames, back to the rod as the loop comes round.
 const fisherShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const bite = bump(u, 0.02, 0.14);
@@ -798,7 +794,6 @@ const radioParts: NpcParts = {
 // arm, drawn over the head and not under it.)
 const radioWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const ear = earOf(u);
     const twist = Math.sin(u * TAU * 3) * (1 - ear);

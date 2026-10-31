@@ -380,10 +380,10 @@ const HOLO: DeskLoop = {
   at: HOLO_AT,
   r: 0.5,
   h: 1.35,
-  frames: 8,
-  fps: 6,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 8 / 6,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = HOLO_AT;
     k.cyl(u, w, z, 0.3, 0.16, C.white, { line: edge(k) });
     band(k, u, w, 0.3, z + 0.04, z + 0.1);

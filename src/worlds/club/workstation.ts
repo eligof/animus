@@ -407,10 +407,10 @@ const mirrorBall: DeskLoop = {
   at: BALL,
   r: 0.5,
   h: 1.4,
-  frames: 8,
-  fps: 6,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 8 / 6,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = BALL;
     const on = v.active;
     const s = k.s;

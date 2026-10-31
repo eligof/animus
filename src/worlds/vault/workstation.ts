@@ -294,10 +294,10 @@ const clock: DeskLoop = {
   at: CLOCK,
   r: 0.45,
   h: 1.6,
-  frames: 8,
-  fps: 6,
-  draw(v, i) {
-    const k = smallKitOf(v);
+  secs: 8 / 6,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = smallKitOf(v);
     const f = fineKit(k);
     const [u, w, z] = CLOCK;
     const n = w + 0.18;

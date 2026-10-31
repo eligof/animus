@@ -472,10 +472,10 @@ const snowGlobe: DeskLoop = {
   at: GLOBE,
   r: 0.45,
   h: 1.05,
-  frames: 8,
-  fps: 4,
-  draw(v, i) {
-    const k = smallKitOf(v);
+  secs: 2,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = smallKitOf(v);
     const f = fineKit(k);
     const [u, w, z] = GLOBE;
     solid(k, lathe(k, u, w, z, [[0, 0.4], [0.22, 0.33]]), C.woodDark);
@@ -522,10 +522,10 @@ const cocoa: DeskLoop = {
   at: MUG,
   r: 0.45,
   h: 1.65,
-  frames: 6,
-  fps: 5,
-  draw(v, i) {
-    const k = smallKitOf(v);
+  secs: 1.2,
+  draw(v, phase) {
+    const i = Math.floor(phase * 6);
+const k = smallKitOf(v);
     const [u, w, z] = MUG;
     mug(k, u, w, z, C.wool, 0.32);
     if (!v.active) return;

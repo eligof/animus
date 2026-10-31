@@ -1,6 +1,7 @@
 import type { CritterFrame } from '../../world/frame.ts';
 import type { Color, Pen } from '../types.ts';
 import { alpha, hexOf, mix, shade } from '../iso.ts';
+import { framesFor, through } from '../motion.ts';
 import { move, mul, turn, Sketch, type Ctx } from './paint.ts';
 
 // The room's critter, facing +x (the sprite flips for screen-left), its
@@ -10,8 +11,8 @@ import { move, mul, turn, Sketch, type Ctx } from './paint.ts';
 // scuttle or buzz.
 
 const TAU = Math.PI * 2;
-const IDLE: readonly [number, number] = [2.4, 8];
-const MOVE: readonly [number, number] = [0.4, 4];
+const IDLE: readonly [number, number] = [2.4, framesFor(2.4)];
+const MOVE: readonly [number, number] = [0.4, framesFor(0.4)];
 const WHITE = '#ffffff';
 const EYE = '#1d1822';
 
@@ -22,13 +23,16 @@ export function critterArt(c: CritterFrame, t: number): { key: string; draw: () 
   const [per, n] = c.moving ? MOVE : IDLE;
   const i = Math.floor(((((t / per) % 1) + 1) % 1) * n);
   const u = i / n;
-  const blink = !c.moving && i === 5;
+  // a blink an eighth of the idle loop long, five eighths round
+  const blink = !c.moving && Math.floor(u * 8) === 5;
   return {
     key: `${c.moving ? 'm' : 'i'}${i}`,
     draw: () => {
       const sk = new Sketch();
       const b = hexOf(c.body);
-      const f = { b, bd: shade(b, -0.22), u, i, moving: c.moving, blink };
+      // i: the step of the loop as first drawn (4 moving, 8 idle), for what
+      // flaps or spins by step
+      const f = { b, bd: shade(b, -0.22), u, i: Math.floor(u * (c.moving ? 4 : 8)), moving: c.moving, blink };
       switch (c.kind) {
         case 'cat':
           cat(sk, f, false);
@@ -307,7 +311,7 @@ function slime(sk: Sketch, f: F): void {
 
 function imp(sk: Sketch, f: F): void {
   const a = f.u * TAU;
-  const flap = f.moving ? [1, 0.35, -0.9, -0.1][f.i % 4] : Math.sin(a);
+  const flap = f.moving ? through([1, 0.35, -0.9, -0.1], f.u) : Math.sin(a);
   const wing = '#4a2a3a';
   for (const s of [-1, 1]) {
     sk.at(mul(move(-0.4, -2.6), turn(s * (0.35 + 0.35 * flap) - (s > 0 ? 0 : Math.PI))), () => {

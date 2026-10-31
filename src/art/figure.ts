@@ -34,11 +34,13 @@ export type Sprite = { img: Bitmap; ax: number; ay: number };
 
 // ---- the cache ----------------------------------------------------------------
 
-// Animation is quantized to loop frames (at most 12 a second) and `s` to
-// eighths, so a figure redraws only when what it shows changes. Least
-// recently used sprites go first past MAX entries or MAX_BYTES of pixels.
-const MAX = 1000;
-const MAX_BYTES = 64 << 20;
+// Animation is quantized to loop frames (15 a second: see art/motion.ts)
+// and `s` to eighths, so a figure redraws only when what it shows changes.
+// Least recently used sprites go first past MAX entries or MAX_BYTES of
+// pixels (a room of twenty busy agents and its locals keeps about this
+// many in use).
+const MAX = 3000;
+const MAX_BYTES = 128 << 20;
 const cache = new Map<string, Sprite>();
 let bytes = 0;
 export const spriteStats = { hits: 0, misses: 0 };

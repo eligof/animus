@@ -169,7 +169,6 @@ const skaldParts: NpcParts = {
 // the far one behind the lyre's arm, swaying and humming.
 const skaldWork: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const sweep = (u * 2) % 1;
     const down = ease(sweep, 0, 0.5) - ease(sweep, 0.5, 1);
@@ -184,7 +183,6 @@ const skaldWork: NpcLoop = {
 // wide and back, singing out, swaying.
 const skaldShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const sw = Math.sin(u * TAU * 2);
@@ -499,7 +497,6 @@ const smithParts: NpcParts = {
 // the bar, a lean into each, its eyes on the work; the tongs steady.
 const smithWork: NpcLoop = {
   secs: 1.6,
-  frames: 10,
   pose(u) {
     const w = lift(u);
     const s = (u * 2) % 1;
@@ -696,7 +693,6 @@ const LAP_HAND: Pt = [-1.6, -2.9];
 // lifted beside its head in a toast and a nod.
 const chiefWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const q = quaff(u);
     const o = off(u);
@@ -714,7 +710,6 @@ const chiefWork: NpcLoop = {
 const HORN_HIGH: Pt = [4.4, -8.9];
 const chiefCelebrate: NpcLoop = {
   secs: 2.0,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const shake = Math.sin(u * TAU * 3);

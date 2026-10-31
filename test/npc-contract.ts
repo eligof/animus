@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { Canvas } from '../src/art/canvas.ts';
 import { render, Sketch } from '../src/art/figure/paint.ts';
 import { frame, project } from '../src/art/iso.ts';
-import { ACTS, loopOf, puppetOf, type SharedAct } from '../src/art/npc/acts.ts';
+import { ACTS, framesOf, loopOf, puppetOf, type SharedAct } from '../src/art/npc/acts.ts';
 import { NPC_BOX, buildNpc } from '../src/art/npc/puppet.ts';
 import { AMBIENT_FPS, CYCLE } from '../src/art/scene.ts';
 import { PROP_SIZE } from '../src/world/layout.ts';
@@ -179,26 +179,25 @@ export function npcContract(w: WorldDef, n: Npc): void {
     assert.ok(cut >= 2.5 && cut <= 9, `${what}: cut ${cut.toFixed(2)} over its feet (its legs hidden, its head and shoulders shown)`);
   }
   // Its loops.
-  const loop = (name: string, lp: NpcLoop, frames: readonly [number, number], secs: readonly [number, number]) => {
-    assert.ok(Number.isInteger(lp.frames) && lp.frames >= frames[0] && lp.frames <= frames[1], `${what}: ${name} in ${lp.frames} frames`);
-    assert.ok(lp.secs >= secs[0] && lp.secs <= secs[1] && lp.frames / lp.secs <= 12, `${what}: ${name} in ${lp.frames} frames over ${lp.secs} s`);
+  const loop = (name: string, lp: NpcLoop, secs: readonly [number, number]) => {
+    assert.ok(lp.secs >= secs[0] && lp.secs <= secs[1], `${what}: ${name} ${lp.secs} s long`);
   };
-  loop('work', n.work, [4, 12], [0.5, 4]);
+  loop('work', n.work, [0.5, 4]);
   if (n.show) {
-    loop('show', n.show, [6, 16], [1, 6]);
+    loop('show', n.show, [1, 6]);
     assert.ok(n.show.crowd === 'dance' || n.show.crowd === 'watch', `${what}: a show's crowd`);
   }
   if (n.celebrate) {
-    loop('celebrate', n.celebrate, [4, 12], [0.6, 2.5]);
+    loop('celebrate', n.celebrate, [0.6, 2.5]);
     // played once, it ends as it starts (its last frame shown posed as its
     // first), so it slots back into its work
-    const [p, q] = [puppetOf(n, 'celebrate', 0), puppetOf(n, 'celebrate', n.celebrate.frames - 1)];
+    const [p, q] = [puppetOf(n, 'celebrate', 0), puppetOf(n, 'celebrate', framesOf(n.celebrate) - 1)];
     const off = Math.abs(p.bob - q.bob) + Math.abs(p.lean - q.lean) + Math.abs(p.tilt - q.tilt) + p.arms.reduce((s, a, k) => s + Math.abs(a.sh - q.arms[k].sh) + Math.abs(a.el - q.arms[k].el), 0);
     assert.ok(off < 0.05, `${what}: its celebration ends ${off.toFixed(2)} off where it starts`);
   } else {
     // with none of its own it cheers as everyone does, empty-handed
     for (const back of pl.look === 'back' ? [false, true] : [false]) {
-      for (let i = 0; i < ACTS.cheer.frames; i++) {
+      for (let i = 0; i < framesOf(ACTS.cheer); i++) {
         const d = unlike(npcPicture(n, 'celebrate', i, back), npcPicture(n, 'cheer', i, back));
         assert.equal(d, 0, `${what}: celebrate ${i}${back ? ' from behind' : ''} draws ${d} pixels unlike its cheer (a tool in a hand?)`);
       }
@@ -210,7 +209,7 @@ export function npcContract(w: WorldDef, n: Npc): void {
   for (const back of pl.look === 'back' ? [false, true] : [false]) {
     for (const act of actsOf(n)) {
       const lp = loopOf(n, act);
-      for (let i = 0; i < lp.frames; i++) {
+      for (let i = 0; i < framesOf(lp); i++) {
         const pic = npcPicture(n, act, i, back);
         const p = painted(pic);
         assert.ok(p.n > 0, `${what}: ${act} ${i}${back ? ' from behind' : ''} draws nothing`);
@@ -220,8 +219,8 @@ export function npcContract(w: WorldDef, n: Npc): void {
     }
   }
   // The same frame the same pixels; its work moves; as tall as it says.
-  const work = Array.from({ length: n.work.frames }, (_, i) => npcPicture(n, 'work', i, false));
-  assert.deepEqual(Array.from({ length: n.work.frames }, (_, i) => hashOf(npcPicture(n, 'work', i, false))), work.map(hashOf), `${what}: a work frame drawn two ways`);
+  const work = Array.from({ length: framesOf(n.work) }, (_, i) => npcPicture(n, 'work', i, false));
+  assert.deepEqual(Array.from({ length: framesOf(n.work) }, (_, i) => hashOf(npcPicture(n, 'work', i, false))), work.map(hashOf), `${what}: a work frame drawn two ways`);
   assert.ok(new Set(work.map(hashOf)).size >= 3, `${what}: its work does not move`);
   const top = Math.max(...work.map((c) => painted(c).top));
   assert.ok(top >= n.tall - 2 && top <= n.tall + 0.75, `${what}: ${top.toFixed(2)} tall at work, says ${n.tall}`);

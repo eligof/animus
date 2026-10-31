@@ -195,7 +195,6 @@ const tailorParts: NpcParts = {
 // frames and lowered over three) and back.
 const tailorWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const look = ease(u, 0.5, 0.75) - ease(u, 0.75, 1);
     const k = 1 - look;
@@ -463,7 +462,6 @@ function blow(u: number): { sh: number; el: number; hit: number } {
 // Two blows, the tongs turning the bar between them.
 const smithWork: NpcLoop = {
   secs: 1.5,
-  frames: 12,
   pose(u) {
     const b = blow((u * 2) % 1);
     return {
@@ -487,7 +485,6 @@ const showHigh = (u: number): number => ease(u, FLURRY - 0.02, FLURRY + 0.16) - 
 // in the tongs, glowing, the smith beaming at it, and back to the anvil.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 2.4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const f = u < FLURRY ? blow(((u / FLURRY) * 3) % 1) : { ...STRIKE, hit: 0 };
@@ -509,7 +506,6 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
 // standing up from it.
 const smithCelebrate: NpcLoop = {
   secs: 1.4,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 2));
@@ -697,7 +693,6 @@ const cookTaste = (u: number): number => ease(u, 0.47, 0.72) - ease(u, 0.78, 1);
 // blow on it, and a happy hum.
 const cookWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const taste = cookTaste(u);
     const stir = 1 - taste;

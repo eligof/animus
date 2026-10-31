@@ -143,7 +143,6 @@ const RUB: readonly [{ sh: number; el: number }, { sh: number; el: number }] = [
 // lever (over three).
 const assistantWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const rub = ease(u, 0.35, 0.6) - ease(u, 0.78, 1);
     const wring = Math.sin(u * TAU * 5) * bump(u, 0.5, 0.92);
@@ -169,7 +168,6 @@ const assistantWork: NpcLoop = {
 // the lever over three.
 const assistantShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const yank = bump(u, 0.02, 0.22);
@@ -341,7 +339,6 @@ const AT_GLASSES = { sh: 1.89, el: 1.16 };
 // frames 7 and 8, back over 10 and 11.
 const professorWork: NpcLoop = {
   secs: 2.8,
-  frames: 12,
   pose(u) {
     const f = u * 12;
     const tap = f < 6 ? Math.abs(Math.sin((f * Math.PI) / 3)) : 0;
@@ -365,7 +362,6 @@ const professorWork: NpcLoop = {
 // clear of his face) and a little hop: eureka.
 const professorCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     return { ...rest(), bob: 0.4 * bump(u, 0.25, 0.6), lean: -0.04 * k, tilt: -0.15 * k, arms: [swing(0.3 * k, 1.2 * k), swing(1.75 * k, 0.55 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'o' };
@@ -526,7 +522,6 @@ const fizzBeaker: NpcServe = {
 // a puff off it (a blink, a start), and down to swirl again.
 const chemistWork: NpcLoop = {
   secs: 3,
-  frames: 12,
   pose(u) {
     const up = ease(u, 0.33, 0.58) - ease(u, 0.78, 1);
     const swirl = 1 - up;

@@ -224,7 +224,6 @@ const HOLD = { sh: 0.35, el: 0.87 };
 // server, a nod, and typing again.
 const adminWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     // (the reach out and back each over two frames)
     const reach = ease(u, 0.42, 0.62) - ease(u, 0.78, 0.98);
@@ -243,7 +242,6 @@ const adminWork: NpcLoop = {
 // A thumbs-up and a grin, the laptop still on its arm.
 const adminCelebrate: NpcLoop = {
   secs: 1.4,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     return { ...rest(), bob: 0.15 * bump(u, 0.3, 0.7), tilt: -0.08 * k, arms: [toward(k, HOLD), swing(1.3 * k, 1.25 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
@@ -452,7 +450,6 @@ const receptionistParts: NpcParts = {
 const TALK: ReadonlyArray<Puppet['mouth']> = ['open', 'smile', 'o', 'open', 'closed', 'smile'];
 const receptionistWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     // (the hand up to the headset over three frames, down over two)
     const call = ease(u, 0.34, 0.6) - ease(u, 0.82, 1);
@@ -707,7 +704,6 @@ const managerParts: NpcParts = {
 // cloth, round and round.
 const managerWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const shot = 1 - ease(u, 0.42, 0.55) + ease(u, 0.92, 1);
     const twist = Math.sin(u * TAU * 2) * bump(u, 0.0, 0.4);
@@ -731,7 +727,6 @@ const managerWork: NpcLoop = {
 const SING: ReadonlyArray<Puppet['mouth']> = ['open', 'o', 'open', 'smile'];
 const managerShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const tada = ease(u, 0.58, 0.68) - ease(u, 0.88, 0.98);

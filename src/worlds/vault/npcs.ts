@@ -208,7 +208,6 @@ const T_UP: Swing = { sh: 0.66, el: 2.14 };
 const T_DOWN: Swing = { sh: -0.06, el: 1.83 };
 const tellerWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const flick = u < 0.6 && Math.floor(u * 12) % 2 === 1 ? 1 : 0;
     const up = ease(u, 0.58, 0.68);
@@ -431,7 +430,6 @@ const S_BELL: Swing = reach(SAFE_BONES, 0, 1.9, -6.15);
 const S_DIAL: Swing = { sh: 0.31, el: 2.03 };
 const safeWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const twist = Math.sin(u * TAU * 2);
     const listen = bump(u, 0.2, 0.55) + bump(u, 0.7, 0.98);
@@ -452,7 +450,6 @@ const safeWork: NpcLoop = {
 // behind: both hands clear of his face.
 const safeShow: NpcLoop & { crowd: 'watch' } = {
   secs: 5,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     // (the bag lowered and the breath held again over the last frames, so
@@ -482,7 +479,6 @@ const safeShow: NpcLoop & { crowd: 'watch' } = {
 // shared cheer has them), pumped twice, a hop on each, grinning.
 const safeCelebrate: NpcLoop = {
   secs: 1.2,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = 0.2 * Math.abs(Math.sin(u * TAU * 2)) * k;
@@ -715,7 +711,6 @@ const G_REST: Swing = { sh: 0.8, el: -1.42 };
 const G_WATCH: Swing = reach(GUARD_BONES, 0, 2.7, -6.1 - LIFT * 0.2);
 const guardWork: NpcLoop = {
   secs: 3,
-  frames: 12,
   pose(u) {
     const w = watchOut(u);
     const rock = Math.sin(u * TAU * 2) * (1 - w);
@@ -737,7 +732,6 @@ const guardWork: NpcLoop = {
 // them), and the cap tossed into the air, caught on his head again.
 const guardCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.15, 0.85);
     const pump = 0.15 * bump(u, 0.3, 0.7);

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { npcSprite, spriteStats } from '../src/art/figure.ts';
+import { framesOf } from '../src/art/npc/acts.ts';
 import { AMBIENT_FPS, CYCLE, Scene, inkOf } from '../src/art/scene.ts';
 import { Screen } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
@@ -118,6 +119,6 @@ test("warm gets a local's work ready at the scales a key away", () => {
   new Scene().warm(f, Infinity);
   const ink = inkOf(f.world);
   const m = spriteStats.misses;
-  for (const n of f.npcs!) for (let i = 0; i < f.world.npcs![n.k].work.frames; i++) npcSprite(f.world, { ...n, act: 'work', frame: i }, s, ink);
+  for (const n of f.npcs!) for (let i = 0; i < framesOf(f.world.npcs![n.k].work); i++) npcSprite(f.world, { ...n, act: 'work', frame: i }, s, ink);
   assert.equal(spriteStats.misses, m, 'drawn on a key press');
 });

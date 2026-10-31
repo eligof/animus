@@ -322,10 +322,10 @@ const holoPlanet: DeskLoop = {
   at: HOLO,
   r: 0.4,
   h: 1.45,
-  frames: 8,
-  fps: 4,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 2,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = HOLO;
     foot(k, u, w, z, 0.35);
     k.cyl(u, w, z, 0.3, 0.14, C.steelDark, { line: fine(k), top: C.steel });
@@ -387,10 +387,10 @@ const beacon: DeskLoop = {
   at: BEACON,
   r: 0.3,
   h: 0.7,
-  frames: 6,
-  fps: 4,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1.5,
+  draw(v, phase) {
+    const i = Math.floor(phase * 6);
+const k = kitOf(v);
     const [u, w, z] = BEACON;
     k.box(u - 0.12, w - 0.1, z - 0.03, 0.24, 0.2, 0.1, C.steelDark, { line: fine(k), stripe: false });
     stick(k, [[u, w, z + 0.05], [u, w, z + 0.45]], C.steel, 0.05);

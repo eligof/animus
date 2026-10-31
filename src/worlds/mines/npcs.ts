@@ -272,7 +272,6 @@ const raised = (ph: number) => (ph < 0.5 ? Math.sin((ph / 0.5) * (Math.PI / 2)) 
 // them, eyes screwed up as each lands.
 const smithWork: NpcLoop = {
   secs: 1.6,
-  frames: 12,
   pose(u) {
     const ph = (u * 2) % 1;
     const k = raised(ph);
@@ -287,7 +286,6 @@ const smithWork: NpcLoop = {
 // anvil, where the next loop's first blow lands.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     if (u < SHOW_BLOWS) {
@@ -316,7 +314,6 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
 // face), the other fist pumping out in front, and a roar.
 const smithCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 1.5));
@@ -537,7 +534,6 @@ const assayLook = (u: number): number => ease(u, 0.38, 0.68) - ease(u, 0.76, 1);
 // settling level, then the loupe up to the eye and a long look.
 const assayerWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const look = assayLook(u);
     const pinch = Math.sin(u * TAU * 4) * (1 - ease(u, 0.35, 0.45));
@@ -768,7 +764,6 @@ const prospectorParts: NpcParts = {
 // old man's swing, unhurried.
 const prospectorWork: NpcLoop = {
   secs: 2,
-  frames: 10,
   pose(u) {
     const k = u < 0.5 ? Math.sin((u / 0.5) * (Math.PI / 2)) : Math.cos(((u - 0.5) / 0.5) * (Math.PI / 2)) ** 1.4;
     const hit = u < 0.05;
@@ -790,7 +785,6 @@ const prospectorWork: NpcLoop = {
 // A nugget up to the light, a look at it, a grin.
 const prospectorCelebrate: NpcLoop = {
   secs: 2,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.25, 0.8);
     return { ...rest(), bob: 0.15 * k, lean: -0.08 * k, tilt: -0.22 * k, arms: [{ sh: 0.3 * k, el: HANG.el + 1.5 * k }, swing(2.5 * k, 0.25 * k)], eyes: k > 0.5 ? 'happy' : 'open', mouth: k > 0.5 ? 'open' : 'smile' };

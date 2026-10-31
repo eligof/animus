@@ -383,10 +383,10 @@ const candle: DeskLoop = {
   at: CANDLE,
   r: 0.25,
   h: 0.8,
-  frames: 6,
-  fps: 6,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1,
+  draw(v, phase) {
+    const i = Math.floor(phase * 6);
+const k = kitOf(v);
     const [u, w, z] = CANDLE;
     const on = v.active;
     const tall = on ? TALL[i] : 0;
@@ -443,10 +443,10 @@ const latte: DeskLoop = {
   at: LATTE,
   r: 0.35,
   h: 1.35,
-  frames: 8,
-  fps: 5,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1.6,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = LATTE;
     k.disc(u, w, z + 0.04, 0.33, shade(C.china, -0.04), fine(k));
     stick(k, [[u + 0.18, w, z + 0.3], [u + 0.29, w, z + 0.25], [u + 0.28, w, z + 0.15], [u + 0.18, w, z + 0.13]], C.china, 0.05);

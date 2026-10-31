@@ -66,8 +66,9 @@ test('the terminal shows exactly the scene, for a small part of a whole picture 
   }
   const n = steps - FPS;
   // Things that move are placements; only what animates in place sends
-  // pictures, small ones (base64 makes 4 bytes of 3, and still).
-  assert.ok(bytes / n < whole / 20, `${(bytes / n).toFixed(0)} bytes a step against ${whole} for a whole picture`);
+  // pictures, small ones (base64 makes 4 bytes of 3, and still), each the
+  // first time round its loop (15 a second: see art/motion.ts).
+  assert.ok(bytes / n < whole / 12, `${(bytes / n).toFixed(0)} bytes a step against ${whole} for a whole picture`);
 });
 
 test('leaving the scene takes the pictures off, and coming back places the kept ones again', () => {

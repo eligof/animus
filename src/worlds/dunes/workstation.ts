@@ -359,10 +359,10 @@ const fan: DeskLoop = {
   at: FAN,
   r: 0.6,
   h: 1.95,
-  frames: 6,
-  fps: 8,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 0.75,
+  draw(v, phase) {
+    const i = Math.floor(phase * 6);
+const k = kitOf(v);
     const e = edge(k);
     const [u, w, z] = FAN;
     const zc = z + 1.3;

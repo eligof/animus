@@ -161,7 +161,6 @@ const ON_HIP: Swing = { sh: -0.5, el: 1.3 };
 // pull, a bob with the effort.
 const mechWork: NpcLoop = {
   secs: 2.0,
-  frames: 12,
   pose(u) {
     const a = A0 - TAU * u;
     const push = Math.cos(a);
@@ -173,7 +172,6 @@ const mechWork: NpcLoop = {
 // Done: a gloved hand wiped across its brow, then a thumbs-up and a grin.
 const mechCelebrate: NpcLoop = {
   secs: 2.0,
-  frames: 10,
   pose(u) {
     const wipe = bump(u, 0.05, 0.5);
     const across = ease(u, 0.12, 0.42);
@@ -331,7 +329,6 @@ const AT_BROW: Swing = { sh: 2.55, el: 2.1 };
 // brow, looking out bare-eyed; and in again.
 const lookWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const k = peer(u);
     const rub = rubbing(u);
@@ -599,7 +596,6 @@ const OUT: Pt = [3.6, -7.4];
 // out to look it over, a squint, a glint, and back to it.
 const barWork: NpcLoop = {
   secs: 2.8,
-  frames: 12,
   pose(u) {
     const up = inspecting(u);
     const c = Math.cos(u * TAU * 2);
@@ -616,7 +612,6 @@ const barWork: NpcLoop = {
 // following them up.
 const barShow: NpcLoop & { crowd: 'watch' } = {
   secs: 2.4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const p: Puppet = { ...rest(), u, bob: 0.12 * Math.abs(Math.sin(u * TAU * 3)), tilt: -0.2 };

@@ -492,10 +492,10 @@ const blackCandle: DeskLoop = {
   at: CANDLE,
   r: 0.55,
   h: 2.6,
-  frames: 6,
-  fps: 6,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1,
+  draw(v, phase) {
+    const i = Math.floor(phase * 6);
+const k = kitOf(v);
     const [u, w, z] = CANDLE;
     const zc = z + SKULL_R * 1.95;
     const ch = 0.8;

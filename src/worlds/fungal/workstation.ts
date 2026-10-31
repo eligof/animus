@@ -599,10 +599,10 @@ const glowCap: DeskLoop = {
   at: LAMP,
   r: 0.6,
   h: 2.3,
-  frames: BREATHS,
-  fps: 5,
-  draw(v, i) {
-    const k = smallKitOf(v);
+  secs: BREATHS / 5,
+  draw(v, phase) {
+    const i = Math.floor(phase * BREATHS);
+const k = smallKitOf(v);
     const [u, w, z] = LAMP;
     const lit = v.active;
     const a = lit ? breath(i) : 0;

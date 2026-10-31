@@ -342,10 +342,10 @@ const FAN: DeskLoop = {
   at: FAN_AT,
   r: 0.5,
   h: 1.35,
-  frames: 8,
-  fps: 8,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = FAN_AT;
     const t = v.active ? i / 8 : 0;
     const swing = Math.PI / 4 + 0.38 * Math.sin(t * Math.PI * 2);
@@ -403,10 +403,10 @@ const BEACON: DeskLoop = {
   at: BEACON_AT,
   r: 0.3,
   h: 0.5,
-  frames: 8,
-  fps: 8,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = BEACON_AT;
     k.cyl(u, w, z, 0.22, 0.1, C.chrome, { line: hair(k) * 1.4 });
     const [x, y] = k.p(u, w, z + 0.1);

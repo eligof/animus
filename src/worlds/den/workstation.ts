@@ -351,10 +351,10 @@ const lavaLamp: DeskLoop = {
   at: LAMP,
   r: 0.4,
   h: 2.05,
-  frames: 8,
-  fps: 3,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 8 / 3,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = LAMP;
     const on = v.active;
     const g0 = z + 0.5;
@@ -432,10 +432,10 @@ const router: DeskLoop = {
   at: ROUTER,
   r: 0.45,
   h: 1.05,
-  frames: 8,
-  fps: 4,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 2,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = ROUTER;
     for (const s of [-1, 1]) stick(k, [[u + s * 0.3, w - 0.1, z + 0.16], [u + s * 0.4, w - 0.2, z + 0.98]], '#3a4045', 0.07);
     k.box(u - 0.42, w - 0.2, z, 0.84, 0.4, 0.2, '#e9ecea', { line: fine(k), round: 0.06 });

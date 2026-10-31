@@ -184,7 +184,6 @@ const capParts: NpcParts = {
 // a nod, eyes smiling.
 const capWork: NpcLoop = {
   secs: 3.0,
-  frames: 12,
   pose(u) {
     const pt = capPoint(u);
     const nod = bump(u, 0.82, 1.0);
@@ -206,7 +205,6 @@ const capWork: NpcLoop = {
 // visor's tip beside its face, not over it; chin up, held, and down again.
 const capCelebrate: NpcLoop = {
   secs: 1.8,
-  frames: 8,
   pose(u) {
     const k = capSalute(u);
     return { ...rest(), tilt: -0.1 * k, arms: [{ sh: 0.3, el: 1.0 }, swing(2.03 * k, 0.15 * k)], mouth: k > 0.5 ? 'closed' : 'smile' };
@@ -383,7 +381,6 @@ const engParts: NpcParts = {
 // to tap the gauge with a knuckle and read it.
 const engWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const crank = u < 0.5 ? Math.sin(u * TAU * 3) : 0;
     // (leaning in to the gauge over two frames, back over two)
@@ -409,7 +406,6 @@ const engWork: NpcLoop = {
 // thumbs-up, grinning.
 const engShow: NpcLoop & { crowd: 'watch' } = {
   secs: 5.0,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const crank = engCrank(u);
@@ -551,7 +547,6 @@ const comParts: NpcParts = {
 // over two frames or more.
 const comWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const call = comCall(u);
     const read = bump(u, 0.22, 0.56);

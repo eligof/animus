@@ -234,7 +234,6 @@ const C_BLOT: Swing = { sh: -0.05, el: 1.75 };
 const C_LIFT: Swing = { sh: 0.95, el: 1.45 };
 const clerkWork: NpcLoop = {
   secs: 3,
-  frames: 12,
   pose(u) {
     const along = u < 0.6 ? 0.5 - 0.5 * Math.cos((u / 0.6) * TAU) : 0;
     const scratch = u < 0.6 ? Math.sin(u * TAU * 4) : 0;
@@ -522,7 +521,6 @@ const H_HIT: Swing = { sh: 1.41, el: -0.84 };
 const T_HOLD: Swing = { sh: 1.0, el: 0.45 };
 const smithWork: NpcLoop = {
   secs: 1.2,
-  frames: 8,
   pose(u) {
     const down = ease(u, 0.25, 0.5) - ease(u, 0.62, 0.95);
     const hit = bump(u, 0.42, 0.68);
@@ -545,7 +543,6 @@ const smithWork: NpcLoop = {
 // back to the start at its end.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const breathe = bump(u, 0.0, 0.24);
@@ -766,7 +763,6 @@ const W_PINCH: Swing = { sh: 0.84, el: 1.44 };
 const W_REST: Swing = { sh: 0.2, el: 0.6 };
 const witchWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const a = u * TAU * 2;
     const pinch = ease(u, 0.4, 0.6) - ease(u, 0.8, 1);
@@ -784,7 +780,6 @@ const witchWork: NpcLoop = {
 // A cackle: head thrown back, arms flung wide, shoulders shaking.
 const witchCelebrate: NpcLoop = {
   secs: 1.4,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const shake = Math.sin(u * TAU * 4) * k;

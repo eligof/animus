@@ -432,10 +432,10 @@ const WINDPUMP: DeskLoop = {
   at: PUMP_AT,
   r: 0.3,
   h: 1.75,
-  frames: 6,
-  fps: 6,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1,
+  draw(v, phase) {
+    const i = Math.floor(phase * 6);
+const k = kitOf(v);
     const [u, w, z] = PUMP_AT;
     const t = v.active ? i / 6 : 0;
     const wood = C.plank;

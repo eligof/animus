@@ -201,7 +201,6 @@ const overseerParts: NpcParts = {
 // speaks, nodding, then lowers it. The other hand stays behind its back.
 const overseerWork: NpcLoop = {
   secs: 4,
-  frames: 12,
   pose(u) {
     const m = miked(u);
     const speak = u > 0.5 && u < 0.85;
@@ -387,7 +386,6 @@ function wrench(sk: Sketch): void {
 // again.
 const mechWork: NpcLoop = {
   secs: 2.8,
-  frames: 12,
   pose(u) {
     const c = cranking(u);
     const t = 1 - c;
@@ -415,7 +413,6 @@ const mechWork: NpcLoop = {
 // beside its head (as the shared cheer has them), a hop, and back.
 const mechCelebrate: NpcLoop = {
   secs: 1.8,
-  frames: 9,
   pose(u) {
     const puff = bump(u, 0.0, 0.35);
     const up = ease(u, 0.2, 0.45) - ease(u, 0.75, 1);
@@ -639,7 +636,6 @@ function pourAt(tip: number): { x: number; y: number } {
 // at her side and the pencil tapped to her chin over the order.
 const waitressWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const po = pouring(u);
     const m = musing(u);
@@ -663,7 +659,6 @@ const waitressWork: NpcLoop = {
 // beside her head.
 const waitressShow: NpcLoop & { crowd: 'dance' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'dance',
   pose(u) {
     const beat = Math.abs(Math.sin(u * TAU * 4));

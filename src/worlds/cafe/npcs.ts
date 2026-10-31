@@ -281,7 +281,6 @@ const baristaParts: NpcParts = {
 // to the steam wand, swirling it, and back.
 const baristaWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const tamp = tampOf(u);
     const steam = steamOf(u);
@@ -306,7 +305,6 @@ const baristaWork: NpcLoop = {
 // the far hand out (voila), and down.
 const baristaShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const k = ease(u * 16, 0, 2.5) - ease(u * 16, 13, 16);
@@ -575,7 +573,6 @@ const pastryChefParts: NpcParts = {
 // sight, behind the counter, so the loop joins up unseen).
 const pastryChefWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const ice = iceOf(u);
     const down = downOf(u);
@@ -834,7 +831,6 @@ const regularParts: NpcParts = {
 // eyes shut; and back to the paper.
 const regularWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const page = bump(u, 0.2, 0.45);
     const sip = sipOf(u);
@@ -855,7 +851,6 @@ const regularWork: NpcLoop = {
 // The paper lowered to its lap, a little clap, a beam.
 const regularCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.85);
     const clap = 0.5 + 0.5 * Math.sin(u * TAU * 3);

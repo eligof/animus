@@ -113,7 +113,6 @@ const djParts: NpcParts = {
 // far one riding a fader, the head nodding on the beat (two a loop).
 const djWork: NpcLoop = {
   secs: 2 * BEAT,
-  frames: 8,
   pose(u) {
     const beat = Math.abs(Math.sin(u * TAU));
     const scratch = Math.sin(u * TAU * 2);
@@ -127,7 +126,6 @@ const djWork: NpcLoop = {
 // it, mouth open, eyes squeezed happy.
 const djShow: NpcLoop & { crowd: 'dance' } = {
   secs: 4 * BEAT,
-  frames: 16,
   crowd: 'dance',
   pose(u) {
     const pump = Math.abs(Math.sin(u * TAU * 2));
@@ -140,7 +138,6 @@ const djShow: NpcLoop & { crowd: 'dance' } = {
 // cheer, see art/npc/acts.ts).
 const djCelebrate: NpcLoop = {
   secs: 4 * BEAT,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.25, 0.75);
     const pump = Math.abs(Math.sin(u * TAU * 2)) * k;
@@ -394,7 +391,6 @@ const bartenderParts: NpcParts = {
 // pink pour, and back up.
 const bartenderWork: NpcLoop = {
   secs: 1.8,
-  frames: 12,
   pose(u) {
     const s = shakeOf(u);
     const k = pourOf(u);
@@ -417,7 +413,6 @@ const bartenderWork: NpcLoop = {
 // follow it round, and it catches it, grinning.
 const bartenderCelebrate: NpcLoop = {
   secs: 1.5,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.2, 0.85);
     const fly = bump(u, 0.25, 0.75);
@@ -678,7 +673,6 @@ const coatCheckParts: NpcParts = {
 // down out of sight, so the loop joins up unseen.
 const coatCheckWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const lift = liftOf(u);
     const tear = tearOf(u);
@@ -704,7 +698,6 @@ const coatCheckWork: NpcLoop = {
 // tight.
 const coatCheckCelebrate: NpcLoop = {
   secs: 1.2,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.15, 0.85);
     const ring = Math.abs(Math.sin(u * TAU * 2));

@@ -520,10 +520,10 @@ const cradle: DeskLoop = {
   at: CRADLE,
   r: 0.6,
   h: 1.2,
-  frames: 8,
-  fps: 8,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 1,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = CRADLE;
     const top = z + 1.1;
     const L = 0.7;
@@ -558,10 +558,10 @@ const busyLight: DeskLoop = {
   at: BUSY,
   r: 0.35,
   h: 0.6,
-  frames: 8,
-  fps: 4,
-  draw(v, i) {
-    const k = kitOf(v);
+  secs: 2,
+  draw(v, phase) {
+    const i = Math.floor(phase * 8);
+const k = kitOf(v);
     const [u, w, z] = BUSY;
     const glow = v.active ? BREATH[i % BREATH.length] : 0;
     k.box(u - 0.23, w - 0.18, z, 0.46, 0.36, 0.07, C.steel, { line: edge(k), stripe: false });

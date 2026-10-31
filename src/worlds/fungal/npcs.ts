@@ -221,7 +221,6 @@ const herbSniff = (u: number): number => ease(u, 0.43, 0.68) - ease(u, 0.76, 1);
 // to the nose, a long sniff, eyes shut, and back to grinding.
 const herbWork: NpcLoop = {
   secs: 3.2,
-  frames: 12,
   pose(u) {
     const sniff = herbSniff(u);
     const g = 1 - sniff;
@@ -245,7 +244,6 @@ const herbWork: NpcLoop = {
 // foot; from rest and back.
 const herbCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const hop = Math.abs(Math.sin(u * TAU * 2));
@@ -512,7 +510,6 @@ const witchParts: NpcParts = {
 // in to peer at the brew, a sniff now and then.
 const witchWork: NpcLoop = {
   secs: 2.0,
-  frames: 10,
   pose(u) {
     const a = u * TAU;
     const peer = bump(u, 0.45, 0.85);
@@ -536,7 +533,6 @@ const witchWork: NpcLoop = {
 // head thrown back, shaking with laughter; from rest and back.
 const witchCelebrate: NpcLoop = {
   secs: 1.8,
-  frames: 10,
   pose(u) {
     const k = env(u, 0.18, 0.82);
     const shake = Math.sin(u * TAU * 5);
@@ -727,7 +723,6 @@ const mycParts: NpcParts = {
 // cap and a puff of spores drifting up.
 const mycWork: NpcLoop = {
   secs: 2.0,
-  frames: 12,
   pose(u) {
     const sway = Math.sin(u * TAU);
     const sq = bump(u, 0.5, 0.68);
@@ -749,7 +744,6 @@ const mycWork: NpcLoop = {
 // spores off its cap each bounce.
 const mycShow: NpcLoop & { crowd: 'dance' } = {
   secs: 3.2,
-  frames: 16,
   crowd: 'dance',
   pose(u) {
     const b = (u * 4) % 1;
@@ -775,7 +769,6 @@ const mycShow: NpcLoop & { crowd: 'dance' } = {
 // and back.
 const mycCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     return { ...rest(), bob: 0.9 * bump(u, 0.15, 0.6), tilt: -0.1 * k, arms: [swing(-1.9 * k, -0.9 * k), swing(1.7 * k, 0.7 * k)], eyes: k > 0.3 ? 'happy' : 'open', mouth: k > 0.3 ? 'open' : 'smile' };

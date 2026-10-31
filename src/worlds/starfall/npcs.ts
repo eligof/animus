@@ -230,7 +230,6 @@ const techParts: NpcParts = {
 // slate, taps it and nods.
 const techWork: NpcLoop = {
   secs: 3,
-  frames: 12,
   pose(u) {
     const s = scooping(u);
     const r = reading(u);
@@ -441,7 +440,6 @@ const pilotParts: NpcParts = {
 // the glass.
 const pilotWork: NpcLoop = {
   secs: 3.6,
-  frames: 12,
   pose(u) {
     const w = Math.sin(u * TAU);
     const w2 = Math.sin(u * TAU * 2 + 0.6);
@@ -463,7 +461,6 @@ const pilotWork: NpcLoop = {
 // down again.
 const pilotCelebrate: NpcLoop = {
   secs: 1.6,
-  frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const pump = Math.abs(Math.sin(u * TAU * 2));
@@ -680,7 +677,6 @@ const cookTaste = (u: number): number => ease(u * 12, 5.5, 8.5) - ease(u * 12, 9
 // Whisks the bowl, round and round, then tastes from the spoon, pleased.
 const cookWork: NpcLoop = {
   secs: 2.4,
-  frames: 12,
   pose(u) {
     const taste = cookTaste(u);
     const stir = 1 - taste;
@@ -706,7 +702,6 @@ const cookWork: NpcLoop = {
 // round).
 const cookShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4,
-  frames: 16,
   crowd: 'watch',
   pose(u) {
     const h = flight(u);

@@ -5,6 +5,7 @@ import { loadWorld } from '../scripts/scene-shot.ts';
 import { Canvas } from '../src/art/canvas.ts';
 import { TRINKET_BOX } from '../src/art/figure.ts';
 import { frame, project as iso } from '../src/art/iso.ts';
+import { framesFor } from '../src/art/motion.ts';
 import { THEMES, getTheme, themeIds } from '../src/themes/index.ts';
 import type { Theme } from '../src/themes/types.ts';
 import { PROP_SIZE, planLayout, type Rect } from '../src/world/layout.ts';
@@ -198,8 +199,7 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
     assert.equal(new Set(loops.map((l) => l.name)).size, loops.length, 'two loops of one name');
     loops.forEach((lp, k) => {
       const [u, v, z] = lp.at;
-      assert.ok(Number.isInteger(lp.frames) && lp.frames >= 4 && lp.frames <= 8, `${lp.name}: ${lp.frames} frames`);
-      assert.ok(lp.fps > 0 && lp.fps <= 8, `${lp.name}: ${lp.fps} a second`);
+      assert.ok(lp.secs >= 0.4 && lp.secs <= 3, `${lp.name}: ${lp.secs} s round`);
       assert.ok(lp.r > 0 && lp.r <= 1.5 && lp.h > 0 && u - lp.r >= 0 && u + lp.r <= DESK.len && v - lp.r >= 0 && v + lp.r <= DESK.dep && z >= 0 && z + lp.h <= art.height + 0.5, `${lp.name} at ${lp.at} is not on its desk`);
       assert.ok(Math.hypot(u - art.top[0], v - art.top[1]) >= lp.r + 1, `${lp.name} is on the upgrade's spot`);
       for (const p of spots) assert.ok(Math.hypot(u - p[0], v - p[1]) >= lp.r + maxR, `${lp.name} is on the spot ${p}`);
@@ -211,7 +211,7 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
     for (const wall of ['right', 'left'] as const) {
       const parts: Array<{ what: string; box: [P3, number, number]; draw: (v: PropView) => void }> = [];
       for (const it of items) for (const p of spots) parts.push({ what: `${it.name} at ${p}`, box: [p, it.r, it.h], draw: (v) => it.draw(v, p) });
-      for (const lp of loops) for (let i = 0; i < lp.frames; i++) parts.push({ what: `${lp.name} frame ${i}`, box: [lp.at, lp.r, lp.h], draw: (v) => lp.draw(v, i) });
+      for (const lp of loops) for (let i = 0, n = framesFor(lp.secs); i < n; i++) parts.push({ what: `${lp.name} frame ${i}`, box: [lp.at, lp.r, lp.h], draw: (v) => lp.draw(v, i / n) });
       for (const part of parts) {
         for (const active of [false, true]) {
           const what = `${wall}${active ? ' (on)' : ''}: ${part.what}`;
@@ -241,16 +241,16 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
         return hashOf(c);
       };
       for (const it of items.slice(0, 12)) if (spots[0]) assert.equal(atTime((v) => it.draw(v, spots[0]), 0), atTime((v) => it.draw(v, spots[0]), 7.3), `${wall}: ${it.name} draws with the clock`);
-      for (const lp of loops) for (let i = 0; i < lp.frames; i++) assert.equal(atTime((v) => lp.draw(v, i), 0), atTime((v) => lp.draw(v, i), 7.3), `${wall}: ${lp.name} frame ${i} draws with the clock`);
+      for (const lp of loops) for (let i = 0, n = framesFor(lp.secs); i < n; i++) assert.equal(atTime((v) => lp.draw(v, i / n), 0), atTime((v) => lp.draw(v, i / n), 7.3), `${wall}: ${lp.name} frame ${i} draws with the clock`);
       // A loop's frame is the same picture every time; lit, its frames differ.
       for (const lp of loops) {
         const shot = (i: number) => {
           const c = new Canvas(160, 160);
-          lp.draw(viewOf(art, wall, c, true), i);
+          lp.draw(viewOf(art, wall, c, true), i / framesFor(lp.secs));
           return hashOf(c);
         };
-        const frames = Array.from({ length: lp.frames }, (_, i) => shot(i));
-        assert.deepEqual(Array.from({ length: lp.frames }, (_, i) => shot(i)), frames, `${wall}: ${lp.name} drew a frame two ways`);
+        const frames = Array.from({ length: framesFor(lp.secs) }, (_, i) => shot(i));
+        assert.deepEqual(Array.from({ length: framesFor(lp.secs) }, (_, i) => shot(i)), frames, `${wall}: ${lp.name} drew a frame two ways`);
         assert.ok(new Set(frames).size >= 2, `${wall}: ${lp.name} does not move`);
       }
     }
