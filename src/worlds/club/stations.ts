@@ -253,10 +253,17 @@ function frustumUp(k: Kit, cu: number, cv: number, z0: number, r0: number, z1: n
 // ── search: the coat check ──────────────────────────────────────────────────
 // A hatch with a counter: coats of every colour on a rail behind it, hats
 // on a shelf over them, a bell, tickets and a tip jar, a lamp over the
-// hatch. Looking for someone's coat sends one sliding along the rail.
+// hatch; between the rail and the counter, room for the attendant (see
+// npcs.ts: it fetches the coats). Worked, the lamp glows brighter and a
+// coat just hung back swings on the rail. `z`: the counter's height (`top`
+// with its top on), `edge` the top's back edge, `at` where along it the
+// attendant stands, `bell` where its bell stands, `lamp` where the lamp
+// hangs, clear of the attendant's head.
 
 const COATS: readonly Color[] = ['#c23a5a', '#2f6e8a', '#d9a03a', '#5a4a8a', '#e8e0d0', '#3a8a5a', '#8a3a7a', '#2a2a34'];
 const RAIL = 12.2;
+export const HATCH = { z: 5.2, top: 5.65, edge: 2.1, at: 5.0, bell: [1.95, 2.65] as const, lamp: 9.0 };
+const SWUNG = 6;
 
 function coat(k: Kit, u: number, v: number, color: Color, sway = 0, z1 = 6.4): void {
   const top = RAIL - 0.2;
@@ -282,12 +289,15 @@ function coat(k: Kit, u: number, v: number, color: Color, sway = 0, z1 = 6.4): v
   k.line([[u - 0.25, v + 0.01, top - 0.35], [u, v + 0.01, top - 1.1], [u + 0.25, v + 0.01, top - 0.35]], shade(color, 0.25), Math.max(0.7, 0.1 * k.s));
 }
 
+const coatAt = (i: number): [number, number] => [1.6 + i * 1.25, 1.2 + (i & 1) * 0.15];
+
 const search: PropArt = {
   len: 12,
   dep: 4,
   height: 16,
   animated: true,
   draw(v: PropView): void {
+    const { z, top, bell, lamp } = HATCH;
     const k = still(v, 'search', 16, (k) => {
       k.shadow(6, 2.4, 6.6, 2.4, 0.3);
       // the cloakroom behind: dark walls of the alcove, the rail, the coats
@@ -297,57 +307,58 @@ const search: PropArt = {
       for (const u of [1.0, 11.0]) k.rod([[u, 0.05, RAIL], [u, 1.2, RAIL]], C.steelDark, 0.12);
       k.rod([[0.7, 1.2, RAIL], [11.3, 1.2, RAIL]], C.chrome, 0.16);
       COATS.forEach((c, i) => {
-        if (i === 3) return; // the one drawn live
-        coat(k, 1.6 + i * 1.25, 1.2 + (i & 1) * 0.15, c, (hash(v.seed, i) - 0.5) * 0.3, 5.6);
+        if (i === SWUNG) return; // the one drawn live
+        coat(k, ...coatAt(i), c, (hash(v.seed, i) - 0.5) * 0.3, 5.6);
       });
-      // the hat shelf
+      // the hat shelf, its hats either side of the attendant's head
       k.box(0.6, 0.05, 13.6, 10.8, 1.6, 0.3, '#5a3a2e', { line: k.thin });
       k.cyl(2.6, 0.9, 13.9, 0.75, 0.25, '#2a2430');
       k.cyl(2.6, 0.9, 14.15, 0.48, 0.65, '#2a2430');
-      k.cyl(5.4, 0.9, 13.9, 0.62, 0.7, C.red, { top: shade(C.red, 0.15) });
-      k.disc(5.4, 0.9, 14.65, 0.22, '#f2e6f0', k.thin);
-      k.cyl(8.6, 0.9, 13.9, 0.66, 0.6, '#d9c08a');
-      k.box(8.3, 1.2, 13.9, 1.2, 0.6, 0.12, '#d9c08a', { line: k.thin, stripe: false });
+      k.cyl(7.0, 0.9, 13.9, 0.62, 0.7, C.red, { top: shade(C.red, 0.15) });
+      k.disc(7.0, 0.9, 14.65, 0.22, '#f2e6f0', k.thin);
+      k.cyl(10.3, 0.9, 13.9, 0.66, 0.6, '#d9c08a');
+      k.box(10.0, 1.2, 13.9, 1.2, 0.6, 0.12, '#d9c08a', { line: k.thin, stripe: false });
       // the counter in the hatch
-      k.box(0.3, 2.3, 0, 11.4, 1.6, 6.0, C.woodDark, { stripe: false });
+      k.box(0.3, 2.3, 0, 11.4, 1.6, z, C.woodDark, { stripe: false });
       for (const [a0, a1] of [[0.8, 3.9], [4.4, 7.6], [8.1, 11.2]] as const) {
-        k.rect(a0, 3.91, 1.0, a1, 5.2, k.side(shade(C.woodDark, 0.06), 0, 1), k.thin);
-        k.line([[a0 + 0.15, 3.92, 1.15], [a0 + 0.15, 3.92, 5.05], [a1 - 0.15, 3.92, 5.05]], shade(C.woodDark, 0.3), Math.max(0.7, 0.1 * k.s));
+        k.rect(a0, 3.91, 0.9, a1, z - 0.7, k.side(shade(C.woodDark, 0.06), 0, 1), k.thin);
+        k.line([[a0 + 0.15, 3.92, 1.05], [a0 + 0.15, 3.92, z - 0.85], [a1 - 0.15, 3.92, z - 0.85]], shade(C.woodDark, 0.3), Math.max(0.7, 0.1 * k.s));
       }
-      k.box(0.1, 2.1, 6.0, 11.8, 2.0, 0.45, '#2a2430', { top: '#3e3646' });
-      k.line([[0.1, 4.1, 6.0], [11.9, 4.1, 6.0]], C.brass, Math.max(1, 0.14 * k.s));
-      // on it: tickets, a bell, a tip jar
-      k.box(1.4, 2.6, 6.45, 1.6, 1.0, 0.25, '#f2e6c8', { line: k.thin, stripe: false });
-      k.box(1.5, 2.65, 6.7, 1.4, 0.9, 0.08, C.pink, { line: 0, stripe: false });
-      k.disc(9.4, 3.1, 6.5, 0.5, '#2a2430', k.thin);
-      const e = k.ell(9.4, 3.1, 6.55, 0.42);
+      k.box(0.1, 2.1, z, 11.8, 2.0, top - z, '#2a2430', { top: '#3e3646' });
+      k.line([[0.1, 4.1, z], [11.9, 4.1, z]], C.brass, Math.max(1, 0.14 * k.s));
+      // on it: tickets, the bell (within the attendant's reach), a tip jar
+      k.box(8.4, 2.6, top, 1.6, 1.0, 0.25, '#f2e6c8', { line: k.thin, stripe: false });
+      k.box(8.5, 2.65, top + 0.25, 1.4, 0.9, 0.08, C.pink, { line: 0, stripe: false });
+      k.disc(bell[0], bell[1], top + 0.05, 0.5, '#2a2430', k.thin);
+      const e = k.ell(bell[0], bell[1], top + 0.1, 0.42);
       k.pen.beginPath();
       k.pen.ellipse(e.cx, e.cy, e.rx, e.rx * 0.9, 0, Math.PI, 0);
       k.pen.closePath();
-      k.paint(k.grad([9.0, 3.1, 7.0], [9.8, 3.1, 6.6], [[0, '#fff0b8'], [1, C.brass]]), k.thin);
-      k.cyl(10.8, 3.0, 6.45, 0.42, 0.95, '#cfe0eecc', { line: k.thin });
-      k.disc(10.8, 3.0, 6.6, 0.32, C.brass, 0);
+      k.paint(k.grad([bell[0] - 0.4, bell[1], top + 0.55], [bell[0] + 0.4, bell[1], top + 0.15], [[0, '#fff0b8'], [1, C.brass]]), k.thin);
+      k.cyl(10.8, 3.0, top, 0.42, 0.95, '#cfe0eecc', { line: k.thin });
+      k.disc(10.8, 3.0, top + 0.15, 0.32, C.brass, 0);
       // the lamp over the hatch
-      k.rod([[6, 0.6, 14.8], [6, 1.6, 14.6], [6, 1.6, 13.8]], '#2a2430', 0.1);
+      k.rod([[lamp, 0.6, 14.8], [lamp, 1.6, 14.6], [lamp, 1.6, 13.8]], '#2a2430', 0.1);
     });
-    const t = v.t;
-    // the coat being fetched: slides along the rail and swings
-    const slide = v.active ? Math.sin(t * 1.4) * 1.2 : 0;
-    const sw = v.active ? Math.sin(t * 4.2) * 0.4 : 0;
-    coat(k, 1.6 + 3 * 1.25 + slide, 1.35, COATS[3], sw, 6.6);
+    // a coat swinging on the rail, just hung back while the hatch is busy
+    const [cu, cv] = coatAt(SWUNG);
+    coat(k, cu, cv, COATS[SWUNG], v.active ? 0.3 * Math.sin(v.t * Math.PI) : (hash(v.seed, SWUNG) - 0.5) * 0.3, 5.6);
     // the lamp's shade, glowing brighter while someone looks
-    frustumUp(k, 6, 1.6, 13.0, 0.8, 13.8, 0.3, v.active ? '#ffe6a8' : '#d8b878');
-    k.halo(6, 1.8, 12.8, v.active ? 3.4 : 2.2, '#ffd890', v.active ? 0.55 : 0.32);
+    frustumUp(k, lamp, 1.6, 13.0, 0.8, 13.8, 0.3, v.active ? '#ffe6a8' : '#d8b878');
+    k.halo(lamp, 1.8, 12.8, v.active ? 3.4 : 2.2, '#ffd890', v.active ? 0.55 : 0.32);
   },
 };
 
 // ── run: the neon bar ───────────────────────────────────────────────────────
 // A zinc-topped bar with a pink neon lip and a glow at its foot; behind it
-// a mirrored back-bar of lit bottles under a neon crown; taps, glasses, a
-// shaker and limes on the counter; velvet stools in front. Running it
-// shakes a cocktail, pours one and pumps the back-bar's light.
+// a mirrored back-bar of lit bottles under a neon crown, and between them
+// room for the bartender (see npcs.ts: it does the shaking and pouring);
+// taps, glasses, a shaker and limes on the counter, kept low in front of
+// it; velvet stools in front. Running it pumps the back-bar's light and
+// sends up sparkles. `at`: where along it the bartender stands; `glass`:
+// the glass it pours into.
 
-const BAR = { v0: 4.4, v1: 7.4, z: 6.2 };
+export const BAR = { v0: 4.4, v1: 7.4, z: 5.8, at: 6.0, glass: [1.6, 4.6] as const };
 
 const run: PropArt = {
   len: 11,
@@ -406,44 +417,31 @@ const run: PropArt = {
       k.neon([[0.15, v1 + 0.2, z + 0.15], [10.85, v1 + 0.2, z + 0.15]], C.pink, 0.22);
       // on the counter: taps, limes, glasses
       const zt = z + 0.4;
-      k.cyl(1.6, 5.4, zt, 0.4, 2.3, C.chrome);
-      for (const [i, c] of [C.pink, C.amber, C.cyan].entries()) k.rod([[1.2 + i * 0.4, 5.85, zt + 1.9], [1.2 + i * 0.4, 6.0, zt + 2.9]], c, 0.16);
+      k.cyl(0.8, 5.9, zt, 0.4, 2.3, C.chrome);
+      for (const [i, c] of [C.pink, C.amber, C.cyan].entries()) k.rod([[0.5 + i * 0.3, 6.35, zt + 1.9], [0.5 + i * 0.3, 6.5, zt + 2.9]], c, 0.16);
       k.disc(3.4, 6.0, zt, 0.75, '#e8e4ee', k.thin);
       for (const [du, dv] of [[-0.25, -0.15], [0.25, 0.05], [0, 0.3]] as const) k.disc(3.4 + du, 6.0 + dv, zt + 0.25, 0.28, C.lime, k.thin * 0.7);
-      martini(k, 5.0, 6.4, zt, C.pink, 0.42);
+      // the glass the bartender pours into, on the counter's back edge
+      martini(k, BAR.glass[0], BAR.glass[1], zt, C.pink, 0.42);
       tumbler(k, 9.6, 6.6, zt, C.amber, 1.1, 0.38, C.pink);
-      martini(k, 8.6, 5.3, zt, C.cyan, 0.42);
+      martini(k, 8.6, 5.8, zt, C.cyan, 0.42);
+      // a spare shaker, standing well out in front of the bartender
+      k.cyl(7.6, 6.5, zt, 0.4, 1.5, C.chrome);
+      k.cyl(7.6, 6.5, zt + 1.5, 0.3, 0.45, '#b8b8c8');
       // stools in front
       for (const u of [2.2, 5.5, 8.8]) stool(k, u, 9.4, C.velvet);
     });
-    const t = v.t;
-    const zt = z + 0.4;
-    const kk = v.active ? kick(t) : 0;
     // the back-bar's light: brighter on the beat while the bar is busy
-    k.halo(5.5, 1.4, 8.2, 4.4, C.violet, v.active ? 0.2 + 0.25 * kk : 0.16);
-    // the shaker: standing, or shaken over the counter, and a pour
-    if (v.active) {
-      const j = Math.sin(t * 26) * 0.35;
-      const u = 7.0;
-      k.cyl(u + j * 0.4, 5.6, zt + 1.4 + j, 0.4, 1.5, C.chrome);
-      k.cyl(u + j * 0.4, 5.6, zt + 2.9 + j, 0.3, 0.45, '#b8b8c8');
-      const ph = (t * 0.7) % 1;
-      if (ph < 0.6) {
-        bottle(k, 3.2, 5.1, zt + 2.4, '#3a8a4a', 1.8, 0.3);
-        k.line([[3.2, 5.6, zt + 2.4], [4.95, 6.4, zt + 1.4]], withAlpha(C.lime, 0.85), Math.max(0.8, 0.1 * k.s));
-      }
-    } else {
-      k.cyl(7.0, 5.6, zt, 0.4, 1.5, C.chrome);
-      k.cyl(7.0, 5.6, zt + 1.5, 0.3, 0.45, '#b8b8c8');
-    }
+    k.halo(5.5, 1.4, 8.2, 4.4, C.violet, v.active ? 0.2 + 0.25 * kick(v.t) : 0.16);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
+    // sparkles off the bartender's shaker, up by its head
     const n = due(v.t, dt, 2.4, v.seed);
     for (let i = 0; i < n; i++) {
       const tick = Math.floor(v.t * 10) + i;
       const j = (q: number) => hash(tick, q) - 0.5;
-      spawn({ kind: 'glint', x: 7 + j(1), y: 5.6 + j(2) * 0.5, z: 9.4, vx: j(3), vy: j(4), vz: 1.6 + j(5), life: 0.9, color: rgb(NEONS[tick % NEONS.length]), glow: true, gravity: 1.5 });
+      spawn({ kind: 'glint', x: BAR.at - 2.9 + j(1), y: 4.5 + j(2) * 0.5, z: 10.8, vx: j(3), vy: j(4), vz: 1.6 + j(5), life: 0.9, color: rgb(NEONS[tick % NEONS.length]), glow: true, gravity: 1.5 });
     }
   },
 };

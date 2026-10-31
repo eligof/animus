@@ -232,11 +232,16 @@ test("the club's DJ works its booth from behind the decks, cut at the booth's to
   const p = room.npcs.find((q) => club.npcs![q.k] === dj);
   assert.ok(p, 'the DJ is not in the room');
   assert.equal(room.props[p.prop].slot?.kind, 'write');
-  assert.ok(p.cut! > 4.5 && p.cut! < 5.6, `cut ${p.cut} over its feet`);
+  assert.ok(Math.abs(p.cut! - 4.5) < 1e-9, `cut ${p.cut} over its feet`);
 });
 
 test("the club's locals on a sheet: a row each, and each at its station", () => {
   const { img, notes } = sheet(club, 4);
   assert.equal(notes.length, club.npcs!.length);
   assert.ok(img.width > 1 && img.data.some((v) => v > 0), 'an empty sheet');
+});
+
+test('Underground Club: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(club.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['dj', 'write', 'behind'], ['bartender', 'run', 'behind'], ['coatCheck', 'search', 'behind']]);
+  assert.ok(club.npcs!.some((n) => n.show), 'no show');
 });
