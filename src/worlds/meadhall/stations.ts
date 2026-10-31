@@ -412,11 +412,14 @@ function boat(k: Kit, u: number, w: number, z: number): void {
 
 // ── run: the forge ──────────────────────────────────────────────────────────
 // A stone hearth of glowing coals under a hood and chimney, leather bellows
-// by it, an anvil on a stump with a hammer, a quench barrel and tongs.
-// Working makes the coals pulse, brings the hammer down on a glowing bar
-// and throws sparks.
+// by it, an anvil on a stump at the front with a hammer, a quench barrel
+// and tongs. Worked, the coals pulse and throw embers and a bar glows on
+// the anvil: the smith stands before it with the hammer and tongs (see
+// npcs.ts: it strikes, and its sparks fly with each blow).
 
-const ANVIL = { u: 7.6, v: 7.6, z: 4.0 };
+export const ANVIL = { u: 8.7, v: 9.5, z: 4.0 };
+// The glowing bar on the anvil, end to end.
+export const BAR: [P3, P3] = [[ANVIL.u - 0.7, ANVIL.v + 0.1, ANVIL.z + 0.12], [ANVIL.u + 0.9, ANVIL.v + 0.3, ANVIL.z + 0.12]];
 
 const run: PropArt = {
   len: 11,
@@ -483,7 +486,7 @@ const run: PropArt = {
     });
     // the coals: a glowing bed, dark lumps on it, white-hot between them;
     // pulsing while worked
-    const pulse = v.active ? 0.5 + 0.5 * Math.sin(v.t * 4.2) : 0.3;
+    const pulse = v.active ? 0.5 + 0.5 * Math.sin(v.t * Math.PI * 2) : 0.3;
     const pen = k.pen;
     const [bx, by] = k.p(4.1, 2.9, 4.22);
     const bed = pen.createRadialGradient(bx, by, 0, bx, by, 2.8 * k.s);
@@ -502,28 +505,19 @@ const run: PropArt = {
     pen.fill();
     k.halo(4.1, 2.9, 4.6, 3.6, '#ff8a3a', 0.35 + 0.3 * pulse);
     if (!v.active) {
-      hammer(k, ANVIL.u + 0.4, ANVIL.v + 0.1, ANVIL.z + 0.05, 0);
+      hammer(k, ANVIL.u - 0.4, ANVIL.v - 0.1, ANVIL.z + 0.05);
       return;
     }
-    // the bar glowing on the anvil, the hammer coming down on it
-    k.rod([[ANVIL.u - 0.7, ANVIL.v + 0.1, ANVIL.z + 0.12], [ANVIL.u + 0.9, ANVIL.v + 0.3, ANVIL.z + 0.12]], '#ff9a3a', 0.2);
-    k.halo(ANVIL.u, ANVIL.v + 0.2, ANVIL.z + 0.2, 1.6, '#ffb050', 0.5);
-    const lift = Math.abs(Math.sin(v.t * Math.PI * 1.4)) ** 0.6;
-    hammer(k, ANVIL.u + 0.1, ANVIL.v + 0.2, ANVIL.z + 0.35 + lift * 2.6, 1);
+    // the bar glowing on the anvil (the smith has the hammer)
+    k.rod(BAR, '#ff9a3a', 0.2);
+    k.halo(ANVIL.u, ANVIL.v + 0.2, ANVIL.z + 0.2, 1.6, '#ffb050', 0.4 + 0.15 * pulse);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) {
       if (due(v.t, dt, 0.3, v.seed)) spawn({ ...wisp(4, 2.6, 16, Math.floor(v.t * 10), 0, [130, 120, 112], 0.5), kind: 'smoke', vz: 2 });
       return;
     }
-    // sparks off each strike, embers off the coals
-    const strike = Math.floor(v.t * 1.4);
-    if (strike !== Math.floor((v.t - dt) * 1.4)) {
-      for (let i = 0; i < 6; i++) {
-        const j = (q: number) => hash(strike, i, q) - 0.5;
-        spawn({ kind: 'spark', x: ANVIL.u + j(1) * 0.6, y: ANVIL.v + j(2) * 0.6, z: ANVIL.z + 0.3, vx: j(3) * 6, vy: j(4) * 6, vz: 2 + (j(5) + 0.5) * 3, life: 0.5 + (j(6) + 0.5) * 0.3, color: [255, 200, 90], glow: true, gravity: 16 });
-      }
-    }
+    // embers off the coals (the sparks off each blow are the smith's)
     const n = due(v.t, dt, 2.5, v.seed);
     for (let i = 0; i < n; i++) {
       const tick = Math.floor(v.t * 20) + i;
@@ -533,11 +527,11 @@ const run: PropArt = {
   },
 };
 
-// A smith's hammer lying on (or raised over) the anvil, its haft toward
-// the smith; `up` tilts it as it is swung.
-function hammer(k: Kit, u: number, v: number, z: number, up: number): void {
+// The smith's hammer lying on the anvil while nobody works it, its haft
+// out over the anvil's end.
+function hammer(k: Kit, u: number, v: number, z: number): void {
   const head: P3 = [u, v, z];
-  const grip: P3 = [u + 0.4, v + 2.4, z + 0.3 + up * 0.9];
+  const grip: P3 = [u + 1.7, v + 1.1, z + 0.3];
   k.rod([head, grip], '#9a7048', 0.2);
   k.box(u - 0.55, v - 0.3, z - 0.3, 1.1, 0.6, 0.6, C.ironDark, { line: k.thin });
 }
@@ -698,7 +692,12 @@ function raven(k: Kit, u: number, v: number, z: number, look: number, puff: numb
 // ── think: the chief's high seat ────────────────────────────────────────────
 // A big carved chair (knotwork bands, round finials) on a low dais, a fur
 // thrown over it and a footstool before it; a horn on a stand at its side
-// and an iron candle stand at the other.
+// and an iron candle stand at the other. The chieftain sits in it (see
+// npcs.ts).
+
+// Where the chieftain sits: on the fur between the arms, its frame a unit
+// under the seat (4.25 up), its boots on the footstool.
+export const THRONE = { u: 6.0, v: 3.0, z: 3.25 };
 
 const think: PropArt = {
   len: 12,
@@ -785,7 +784,13 @@ const think: PropArt = {
 
 // ── idle: the long table ────────────────────────────────────────────────────
 // Planks on trestles between two benches, set with drinking horns, a mead
-// jug, bread, a platter with a roast and apples, cups and two candles.
+// jug, bread, a platter with a roast and apples, cups and two candles. The
+// back bench is pulled up under the table's edge: the skald sits on it at
+// its end, behind the table (see SKALD and npcs.ts), clear of what stands
+// on the table.
+
+// Where the skald sits, and the table's top and back edge before it.
+export const SKALD = { u: 12.6, v: 2.95, z: 2.3, top: 5.8, edge: 3.6 };
 
 const idle: PropArt = {
   len: 15,
@@ -794,7 +799,7 @@ const idle: PropArt = {
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(7.5, 5.5, 8, 5.4, 0.3);
-    bench(k, 1.2, 13.8, 0.8, 2.5, 3.3);
+    bench(k, 1.2, 13.8, 1.9, 3.6, 3.3);
     // trestles and the stretcher
     for (const u of [2.6, 11.9]) {
       k.box(u, 3.8, 0, 0.6, 3.4, 0.5, C.timberDark, { line: k.thin });

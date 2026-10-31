@@ -262,13 +262,26 @@ function foldedMap(k: Kit, u0: number, v0: number, z: number, du: number, dv: nu
 }
 
 // ── search: the spyglass ─────────────────────────────────────────────────────
-// A brass spyglass on a wooden tripod, trained on a small window with the
-// dunes in it, its hide blind rolled up; a chart pinned up beside it and a
-// crate of rolled maps. Looking pans the glass along the horizon, its rim
-// glinting.
+// A brass spyglass on a tall wooden tripod, trained on a small window with
+// the dunes in it, its hide blind rolled up; the lookout's stool at its
+// near end (the lookout sits on it with its eye to the glass: see
+// npcs.ts), a chart pinned up behind it and a crate of rolled maps under
+// the window. Worked, a glint runs round the rim now and then.
 
 const SLIT = { u0: 6.4, u1: 10.8, z0: 8.6, z1: 13.0 };
-const HEAD: P3 = [3.6, 2.4, 8.0];
+// Where the lookout sits and looks: its stool (`h` high), its frame on it
+// (`z`, a unit under the seat), its eye at the eyepiece and the glass's
+// unit direction from there to the window, `len` long, held on the
+// tripod `pivot` along it.
+export const SPY = (() => {
+  const seat = { u: 1.6, v: 2.6, z: 2.0, h: 3.0 };
+  const eye: P3 = [4.35, 2.0, 10.69];
+  const aim: P3 = [(SLIT.u0 + SLIT.u1) / 2, -0.5, SLIT.z0 + 2.0];
+  const d: P3 = [aim[0] - eye[0], aim[1] - eye[1], aim[2] - eye[2]];
+  const l = Math.hypot(...d);
+  return { seat, eye, dir: [d[0] / l, d[1] / l, d[2] / l] as P3, len: 3.9, pivot: 2.0 };
+})();
+const TRIPOD: P3[] = [[4.3, 0.45, 0], [7.5, 0.45, 0], [6.9, 3.4, 0]];
 
 const search: PropArt = {
   len: 12,
@@ -276,8 +289,10 @@ const search: PropArt = {
   height: 16,
   animated: true,
   draw(v: PropView): void {
+    const at = (s: number): P3 => [SPY.eye[0] + SPY.dir[0] * s, SPY.eye[1] + SPY.dir[1] * s, SPY.eye[2] + SPY.dir[2] * s];
+    const head = at(SPY.pivot);
     const k = still(v, 'search', 16, (k) => {
-      k.shadow(4.2, 2.3, 4.6, 2.2, 0.24);
+      k.shadow(5.2, 2.2, 5.6, 2.2, 0.24);
       // the window: a plank frame set in a patch of stone, the view, the
       // reveal, a sill; its hide blind rolled up over it
       const { u0, u1, z0, z1 } = SLIT;
@@ -296,36 +311,36 @@ const search: PropArt = {
       // the rolled blind and its ties
       tube(k, [u0 - 0.6, 0.75, z1 + 0.45], [u1 + 0.6, 0.75, z1 + 0.45], 0.5, 0.5, C.hide, shade(C.hide, -0.15), k.lw);
       for (const u of [u0 + 0.6, u1 - 0.6]) k.line([[u, 0.3, z1 + 1.0], [u, 1.3, z1 + 0.6], [u, 1.25, z1 - 0.1]], '#5a3a22', Math.max(0.8, 0.1 * k.s));
-      // a chart pinned up on the left
-      chart(k, 0.8, 0.06, 8.6, 2.8, 3.4, v.seed);
-      // the crate of rolled maps
-      crate(k, 0.3, 0.7, 0, 2.6, 2.9, 2.9, mix(C.woodLight, C.hide, 0.3));
-      for (const [du, dv, c] of [[0.6, 1.3, C.cream], [1.3, 1.9, '#e2cfa4'], [1.9, 1.1, '#ecdcb4'], [1.0, 2.4, '#d8c294']] as const) tube(k, [0.3 + du, 0.7 + dv, 2.6], [0.3 + du + 0.25, 0.7 + dv - 0.3, 5.0], 0.28, 0.28, c, '#cdb68a', k.thin);
+      // a chart pinned up between the lookout and the window
+      chart(k, 2.6, 0.06, 11.0, 2.6, 3.0, v.seed);
+      // the crate of rolled maps under the window
+      crate(k, 9.0, 0.6, 0, 2.6, 2.9, 2.9, mix(C.woodLight, C.hide, 0.3));
+      for (const [du, dv, c] of [[0.6, 1.3, C.cream], [1.3, 1.9, '#e2cfa4'], [1.9, 1.1, '#ecdcb4'], [1.0, 2.4, '#d8c294']] as const) tube(k, [9.0 + du, 0.6 + dv, 2.6], [9.0 + du + 0.25, 0.6 + dv - 0.3, 5.0], 0.28, 0.28, c, '#cdb68a', k.thin);
+      // the lookout's stool
+      stool(k, SPY.seat.u, SPY.seat.v, SPY.seat.h, C.hide);
       // the tripod: three legs, a brass collar
-      for (const a of [Math.PI * 0.55, Math.PI * 1.2, Math.PI * 1.85]) k.rod([[HEAD[0] + Math.cos(a) * 0.25, HEAD[1] + Math.sin(a) * 0.2, HEAD[2] - 0.4], [HEAD[0] + Math.cos(a) * 1.9, HEAD[1] + Math.sin(a) * 1.35, 0]], C.wood, 0.22);
-      k.cyl(HEAD[0], HEAD[1], HEAD[2] - 0.7, 0.42, 0.7, C.brassDark, { line: k.thin });
+      for (const f of TRIPOD) k.rod([[head[0] + (f[0] - head[0]) * 0.08, head[1] + (f[1] - head[1]) * 0.08, head[2] - 0.5], f], C.wood, 0.22);
+      k.cyl(head[0], head[1], head[2] - 0.95, 0.42, 0.7, C.brassDark, { line: k.thin });
       // a canteen on a cord, slung over a leg
-      lathe(k, 2.4, 3.2, 2.4, [[0, 0.2], [0.2, 0.55], [0.85, 0.55], [1.05, 0.2]], C.hideDark, { line: k.thin });
-      k.line([[2.4, 3.2, 3.45], [2.9, 3.0, 4.6], [3.2, 2.9, 5.2]], '#5a3a22', Math.max(0.7, 0.08 * k.s));
+      const g = TRIPOD[2];
+      lathe(k, g[0] - 0.1, g[1] - 0.6, 2.4, [[0, 0.2], [0.2, 0.55], [0.85, 0.55], [1.05, 0.2]], C.hideDark, { line: k.thin });
+      k.line([[g[0] - 0.1, g[1] - 0.6, 3.45], [g[0] - 0.05, g[1] - 0.3, 4.6], [g[0] - 0.1, g[1] - 0.25, 5.2]], '#5a3a22', Math.max(0.7, 0.08 * k.s));
     });
-    // the glass: pans along the horizon while someone looks
-    const pan = v.active ? Math.sin(v.t * 0.8) * 1.3 : 0.3;
-    const aim: P3 = [(SLIT.u0 + SLIT.u1) / 2 + pan, -0.5, SLIT.z0 + 2.2];
-    const d: P3 = [aim[0] - HEAD[0], aim[1] - HEAD[1], aim[2] - HEAD[2]];
-    const L = Math.hypot(...d);
-    const at = (s: number): P3 => [HEAD[0] + (d[0] / L) * s, HEAD[1] + (d[1] / L) * s, HEAD[2] + 0.35 + (d[2] / L) * s];
-    // the far end first: the hood, the big barrel, the draw tubes, the eyepiece
-    tube(k, at(2.9), at(3.4), 0.66, 0.7, C.brassDark, null);
-    tube(k, at(0.5), at(2.9), 0.55, 0.6, C.brass, null);
-    const rim = ring(k, at(3.4), d, 0.7, 18);
-    tube(k, at(-0.7), at(0.5), 0.42, 0.44, mix(C.brass, C.hide, 0.3), null);
-    tube(k, at(-1.7), at(-0.7), 0.3, 0.32, C.brass, '#2b1d16');
-    for (const [s0, r] of [[0.5, 0.56], [-0.7, 0.43], [1.7, 0.6]] as const) fillPts(k, ring(k, at(s0), d, r, 16), null, k.thin);
-    // a band of leather round the barrel
-    fillPts(k, ring(k, at(1.4), d, 0.62, 16), null, Math.max(1, 0.2 * k.s));
+    // the glass, held still on its tripod: the far end first, the hood,
+    // the big barrel, the draw tube, the eyepiece
+    const d = SPY.dir;
+    const L = SPY.len;
+    tube(k, at(L - 0.5), at(L), 0.66, 0.7, C.brassDark, null);
+    tube(k, at(1.9), at(L - 0.5), 0.55, 0.6, C.brass, null);
+    const rim = ring(k, at(L), d, 0.7, 18);
+    tube(k, at(0.9), at(1.9), 0.42, 0.44, mix(C.brass, C.hide, 0.3), null);
+    tube(k, at(0), at(0.9), 0.3, 0.32, C.brass, '#2b1d16');
+    for (const [s0, r] of [[1.9, 0.56], [0.9, 0.43], [L - 0.5, 0.6]] as const) fillPts(k, ring(k, at(s0), d, r, 16), null, k.thin);
+    // a band of leather round the barrel where the tripod holds it
+    fillPts(k, ring(k, at(SPY.pivot + 0.4), d, 0.62, 16), null, Math.max(1, 0.2 * k.s));
     if (!v.active) return;
     // a glint running round the rim now and then
-    const ph = (v.t * 0.6) % 1;
+    const ph = (v.t * 0.5) % 1;
     if (ph < 0.35) {
       const [gx, gy] = rim[Math.floor((ph / 0.35) * rim.length) % rim.length];
       sparkle(k, gx, gy, (0.5 + Math.sin((ph / 0.35) * Math.PI) * 0.6) * k.s);
@@ -379,10 +394,16 @@ function chart(k: Kit, u0: number, n: number, z0: number, w: number, h: number, 
 // A workbench under a plank shelf on pipe brackets (jars, cogs, a tin), a
 // jointed machine arm bolted to it, a vise, copper wire and a bare bulb;
 // in front, on a sled of planks, a spoked flywheel with a crank belted to
-// a dynamo wound in copper. Working turns the crank and the wheel, the arm
-// reaches, sparks jump at the dynamo and the bulb lights.
+// a dynamo wound in copper. Working, the mechanic turns the crank (see
+// npcs.ts: it draws the crank in its hand), the wheel spins, the arm
+// reaches, sparks jump at the dynamo and the bulb lights. The wheel turns
+// once in two seconds, its four spokes a third of their spacing a step,
+// so it reads as turning, never strobing.
 
-const WHEEL = { u: 3.2, n: 8.4, z: 4.5, r: 2.9 };
+const WHEEL = { u: 3.2, n: 8.4, z: 4.5, r: 2.3 };
+// The crank on the wheel's face: its hub, its throw and how far its
+// handle stands out toward the viewer.
+export const CRANK = { u: WHEEL.u, v: WHEEL.n + 0.2, z: WHEEL.z, r: 1.3, out: 1.1 };
 const DYN = { u: 8.2, z: 2.5, r: 1.25, v0: 5.9, v1: 8.1 };
 const PULLEY = { u: 8.2, n: 8.4, z: 2.5, r: 0.62 };
 const BULB: P3 = [9.2, 2.4, 7.4];
@@ -468,13 +489,13 @@ const run: PropArt = {
       for (const du of [-1.8, 1.8]) k.rod([[W.u + du, W.n - 0.5, 0.9], [W.u, W.n - 0.5, W.z]], C.woodDark, 0.3);
       k.rod([[W.u - 1.2, W.n - 0.5, 2.0], [W.u + 1.2, W.n - 0.5, 2.0]], C.woodDark, 0.2);
       const outer = ring(k, [W.u, W.n, W.z], [0, 1, 0], W.r, 40);
-      const inn = ring(k, [W.u, W.n + 0.02, W.z], [0, 1, 0], W.r - 0.42, 40);
+      const inn = ring(k, [W.u, W.n + 0.02, W.z], [0, 1, 0], W.r - 0.45, 40);
       pen.beginPath();
       outer.forEach(([x, y], i) => (i ? pen.lineTo(x, y) : pen.moveTo(x, y)));
       pen.closePath();
       inn.slice().reverse().forEach(([x, y], i) => (i ? pen.lineTo(x, y) : pen.moveTo(x, y)));
       pen.closePath();
-      pen.fillStyle = '#5a5650';
+      pen.fillStyle = '#76716a';
       pen.fill('evenodd');
       pen.strokeStyle = INK;
       pen.lineWidth = k.lw;
@@ -488,29 +509,32 @@ const run: PropArt = {
       pen.stroke();
     });
     // the jointed arm on the bench: reaching for the tin while worked
-    const sh = v.active ? 1.1 + 0.22 * Math.sin(v.t * 1.3) : 1.25;
-    const el = v.active ? -1.6 + 0.3 * Math.sin(v.t * 1.7 + 1) : -1.9;
+    const sh = v.active ? 1.1 + 0.22 * Math.sin(v.t * Math.PI) : 1.25;
+    const el = v.active ? -1.6 + 0.3 * Math.sin(v.t * Math.PI + 1) : -1.9;
     arm(k, sh, el);
     const W = WHEEL;
     const P = PULLEY;
-    const turn = v.active ? -v.t * 3.2 : 0.4;
-    // spokes, hub and crank
+    const turn = v.active ? -v.t * Math.PI : 0.4;
+    // spokes and hub
     const spokes: Array<[P3, P3]> = [];
-    for (let i = 0; i < 6; i++) {
-      const a = turn + (i * Math.PI) / 3;
+    for (let i = 0; i < 4; i++) {
+      const a = turn + (i * Math.PI) / 2;
       spokes.push([[W.u + Math.cos(a) * 0.45, W.n + 0.01, W.z + Math.sin(a) * 0.45], [W.u + Math.cos(a) * (W.r - 0.38), W.n + 0.01, W.z + Math.sin(a) * (W.r - 0.38)]]);
     }
-    k.segs(spokes, INK, Math.max(1.6, 0.28 * k.s + k.lw), 'round');
-    k.segs(spokes, '#6e6a62', Math.max(1, 0.28 * k.s), 'round');
+    k.segs(spokes, INK, Math.max(1.6, 0.3 * k.s + k.lw), 'round');
+    k.segs(spokes, '#8e897e', Math.max(1, 0.3 * k.s), 'round');
     k.face(W.u, W.n + 0.05, W.z, 0.6, C.brass, k.thin, 16);
-    const ca = turn + 0.5;
-    const hu = W.u + Math.cos(ca) * 1.8;
-    const hz = W.z + Math.sin(ca) * 1.8;
-    k.rod([[W.u, W.n + 0.2, W.z], [hu, W.n + 0.2, hz]], C.scrapDark, 0.26);
-    k.rod([[hu, W.n + 0.2, hz], [hu, W.n + 1.3, hz]], C.woodLight, 0.3);
+    // the crank at rest (worked, it is in the mechanic's hand)
+    if (!v.active) {
+      const ca = turn + 0.5;
+      const hu = CRANK.u + Math.cos(ca) * CRANK.r;
+      const hz = CRANK.z + Math.sin(ca) * CRANK.r;
+      k.rod([[CRANK.u, CRANK.v, CRANK.z], [hu, CRANK.v, hz]], C.scrapDark, 0.26);
+      k.rod([[hu, CRANK.v, hz], [hu, CRANK.v + CRANK.out, hz]], C.woodLight, 0.3);
+    }
     // the pulley turning fast
     k.face(P.u, P.n, P.z, P.r, C.scrap, k.thin, 14);
-    const pa = turn * 4.7;
+    const pa = turn * 2;
     k.line([[P.u - Math.cos(pa) * P.r * 0.8, P.n + 0.02, P.z - Math.sin(pa) * P.r * 0.8], [P.u + Math.cos(pa) * P.r * 0.8, P.n + 0.02, P.z + Math.sin(pa) * P.r * 0.8]], INK, Math.max(0.8, 0.1 * k.s));
     k.face(P.u, P.n + 0.03, P.z, 0.18, C.brass, 0, 8);
     // the bulb, dark or lit
@@ -774,9 +798,13 @@ function lanternStanding(k: Kit, u: number, v: number, z: number): void {
 // ── idle: the bar ────────────────────────────────────────────────────────────
 // A counter of plank strapped with iron on a base of riveted scrap plate;
 // behind it the back bar: a plank rack of three barrels on their sides
-// and two upright kegs with bent pipe taps. Tin cups, bottles and a
-// pitcher on the counter, three hide-topped stools before it, a cold tube
-// lamp on a pole at its end.
+// and two upright kegs with bent pipe taps, and between the rack and the
+// counter room for the barkeep (see npcs.ts). Tin cups, bottles and a
+// pitcher on the counter, clear of where the barkeep stands, three
+// hide-topped stools before it, a cold tube lamp on a pole at its end.
+
+// Where the barkeep stands, and the counter's top and back edge before it.
+export const BAR = { u: 5.0, v: 3.15, top: 5.5, edge: 3.8 };
 
 const idle: PropArt = {
   len: 15,
@@ -784,30 +812,32 @@ const idle: PropArt = {
   height: 16,
   draw(v: PropView): void {
     const k = kitOf(v);
-    k.shadow(7.5, 4.8, 8.2, 5.0, 0.3);
-    // the barrel rack, shoulder high behind the counter: a plank stand,
-    // posts at the back, three barrels on their sides, the posts in front
-    const r = 1.45;
+    k.shadow(7.5, 5.0, 8.2, 5.0, 0.3);
+    // the barrel rack, shoulder high against the back: a plank stand,
+    // posts at the back, three short barrels on their sides, the posts in
+    // front
+    const r = 1.4;
     const zp = 4.9;
     const zc = zp + 0.45 + r;
-    for (const [u, w] of [[0.4, 0.5], [8.2, 0.5], [0.4, 2.5], [8.2, 2.5]] as const) k.box(u, w, 0, 0.45, 0.45, zp, C.woodDark, { line: k.thin });
-    k.box(0.3, 0.4, zp, 8.4, 2.7, 0.45, C.woodLight, { line: k.thin });
-    for (const u of [0.3, 8.3]) k.box(u, 0.4, zp + 0.45, 0.4, 0.4, 5.8, C.wood, { line: k.thin });
-    barrelSide(k, 2.4, 0.5, zc, r, 2.6, C.stave, true);
-    barrelSide(k, 6.2, 0.5, zc, r, 2.6, mix(C.stave, C.woodLight, 0.35), true);
-    barrelSide(k, 4.3, 0.6, zc + r * 1.72, r, 2.4, shade(C.stave, 0.06), hash(v.seed, 1) < 0.5);
-    for (const u of [0.3, 8.3]) k.box(u, 2.7, zp + 0.45, 0.4, 0.4, 5.8, C.wood, { line: k.thin });
-    k.box(0.3, 0.4, zp + 6.25, 8.4, 2.7, 0.35, C.woodLight, { line: k.thin });
+    const [rv0, rv1] = [0.3, 2.3];
+    for (const [u, w] of [[0.4, rv0 + 0.1], [8.2, rv0 + 0.1], [0.4, rv1 - 0.45], [8.2, rv1 - 0.45]] as const) k.box(u, w, 0, 0.45, 0.45, zp, C.woodDark, { line: k.thin });
+    k.box(0.3, rv0, zp, 8.4, rv1 - rv0, 0.45, C.woodLight, { line: k.thin });
+    for (const u of [0.3, 8.3]) k.box(u, rv0, zp + 0.45, 0.4, 0.4, 5.6, C.wood, { line: k.thin });
+    barrelSide(k, 2.4, rv0 + 0.1, zc, r, 1.85, C.stave, true);
+    barrelSide(k, 6.2, rv0 + 0.1, zc, r, 1.85, mix(C.stave, C.woodLight, 0.35), true);
+    barrelSide(k, 4.3, rv0 + 0.15, zc + r * 1.72, r, 1.75, shade(C.stave, 0.06), hash(v.seed, 1) < 0.5);
+    for (const u of [0.3, 8.3]) k.box(u, rv1 - 0.4, zp + 0.45, 0.4, 0.4, 5.6, C.wood, { line: k.thin });
+    k.box(0.3, rv0, zp + 6.05, 8.4, rv1 - rv0, 0.35, C.woodLight, { line: k.thin });
     // the kegs on tap
-    keg(k, 10.3, 1.7, 0, 1.3, 6.4, C.stave, 1);
-    keg(k, 13.0, 1.7, 0, 1.3, 6.0, shade(C.stave, 0.05), 1);
+    keg(k, 10.3, 1.6, 0, 1.25, 6.4, C.stave, 1);
+    keg(k, 13.0, 1.6, 0, 1.25, 6.0, shade(C.stave, 0.05), 1);
     // the lamp at the counter's end, behind it
     k.cyl(14.5, 3.0, 0, 0.5, 0.3, C.steelDark, { line: k.thin });
     k.rod([[14.5, 3.0, 0.3], [14.5, 3.0, 10.6]], C.rustDark, 0.2);
     tubeLamp(k, 14.5, 3.0, 10.8, 4.6, 0.28);
     // the counter: a base of plate, planks on it strapped with iron
-    const cv0 = 3.7;
-    const cv1 = 6.3;
+    const cv0 = BAR.edge + 0.3;
+    const cv1 = cv0 + 2.6;
     k.box(0.9, cv0, 0, 13.2, cv1 - cv0, 4.9, C.plate, { stripe: false });
     const F = cv1 + 0.01;
     k.poly([[0.9, F, 0], [14.1, F, 0], [14.1, F, 0.5], [9.5, F, 0.75], [5.2, F, 0.45], [0.9, F, 0.7]], withAlpha(k.side(C.rust, 0, 1), 0.65), 0);
@@ -820,24 +850,25 @@ const idle: PropArt = {
       for (const u of [1.2, 4.0, 4.4, 7.3, 7.7, 10.6, 11.0, 13.8]) for (const z of [0.35, 2.2, 2.8, 4.6]) dots.push([u, F, z]);
       rivets(k, dots, C.plateDark, 0.09);
     }
-    k.box(0.6, cv0 - 0.3, 4.9, 13.8, cv1 - cv0 + 0.75, 0.6, C.plankLight, { line: k.lw });
-    seams(k, 0.6, cv0 - 0.3, 4.9, 13.8, cv1 - cv0 + 0.75, 0.6, 1, 2);
-    const zt = 5.5;
+    k.box(0.6, BAR.edge, 4.9, 13.8, cv1 - cv0 + 0.75, BAR.top - 4.9, C.plankLight, { line: k.lw });
+    seams(k, 0.6, BAR.edge, 4.9, 13.8, cv1 - cv0 + 0.75, BAR.top - 4.9, 1, 2);
+    const zt = BAR.top;
     for (const u of [3.3, 8.6, 12.4]) {
-      k.poly([[u, cv0 - 0.3, zt + 0.01], [u + 0.5, cv0 - 0.3, zt + 0.01], [u + 0.5, cv1 + 0.45, zt + 0.01], [u, cv1 + 0.45, zt + 0.01]], C.hoop, 0);
+      k.poly([[u, BAR.edge, zt + 0.01], [u + 0.5, BAR.edge, zt + 0.01], [u + 0.5, cv1 + 0.45, zt + 0.01], [u, cv1 + 0.45, zt + 0.01]], C.hoop, 0);
       k.poly([[u, cv1 + 0.46, 4.9], [u + 0.5, cv1 + 0.46, 4.9], [u + 0.5, cv1 + 0.46, zt], [u, cv1 + 0.46, zt]], k.side(C.hoop, 0, 1), 0);
       if (k.s >= 3) rivets(k, [[u + 0.25, cv0 + 0.2, zt + 0.02], [u + 0.25, cv1 - 0.1, zt + 0.02]], '#3e3a36', 0.08);
     }
-    // on the counter: tin cups, a pitcher, bottles, a bowl
-    for (const [u, w] of [[2.2, 5.2], [5.6, 4.6], [10.0, 5.4]] as const) glass(k, u, w, zt, 0.32, 0.75, hash(u * 10, v.seed) < 0.4);
-    lathe(k, 7.2, 4.6, zt, [[0, 0.5], [0.9, 0.5], [1.3, 0.38], [1.55, 0.5]], C.scrap, { mouth: '#4a4238' });
-    k.rod([[7.65, 4.6, zt + 1.2], [8.05, 4.6, zt + 1.0], [8.0, 4.6, zt + 0.4], [7.7, 4.6, zt + 0.3]], C.scrap, 0.1);
-    bottle(k, 11.3, 4.3, zt, 2.1, '#4f8a5a', 0.32);
-    bottle(k, 12.0, 5.1, zt, 1.8, '#c07a2a', 0.3);
-    lathe(k, 13.4, 4.6, zt, [[0, 0.3], [0.35, 0.6]], C.cream, { mouth: '#d8c49a', line: k.thin });
-    k.pool(12.6, 4.8, 3.0, 2.0, C.tubeGlow, 0.18, zt + 0.02);
+    // on the counter, clear of the barkeep: tin cups, a pitcher, bottles,
+    // a bowl
+    for (const [u, w] of [[1.9, cv0 + 1.3], [2.9, cv0 + 2.0], [10.3, cv0 + 1.7]] as const) glass(k, u, w, zt, 0.32, 0.75, hash(u * 10, v.seed) < 0.4);
+    lathe(k, 11.6, cv0 + 1.2, zt, [[0, 0.5], [0.9, 0.5], [1.3, 0.38], [1.55, 0.5]], C.scrap, { mouth: '#4a4238' });
+    k.rod([[12.05, cv0 + 1.2, zt + 1.2], [12.45, cv0 + 1.2, zt + 1.0], [12.4, cv0 + 1.2, zt + 0.4], [12.1, cv0 + 1.2, zt + 0.3]], C.scrap, 0.1);
+    bottle(k, 12.9, cv0 + 0.9, zt, 2.1, '#4f8a5a', 0.32);
+    bottle(k, 13.4, cv0 + 1.8, zt, 1.8, '#c07a2a', 0.3);
+    lathe(k, 9.0, cv0 + 1.9, zt, [[0, 0.3], [0.35, 0.6]], C.cream, { mouth: '#d8c49a', line: k.thin });
+    k.pool(12.6, cv0 + 1.2, 3.0, 2.0, C.tubeGlow, 0.18, zt + 0.02);
     // the stools before it
-    for (const u of [3.2, 7.4, 11.4]) stool(k, u, 8.4, 3.9, C.hide);
+    for (const u of [3.2, 7.4, 11.4]) stool(k, u, cv1 + 2.1, 3.9, C.hide);
   },
 };
 

@@ -256,3 +256,8 @@ test('Dust Outpost: its desks have things of their own to pick from, and somethi
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test('Dust Outpost: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(dunes.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['mechanic', 'run', 'standing'], ['lookout', 'search', 'seated'], ['barkeep', 'idle', 'behind']]);
+  assert.ok(dunes.npcs!.some((n) => n.show), 'no show');
+});
