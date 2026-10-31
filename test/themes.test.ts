@@ -296,7 +296,7 @@ test('every world dresses its desks: things to pick from, and something that mov
   assert.deepEqual(bare, []);
 });
 
-test('every world has three locals at work, one of them with a show', { todo: "the worlds' locals" }, () => {
+test('every world has three locals at work, one of them with a show', () => {
   const short = THEMES.filter((w) => !w.npcs || w.npcs.length !== 3 || !w.npcs.some((n) => n.show)).map((w) => w.id);
   assert.deepEqual(short, []);
 });
