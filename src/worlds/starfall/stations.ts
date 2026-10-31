@@ -384,9 +384,13 @@ function crystal(k: Kit, cu: number, cv: number, z: number): void {
 // orange trim, a round port on its front glowing with the melt inside, a
 // grey funnel hopper on top heaped with raw crystal, a stack behind with
 // orange bands, a pipe bending down into the deck, a piston at its side and
-// a chute dropping refined nuggets into a tray. Running it pulses the port,
-// chugs the piston and puffs steam from the stack.
+// a chute dropping refined nuggets into a bin on a stand, at hand height
+// for the refinery tech at the refiner's end (see npcs.ts; `v` where it
+// stands, the bin in front of it).
+// Running it pulses the port, chugs the piston and puffs steam from the
+// stack, each round in two seconds or one.
 
+export const CHUTE = { u0: 8.6, u1: 10.9, v0: 7.0, v1: 10.1, z: 3.9, v: 6.5 };
 const R0 = { cu: 5.3, cv: 5.0, r: 3.2 };
 const STACK: P3 = [7.6, 2.6, 14.3];
 const PORT = { th: Math.PI / 4 + 0.42, z: 3.4, r: 1.15 };
@@ -460,16 +464,24 @@ const run: PropArt = {
         k.pen.closePath();
         k.paint(c, k.thin * 0.8);
       }
-      // the chute on the right, and the tray of refined nuggets under it
-      k.box(8.6, 6.9, 0, 2.2, 3.3, 0.8, C.metal, { round: 0.2 });
-      k.box(8.8, 7.1, 0.8, 1.8, 2.9, 0.12, '#3a3350', { line: 0, stripe: false });
-      for (let i = 0; i < 6; i++) {
-        const nu = 9.1 + (i % 3) * 0.55;
-        const nv = 7.6 + Math.floor(i / 3) * 1.1;
-        k.box(nu, nv, 0.9, 0.45, 0.5, 0.32, C.gold, { line: k.thin * 0.8, round: 0.08 });
+      // the bin of refined nuggets on its stand, the chute over it
+      const ch = CHUTE;
+      const mu = (ch.u0 + ch.u1) / 2;
+      const mv = (ch.v0 + ch.v1) / 2;
+      k.shadow(mu, mv, 1.4, 1.8, 0.25);
+      k.box(ch.u0 + 0.25, ch.v0 + 0.3, 0, ch.u1 - ch.u0 - 0.5, ch.v1 - ch.v0 - 0.6, 0.3, C.metalDark, { round: 0.2 });
+      k.cyl(mu, mv, 0.3, 0.32, ch.z - 1.5, C.metal);
+      k.box(ch.u0, ch.v0, ch.z - 1.3, ch.u1 - ch.u0, ch.v1 - ch.v0, 1.3, C.metal, { round: 0.2 });
+      k.poly([[ch.u0, ch.v1 + 0.01, ch.z - 0.75], [ch.u1, ch.v1 + 0.01, ch.z - 0.75], [ch.u1, ch.v1 + 0.01, ch.z - 0.45], [ch.u0, ch.v1 + 0.01, ch.z - 0.45]], C.trimOrange, 0);
+      k.poly([[ch.u1 + 0.01, ch.v0, ch.z - 0.75], [ch.u1 + 0.01, ch.v1, ch.z - 0.75], [ch.u1 + 0.01, ch.v1, ch.z - 0.45], [ch.u1 + 0.01, ch.v0, ch.z - 0.45]], k.side(C.trimOrange, 1, 0, 0.12), 0);
+      k.box(ch.u0 + 0.2, ch.v0 + 0.2, ch.z - 0.02, ch.u1 - ch.u0 - 0.4, ch.v1 - ch.v0 - 0.4, 0.1, '#3a3350', { line: 0, stripe: false });
+      for (let i = 0; i < 7; i++) {
+        const nu = ch.u0 + 0.45 + (i % 3) * 0.55 + (i > 5 ? 0.3 : 0);
+        const nv = ch.v0 + 0.5 + Math.floor(i / 3) * 0.85;
+        k.box(nu, nv, ch.z, 0.45, 0.5, 0.32 + (i % 2) * 0.1, C.gold, { line: k.thin * 0.8, round: 0.08 });
       }
-      k.rod([[cu + r * 0.97, cv + r * 0.22, 3.6], [9.7, 7.4, 3.0], [9.7, 7.9, 1.6]], C.panel, 0.42);
-      k.disc(9.7, 7.9, 1.55, 0.4, '#3a3350', k.thin);
+      k.rod([[cu + r * 0.97, cv + r * 0.22, 6.3], [mu, ch.v0 + 0.5, 6.1], [mu, ch.v0 + 1.0, ch.z + 1.1]], C.panel, 0.42);
+      k.disc(mu, ch.v0 + 1.0, ch.z + 1.05, 0.4, '#3a3350', k.thin);
       // the piston's sleeve, piped to the body
       k.cyl(PISTON[0], PISTON[1], 0, 0.85, 0.6, C.metal);
       k.cyl(PISTON[0], PISTON[1], PISTON[2], 0.6, 3.6, C.white);
@@ -478,12 +490,12 @@ const run: PropArt = {
       k.rod([[PISTON[0] + 0.5, PISTON[1] - 0.4, 3.0], [cu - r * 0.9, cv + r * 0.3, 3.0]], C.metal, 0.2);
     });
     // the port's glow: a steady ember at rest, pulsing while it runs
-    const pulse = v.active ? 0.5 + 0.5 * Math.sin(v.t * 5.2) : 0;
+    const pulse = v.active ? 0.5 + 0.5 * Math.sin(v.t * Math.PI) : 0;
     const [gu, gv, gz] = coreAt(PORT.th, PORT.z, R0.r + 0.3);
     k.halo(gu, gv, gz, 2.4, '#ffb35c', v.active ? 0.35 + 0.3 * pulse : 0.25);
     if (v.active) k.poly(portPts(PORT.r * 0.7, 0.1), withAlpha('#fff3c8', 0.25 + 0.4 * pulse), 0);
     // the piston: its rod rides up and down while running
-    const lift = v.active ? 0.9 + 0.8 * Math.sin(v.t * 6.3) : 0.3;
+    const lift = v.active ? 0.9 + 0.8 * Math.sin(v.t * Math.PI * 2) : 0.3;
     const top = PISTON[2] + 3.6 + lift;
     k.cyl(PISTON[0], PISTON[1], PISTON[2] + 3.6, 0.28, lift, C.panelLight);
     k.cyl(PISTON[0], PISTON[1], top, 0.5, 0.45, C.trimOrange);
@@ -619,9 +631,14 @@ const web: PropArt = {
 
 // ── think: the pilot's chair ───────────────────────────────────────────────
 // A high-backed pilot's chair on a round dais, turned to face the glass:
-// we see its padded shell back and headrest, its armrests either side, a
-// small control stick on one. Before it, a console arc of screens and
-// buttons with a little hologram globe over the middle.
+// we see its padded shell back, its armrests either side, a small control
+// stick on one. Before it, a console arc of screens and buttons with a
+// little hologram globe over the middle. The back stops at the pilot's
+// shoulders (see npcs.ts), its head over it: `seat` the cushion's top,
+// `back` the shell's inner face, `top` its top, (u, v) where the pilot
+// sits.
+
+export const CHAIR = { u: 5.6, v: 4.4, seat: 3.5, back: 5.25, top: 8.2 };
 
 const consoleBack = (u: number) => 0.5 + 1.3 * ((u - 6) / 5.4) ** 2;
 
@@ -687,16 +704,15 @@ const think: PropArt = {
     k.box(7.5, 3.4, 2.9, 0.5, 0.5, 1.4, C.panelDark, { line: k.thin });
     k.rod([[7.78, 3.5, 4.8], [7.82, 3.45, 5.8]], C.dark, 0.16);
     k.disc(7.82, 3.45, 5.85, 0.24, C.magenta, k.thin);
-    // the high back, its padded shell toward us, then the headrest
-    k.box(3.9, 5.25, 3.2, 3.4, 1.0, 6.9, C.white, { round: 0.9 });
-    k.poly(rrect(4.35, 3.9, 6.85, 9.4, 6.27, 0.8, 0.5), k.vgrad(5.6, 6.27, 3.9, 9.4, [[0, shade(C.panel, -0.06)], [1, C.panelLight]]), k.thin);
+    // the high back, its padded shell toward us
+    const top = CHAIR.top;
+    k.box(3.9, CHAIR.back, 3.2, 3.4, 1.0, top - 3.2, C.white, { round: 0.9 });
+    k.poly(rrect(4.35, 3.8, 6.85, top - 0.6, 6.27, 0.7, 0.5), k.vgrad(5.6, 6.27, 3.8, top - 0.6, [[0, shade(C.panel, -0.06)], [1, C.panelLight]]), k.thin);
     // an orange spine and two cyan running lights down it
-    k.poly(rrect(5.35, 4.4, 5.85, 8.9, 6.28, 0.25), C.trim, 0);
-    pips(k, [[5.6, 6.3, 8.2], [5.6, 6.3, 5.1]], '#bff6ff', 0.15, 0.9);
-    k.box(4.6, 5.4, 10.1, 2.0, 0.85, 1.6, C.white, { round: 0.6 });
-    k.box(5.0, 5.2, 9.9, 1.2, 0.5, 0.4, C.panelDark, { line: k.thin, stripe: false });
+    k.poly(rrect(5.35, 4.3, 5.85, top - 1.0, 6.28, 0.25), C.trim, 0);
+    pips(k, [[5.6, 6.3, top - 1.6], [5.6, 6.3, 4.9]], '#bff6ff', 0.15, 0.9);
     // a magenta cushion edge peeking past the shell at the top
-    k.line([[4.0, 5.24, 9.9], [5.6, 5.24, 10.15], [7.2, 5.24, 9.9]], C.magenta, Math.max(0.9, 0.2 * k.s));
+    k.line([[4.0, CHAIR.back - 0.01, top - 0.25], [5.6, CHAIR.back - 0.01, top], [7.2, CHAIR.back - 0.01, top - 0.25]], C.magenta, Math.max(0.9, 0.2 * k.s));
   },
 };
 

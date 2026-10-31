@@ -308,3 +308,12 @@ test('Atomic Shelter: its desks have things of their own to pick from, and somet
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test('Atomic Shelter: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(shelter.npcs!.map((n) => [n.name, n.station, n.place.mode]), [
+    ['overseer', 'search', 'standing'],
+    ['mechanic', 'run', 'standing'],
+    ['waitress', 'idle', 'seated'],
+  ]);
+  assert.ok(shelter.npcs!.some((n) => n.show), 'no show');
+});

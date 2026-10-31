@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './starfall/decor.ts';
 import { INK } from './starfall/kit.ts';
+import { NPCS } from './starfall/npcs.ts';
 import { starfallPois, room } from './starfall/room.ts';
 import { STATIONS } from './starfall/stations.ts';
 import { WORKSTATION } from './starfall/workstation.ts';
@@ -11,8 +12,9 @@ import { WORKSTATION } from './starfall/workstation.ts';
 // with orange trim and blue lights, one wall glass onto a pink sky with two
 // moons and the other its working side, in outlined cartoon (deep violet
 // ink): the shell in starfall/room.ts, the stations in
-// starfall/stations.ts, the furniture in starfall/decor.ts, all drawn with
-// the kit in starfall/kit.ts and starfall/bits.ts.
+// starfall/stations.ts, the furniture in starfall/decor.ts, the locals in
+// starfall/npcs.ts, all drawn with the kit in starfall/kit.ts and
+// starfall/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#140a1c'),
@@ -46,6 +48,7 @@ export const starfall: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'exosuit',
   critter: { kind: 'hopper', body: hex('#b07ef0') }, // a fluffy hopper
   finale: { colors: [[255, 79, 163], [56, 217, 232], [255, 200, 74]] }, // magenta, cyan and gold confetti
