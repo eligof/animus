@@ -28,14 +28,20 @@ function puff(kind: 'steam' | 'smoke', u: number, v: number, z: number, n: numbe
 }
 
 // ── write: the tailoring bench ──────────────────────────────────────────────
-// A wide plank table: a sewing machine on its right end, bolts of cloth
-// folded on the left, spools in a tray, and laid flat on the boards a
-// length of cloth chalked with a pattern, open scissors, a tape measure
-// and a pincushion; a stool before it. Sewing bobs the needle and feeds
-// the cloth.
+// An L of plank benches: along the front a cutting table, bolts of cloth
+// folded on its left end, a length of cloth chalked with a pattern laid
+// flat with open scissors on it, a tray of spools on its right; on the
+// bench's back leg, on the right, the sewing machine, its needle end
+// toward the room behind the table where the tailor stands to sew (see
+// npcs.ts). Sewing bobs the needle and feeds the cloth on; the tailor's
+// hands guide it.
 
-const ZT = 5.0; // the table top
-const NEEDLE = { u: 7.0, v: 2.55 };
+// The bench's top (`z`), the cutting table's back and front edges (`v0`,
+// `v1`), the machine's leg's -u end (`u0`) and where the tailor stands
+// behind the table (`at`, `stand`).
+export const BENCH = { z: 5.0, v0: 2.4, v1: 6.6, u0: 6.0, at: 3.6, stand: 1.3 };
+const ZT = BENCH.z;
+const NEEDLE = { u: 7.0, v: 1.4 };
 
 const write: PropArt = {
   len: 11,
@@ -44,69 +50,70 @@ const write: PropArt = {
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 9, (k) => {
-      k.shadow(5.5, 3.2, 6.0, 3.6, 0.3);
-      const wood = C.plank;
-      // a basket of scraps under the table, the legs and the stretcher
-      k.box(2.2, 1.0, 0, 2.4, 2.2, 1.4, '#c8a060', { round: 0.3 });
-      for (const [i, c] of [C.cloth, C.clothBlue, '#e8c040'].entries()) k.disc(2.9 + i * 0.6, 2.0 + (i & 1) * 0.4, 1.42, 0.38, c, k.thin * 0.8);
-      for (const [u, w] of [[0.6, 0.6], [9.9, 0.6], [0.6, 4.0], [9.9, 4.0]] as const) k.box(u, w, 0, 0.5, 0.5, ZT - 0.5, C.plankDark, { line: k.thin });
-      k.box(0.6, 4.05, 1.0, 9.8, 0.4, 0.4, C.plankDark, { line: k.thin, stripe: false });
-      // the top: three wide planks
-      k.box(0.3, 0.3, ZT - 0.5, 10.4, 4.6, 0.5, wood);
-      k.segs([[[0.35, 1.83, ZT + 0.01], [10.65, 1.83, ZT + 0.01]], [[0.35, 3.37, ZT + 0.01], [10.65, 3.37, ZT + 0.01]]], withAlpha(INK, 0.45), Math.max(0.6, 0.08 * k.s));
-      // laid flat: a length of cloth chalked with a pattern, a paper piece on it
-      k.poly([[0.8, 2.9, ZT + 0.02], [5.9, 2.8, ZT + 0.02], [6.0, 4.6, ZT + 0.02], [0.9, 4.7, ZT + 0.02]], '#c9d8e8', k.thin);
-      k.line([[1.3, 3.2, ZT + 0.03], [2.6, 3.1, ZT + 0.03], [3.0, 3.6, ZT + 0.03], [4.1, 3.5, ZT + 0.03], [4.4, 4.3, ZT + 0.03], [1.5, 4.4, ZT + 0.03], [1.3, 3.2, ZT + 0.03]], '#f8f8f0', Math.max(0.7, 0.09 * k.s));
-      k.poly([[3.9, 3.0, ZT + 0.04], [5.5, 3.0, ZT + 0.04], [5.6, 4.0, ZT + 0.04], [4.2, 4.1, ZT + 0.04]], C.paper, k.thin * 0.8);
-      // the tape measure, its tape run out across the boards
-      k.line([[2.4, 2.25, ZT + 0.03], [4.0, 2.4, ZT + 0.03], [5.4, 2.2, ZT + 0.03]], INK, Math.max(1.2, 0.26 * k.s + k.thin));
-      k.line([[2.4, 2.25, ZT + 0.03], [4.0, 2.4, ZT + 0.03], [5.4, 2.2, ZT + 0.03]], '#e8d040', Math.max(0.8, 0.26 * k.s));
-      k.cyl(2.2, 2.2, ZT, 0.5, 0.35, '#c0503a', { line: k.thin });
+      const { v0, v1, u0 } = BENCH;
+      k.shadow(5.5, 3.6, 6.0, 3.6, 0.3);
+      // the machine's leg of the L, against the wall
+      for (const [u, w] of [[u0 + 0.3, 0.6], [9.9, 0.6]] as const) k.box(u, w, 0, 0.5, 0.5, ZT - 0.5, C.plankDark, { line: k.thin });
+      k.box(u0, 0.3, ZT - 0.5, 10.7 - u0, v0 - 0.3, 0.5, C.plank);
+      // the cutting table: a basket of scraps under it, legs, a stretcher,
+      // three wide planks
+      k.box(2.2, 4.0, 0, 2.4, 2.2, 1.4, '#c8a060', { round: 0.3 });
+      for (const [i, c] of [C.cloth, C.clothBlue, '#e8c040'].entries()) k.disc(2.9 + i * 0.6, 5.0 + (i & 1) * 0.4, 1.42, 0.38, c, k.thin * 0.8);
+      for (const [u, w] of [[0.6, v0 + 0.3], [9.9, v0 + 0.3], [0.6, v1 - 0.8], [9.9, v1 - 0.8]] as const) k.box(u, w, 0, 0.5, 0.5, ZT - 0.5, C.plankDark, { line: k.thin });
+      k.box(0.6, v1 - 0.75, 1.0, 9.8, 0.4, 0.4, C.plankDark, { line: k.thin, stripe: false });
+      k.box(0.3, v0, ZT - 0.5, 10.4, v1 - v0, 0.5, C.plank);
+      k.segs([[[0.35, v0 + 1.4, ZT + 0.01], [10.65, v0 + 1.4, ZT + 0.01]], [[0.35, v0 + 2.8, ZT + 0.01], [10.65, v0 + 2.8, ZT + 0.01]], [[u0, 0.35, ZT + 0.01], [u0, v0, ZT + 0.01]]], withAlpha(INK, 0.45), Math.max(0.6, 0.08 * k.s));
+      // the machine: bed plate, a length of cloth over it hanging off the
+      // -u end, the pillar and arm, the head over the needle, the hand
+      // wheel at the far end
+      const M = '#2f3a34';
+      k.box(6.2, 0.35, ZT, 4.0, 1.95, 0.35, M, { round: 0.1 });
+      k.poly([[5.5, 0.75, ZT + 0.37], [8.3, 0.75, ZT + 0.37], [8.3, 2.15, ZT + 0.37], [5.5, 2.15, ZT + 0.37]], '#c9d8e8', k.thin);
+      k.poly([[5.5, 0.75, ZT + 0.37], [5.5, 2.15, ZT + 0.37], [5.75, 2.25, ZT - 0.6], [5.75, 0.85, ZT - 0.6]], k.side('#c9d8e8', -1, 0, 0.12), k.thin);
+      k.box(9.1, 0.65, ZT + 0.35, 0.95, 1.3, 2.4, M, { round: 0.3 });
+      k.box(6.5, 0.7, ZT + 2.2, 3.5, 1.2, 0.85, M, { round: 0.35 });
+      k.box(6.45, 0.7, ZT + 1.0, 1.05, 1.3, 1.9, M, { round: 0.25 });
+      k.line([[6.7, 1.91, ZT + 2.62], [9.8, 1.91, ZT + 2.62]], '#c9a450', Math.max(0.7, 0.09 * k.s));
+      k.rod([[8.5, 1.3, ZT + 3.05], [8.5, 1.3, ZT + 3.5]], C.steel, 0.07);
+      k.cyl(8.5, 1.3, ZT + 3.05, 0.28, 0.5, C.cloth, { line: k.thin });
+      wheel(k, [10.1, 1.3, ZT + 2.2], [1, 0, 0], 0.8, 4, 0.5, '#b8b8b0', '#8a8a82', 0.25);
+      k.box(6.8, 1.15, ZT + 0.4, 0.4, 0.5, 0.2, C.steel, { line: k.thin });
+      // on the cutting table: bolts of cloth folded on the left end
+      const bolts: Color[] = [C.canvas, C.clothBlue, C.cloth];
+      bolts.forEach((c, i) => {
+        k.box(0.6 + i * 0.1, v0 + 1.0 + i * 0.08, ZT + i * 0.55, 2.6 - i * 0.2, 1.9 - i * 0.16, 0.55, c, { line: k.thin, round: 0.15 });
+        if (k.fine) k.line([[0.8 + i * 0.1, v0 + 2.82 - i * 0.08, ZT + i * 0.55 + 0.28], [3.0 - i * 0.1, v0 + 2.82 - i * 0.08, ZT + i * 0.55 + 0.28]], shade(c, -0.22), 0.06 * k.s);
+      });
+      // a length of cloth chalked with a pattern, a paper piece on it
+      k.poly([[3.7, v0 + 0.9, ZT + 0.02], [8.5, v0 + 0.8, ZT + 0.02], [8.6, v1 - 0.4, ZT + 0.02], [3.8, v1 - 0.3, ZT + 0.02]], '#e8d0c0', k.thin);
+      k.line([[4.2, v0 + 1.3, ZT + 0.03], [5.5, v0 + 1.2, ZT + 0.03], [5.9, v0 + 1.8, ZT + 0.03], [7.0, v0 + 1.7, ZT + 0.03], [7.3, v0 + 2.9, ZT + 0.03], [4.4, v0 + 3.0, ZT + 0.03], [4.2, v0 + 1.3, ZT + 0.03]], '#f8f8f0', Math.max(0.7, 0.09 * k.s));
+      k.poly([[6.6, v0 + 1.1, ZT + 0.04], [8.1, v0 + 1.1, ZT + 0.04], [8.2, v0 + 2.1, ZT + 0.04], [6.9, v0 + 2.2, ZT + 0.04]], C.paper, k.thin * 0.8);
       // the scissors lying open on the cloth
-      const sc = (a: number) => k.rod([[4.8, 4.35, ZT + 0.06], [4.8 + Math.cos(a) * 1.4, 4.35 + Math.sin(a) * 1.4, ZT + 0.06]], C.steel, 0.12);
+      const so: P3 = [5.0, v1 - 0.9, ZT + 0.06];
+      const sc = (a: number) => k.rod([so, [so[0] + Math.cos(a) * 1.4, so[1] + Math.sin(a) * 1.4, so[2]]], C.steel, 0.12);
       sc(-0.25);
       sc(-0.7);
       for (const a of [2.6, 2.2]) {
-        const [x, y] = k.p(4.8 + Math.cos(a) * 0.45, 4.35 + Math.sin(a) * 0.45, ZT + 0.07);
+        const [x, y] = k.p(so[0] + Math.cos(a) * 0.45, so[1] + Math.sin(a) * 0.45, so[2] + 0.01);
         k.pen.beginPath();
         k.pen.ellipse(x, y, 0.3 * k.s, 0.18 * k.s, 0, 0, Math.PI * 2);
         k.pen.strokeStyle = C.cloth;
         k.pen.lineWidth = Math.max(0.8, 0.12 * k.s);
         k.pen.stroke();
       }
-      // bolts of folded cloth on the left, spools in a tray behind
-      const bolts: Color[] = [C.canvas, C.clothBlue, C.cloth];
-      bolts.forEach((c, i) => {
-        k.box(0.7 + i * 0.1, 0.6 + i * 0.08, ZT + i * 0.55, 2.7 - i * 0.2, 1.9 - i * 0.16, 0.55, c, { line: k.thin, round: 0.15 });
-        if (k.fine) k.line([[0.9 + i * 0.1, 2.52 - i * 0.08, ZT + i * 0.55 + 0.28], [3.2 - i * 0.1, 2.52 - i * 0.08, ZT + i * 0.55 + 0.28]], shade(c, -0.22), 0.06 * k.s);
-      });
-      k.box(3.8, 0.6, ZT, 2.6, 1.0, 0.3, C.plankLight, { line: k.thin });
+      // a tray of spools on the right
+      k.box(8.8, v0 + 0.5, ZT, 1.7, 1.0, 0.3, C.plankLight, { line: k.thin });
       const threads: Color[] = [C.cloth, C.clothBlue, '#e8c040', C.green, '#7a4a6a'];
-      for (let i = 0; i < 4; i++) k.cyl(4.25 + i * 0.6, 1.1, ZT + 0.3, 0.26, 0.6, threads[(i + v.seed) % threads.length], { line: k.thin });
-      // the machine: bed plate, the pillar and arm, the head over the needle
-      const M = '#2f3a34';
-      k.box(6.2, 1.4, ZT, 4.0, 2.1, 0.35, M, { round: 0.1 });
-      k.poly([[5.6, 1.9, ZT + 0.37], [8.3, 1.9, ZT + 0.37], [8.3, 3.4, ZT + 0.37], [5.6, 3.4, ZT + 0.37]], '#e8d8b8', k.thin);
-      k.box(9.1, 1.8, ZT + 0.35, 0.95, 1.3, 2.4, M, { round: 0.3 });
-      k.box(6.5, 1.85, ZT + 2.2, 3.5, 1.2, 0.85, M, { round: 0.35 });
-      k.box(6.45, 1.8, ZT + 1.0, 1.05, 1.35, 1.9, M, { round: 0.25 });
-      k.line([[6.7, 3.06, ZT + 2.62], [9.8, 3.06, ZT + 2.62]], '#c9a450', Math.max(0.7, 0.09 * k.s));
-      k.rod([[8.5, 2.45, ZT + 3.05], [8.5, 2.45, ZT + 3.5]], C.steel, 0.07);
-      k.cyl(8.5, 2.45, ZT + 3.05, 0.28, 0.5, C.cloth, { line: k.thin });
-      wheel(k, [10.1, 2.45, ZT + 2.2], [1, 0, 0], 0.8, 4, 0.5, '#b8b8b0', '#8a8a82', 0.25);
-      k.box(6.8, 2.3, ZT + 0.4, 0.4, 0.5, 0.2, C.steel, { line: k.thin });
-      // the pincushion, and the stool before the bench
-      ball(k, 9.0, 4.0, ZT + 0.35, 0.42, C.cloth, k.thin);
-      if (k.fine) for (const [du, dw] of [[-0.15, -0.1], [0.12, 0.05], [0, 0.2]] as const) k.disc(9.0 + du, 4.0 + dw, ZT + 0.8, 0.08, '#e8e8e0', 0);
-      stool(k, 7.2, 6.0, 3.2, C.plankLight, 0.85);
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) k.cyl(9.2 + j * 0.8, v0 + 0.75 + i * 0.5, ZT + 0.3, 0.22, 0.5, threads[(i * 2 + j + v.seed) % threads.length], { line: k.thin });
     });
-    // the cloth's stripes, fed along while sewing; the needle bobbing
+    // the cloth's stripes, fed on under the needle while sewing; the needle
+    // bobbing
     const feed = v.active ? (v.t * 0.6) % 0.6 : 0;
     const seam: Array<[P3, P3]> = [];
-    for (let u = 5.75 - feed; u < 8.25; u += 0.6) if (u > 5.65) seam.push([[u, 2.3, ZT + 0.38], [Math.min(8.25, u + 0.3), 2.3, ZT + 0.38]]);
+    for (let u = 5.35 + feed; u < 8.25; u += 0.6) seam.push([[Math.max(5.55, u), 1.45, ZT + 0.38], [Math.min(8.25, u + 0.3), 1.45, ZT + 0.38]]);
     k.segs(seam, C.cloth, Math.max(0.8, 0.14 * k.s));
     const stripes: Array<[P3, P3]> = [];
-    for (let u = 5.9 - feed * 1.5; u < 8.2; u += 0.9) if (u > 5.65) stripes.push([[u, 1.95, ZT + 0.38], [u, 3.35, ZT + 0.38]]);
+    for (let u = 5.6 + feed * 1.5; u < 8.2; u += 0.9) stripes.push([[u, 0.8, ZT + 0.38], [u, 2.1, ZT + 0.38]]);
     k.segs(stripes, '#7aa0c8', Math.max(0.7, 0.12 * k.s));
     const bob = v.active ? 0.35 + 0.35 * Math.sin(v.t * 18) : 0.7;
     k.rod([[NEEDLE.u, NEEDLE.v, ZT + 1.2], [NEEDLE.u, NEEDLE.v, ZT + 0.4 + bob]], C.steel, 0.1);
@@ -288,14 +295,15 @@ const search: PropArt = {
 
 // ── run: the smithy ─────────────────────────────────────────────────────────
 // A forge of cut stone with a stone chimney, its mouth glowing orange; a
-// pair of leather bellows on a trestle piped into its side; an anvil on a
-// stump, a water trough with tongs, a box of coal. Smithing pumps the
-// bellows, makes the mouth white-hot and pulsing and throws sparks off the
-// anvil.
+// pair of leather bellows on a trestle piped into its side; a box of coal
+// before the mouth, a water trough on the left, and an anvil on a stump
+// toward the open +u side, where the blacksmith stands to work it (see
+// npcs.ts: the hammer and tongs are in its hands). Smithing makes the
+// mouth white-hot and pulsing and throws sparks off the anvil.
 
 const FORGE = '#9a9286';
 const MOUTH = { u0: 2.0, u1: 5.0, z0: 1.0, z1: 3.6, v: 5.6 };
-const ANVIL = { u: 3.5, v: 8.2, z: 3.4 };
+export const ANVIL = { u: 8.1, v: 9.25, z: 3.4 };
 const CHIMNEY = 14.5;
 const BELLOWS: ReadonlyArray<readonly [number, number]> = [[7.0, 3.0], [7.6, 2.35], [8.8, 1.9], [9.8, 2.1], [10.3, 3.0], [9.8, 3.9], [8.8, 4.1], [7.6, 3.65]];
 const BZ0 = 2.3; // the bellows' bottom board
@@ -327,20 +335,18 @@ const run: PropArt = {
       }
       k.rod([[7.1, 3.0, BZ0 + 0.25], [6.6, 3.0, BZ0 + 0.25]], '#c9a450', 0.3);
       k.poly(BELLOWS.map(([u, w]) => [u, w, BZ0] as P3), C.plankLight, k.thin);
-      // a box of coal in the front corner
-      k.box(0.5, 6.9, 0, 2.2, 2.2, 1.1, C.plankDark, { stripe: false });
-      for (let i = 0; i < 6; i++) rock(k, 0.9 + (i % 3) * 0.7, 7.4 + Math.floor(i / 3) * 0.8, 0.9, 0.42, 0.45, '#3a3836', i, k.thin);
-      // the water trough, tongs leaning on it
-      k.box(6.8, 7.0, 0, 3.8, 3.4, 2.3, C.plankDark, { stripe: false });
-      k.poly([[7.1, 7.3, 2.0], [10.3, 7.3, 2.0], [10.3, 10.1, 2.0], [7.1, 10.1, 2.0]], k.vgrad(8.7, 8.7, 1.5, 2.0, [[0, '#3f6a8a'], [1, '#6a9ac0']]), k.thin);
-      k.line([[7.6, 8.0, 2.01], [9.0, 8.0, 2.01]], '#d8ecf8aa', Math.max(0.7, 0.1 * k.s));
-      for (const dv of [-0.2, 0.2]) k.rod([[9.8, 8.6 + dv, 0.4], [10.2, 9.0 + dv * 2, 4.2]], C.iron, 0.12);
-      // the stump and the anvil on it, a hammer resting on its face
+      // a box of coal before the mouth
+      k.box(3.7, 6.9, 0, 2.3, 1.9, 1.1, C.plankDark, { stripe: false });
+      for (let i = 0; i < 6; i++) rock(k, 4.1 + (i % 3) * 0.75, 7.35 + Math.floor(i / 3) * 0.75, 0.9, 0.42, 0.45, '#3a3836', i, k.thin);
+      // the water trough on the left, a spare pair of tongs leaning on it
+      k.box(0.4, 7.0, 0, 2.8, 3.6, 2.3, C.plankDark, { stripe: false });
+      k.poly([[0.7, 7.3, 2.0], [2.9, 7.3, 2.0], [2.9, 10.3, 2.0], [0.7, 10.3, 2.0]], k.vgrad(1.8, 8.8, 1.5, 2.0, [[0, '#3f6a8a'], [1, '#6a9ac0']]), k.thin);
+      k.line([[1.1, 8.0, 2.01], [1.1, 9.4, 2.01]], '#d8ecf8aa', Math.max(0.7, 0.1 * k.s));
+      for (const du of [-0.2, 0.2]) k.rod([[2.6 + du, 10.1, 0.4], [3.0 + du * 2, 10.5, 4.2]], C.iron, 0.12);
+      // the stump and the anvil on it
       k.cyl(ANVIL.u, ANVIL.v, 0, 1.15, 2.4, C.log);
       k.disc(ANVIL.u, ANVIL.v, 2.4, 1.0, '#d9b07a', k.thin);
       anvil(k);
-      k.rod([[ANVIL.u + 0.4, ANVIL.v + 0.3, ANVIL.z + 0.25], [ANVIL.u + 2.2, ANVIL.v + 1.1, ANVIL.z - 0.4]], '#b07a44', 0.2);
-      k.box(ANVIL.u - 0.05, ANVIL.v - 0.05, ANVIL.z, 0.8, 0.55, 0.5, C.iron, { line: k.thin });
     });
     // the fire: glowing orange while idle, white-hot and pulsing while worked
     const t = v.t;
@@ -360,10 +366,8 @@ const run: PropArt = {
     k.disc(3.6, 4.0, 5.54, 0.95, v.active ? '#ffb040' : '#c8481a', 0);
     k.halo(3.5, MOUTH.v + 0.6, 2.4, 3.2 + n, '#ff9a48', v.active ? 0.42 + 0.2 * n : 0.3);
     if (v.active) k.halo(ANVIL.u, ANVIL.v, ANVIL.z + 0.5, 1.6, '#ffb060', 0.35);
-    // the bellows: the leather between the boards, the top board, pumping
-    // while worked
-    const gap = v.active ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 4)) : 0.8;
-    bellows(k, gap);
+    // the bellows: the leather between the boards, the top board
+    bellows(k, 0.8);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
@@ -573,15 +577,18 @@ function piece(k: Kit, u: number, v: number, z: number, c: Color, kind: number):
 // ── idle: the campfire ──────────────────────────────────────────────────────
 // A fire of crossed logs in a ring of stones on trodden earth, a pot hung
 // over it from a tripod, three log seats round it (the front left open to
-// the room), a stack of firewood, a tin mug left on a seat and a torch on a
-// pole in the back corner. It always burns, whoever sits by it, throwing
-// embers and a thread of smoke.
+// the room; the left one drawn up close, where the camp cook sits to stir
+// the pot: see npcs.ts), a stack of firewood, a tin mug left on a seat and
+// a torch on a pole in the back corner. It always burns, whoever sits by
+// it, throwing embers and a thread of smoke.
 
-const FIRE = { u: 7.5, v: 5.2 };
+export const FIRE = { u: 7.5, v: 5.2 };
 const RING = { u: 2.6, v: 2.2 }; // the stone ring's radii
-const POT = 4.0; // the pot's bottom
+export const POT = 4.0; // the pot's bottom
 const APEX = 7.6; // the tripod's top
-const TORCH = { u: 0.9, v: 0.9, z: 5.9 }; // the torch's cup
+const TORCH = { u: 12.0, v: 0.55, z: 5.9 }; // the torch's cup
+// The left log seat, along v at u, its top z high.
+export const LEFT_SEAT = { u: 1.7, z: 1.55 };
 
 const idle: PropArt = {
   len: 15,
@@ -599,10 +606,10 @@ const idle: PropArt = {
       k.rod([[TORCH.u, TORCH.v, 0], [TORCH.u, TORCH.v, TORCH.z - 0.3]], C.log, 0.26);
       k.cyl(TORCH.u, TORCH.v, TORCH.z - 0.45, 0.38, 0.5, C.iron, { line: k.thin });
       // the back seat and the left one, each on its own shadow
-      k.shadow(7.5, 1.3, 4.6, 1.1, 0.28);
-      seat(k, 3.2, 11.8, 1.3, 'u');
-      k.shadow(1.4, 5.8, 1.1, 3.0, 0.28);
-      seat(k, 2.8, 8.8, 1.4, 'v');
+      k.shadow(7.3, 1.3, 4.3, 1.1, 0.28);
+      seat(k, 3.4, 11.2, 1.3, 'u');
+      k.shadow(LEFT_SEAT.u, 5.8, 1.1, 3.0, 0.28);
+      seat(k, 2.8, 8.8, LEFT_SEAT.u, 'v');
       // firewood stacked behind the right seat
       for (const [cv, cz] of [[0.7, 0.45], [1.6, 0.45], [1.15, 1.25]] as const) logU(k, 12.3, 14.7, cv, cz, 0.42, '#6a4a2e');
       // the back stones of the ring, and the logs in the fire

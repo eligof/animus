@@ -3,6 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './office/decor.ts';
 import { INK } from './office/kit.ts';
+import { NPCS } from './office/npcs.ts';
 import { officePois, room } from './office/room.ts';
 import { STATIONS } from './office/stations.ts';
 import { WORKSTATION } from './office/workstation.ts';
@@ -12,7 +13,8 @@ import { WORKSTATION } from './office/workstation.ts';
 // desks, a kanban board and an espresso machine that never sleeps, and an
 // office dog, in outlined cartoon (dark warm-brown ink): the shell in
 // office/room.ts, the stations in office/stations.ts, the furniture in
-// office/decor.ts, all drawn with the kit in office/kit.ts and
+// office/decor.ts, the locals (an IT admin, a receptionist and the office
+// manager) in office/npcs.ts, all drawn with the kit in office/kit.ts and
 // office/bits.ts. No company's logo, product or brand anywhere.
 
 const PALETTE: Palette = {
@@ -47,6 +49,7 @@ export const office: WorldDef = {
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
+  npcs: NPCS,
   costume: 'startup',
   critter: { kind: 'corgi', body: hex('#d98a3c') }, // the office dog, a red corgi
   finale: { colors: [[255, 107, 107], [255, 200, 87], [78, 205, 196], [167, 139, 250]] }, // coral, sunflower, teal and lilac confetti

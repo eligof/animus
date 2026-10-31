@@ -372,3 +372,8 @@ test('The Startup: its desks have things of their own to pick from, and somethin
   assert.ok(art.clutter && art.clutter.items.length >= 8 && art.clutter.items.length <= 12, 'no clutter to pick from');
   assert.ok(art.loops && art.loops.length >= 1 && art.loops.length <= 2, 'nothing moves');
 });
+
+test('The Startup: three locals at work, each where its job puts it', () => {
+  assert.deepEqual(office.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['itAdmin', 'run', 'standing'], ['receptionist', 'entrance', 'behind'], ['officeManager', 'idle', 'behind']]);
+  assert.ok(office.npcs!.some((n) => n.show), 'no show');
+});
