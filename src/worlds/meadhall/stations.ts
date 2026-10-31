@@ -785,12 +785,15 @@ const think: PropArt = {
 // ── idle: the long table ────────────────────────────────────────────────────
 // Planks on trestles between two benches, set with drinking horns, a mead
 // jug, bread, a platter with a roast and apples, cups and two candles. The
-// back bench is pulled up under the table's edge: the skald sits on it at
-// its end, behind the table (see SKALD and npcs.ts), clear of what stands
-// on the table.
+// back bench is pulled up under the table's edge: the skald sits on it
+// toward the table's end, behind it (see SKALD and npcs.ts), far enough in
+// that the table's back edge runs on past her cloak and hair on screen. In
+// front of her only low things stand on the table's back half (the jug,
+// the near candle and a cup stand forward, on its front half), so nothing
+// rises over the edge where she shows.
 
 // Where the skald sits, and the table's top and back edge before it.
-export const SKALD = { u: 12.6, v: 2.95, z: 2.3, top: 5.8, edge: 3.6 };
+export const SKALD = { u: 9.6, v: 2.95, z: 2.3, top: 5.8, edge: 3.6 };
 
 const idle: PropArt = {
   len: 15,
@@ -828,25 +831,25 @@ const idle: PropArt = {
       if (k.fine) k.line([[u - 0.35, w - 0.1, z + 0.75], [u + 0.35, w + 0.1, z + 0.75]], '#8a5a2a', 0.07 * k.s);
     }
     // the mead jug and cups
-    k.cyl(10.4, 4.6, z, 0.8, 1.2, '#b8875a');
-    k.cyl(10.4, 4.6, z + 1.2, 0.55, 0.5, '#c8976a');
-    k.rod([[11.15, 4.6, z + 1.4], [11.6, 4.6, z + 1.1], [11.15, 4.6, z + 0.5]], '#b8875a', 0.14);
+    k.cyl(12.5, 5.9, z, 0.8, 1.2, '#b8875a');
+    k.cyl(12.5, 5.9, z + 1.2, 0.55, 0.5, '#c8976a');
+    k.rod([[13.25, 5.9, z + 1.4], [13.7, 5.9, z + 1.1], [13.25, 5.9, z + 0.5]], '#b8875a', 0.14);
     // a wheel of cheese, a wedge cut from it
-    k.cyl(12.8, 4.9, z, 0.75, 0.55, '#e0b850', { top: '#f0d070' });
-    k.poly([[12.8, 4.9, z + 0.56], [13.55, 4.9, z + 0.56], [13.33, 5.43, z + 0.56]], '#c89a38', k.thin * 0.7);
-    for (const [u, w] of [[5.6, 4.4], [12.2, 6.4], [2.2, 6.6]] as const) {
+    k.cyl(11.3, 4.5, z, 0.75, 0.55, '#e0b850', { top: '#f0d070' });
+    k.poly([[11.3, 4.5, z + 0.56], [12.05, 4.5, z + 0.56], [11.83, 5.03, z + 0.56]], '#c89a38', k.thin * 0.7);
+    for (const [u, w] of [[5.6, 4.4], [13.5, 4.5], [2.2, 6.6]] as const) {
       k.cyl(u, w, z, 0.42, 0.75, C.timberLight);
       k.disc(u, w, z + 0.74, 0.3, '#c98a2a', 0);
     }
     // horns: two lying, one held up in a little stand
     horn(k, [[1.8, 4.3, z + 0.45], [2.8, 4.25, z + 0.35], [3.6, 4.4, z + 0.35], [4.1, 4.7, z + 0.6]], 0.42);
-    horn(k, [[12.9, 6.7, z + 0.4], [12.0, 6.95, z + 0.3], [11.2, 6.9, z + 0.32], [10.8, 6.6, z + 0.55]], 0.4);
+    horn(k, [[13.6, 7.0, z + 0.4], [12.7, 7.15, z + 0.3], [11.9, 7.1, z + 0.32], [11.5, 6.85, z + 0.55]], 0.4);
     k.box(9.1, 6.4, z, 0.9, 0.7, 0.35, C.timberDark, { line: k.thin });
     horn(k, [[9.4, 6.75, z + 1.6], [9.45, 6.75, z + 0.9], [9.7, 6.75, z + 0.45], [10.1, 6.75, z + 0.3]], 0.38, true);
-    // two candles down the middle
-    for (const u of [6.0, 9.0]) {
-      candleDish(k, u, 5.1, z);
-      candle(k, u, 5.1, z + 0.1, 1.0);
+    // two candles down the middle, the near one forward of the skald
+    for (const [u, w] of [[6.0, 5.1], [10.6, 6.0]] as const) {
+      candleDish(k, u, w, z);
+      candle(k, u, w, z + 0.1, 1.0);
     }
     // the near bench
     bench(k, 1.2, 13.8, 8.4, 10.1, 3.3);

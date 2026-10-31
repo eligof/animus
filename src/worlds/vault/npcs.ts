@@ -5,15 +5,15 @@ import { face } from '../../art/npc/face.ts';
 import type { Pen } from '../../art/types.ts';
 import type { Bones, Npc, NpcLoop, NpcParts, NpcServe, Puppet, Swing } from '../types.ts';
 import { C } from './kit.ts';
-import { COUNTER, SAFE, STOOL } from './stations.ts';
+import { COUNTER, GUARD_POST, SAFE } from './stations.ts';
 
 // The vault's locals (see Npc in ../types.ts), on the shared puppet, in the
 // figures' style and the vault's ink: the teller in her chair behind the
 // counting desk (the desk stands out from the wall to make room: see
 // COUNTER in ./stations.ts), the safecracker at the safe's door with his
 // stethoscope on and a gloved hand on the dial, and the old night guard
-// on his stool by the vault doorway (the doorway's near stanchion made
-// way for it: see STOOL). None is dressed like the agents (navy guards):
+// at his post beside the vault doorway, off the way in (see GUARD_POST).
+// None is dressed like the agents (navy guards):
 // a green eyeshade, a striped jersey, an oxblood greatcoat.
 
 const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => (p: Pen) => p.ellipse(cx, cy, rx, ry, rot, 0, TAU);
@@ -54,13 +54,27 @@ const upright = (p: Puppet, k: 0 | 1): Mat => turn(p.arms[k].sh + p.arms[k].el -
 // An arm k of the way from a to b.
 const mix = (a: Swing, b: Swing, k: number): Swing => ({ sh: a.sh + (b.sh - a.sh) * k, el: a.el + (b.el - a.el) * k });
 
+// The swing that puts arm k's hand at (x, y) in a local's frame (its feet
+// at the origin, x toward where it faces, y down), as near as the arm
+// reaches, the elbow bent forward under the line to the hand.
+function reach(b: Bones, k: 0 | 1, x: number, y: number): Swing {
+  const [sx, sy] = b.shoulders[k];
+  const dx = x - sx;
+  const dy = y - sy;
+  const a = b.upper;
+  const f = b.fore;
+  const d = Math.max(Math.abs(a - f) + 1e-3, Math.min(Math.hypot(dx, dy), a + f - 1e-3));
+  const cos = (q: number) => Math.acos(Math.max(-1, Math.min(1, q)));
+  return { sh: Math.atan2(dx, dy) - cos((a * a + d * d - f * f) / (2 * a * d)), el: Math.PI - cos((a * a + f * f - d * d) / (2 * a * f)) };
+}
+
 // ── the teller ───────────────────────────────────────────────────────────
 // In her leather chair behind the counting desk: auburn hair in a bun, a
 // green eyeshade, a white blouse with black sleeve garters under a bottle
 // green waistcoat with brass buttons, a black bow at her collar. At work
-// she thumbs through a bundle of notes, mouthing the count, then brings
-// her stamp down on the ledger with the other hand; she hands over a gold
-// coin.
+// she thumbs through a bundle of notes held low at the desk's edge (well
+// under her chin), mouthing the count, then brings her stamp down on the
+// ledger with the other hand; she hands over a gold coin.
 
 const T_SKIN = '#f2c7a0';
 const T_SKIN_D = '#d39c76';
@@ -172,23 +186,25 @@ const tellerParts: NpcParts = {
     const f = TELLER_BONES.fore;
     sk.limb([0, 0, 0, f - 0.3], 1.0, k ? BLOUSE_D : BLOUSE, { dark: k ? null : BLOUSE_D });
     const work = p.act === 'work';
-    // the bundle of notes in the near hand, held up before her while she
-    // counts: a note bent over by her thumb every other frame
+    // the bundle of notes in the near hand, held low before her at the
+    // desk's edge while she counts, lying long-ways: a note fanned forward
+    // off its top by her thumb every other frame, never up past her chin
     if (k === 0 && work) {
       sk.at(mul(move(0, f), upright(p, 0)), () => {
-        sk.blob((q) => q.roundRect(-0.35, -1.85, 1.7, 2.0, 0.14), NOTE, { dark: NOTE_D, d: 0.18 });
-        stroke(sk, [-0.1, -1.5, 1.1, -1.5], 0.07, '#4f6a42');
-        stroke(sk, [-0.1, -1.15, 1.1, -1.15], 0.07, '#4f6a42');
-        sk.blob((q) => q.rect(-0.37, -0.8, 1.74, 0.36), C.paper, { line: 0.4 });
-        if (p.u < 0.6 && Math.floor(p.u * 12) % 2 === 1) {
+        if (Math.floor(p.u * 12) % 2 === 1) {
           sk.blob((q) => {
-            q.moveTo(-0.3, -1.8);
-            q.quadraticCurveTo(-0.6, -2.9, 0.6, -3.0);
-            q.lineTo(1.3, -2.85);
-            q.quadraticCurveTo(0.5, -2.6, 0.9, -1.8);
+            q.moveTo(-0.35, -1.2);
+            q.lineTo(1.55, -1.25);
+            q.quadraticCurveTo(2.0, -1.55, 2.1, -1.85);
+            q.lineTo(0.2, -1.8);
+            q.quadraticCurveTo(-0.15, -1.6, -0.35, -1.2);
             q.closePath();
           }, shade(NOTE, 0.12), { dark: NOTE, d: 0.12 });
         }
+        sk.blob((q) => q.roundRect(-0.45, -1.3, 2.1, 1.4, 0.12), NOTE, { dark: NOTE_D, d: 0.18 });
+        stroke(sk, [-0.2, -0.95, 1.4, -0.95], 0.07, '#4f6a42');
+        stroke(sk, [-0.2, -0.45, 1.4, -0.45], 0.07, '#4f6a42');
+        sk.blob((q) => q.rect(0.4, -1.32, 0.42, 1.44), C.paper, { line: 0.4 });
       });
     }
     // the stamp in the far hand, brought down on the ledger: a turned
@@ -205,12 +221,12 @@ const tellerParts: NpcParts = {
   },
 };
 
-// Counting: the near hand holds the bundle up before her, its thumb
-// flicking a note over every other frame, her lips moving with the count;
-// then the far hand takes up the stamp from the desk and brings it down
-// on the page with a thump, and lays it by again.
-const T_HOLD: Swing = { sh: 0.65, el: 0.96 };
-const T_FLICK: Swing = { sh: 0.74, el: 1.0 };
+// Counting: the near hand holds the bundle low before her at the desk's
+// edge, its thumb flicking a note over every other frame, her lips moving
+// with the count; then the far hand takes up the stamp from the desk and
+// brings it down on the page with a thump, and lays it by again.
+const T_HOLD: Swing = reach(TELLER_BONES, 0, 1.3, -3.75);
+const T_FLICK: Swing = reach(TELLER_BONES, 0, 1.38, -3.9);
 const T_REST: Swing = { sh: 0.08, el: 1.64 };
 const T_UP: Swing = { sh: 0.66, el: 2.14 };
 const T_DOWN: Swing = { sh: -0.06, el: 1.83 };
@@ -279,7 +295,7 @@ const teller: Npc = {
 // his ears. At work he stands at the safe's door, the stethoscope's bell
 // pressed to it in the near hand, the far hand working the dial, listening
 // with his head cocked. His show is the crack: a held breath, the click,
-// and a bag of gold hoisted high. He celebrates rubbing his hands.
+// and a bag of gold hoisted high. He celebrates with a jig, fists up.
 
 const S_SKIN = '#eab48a';
 const S_SKIN_D = '#c48a64';
@@ -432,10 +448,10 @@ const safeParts: NpcParts = {
 // him, under his far hand.
 const SAFECRACKER: [number, number] = [SAFE.u0 + 0.6, SAFE.v1 + 1.9];
 
-// At the door: leaning in, the bell to the steel by the dial, the far
-// hand on the dial turning it a notch at a time; his head cocked, eyes
-// shut to listen, open again.
-const S_BELL: Swing = { sh: 1.46, el: 0.61 };
+// At the door: leaning in, the bell to the steel by the dial at his chest
+// (below his chin, his mouth clear), the far hand on the dial turning it a
+// notch at a time; his head cocked, eyes shut to listen, open again.
+const S_BELL: Swing = reach(SAFE_BONES, 0, 1.9, -6.15);
 const S_DIAL: Swing = { sh: 0.31, el: 2.03 };
 const safeWork: NpcLoop = {
   secs: 2.4,
@@ -455,16 +471,21 @@ const safeWork: NpcLoop = {
 };
 
 // The crack: slower and slower at the dial, breath held; the click (a
-// start, eyes wide); a grin round at the crowd and the bag hoisted high,
-// bouncing.
+// start, eyes wide, the near hand springing open out behind); a grin round
+// at the crowd and the bag hoisted high, bouncing, the near fist up and out
+// behind: both hands clear of his face.
 const safeShow: NpcLoop & { crowd: 'watch' } = {
   secs: 5,
   frames: 16,
   crowd: 'watch',
   pose(u) {
-    const hold = 1 - ease(u, 0.32, 0.4);
+    // (the bag lowered and the breath held again over the last frames, so
+    // the show goes round without a jump)
+    const hold = 1 - ease(u, 0.32, 0.4) + ease(u, 0.88, 1);
     const click = bump(u, 0.34, 0.5);
-    const lift = ease(u, 0.46, 0.58);
+    const lift = ease(u, 0.46, 0.58) - ease(u, 0.86, 1);
+    // the near hand off the steel at the click, and back on it at the end
+    const sprung = ease(u, 0.34, 0.42) - ease(u, 0.86, 1);
     const bounce = lift * Math.abs(Math.sin((u - 0.58) * TAU * 2));
     const turn = Math.sin(u * TAU * 4) * hold;
     const dial = { sh: S_DIAL.sh + 0.04 * turn, el: S_DIAL.el + 0.15 * turn };
@@ -473,21 +494,30 @@ const safeShow: NpcLoop & { crowd: 'watch' } = {
       bob: 0.12 * hold + 0.45 * click + 0.35 * bounce,
       lean: 0.16 * hold * (1 - lift) - 0.05 * lift,
       tilt: 0.26 * hold - 0.12 * lift,
-      arms: [mix(mix(S_BELL, { sh: 2.2, el: 1.2 }, click), { sh: 0.5 + 0.5 * bounce, el: 1.6 }, lift), mix(mix(dial, { sh: 0.9, el: 1.2 }, click), { sh: 2.15 + 0.2 * bounce, el: -0.25 }, lift)],
+      arms: [mix(mix(S_BELL, { sh: -0.8, el: -0.9 }, sprung), { sh: 0.12 - 1.7 - 0.2 * bounce, el: 0.2 - 1.0 }, lift), mix(mix(dial, { sh: 0.9, el: 1.2 }, click), { sh: 2.15 + 0.2 * bounce, el: -0.25 }, lift)],
       eyes: hold > 0.5 ? 'shut' : click > 0.3 ? 'open' : 'happy',
       mouth: hold > 0.5 ? 'closed' : click > 0.3 ? 'o' : 'open',
     };
   },
 };
 
-// Rubbing his gloved hands together, grinning.
+// A gleeful little jig: both gloved fists up and out beside his head (the
+// near one up behind, the far one up in front, clear of his face, as the
+// shared cheer has them), pumped twice, a hop on each, grinning.
 const safeCelebrate: NpcLoop = {
   secs: 1.2,
   frames: 8,
   pose(u) {
     const k = env(u, 0.2, 0.8);
-    const rub = Math.sin(u * TAU * 3);
-    return { ...rest(), bob: 0.15 * k, lean: 0.06 * k, tilt: 0.08 * k, arms: [{ sh: 0.12 + (1.05 + 0.12 * rub) * k, el: 0.2 + 1.45 * k }, { sh: 0.12 + (0.95 - 0.12 * rub) * k, el: 0.2 + 1.5 * k }], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'smile' : 'closed' };
+    const pump = 0.2 * Math.abs(Math.sin(u * TAU * 2)) * k;
+    return {
+      ...rest(),
+      bob: 0.5 * pump / 0.2,
+      tilt: -0.08 * k,
+      arms: [{ sh: 0.12 - 1.85 * k, el: 0.2 - (1.05 + pump) * k }, { sh: 0.12 + 1.65 * k, el: 0.2 + (0.65 + pump) * k }],
+      eyes: k > 0.4 ? 'happy' : 'open',
+      mouth: k > 0.4 ? 'open' : 'closed',
+    };
   },
 };
 
@@ -505,11 +535,13 @@ const safecracker: Npc = {
 };
 
 // ── the guard ────────────────────────────────────────────────────────────
-// The old night guard on his stool by the vault doorway: big and round in
-// an oxblood greatcoat with two rows of brass buttons and a ring of keys at
-// his belt, white gloves, a peaked cap with a brass badge, a grey walrus
-// moustache and a red nose. At work he sits with his hands on his belly,
-// drumming his fingers, looks one way and the other, and touches his cap.
+// The old night guard at his post beside the vault doorway: big and round
+// in an oxblood greatcoat down to his shins with two rows of brass buttons
+// and a ring of keys at his belt, white gloves, a peaked cap with a brass
+// badge, a grey walrus moustache and a red nose. At work he stands with
+// his hands on his belly, drumming his fingers, rocking on his heels,
+// looks one way and the other, and takes out his pocket watch to check
+// the hour, held down at his chest, below his chin.
 
 const G_SKIN = '#eeb08e';
 const G_SKIN_D = '#c98868';
@@ -521,25 +553,33 @@ const GLOVE_D = '#cfcabd';
 const MOUSTACHE = '#d9d6cf';
 const MOUSTACHE_D = '#a8a49a';
 
-const GUARD_BONES: Bones = { neck: [0.15, -6.85], shoulders: [[-2.2, -6.2], [2.35, -6.2]], upper: 2.0, fore: 1.85 };
+// His body stands LIFT higher than the seated sketch it was drawn as, on
+// short legs under the coat.
+const LIFT = 1.0;
+const GUARD_BONES: Bones = { neck: [0.15, -6.85 - LIFT], shoulders: [[-2.2, -6.2 - LIFT], [2.35, -6.2 - LIFT]], upper: 2.0, fore: 1.85 };
+
+// How far out his pocket watch is, at u of his work (out over three
+// frames, back over two).
+const watchOut = (u: number) => ease(u, 0.5, 0.72) - ease(u, 0.84, 1);
 
 const guardParts: NpcParts = {
   body(sk, p) {
-    // seated: stout legs forward to the knees and down to glossy black
-    // boots on the stool's ring, the far leg first
-    for (const [dx, near] of [[0.7, false], [-0.35, true]] as const) {
+    // standing: stout legs under the coat down to glossy black boots, the
+    // far leg first
+    for (const [dx, near] of [[0.9, false], [-0.55, true]] as const) {
       const c = near ? TROUSERS : shade(TROUSERS, -0.2);
-      sk.limb([dx, -1.5, 2.6 + dx, -1.3], 1.6, c, { dark: near ? shade(TROUSERS, -0.2) : null });
-      sk.limb([2.6 + dx, -1.3, 2.7 + dx, 0.4], 1.45, c, { dark: near ? shade(TROUSERS, -0.2) : null });
-      sk.blob((q) => q.roundRect(1.95 + dx, 0.2, 2.1, 1.15, 0.5), '#17181c', { dark: '#0c0d10', d: 0.2 });
-      sk.blob(ell(3.1 + dx, 0.5, 0.5, 0.18), '#5a5e68', { line: 0, sil: false });
+      sk.limb([dx, -2.4, dx + 0.05, -0.8], 1.55, c, { dark: near ? shade(TROUSERS, -0.2) : null });
+      sk.blob((q) => q.roundRect(dx - 0.8, -1.15, 2.1, 1.15, 0.5), '#17181c', { dark: '#0c0d10', d: 0.2 });
+      sk.blob(ell(dx + 0.5, -0.8, 0.5, 0.18), '#5a5e68', { line: 0, sil: false });
     }
-    // the greatcoat, round over the belly, its skirts over his lap
+    sk.push(move(0, -LIFT));
+    // the greatcoat, round over the belly, its skirts hanging to his shins
     const coat = (q: Pen) => {
       q.moveTo(-2.55, -6.35);
       q.quadraticCurveTo(0.2, -7.3, 2.85, -6.45);
-      q.quadraticCurveTo(4.0, -4.2, 3.35, -1.5);
-      q.quadraticCurveTo(1.0, -0.7, -2.2, -0.9);
+      q.quadraticCurveTo(4.0, -4.2, 3.2, -2.1);
+      q.lineTo(2.95, -0.65);
+      q.quadraticCurveTo(0.4, -0.35, -2.25, -0.65);
       q.quadraticCurveTo(-3.15, -3.8, -2.55, -6.35);
       q.closePath();
     };
@@ -598,11 +638,11 @@ const guardParts: NpcParts = {
         });
       }
     });
+    sk.pop();
   },
   head(sk, p, back) {
     const cx = 0.1;
     const cy = -3.0;
-    const tip = p.act === 'work' ? bump(p.u, 0.72, 0.97) : 0;
     const toss = p.act === 'celebrate' ? bump(p.u, 0.15, 0.85) : 0;
     // looking one way, then the other, at work
     const look = p.act === 'work' ? 0.45 * Math.sin(p.u * TAU) : 0;
@@ -639,8 +679,8 @@ const guardParts: NpcParts = {
       }, MOUSTACHE, { dark: MOUSTACHE_D, d: 0.2 });
       sk.blob(circ(cx + 0.95 + look, cy + 1.2, 0.55), '#e8807a', { dark: '#c45e58', d: 0.15 });
     }
-    // the peaked cap, lifted at a touch and tossed up in a cheer
-    sk.at(mul(move(cx - 3.3 + 0.2 * tip, cy - 1.45 - 0.3 * tip - 1.8 * toss), turn(-0.09 * tip - 0.25 * toss)), () => {
+    // the peaked cap, tossed up in a cheer
+    sk.at(mul(move(cx - 3.3, cy - 1.45 - 1.8 * toss), turn(-0.25 * toss)), () => {
       sk.blob((q) => {
         q.moveTo(0, 0);
         q.quadraticCurveTo(-0.4, -2.0, 1.7, -2.5);
@@ -671,58 +711,79 @@ const guardParts: NpcParts = {
   upper(sk, _p, k) {
     sk.limb([0, 0, 0, GUARD_BONES.upper], 1.5, k ? COAT_D : COAT, { dark: k ? null : COAT_D });
   },
-  fore(sk, _p, k) {
+  fore(sk, p, k) {
     const f = GUARD_BONES.fore;
     sk.limb([0, 0, 0, f - 0.3], 1.3, k ? COAT_D : COAT, { dark: k ? null : COAT_D });
     stroke(sk, [-0.68, f - 0.55, 0.68, f - 0.55], 0.3, C.gold, 'butt');
     sk.blob(circ(0, f, 0.72), k ? GLOVE_D : GLOVE, { dark: GLOVE_D, d: 0.2 });
+    // his pocket watch, open in his near hand, its chain back to his coat
+    if (k === 0 && p.act === 'work' && watchOut(p.u) > 0.5) {
+      sk.at(mul(move(0.15, f - 0.35), upright(p, 0)), () => {
+        stroke(sk, [-0.3, 0.2, -0.9, 0.9, -1.6, 1.0], 0.12, C.brass);
+        sk.blob(circ(0.25, -0.35, 0.72), C.gold, { dark: C.goldDeep, d: 0.15 });
+        sk.blob(circ(0.25, -0.35, 0.5), C.paper, { line: 0.4 });
+        stroke(sk, [0.25, -0.35, 0.25, -0.7], 0.08, '#1e2023');
+        stroke(sk, [0.25, -0.35, 0.5, -0.3], 0.08, '#1e2023');
+        sk.blob(circ(0.25, -1.12, 0.16), C.gold, { line: 0.4 });
+      });
+    }
   },
 };
 
-// On his stool: hands folded on his belly, the near fingers drumming every
-// other frame, looking one way and the other, then a gloved touch to the
-// brim of his cap.
+// At his post: hands folded on his belly, the near fingers drumming every
+// other frame, rocking on his heels, looking one way and the other; then
+// the near hand brings out his pocket watch at his chest, his head bowed
+// to it, and puts it away again (each over two frames or more).
 const G_BELLY: Swing = { sh: 0.71, el: 0.33 };
 const G_DRUM: Swing = { sh: 0.8, el: 0.45 };
 const G_REST: Swing = { sh: 0.8, el: -1.42 };
-const G_CAP: Swing = { sh: 2.62, el: 0.4 };
+const G_WATCH: Swing = reach(GUARD_BONES, 0, 2.7, -6.1 - LIFT * 0.2);
 const guardWork: NpcLoop = {
   secs: 3,
   frames: 12,
   pose(u) {
-    const tip = bump(u, 0.7, 0.98);
-    const drum = u < 0.66 && Math.floor(u * 12) % 2 === 1 ? 1 : 0;
+    const w = watchOut(u);
+    const rock = Math.sin(u * TAU * 2) * (1 - w);
+    const drum = u < 0.5 && Math.floor(u * 12) % 2 === 1 ? 1 : 0;
     return {
       ...rest(),
-      bob: 0.06 * drum,
-      lean: -0.03 - 0.03 * tip,
-      tilt: 0.04 * Math.sin(u * TAU * 2) - 0.06 * tip,
-      arms: [mix(G_BELLY, G_DRUM, drum), mix(G_REST, G_CAP, tip)],
-      eyes: tip > 0.6 ? 'happy' : 'open',
-      mouth: tip > 0.4 ? 'open' : 'smile',
+      bob: 0.06 * drum + 0.14 * Math.max(0, rock),
+      lean: -0.03 + 0.035 * rock,
+      tilt: 0.04 * Math.sin(u * TAU * 2) * (1 - w) + 0.14 * w,
+      arms: [mix(mix(G_BELLY, G_DRUM, drum), G_WATCH, w), G_REST],
+      eyes: w > 0.5 && u > 0.7 && u < 0.8 ? 'blink' : 'open',
+      mouth: w > 0.5 ? 'closed' : 'smile',
     };
   },
 };
 
-// Both arms up and the cap tossed into the air, caught on his head again.
+// Both arms up and out, the hands beside his head (the near one up behind,
+// the far one up in front, clear of his face, as the shared cheer has
+// them), and the cap tossed into the air, caught on his head again.
 const guardCelebrate: NpcLoop = {
   secs: 1.6,
   frames: 10,
   pose(u) {
     const k = env(u, 0.15, 0.85);
-    const up = { sh: 0.12 + 2.6 * k, el: 0.2 - 0.1 * k };
-    return { ...rest(), bob: 0.3 * bump(u, 0.2, 0.7), tilt: -0.1 * k, arms: [up, up], eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    const pump = 0.15 * bump(u, 0.3, 0.7);
+    return {
+      ...rest(),
+      bob: 0.3 * bump(u, 0.2, 0.7),
+      tilt: -0.1 * k,
+      arms: [{ sh: 0.12 - 1.9 * k, el: 0.2 - (1.0 + pump) * k }, { sh: 0.12 + 1.7 * k, el: 0.2 + (0.7 + pump) * k }],
+      eyes: k > 0.4 ? 'happy' : 'open',
+      mouth: k > 0.4 ? 'open' : 'smile',
+    };
   },
 };
 
 const guard: Npc = {
   name: 'guard',
   station: 'entrance',
-  // on his stool beside the opening, inside the doorway's own footprint
-  // (its seat 2.4 up, his seat line a unit over his frame), facing the
-  // room: nearest whoever comes in
-  place: { mode: 'seated', u: STOOL.u, v: STOOL.v, z: STOOL.z - 1 },
-  tall: 15,
+  // at his post on the floor past the doorway's far stanchion, off the
+  // way in, turned along the wall to face whoever comes in: nearest them
+  place: { mode: 'standing', u: GUARD_POST.u, v: GUARD_POST.v, look: 'along' },
+  tall: 16,
   bones: GUARD_BONES,
   parts: guardParts,
   work: guardWork,

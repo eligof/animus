@@ -971,13 +971,19 @@ function sack(k: Kit, cu: number, cv: number, r: number, h: number, seed: number
 // A round doorway through the vault's wall: a massive stepped steel jamb
 // ringed with the sockets the bolts shoot into, a tunnel through, and the
 // marble lobby beyond in warm light; a brass bridge plate over the sill, a
-// stanchion and its rope on the far side, the guard's stool on the near
-// one (see npcs.ts), and a beacon over the top that turns while someone
-// comes or goes. (The door itself stands open against the wall beside it:
-// see room.ts.)
+// stanchion and its rope on either side, and a beacon over the top that
+// turns while someone comes or goes. The guard keeps his post on the floor
+// past the far stanchion, clear of the way in (see GUARD_POST). (The door
+// itself stands open against the wall beside it: see room.ts.)
 
 const DOORWAY = { a: 7.5, z: 6.55, r: 6.55, R: 7.45, deep: 2.6 };
-export const STOOL = { u: 14.0, v: 2.4, z: 2.4 };
+// Where the guard stands (see npcs.ts): on the floor out past the
+// doorway's low-u end and a few steps out into the room, by the far
+// stanchion; off the floor arrivals walk in over (8 from the way in's
+// spot), clear of what stands against the wall beside the doorway, and on
+// screen well clear of the opening (a step out from the wall shows toward
+// the low-u end on either wall).
+export const GUARD_POST = { u: -2.0, v: 6.8 };
 
 const entrance: PropArt = {
   len: 15,
@@ -1054,17 +1060,11 @@ const entrance: PropArt = {
       k.line([[a - 4.2, 1.9, 0.08], [a + 4.2, 1.9, 0.08]], C.brass, Math.max(1, 0.22 * k.s));
       // the beacon's bracket over the top
       k.box(a - 0.5, 0, cz + R - 0.1, 1.0, 1.0, 1.2, C.gunmetal, { line: k.thin });
-      // a stanchion on the far side, its rope back to the jamb; the
-      // guard's stool on the near side: three brass legs, a ring to rest
-      // his boots on, an oxblood leather seat
-      stanchion(k, 0.7, 3.1);
-      rope(k, [0.7, 3.1], [0.7, 0.8], 0.6);
-      const { u: su, v: sv, z: sz } = STOOL;
-      k.shadow(su, sv, 1.3, 1.3, 0.28);
-      for (const a of [0.9, 3.0, 5.1]) k.rod([[su + Math.cos(a) * 0.55, sv + Math.sin(a) * 0.55, sz - 0.3], [su + Math.cos(a) * 1.0, sv + Math.sin(a) * 1.0, 0]], C.brassDark, 0.13);
-      const ring: P3[] = Array.from({ length: 25 }, (_, i) => [su + Math.cos((i / 24) * Math.PI * 2) * 0.8, sv + Math.sin((i / 24) * Math.PI * 2) * 0.8, 0.9] as P3);
-      k.line(ring, C.brass, Math.max(0.8, 0.1 * k.s));
-      k.cyl(su, sv, sz - 0.4, 0.95, 0.4, C.oxblood, { top: shade(C.oxblood, 0.15) });
+      // a stanchion on either side, its rope back to the jamb
+      for (const u of [0.7, 14.3]) {
+        stanchion(k, u, 3.1);
+        rope(k, [u, 3.1], [u, 0.8], 0.6);
+      }
     });
     // the beacon: dark, or turning amber while someone passes
     const bz = cz + R + 1.6;

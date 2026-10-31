@@ -260,8 +260,9 @@ const overseer: Npc = {
 // bandana knotted over dark hair, grease on its forearms and cheek, a red
 // rag hanging from a pocket and a big chrome wrench in its near hand. At
 // work it cranks the purifier's valve wheel round, then knocks on the
-// gauge over it; it celebrates with a wipe of its brow and the wrench held
-// up.
+// gauge over it; it celebrates with a puff of relief, then the wrench
+// held up high behind and the other fist up in front, both beside its
+// head, clear of its face.
 
 const M_SKIN = '#b77a4e';
 const M_SKIN_D = '#8c5733';
@@ -290,7 +291,8 @@ const GAUGE = seen(TOP_GAUGE[0], TOP_GAUGE[1], TOP_GAUGE[2]);
 
 // How far into its work the mechanic cranks the wheel (the rest it knocks
 // on the gauge).
-const cranking = (u: number) => 1 - ease(u, 0.56, 0.64) + ease(u, 0.94, 1);
+// (each change over two frames or more, round the loop too)
+const cranking = (u: number) => 1 - ease(u, 0.54, 0.7) + ease(u, 0.8, 1);
 
 const mechParts: NpcParts = {
   body(sk, _p, back) {
@@ -385,8 +387,8 @@ const mechParts: NpcParts = {
     sk.blob((q) => q.roundRect(-0.8, -0.25, 1.6, 0.75, 0.3), k ? OLIVE_D : OLIVE, { dark: OLIVE_D, d: 0.15 });
     sk.blob(ell(0.15, 0.95, 0.3, 0.2), GREASE, { line: 0, sil: false });
     sk.blob(circ(0, f, 0.68), k ? M_SKIN_D : M_SKIN, { dark: M_SKIN_D, d: 0.2 });
-    // the wrench hanging in the near fist
-    if (k === 0) held(sk, f, () => sk.at(turn(Math.PI / 2 - 0.1 * p.lean), () => wrench(sk)));
+    // the wrench hanging in the near fist (stood up in it as it cheers)
+    if (k === 0) held(sk, f, () => sk.at(turn(p.act === 'celebrate' && p.arms[0].sh < -0.6 ? -Math.PI / 2 - 0.35 : Math.PI / 2 - 0.1 * p.lean), () => wrench(sk)));
   },
 };
 
@@ -419,7 +421,7 @@ const mechWork: NpcLoop = {
     const t = 1 - c;
     const turnOf = ease(u, 0, 0.58);
     const th = Math.PI / 2 + TAU * turnOf;
-    const tap = bump(u, 0.66, 0.75) + bump(u, 0.75, 0.84);
+    const tap = bump(u, 0.62, 0.71) + bump(u, 0.79, 0.88);
     const lean = 0.05 + 0.04 * Math.sin(TAU * turnOf) * c + 0.03 * t;
     const bob = -0.12 * Math.abs(Math.sin(TAU * turnOf)) * c;
     const crank = reach(MECH_BONES, 1, WHEEL.x + WHEEL.r * Math.cos(th), WHEEL.y + WHEEL.r * (0.5 * Math.cos(th) - Math.sin(th)), lean, bob);
@@ -436,21 +438,23 @@ const mechWork: NpcLoop = {
   },
 };
 
-// From rest: the far forearm wiped across its brow, then a grin and the
-// wrench up, and back.
+// From rest: a puff of relief, shoulders dropping, then a grin, the wrench
+// up high behind in the near fist and the far fist up in front, both
+// beside its head (as the shared cheer has them), a hop, and back.
 const mechCelebrate: NpcLoop = {
   secs: 1.8,
   frames: 9,
   pose(u) {
-    const wipe = bump(u, 0.05, 0.5);
-    const up = bump(u, 0.45, 0.95);
+    const puff = bump(u, 0.0, 0.35);
+    const up = ease(u, 0.2, 0.45) - ease(u, 0.75, 1);
+    const pump = 0.15 * bump(u, 0.45, 0.75);
     return {
       ...rest(),
-      tilt: -0.1 * wipe - 0.06 * up,
-      bob: 0.25 * up,
-      arms: [{ sh: 0.12 + 2.5 * up, el: 0.2 + 0.1 * up }, { sh: 0.12 + 2.3 * wipe, el: 0.2 + 1.9 * wipe }],
-      eyes: wipe > 0.4 ? 'shut' : up > 0.3 ? 'happy' : 'open',
-      mouth: up > 0.3 ? 'open' : 'smile',
+      tilt: 0.06 * puff - 0.08 * up,
+      bob: -0.15 * puff + 0.35 * bump(u, 0.4, 0.75),
+      arms: [{ sh: 0.12 - 1.9 * up, el: 0.2 - (1.0 + pump) * up }, { sh: 0.12 + 1.65 * up, el: 0.2 + (0.65 + pump) * up }],
+      eyes: puff > 0.5 ? 'shut' : up > 0.3 ? 'happy' : 'open',
+      mouth: puff > 0.5 ? 'o' : up > 0.3 ? 'open' : 'smile',
     };
   },
 };
@@ -490,9 +494,9 @@ const PENCIL = '#f0c040';
 const WAITRESS_BONES: Bones = { neck: [0.1, -7.8], shoulders: [[-1.6, -7.3], [1.7, -7.3]], upper: 1.65, fore: 1.55 };
 
 // How far into her work she pours, and taps her pencil.
-const pouring = (u: number) => ease(u, 0.02, 0.14) - ease(u, 0.42, 0.52);
+const pouring = (u: number) => ease(u, 0, 0.17) - ease(u, 0.4, 0.58);
 const tilting = (u: number) => ease(u, 0.12, 0.2) - ease(u, 0.36, 0.44);
-const musing = (u: number) => ease(u, 0.52, 0.62) - ease(u, 0.9, 0.99);
+const musing = (u: number) => ease(u, 0.5, 0.66) - ease(u, 0.82, 1);
 
 const waitressParts: NpcParts = {
   body(sk, p, back) {

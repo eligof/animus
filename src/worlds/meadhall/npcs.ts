@@ -67,7 +67,7 @@ function upTurn(sk: Sketch): number {
 }
 
 // ── the skald ────────────────────────────────────────────────────────────
-// On the back bench at the end of the long table, behind it: a skald with
+// On the back bench toward the end of the long table, behind it: a skald with
 // a mane of red hair loose down her back, freckles, a blue gown belted in
 // leather, a green cloak pinned at the shoulder with a gold brooch, and a
 // lyre of pale wood on her lap. At work she strums it, swaying, humming;
@@ -250,7 +250,7 @@ const skaldShow: NpcLoop & { crowd: 'watch' } = {
 const skald: Npc = {
   name: 'skald',
   station: 'idle',
-  // on the back bench at the table's end, the table hiding her lap
+  // on the back bench toward the table's end, the table hiding her lap
   place: { mode: 'seated', u: SKALD.u, v: SKALD.v, z: SKALD.z, top: SKALD.top, edge: SKALD.edge },
   tall: 12.5,
   bones: SKALD_BONES,
@@ -260,22 +260,30 @@ const skald: Npc = {
 };
 
 // ── the smith ────────────────────────────────────────────────────────────
-// Before the forge, at the anvil: a big bald smith with a bushy black beard,
-// heavy brows, a soot smudge on its brow, bare arms in leather bracers, a
-// charcoal shirt under a long leather apron. At work it holds the glowing
-// bar on the anvil in its tongs (its near hand) and brings the hammer in
-// its right hand down on it, two blows a loop, sparks flying off each.
+// Before the forge, at the anvil: a big Norse smith, his flaxen hair shaved
+// at the sides and worn in a long braid down his back, his beard braided
+// into one thick plait bound in iron rings, a bear-fur mantle over his
+// shoulders, a woad-grey tunic under a long leather apron, bare forearms in
+// leather bracers and an iron ring on each arm. At work he holds the
+// glowing bar on the anvil in his tongs (his near hand) and brings the
+// hammer in his right hand down on it, two blows a loop, sparks flying off
+// each; raised, the hammer stands up in front of his face, never across it.
 
 const F = {
-  skin: '#d99a70',
-  skinD: '#b0744e',
-  beard: '#3a2618',
-  beardD: '#24160c',
-  shirt: '#4a4644',
-  shirtD: '#34302e',
+  skin: '#eab38c',
+  skinD: '#c48a64',
+  cheek: '#e88a7a',
+  hair: '#dcae52',
+  hairD: '#a8782e',
+  fur: '#5e4430',
+  furD: '#42301f',
+  furTip: '#7a5a3e',
+  tunic: '#4e6478',
+  tunicD: '#3a4a5a',
   apron: C.leather,
   apronD: C.leatherDark,
-  legs: '#5a4634',
+  legs: '#6a5440',
+  wrap: '#8a7458',
   boot: '#3a2a1e',
   soot: '#5a4a44',
   iron: C.iron,
@@ -287,10 +295,12 @@ const SMITH_AT = { u: 7.4, v: 12.5 };
 const BAR_AT: [Pt, Pt] = [along(SMITH_AT.u, SMITH_AT.v, 0, BAR[0]), along(SMITH_AT.u, SMITH_AT.v, 0, BAR[1])];
 const STRIKE: Pt = [BAR_AT[0][0] * 0.4 + BAR_AT[1][0] * 0.6, BAR_AT[0][1] * 0.4 + BAR_AT[1][1] * 0.6 - 0.2];
 // The hammer's haft, hand to head; its angle (radians in the local's
-// frame) on the bar and raised before its face.
+// frame) on the bar and raised: stood up a little forward of upright, the
+// hand out before his beard, so the hammer's head clears his face.
 const HAFT = 2.1;
 const DOWN = 0.45;
-const UP = -1.95;
+const UP = -1.2;
+const RAISED: Pt = [5.2, -9.1];
 // Where its tongs' grip is, in front of its apron, the jaws on the bar's
 // near end.
 const GRIP: Pt = [0.85, -5.55];
@@ -302,13 +312,12 @@ function lift(u: number): number {
   return s < 0.6 ? ease(s, 0, 0.6) : 1 - ease(s, 0.6, 1);
 }
 // Its hammer hand (the far one, its right) and the hammer's angle, `w` of
-// the way up: from the blow up before its face and back down.
+// the way up: from the blow up in front of its face and back down.
 function swingAt(w: number): { hand: Pt; dir: number } {
   const dir = DOWN + (UP - DOWN) * w;
   const h0: Pt = [STRIKE[0] - HAFT * Math.cos(DOWN), STRIKE[1] - HAFT * Math.sin(DOWN)];
-  const h1: Pt = [4.1, -10.2];
   const k = ease(w, 0, 1);
-  return { hand: [h0[0] + (h1[0] - h0[0]) * k + 0.5 * Math.sin(w * Math.PI), h0[1] + (h1[1] - h0[1]) * k], dir };
+  return { hand: [h0[0] + (RAISED[0] - h0[0]) * k + 0.4 * Math.sin(w * Math.PI), h0[1] + (RAISED[1] - h0[1]) * k], dir };
 }
 
 // A spray of sparks off the blow at (x, y), `k` 1 at the blow, fading out.
@@ -335,66 +344,172 @@ function sparks(sk: Sketch, x: number, y: number, k: number): void {
   });
 }
 
+// A braid from (x0, y0) down to (x1, y1), `w` wide, its plaits crossing,
+// bound at its foot in an iron ring and ending in a tuft.
+function braid(sk: Sketch, x0: number, y0: number, x1: number, y1: number, w: number, rings: readonly number[]): void {
+  sk.limb([x0, y0, x1, y1], w, F.hair, { dark: F.hairD });
+  sk.draw((q, c) => {
+    q.strokeStyle = F.hairD;
+    q.lineWidth = Math.max(0.1, 0.8 / c.px);
+    q.lineCap = 'round';
+    q.beginPath();
+    const n = Math.max(2, Math.round(Math.hypot(x1 - x0, y1 - y0) / 0.6));
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const x = x0 + (x1 - x0) * t;
+      const y = y0 + (y1 - y0) * t;
+      const side = i % 2 ? 1 : -1;
+      q.moveTo(x - (w * 0.38) * side, y - 0.18);
+      q.lineTo(x + (w * 0.38) * side, y + 0.18);
+    }
+    q.stroke();
+  });
+  for (const t of rings) {
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    sk.blob((q) => q.roundRect(x - w * 0.62, y - 0.22, w * 1.24, 0.44, 0.12), F.iron, { dark: F.ironD, d: 0.1, line: 0.5 });
+  }
+  sk.blob(ell(x1, y1 + 0.35, w * 0.45, 0.45), F.hair, { dark: F.hairD, d: 0.12 });
+}
+
 const smithParts: NpcParts = {
   body(sk, _p, back) {
-    // legs and heavy boots
+    // legs in wrapped trousers and soft turnshoes
     for (const [x, near] of [[1.05, false], [-0.85, true]] as const) {
-      sk.limb([x, -4.0, x + 0.1, -1.0], 1.5, near ? F.legs : shade(F.legs, -0.15), { dark: near ? shade(F.legs, -0.15) : null });
+      const leg = near ? F.legs : shade(F.legs, -0.15);
+      sk.limb([x, -4.0, x + 0.1, -1.0], 1.5, leg, { dark: near ? shade(F.legs, -0.15) : null });
+      for (const y of [-2.6, -1.9]) sk.limb([x - 0.68, y + 0.25, x + 0.78, y - 0.2], 0.32, near ? F.wrap : shade(F.wrap, -0.15), { line: 0.5 });
       sk.blob((q) => q.roundRect(x - 0.65, -1.3, 1.9, 1.3, 0.5), F.boot, { dark: shade(F.boot, -0.25), d: 0.2 });
     }
-    // the shirt, broad in the shoulders
+    // the bear-fur mantle's back, hanging behind him
+    sk.blob((q) => {
+      q.moveTo(-1.2, -8.6);
+      q.quadraticCurveTo(-3.2, -8.2, -3.35, -6.0);
+      q.lineTo(-3.25, -4.2);
+      q.lineTo(-2.8, -4.6);
+      q.lineTo(-2.4, -4.0);
+      q.lineTo(-1.9, -4.5);
+      q.lineTo(-1.2, -4.2);
+      q.closePath();
+    }, F.fur, { dark: F.furD, d: 0.3 });
+    // the tunic, broad in the shoulders, its skirt under the apron
     sk.blob((q) => {
       q.moveTo(-2.35, -7.75);
       q.quadraticCurveTo(0.1, -8.45, 2.5, -7.8);
-      q.quadraticCurveTo(2.85, -5.6, 2.35, -3.8);
-      q.quadraticCurveTo(0.1, -3.3, -2.2, -3.8);
+      q.quadraticCurveTo(2.85, -5.6, 2.55, -3.2);
+      q.quadraticCurveTo(0.1, -2.7, -2.4, -3.2);
       q.quadraticCurveTo(-2.75, -5.6, -2.35, -7.75);
       q.closePath();
-    }, F.shirt, { dark: F.shirtD, d: 0.45 });
-    if (back) return;
-    // the long apron, its strap round the neck, soot on it
+    }, F.tunic, { dark: F.tunicD, d: 0.45 });
+    if (!back) {
+      // the long apron, soot on it
+      sk.blob((q) => {
+        q.moveTo(-0.6, -7.4);
+        q.lineTo(1.9, -7.45);
+        q.quadraticCurveTo(2.75, -5.0, 2.7, -1.9);
+        q.quadraticCurveTo(0.8, -1.5, -1.4, -1.9);
+        q.quadraticCurveTo(-1.2, -5.0, -0.6, -7.4);
+        q.closePath();
+      }, F.apron, { dark: F.apronD, d: 0.35 });
+      sk.limb([-1.95, -4.35, 0.3, -4.55, 2.6, -4.35], 0.42, F.apronD);
+      sk.blob(ell(1.5, -3.2, 0.55, 0.32, 0.3), F.soot, { line: 0, sil: false });
+      sk.blob(ell(0.3, -2.5, 0.4, 0.25, -0.2), F.soot, { line: 0, sil: false });
+    }
+    // the bear-fur mantle over his shoulders, its edge ragged
     sk.blob((q) => {
-      q.moveTo(-0.6, -7.4);
-      q.lineTo(1.9, -7.45);
-      q.quadraticCurveTo(2.75, -5.0, 2.7, -1.9);
-      q.quadraticCurveTo(0.8, -1.5, -1.4, -1.9);
-      q.quadraticCurveTo(-1.2, -5.0, -0.6, -7.4);
+      q.moveTo(-2.75, -7.3);
+      q.quadraticCurveTo(-2.2, -8.75, 0.2, -8.85);
+      q.quadraticCurveTo(2.6, -8.75, 2.95, -7.35);
+      q.lineTo(2.85, -6.55);
+      q.lineTo(2.3, -6.9);
+      q.lineTo(1.9, -6.3);
+      q.lineTo(1.35, -6.75);
+      q.lineTo(0.85, -6.2);
+      q.lineTo(0.3, -6.7);
+      q.lineTo(-0.3, -6.15);
+      q.lineTo(-0.85, -6.65);
+      q.lineTo(-1.45, -6.2);
+      q.lineTo(-2.0, -6.75);
+      q.lineTo(-2.55, -6.4);
       q.closePath();
-    }, F.apron, { dark: F.apronD, d: 0.35 });
-    sk.limb([-0.4, -7.5, 0.6, -8.4, 1.7, -7.55], 0.3, F.apronD);
-    sk.blob(ell(1.5, -3.6, 0.55, 0.32, 0.3), F.soot, { line: 0, sil: false });
-    sk.blob(ell(0.3, -2.7, 0.4, 0.25, -0.2), F.soot, { line: 0, sil: false });
+    }, F.fur, { dark: F.furD, d: 0.35 });
+    if (!back) for (const [x, y] of [[-1.6, -7.5], [-0.4, -7.9], [1.0, -7.75], [2.1, -7.4]] as const) sk.limb([x, y, x + 0.25, y + 0.55], 0.18, F.furTip, { line: 0, sil: false });
   },
   head(sk, p, back) {
     const cx = 0.1;
     const cy = -2.95;
+    // the braid of his hair down his back, behind the head
+    braid(sk, cx - 2.0, cy - 1.2, cx - 3.25, cy + 4.6, 0.95, [0.82]);
     sk.blob(ell(cx + (back ? 2.95 : -2.95), cy + 0.6, 0.62, 0.78), F.skin, { dark: F.skinD, d: 0.25 });
     sk.blob(ell(cx, cy, 3.3, 3.15), F.skin, { dark: F.skinD, d: 0.45 });
-    // the shine on its bald dome
-    sk.blob(ell(cx - 1.1, cy - 2.2, 0.85, 0.4, -0.5), shade(F.skin, 0.25), { line: 0, sil: false });
+    // his hair swept back off his brow to the braid
+    sk.blob((q) => {
+      q.moveTo(cx - 3.25, cy + 0.9);
+      q.quadraticCurveTo(cx - 3.75, cy - 3.0, cx + 0.3, cy - 3.45);
+      q.quadraticCurveTo(cx + 3.4, cy - 3.3, cx + 3.35, cy - 1.0);
+      q.quadraticCurveTo(cx + 2.4, cy - 2.05, cx + 0.9, cy - 2.15);
+      q.quadraticCurveTo(cx - 0.6, cy - 2.0, cx - 1.6, cy - 1.3);
+      q.quadraticCurveTo(cx - 2.4, cy - 0.5, cx - 2.3, cy + 0.9);
+      q.closePath();
+    }, F.hair, { dark: F.hairD, d: 0.3 });
+    if (!back) for (const [x0, y0, x1, y1] of [[cx - 1.0, cy - 2.75, cx - 2.2, cy - 1.6], [cx + 0.6, cy - 3.05, cx - 0.9, cy - 2.25], [cx + 2.0, cy - 2.75, cx + 0.8, cy - 2.4]] as const) sk.limb([x0, y0, x1, y1], 0.12, F.hairD, { line: 0, sil: false });
     if (back) {
-      sk.blob((q) => q.roundRect(cx - 2.6, cy + 0.2, 5.2, 2.6, 1.2), F.beard, { dark: F.beardD, d: 0.2 });
+      sk.blob((q) => q.roundRect(cx - 2.6, cy + 0.4, 5.2, 2.4, 1.1), F.hair, { dark: F.hairD, d: 0.2 });
       return;
     }
-    // the bushy beard from ear to ear, down over its chest
+    // the beard from ear to ear, braided below the chin into one thick
+    // plait bound in iron rings
+    braid(sk, cx + 0.95, cy + 3.6, cx + 1.15, cy + 6.6, 1.15, [0.3, 0.72]);
     sk.blob((q) => {
       q.moveTo(cx - 2.55, cy + 0.2);
-      q.quadraticCurveTo(cx - 2.6, cy + 3.6, cx + 0.1, cy + 4.6);
-      q.quadraticCurveTo(cx + 1.4, cy + 5.2, cx + 2.4, cy + 4.3);
-      q.quadraticCurveTo(cx + 3.6, cy + 3.0, cx + 3.25, cy + 0.6);
+      q.quadraticCurveTo(cx - 2.5, cy + 3.0, cx - 0.2, cy + 3.9);
+      q.quadraticCurveTo(cx + 1.0, cy + 4.3, cx + 2.2, cy + 3.8);
+      q.quadraticCurveTo(cx + 3.5, cy + 2.8, cx + 3.25, cy + 0.6);
       q.quadraticCurveTo(cx + 2.4, cy + 1.6, cx + 0.8, cy + 1.6);
       q.quadraticCurveTo(cx - 1.2, cy + 1.6, cx - 1.7, cy + 0.0);
       q.closePath();
-    }, F.beard, { dark: F.beardD, d: 0.3 });
-    face(sk, { x: cx + 0.65, y: cy + 0.55, eyes: p.eyes, mouth: p.mouth, drop: 1.6 });
-    // heavy brows, soot on its brow
-    sk.limb([cx - 0.95, cy - 0.5, cx + 0.25, cy - 0.35], 0.42, F.beard, { line: 0.4 });
-    sk.limb([cx + 1.15, cy - 0.35, cx + 2.25, cy - 0.5], 0.38, F.beard, { line: 0.4 });
+    }, F.hair, { dark: F.hairD, d: 0.3 });
+    face(sk, { x: cx + 0.65, y: cy + 0.55, eyes: p.eyes, mouth: p.mouth, drop: 1.6, iris: '#3f6a92' });
+    // ruddy cheeks over the beard, the drooping moustache, flaxen brows,
+    // soot on his brow
+    sk.draw((q) => {
+      q.fillStyle = '#e88a7a60';
+      q.beginPath();
+      q.ellipse(cx - 1.15, cy + 1.2, 0.55, 0.32, 0, 0, TAU);
+      q.ellipse(cx + 2.65, cy + 1.15, 0.45, 0.3, 0, 0, TAU);
+      q.fill();
+    });
+    {
+      const x = cx + 0.7;
+      const y = cy + 1.6;
+      sk.blob((q) => {
+        q.moveTo(x - 0.1, y - 0.32);
+        q.quadraticCurveTo(x - 1.25, y - 0.45, x - 1.85, y + 0.3);
+        q.quadraticCurveTo(x - 1.0, y + 0.12, x - 0.1, y + 0.32);
+        q.quadraticCurveTo(x + 0.9, y + 0.12, x + 1.7, y + 0.3);
+        q.quadraticCurveTo(x + 1.2, y - 0.45, x - 0.1, y - 0.32);
+        q.closePath();
+      }, F.hair, { dark: F.hairD, d: 0.15 });
+    }
+    sk.limb([cx - 0.95, cy - 0.5, cx + 0.25, cy - 0.35], 0.4, F.hairD, { line: 0.4 });
+    sk.limb([cx + 1.15, cy - 0.35, cx + 2.25, cy - 0.5], 0.36, F.hairD, { line: 0.4 });
     sk.blob(ell(cx + 1.7, cy - 1.45, 0.55, 0.22, 0.2), F.soot, { line: 0, sil: false });
   },
   upper(sk, _p, k) {
     sk.limb([0, 0, 0, SMITH_BONES.upper], 1.35, k ? F.skinD : F.skin, { dark: k ? null : F.skinD });
-    sk.limb([0, 0, 0, 0.35], 1.45, k ? F.shirtD : F.shirt);
+    sk.limb([0, 0, 0, 0.45], 1.45, k ? F.tunicD : F.tunic);
+    // an iron arm ring, and the bear fur over the shoulder
+    sk.limb([-0.68, 1.15, 0.68, 1.15], 0.32, F.iron, { line: 0.5 });
+    sk.blob((q) => {
+      q.moveTo(-0.95, 0.35);
+      q.quadraticCurveTo(-1.05, -0.75, 0, -0.8);
+      q.quadraticCurveTo(1.05, -0.75, 0.95, 0.35);
+      q.lineTo(0.55, 0.15);
+      q.lineTo(0.25, 0.6);
+      q.lineTo(-0.15, 0.2);
+      q.lineTo(-0.5, 0.6);
+      q.closePath();
+    }, k ? F.furD : F.fur, { dark: k ? null : F.furD, d: 0.2 });
   },
   fore(sk, p, k) {
     const f = SMITH_BONES.fore;
@@ -611,43 +726,51 @@ const chiefParts: NpcParts = {
   },
 };
 
-// How far up in a toast the horn is, at u of its work.
-const quaff = (u: number) => ease(u, 0.56, 0.68) - ease(u, 0.86, 0.96);
-// Where its far hand holds the horn on its knee, and up beside its head.
+// How far up in a toast the horn is, at u of its work (up over three
+// frames, down over two), and how far its near hand has left its beard for
+// its lap (over two frames each way).
+const quaff = (u: number) => ease(u, 0.5, 0.72) - ease(u, 0.82, 0.98);
+const off = (u: number) => ease(u, 0.38, 0.55) - ease(u, 0.85, 1);
+// Where its far hand holds the horn on its knee, and up beside its head
+// (out past its cheek, the horn clear of its face); where its near hand
+// rests on its lap.
 const KNEE: Pt = [2.9, -2.6];
-const TOAST: Pt = [3.3, -9.35];
+const TOAST: Pt = [4.5, -8.7];
+const LAP_HAND: Pt = [-1.6, -2.9];
 
-// Two strokes down its beard with the near hand, the horn on its knee in
-// the other, then the horn lifted beside its head in a toast and a nod.
+// A slow stroke down its beard with the near hand and back up, the horn
+// on its knee in the other; then the near hand to its lap and the horn
+// lifted beside its head in a toast and a nod.
 const chiefWork: NpcLoop = {
   secs: 3.6,
   frames: 12,
   pose(u) {
     const q = quaff(u);
-    const stroke = u < 0.5 ? (u / 0.25) % 1 : 0;
-    const p: Puppet = { ...rest(), u, lean: -0.02, tilt: 0.05 + 0.1 * q, eyes: q > 0.5 ? 'happy' : u < 0.5 && stroke > 0.5 ? 'blink' : 'open', mouth: q > 0.5 ? 'open' : 'smile' };
+    const o = off(u);
+    const stroke = u < 0.45 ? Math.sin((Math.PI * u) / 0.45) : 0;
+    const p: Puppet = { ...rest(), u, lean: -0.02, tilt: 0.05 + 0.1 * q, eyes: q > 0.5 ? 'happy' : stroke > 0.9 ? 'blink' : 'open', mouth: q > 0.5 ? 'open' : 'smile' };
     const [s0, s1] = CHIEF_BONES.shoulders as [Pt, Pt];
     const beard: Pt = [1.0 + 0.2 * stroke, -6.0 + 2.2 * Math.sin(stroke * Math.PI * 0.5)];
-    const near = u < 0.5 ? beard : ([-1.6, -2.9] as Pt);
+    const near: Pt = [beard[0] + (LAP_HAND[0] - beard[0]) * o, beard[1] + (LAP_HAND[1] - beard[1]) * o];
     const far: Pt = [KNEE[0] + (TOAST[0] - KNEE[0]) * q, KNEE[1] + (TOAST[1] - KNEE[1]) * q];
     return { ...p, arms: [reach(s0, toBody(p, near), CHIEF_BONES.upper, CHIEF_BONES.fore), reach(s1, toBody(p, far), CHIEF_BONES.upper, CHIEF_BONES.fore)] };
   },
 };
 
-// The horn held high and a roar, the other fist shaking.
+// The horn held high out beside its head and a roar, the other fist
+// raised up and out behind, shaking: both hands clear of its face.
+const HORN_HIGH: Pt = [4.4, -8.9];
 const chiefCelebrate: NpcLoop = {
   secs: 2.0,
   frames: 10,
   pose(u) {
     const k = env(u, 0.2, 0.8);
     const shake = Math.sin(u * TAU * 3);
+    const p: Puppet = { ...rest(), lean: -0.05 * k, tilt: -0.12 * k, eyes: k > 0.4 ? 'happy' : 'open', mouth: k > 0.4 ? 'open' : 'smile' };
+    const high = reach(CHIEF_BONES.shoulders[1] as Pt, toBody(p, HORN_HIGH), CHIEF_BONES.upper, CHIEF_BONES.fore);
     return {
-      ...rest(),
-      lean: -0.05 * k,
-      tilt: -0.12 * k,
-      arms: [{ sh: 0.12 + (1.7 + 0.25 * shake) * k, el: 0.2 + 1.4 * k }, { sh: 0.12 + 2.65 * k, el: 0.2 - 0.05 * k }],
-      eyes: k > 0.4 ? 'happy' : 'open',
-      mouth: k > 0.4 ? 'open' : 'smile',
+      ...p,
+      arms: [{ sh: 0.12 + (-1.85 + 0.15 * shake) * k, el: 0.2 - 1.05 * k }, { sh: 0.12 + (high.sh - 0.12) * k, el: 0.2 + (high.el - 0.2) * k }],
     };
   },
 };

@@ -14,7 +14,8 @@ import { ANVIL, BUREAU, POT } from './stations.ts';
 // forge demon at his anvil on the forge's front edge, and the witch at her
 // scrying cauldron's side with its bone ladle. None is dressed like the
 // agents (red robes, gold ram's horns): a red-skinned clerk in black, a
-// big plum-coloured smith with a fiery tuft, a lilac witch in a tall hat.
+// big ember-orange smith with a fiery tuft in a charcoal apron, a lilac
+// witch in a tall hat: three hues apart.
 
 const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => (p: Pen) => p.ellipse(cx, cy, rx, ry, rot, 0, TAU);
 const circ = (cx: number, cy: number, r: number) => (p: Pen) => p.arc(cx, cy, r, 0, TAU);
@@ -290,18 +291,20 @@ const clerk: Npc = {
 };
 
 // ── the forge demon ──────────────────────────────────────────────────────
-// A big, round, plum-coloured smith: great curling bone horns with a tuft
-// of fire between them, a broad grin with two little tusks, a leather
-// apron, bracers and a pointed tail. At work he hammers an ingot on the
-// anvil, his tongs holding it in the near hand. His show: a deep breath, a
-// gout of fire on the ingot, a flurry of blows, and a glowing blade held
-// high.
+// A big, round, ember-orange smith: great curling bone horns with a tuft
+// of fire between them, a broad grin with two little tusks, a charcoal
+// leather apron, bracers and a pointed tail. At work he hammers an ingot
+// on the anvil, his tongs holding it in the near hand. His show is all
+// hellfire: a deep breath, cheeks full; a gout of fire breathed onto the
+// ingot till it flares white-hot and a fountain of sparks leaps off it; a
+// flurry of blows, sparks flying off each; then a roar, hammer and tongs
+// flung up wide and the fire on his head blazing up tall.
 
-const PLUM = '#9a5f92';
-const PLUM_D = '#6e3c6a';
-const BELLY = '#b884ac';
-const APRON = '#7a3c26';
-const APRON_D = '#542616';
+const PLUM = '#de7330';
+const PLUM_D = '#a84e1e';
+const BELLY = '#f4a865';
+const APRON = '#3e3436';
+const APRON_D = '#2a2224';
 const BOOTS = '#2a1a1e';
 const HAMMER_H = '#6e4630';
 
@@ -310,8 +313,47 @@ const SMITH_BONES: Bones = { neck: [0.3, -8.15], shoulders: [[-2.6, -7.7], [2.85
 // feet (frame units: forward, down).
 const SMITH: [number, number] = [Math.round((ANVIL.u - 3.3) * 10) / 10, 12.6];
 const INGOT: [number, number] = [ANVIL.u - SMITH[0] - (ANVIL.v - SMITH[1]), (ANVIL.u - SMITH[0] + ANVIL.v - SMITH[1]) / 2 - ANVIL.z - 0.3];
-// Where the tongs hold the finished blade up at the end of his show.
-const BLADE: [number, number] = [4.4, -8.0];
+// His show's beats, at u of it: the ingot flaring white-hot under his
+// fire (and dimming as it is worked), the blows of the flurry (1 on a
+// frame the hammer lands), and the roar at its end.
+const flareOf = (u: number) => (ease(u, 0.27, 0.36) - 0.45 * ease(u, 0.5, 0.75)) * (1 - ease(u, 0.92, 1));
+const blowOf = (u: number) => (u >= 0.47 && u < 0.72 && Math.floor(u * 16) % 2 === 0 ? 1 : 0);
+const roarOf = (u: number) => ease(u, 0.7, 0.8) - ease(u, 0.86, 1);
+
+// A spray of sparks flying off (x, y) up and out, `n` of them `r` long,
+// `k` 1 as they burst and fading out further off; `seed` turns the spray.
+function sparkSpray(sk: Sketch, x: number, y: number, n: number, r: number, k: number, seed: number): void {
+  sk.draw((q, c) => {
+    q.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI * (0.06 + ((i + 0.5) / n) * 0.88) + 0.18 * Math.sin(seed * 7.1 + i * 2.3);
+      const r0 = 0.3 + (1 - k) * r * 0.6;
+      const r1 = r0 + r * (0.45 + 0.4 * ((i * 5 + seed) % 3) / 2);
+      q.strokeStyle = i % 3 ? C.lavaHot : C.lavaWhite;
+      q.lineWidth = Math.max(0.16, 1 / c.px) * (k > 0.5 ? 1.5 : 1.1);
+      q.beginPath();
+      q.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0);
+      q.lineTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1);
+      q.stroke();
+    }
+  });
+}
+
+// The ingot flaring under his fire: a white-hot glow round it, `f` 0..1.
+function flare(sk: Sketch, x: number, y: number, f: number): void {
+  sk.draw((q) => {
+    const g = q.createRadialGradient(x, y, 0, x, y, 1.0 + 1.6 * f);
+    g.addColorStop(0, '#fff8dcf0');
+    g.addColorStop(0.35, '#ffd25ad0');
+    g.addColorStop(0.7, '#ff7a1f60');
+    g.addColorStop(1, '#ff7a1f00');
+    q.fillStyle = g;
+    q.beginPath();
+    q.arc(x, y, 1.0 + 1.6 * f, 0, TAU);
+    q.fill();
+  });
+  sk.blob(ell(x, y, 0.95, 0.38), f > 0.6 ? C.lavaWhite : C.lavaHot, { line: 0.5, sil: false });
+}
 
 // Fire at frame u: three tongues of flame.
 function fireTuft(sk: Sketch, x: number, y: number, s: number, u: number): void {
@@ -379,8 +421,8 @@ const smithParts: NpcParts = {
     // the far horn, behind the head
     horn(sk, cx + 1.9, cy - 2.35, cx + 3.8, cy - 3.9, 0.55, 0.72, C.bone, C.boneShade);
     sk.blob(ell(cx, cy, 3.45 + 0.15 * puff, 3.25), PLUM, { dark: PLUM_D, d: 0.5 });
-    // his tuft of fire, flickering
-    fireTuft(sk, cx + 0.1, cy - 2.8, 0.82, p.u + (p.act === 'work' ? 0 : 0.37));
+    // his tuft of fire, flickering, blazing up tall as he roars
+    fireTuft(sk, cx + 0.1, cy - 2.8, 0.82 + 0.85 * (show >= 0 ? roarOf(show) : 0), p.u + (p.act === 'work' ? 0 : 0.37));
     // the near ear, pointed
     sk.blob((q) => {
       q.moveTo(cx - 2.85, cy - 0.3);
@@ -391,8 +433,8 @@ const smithParts: NpcParts = {
     horn(sk, cx - 1.8, cy - 2.55, cx - 3.6, cy - 4.2, -0.55, 0.78, C.bone, C.boneShade);
     if (back) return;
     // heavy brows, the face, two little tusks
-    stroke(sk, [cx - 1.25, cy - 0.35, cx - 0.1, cy - 0.15], 0.38, '#3a1e3a');
-    stroke(sk, [cx + 1.2, cy - 0.2, cx + 2.4, cy - 0.35], 0.32, '#3a1e3a');
+    stroke(sk, [cx - 1.25, cy - 0.35, cx - 0.1, cy - 0.15], 0.38, '#5a2410');
+    stroke(sk, [cx + 1.2, cy - 0.2, cx + 2.4, cy - 0.35], 0.32, '#5a2410');
     face(sk, { x: cx + 0.65, y: cy + 0.55, eyes: p.eyes, mouth: p.mouth, gap: 2.45, drop: 1.6 });
     if (p.mouth !== 'o') {
       for (const x of [cx + 0.05, cx + 1.35]) {
@@ -453,30 +495,28 @@ const smithParts: NpcParts = {
     }
     if (k === 0) {
       // the tongs: on the ingot at work and through the show's fire and
-      // flurry, then held out with the glowing blade stood up in them,
-      // beside his head
-      const high = p.act === 'show' && p.u >= 0.7;
-      const held = p.act === 'work' || p.act === 'show';
+      // flurry, then flung up with his arm as he roars
+      const show = p.act === 'show' ? p.u : -1;
+      const held = p.act === 'work' || (show >= 0 && roarOf(show) < 0.3);
       let tx = 0;
       let ty = f + 3.2;
-      if (held) [tx, ty] = high ? apply(inverse(sk.m), BLADE[0], BLADE[1]) : apply(inverse(sk.m), INGOT[0] - 0.6, INGOT[1] + 0.1);
+      if (held) [tx, ty] = apply(inverse(sk.m), INGOT[0] - 0.6, INGOT[1] + 0.1);
       const a = Math.atan2(ty - f, tx);
       const l = Math.hypot(tx, ty - f);
       sk.at(mul(move(0, f), turn(a)), () => {
         sk.limb([0, -0.1, l * 0.75, -0.18, l, -0.05], 0.22, C.ironLight);
         sk.limb([0, 0.1, l * 0.75, 0.18, l, 0.05], 0.22, C.iron);
       });
-      if (high) {
-        sk.at(mul(move(tx, ty), upright(p, 0)), () => {
-          sk.blob((q) => {
-            q.moveTo(-0.38, 0.4);
-            q.lineTo(-0.3, -3.6);
-            q.lineTo(0, -4.4);
-            q.lineTo(0.3, -3.6);
-            q.lineTo(0.38, 0.4);
-            q.closePath();
-          }, C.lavaHot, { dark: C.lava, d: 0.15 });
-          stroke(sk, [0, 0.0, 0, -3.5], 0.1, C.lavaWhite);
+      // in the show the ingot flares white-hot under his fire, a fountain
+      // of sparks leaping off it, and sparks fly off every blow
+      if (show >= 0) {
+        const fl = flareOf(show);
+        sk.at(inverse(sk.m), () => {
+          const [x, y] = INGOT;
+          if (fl > 0.05) flare(sk, x, y, fl);
+          const burst = bump(show, 0.3, 0.5);
+          if (burst > 0.1) sparkSpray(sk, x, y - 0.2, 11, 1.4 + 2.2 * burst, burst, Math.floor(show * 16));
+          if (blowOf(show)) sparkSpray(sk, x + 0.3, y - 0.2, 8, 1.6, 1, Math.floor(show * 16) + 3);
         });
       }
     }
@@ -484,9 +524,10 @@ const smithParts: NpcParts = {
   },
 };
 
-// Hammering: the hammer up behind his head, down on the ingot with a
-// clang (a squint and a grin), up again; the tongs steady in the near hand.
-const H_UP: Swing = { sh: 2.1, el: 1.0 };
+// Hammering: the hammer up beside his head (forward of it, clear of his
+// face), down on the ingot with a clang (a squint and a grin), up again;
+// the tongs steady in the near hand.
+const H_UP: Swing = { sh: 1.95, el: 0.75 };
 const H_HIT: Swing = { sh: 1.41, el: -0.84 };
 const T_HOLD: Swing = { sh: 1.0, el: 0.45 };
 const smithWork: NpcLoop = {
@@ -507,8 +548,11 @@ const smithWork: NpcLoop = {
   },
 };
 
-// The show: a deep breath, cheeks full; a gout of fire on the ingot; a
-// flurry of blows; and the blade held high, glowing, a big grin.
+// The show: a deep breath, cheeks full; a gout of fire on the ingot, which
+// flares; a flurry of blows on it; and a roar, the hammer and the tongs
+// flung up and out beside his head (never over his face), the fire on his
+// head blazing up, a grin. Each change eased over two frames or more,
+// back to the start at its end.
 const smithShow: NpcLoop & { crowd: 'watch' } = {
   secs: 4.8,
   frames: 16,
@@ -516,17 +560,18 @@ const smithShow: NpcLoop & { crowd: 'watch' } = {
   pose(u) {
     const breathe = bump(u, 0.0, 0.24);
     const fire = bump(u, 0.18, 0.46);
-    const flurry = u >= 0.44 && u < 0.7 ? Math.floor(u * 16) % 2 : 0;
-    const flurrying = ease(u, 0.4, 0.46) - ease(u, 0.66, 0.72);
-    const high = ease(u, 0.68, 0.78) - ease(u, 0.94, 1);
-    const hammer = mix(mix({ sh: 2.25, el: 1.2 }, flurry ? H_HIT : H_UP, flurrying), { sh: 0.7, el: 1.6 }, high);
+    const flurrying = ease(u, 0.4, 0.47) - ease(u, 0.66, 0.74);
+    const blow = blowOf(u);
+    const roar = roarOf(u);
+    const hammer = mix(mix({ sh: 2.0, el: 0.85 }, blow ? H_HIT : H_UP, flurrying), { sh: 0.12 + 1.75, el: 0.2 + 0.75 }, roar);
+    const tongs = mix(T_HOLD, { sh: 0.12 - 1.9, el: 0.2 - 1.0 }, roar);
     return {
       ...rest(),
-      bob: 0.25 * breathe + 0.2 * high * Math.abs(Math.sin(u * TAU * 3)),
-      lean: -0.08 * breathe + 0.1 * fire + 0.05 * flurrying - 0.04 * high,
-      tilt: -0.16 * breathe + 0.2 * fire - 0.1 * high,
-      arms: [mix(T_HOLD, { sh: 1.4, el: 0.3 }, high), hammer],
-      eyes: breathe > 0.5 ? 'shut' : fire > 0.3 || high > 0.5 || flurry ? 'happy' : 'open',
+      bob: 0.25 * breathe + 0.35 * roar * Math.abs(Math.sin(u * TAU * 4)),
+      lean: -0.08 * breathe + 0.1 * fire + 0.05 * flurrying - 0.06 * roar,
+      tilt: -0.16 * breathe + 0.2 * fire - 0.16 * roar,
+      arms: [tongs, hammer],
+      eyes: breathe > 0.5 ? 'shut' : fire > 0.3 || roar > 0.5 || blow ? 'happy' : 'open',
       mouth: breathe > 0.3 ? 'o' : 'open',
     };
   },
@@ -734,7 +779,7 @@ const witchWork: NpcLoop = {
   frames: 12,
   pose(u) {
     const a = u * TAU * 2;
-    const pinch = ease(u, 0.45, 0.58) - ease(u, 0.88, 1);
+    const pinch = ease(u, 0.4, 0.6) - ease(u, 0.8, 1);
     return {
       ...rest(),
       lean: 0.1 + 0.02 * Math.sin(a),
