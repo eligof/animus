@@ -425,6 +425,7 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 16,
+  light: [{ kind: 'fire', u: 4.1, v: 2.9, z: 4.6, r: 12, halo: 0, strength: 0.8 }], // the forge's coals (its own glow pulses)
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'run', 16, (k) => {
@@ -799,6 +800,7 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 8,
+  light: [{ kind: 'fire', u: 7.5, v: 5.1, z: 7, r: 8, halo: 0, strength: 0.5 }], // the candles down the table
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(7.5, 5.5, 8, 5.4, 0.3);
@@ -872,6 +874,7 @@ const entrance: PropArt = {
   len: 15,
   dep: 4,
   height: 22,
+  light: [{ kind: 'fire', u: 2.1, v: 1.1, z: 12.6, r: 9, halo: 0, strength: 0.6 }], // the torch by the doors
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, spring } = DOOR;

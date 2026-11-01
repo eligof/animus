@@ -52,5 +52,9 @@ export const meadhall: WorldDef = {
   costume: 'nord',
   critter: { kind: 'fox', body: hex('#d9772e') }, // a fox
   finale: { colors: [[240, 120, 40], [245, 197, 66], [150, 200, 235]] }, // ember, gold and frost-blue confetti
+  // a faint cool evening over the hall, so the firelight tells (more greys
+  // it out); at night the moon at the windows, the fires carrying the hall
+  ambient: { tint: [110, 104, 150], strength: 0.12 },
+  light: { night: { tint: [62, 82, 150], strength: 0.45 } },
   build: { colors: [hex('#8a8f96'), hex('#6b7077'), hex('#a8adb3'), hex('#f0a040')], shape: 'statue' }, // a carved stone warrior, an ember at its heart
 };
