@@ -6,7 +6,8 @@ import { hashString } from '../../world/rng.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { blot, flame, horn, shieldFace, zigzag } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
@@ -292,7 +293,7 @@ function decorOf(L: Layout): PlacedProp[] {
 // What lights the walls: the hearth and the braziers, the forge's coals,
 // the candles at the stations and the torch by the doors; each a point
 // (world units), how bright it is and how far its light carries.
-type Light = { x: number; y: number; z: number; a: number; reach: number; color: Color };
+type Light = { x: number; y: number; z: number; a: number; reach: number; color: Color; declared: boolean };
 const GLOWS: ReadonlyArray<readonly [SlotKind, number, number, number, number, number]> = [
   ['run', 4.1, 2.9, 4.5, 0.75, 24],
   ['write', 1.6, 2.4, 12, 0.4, 10],
@@ -310,12 +311,12 @@ function lightsOf(L: Layout): Light[] {
   const at = (p: { wall: Wall; x0: number; y0: number }, u: number, w: number) => (p.wall === 'right' ? { x: p.x0 + u, y: p.y0 + w } : { x: p.x0 + w, y: p.y0 + u });
   hit = [];
   for (const p of decorOf(L)) {
-    if (p.art === DECOR_ART.hearth) hit.push({ ...at(p, 8, 4.3), z: 3, a: 0.95, reach: 34, color: '#ff8a3a' });
-    else if (p.art === DECOR_ART.brazier) hit.push({ ...at(p, p.len / 2, p.dep / 2), z: 4, a: 0.5, reach: 16, color: '#ff8a3a' });
+    if (p.art === DECOR_ART.hearth) hit.push({ ...at(p, 8, 4.3), z: 3, a: 0.95, reach: 34, color: '#ff8a3a', declared: true });
+    else if (p.art === DECOR_ART.brazier) hit.push({ ...at(p, p.len / 2, p.dep / 2), z: 4, a: 0.5, reach: 16, color: '#ff8a3a', declared: true });
   }
   for (const [kind, u, w, z, a, reach] of GLOWS) {
     const q = L.slots.find((sl) => sl.kind === kind);
-    if (q) hit.push({ ...at(q, u, w), z, a, reach, color: kind === 'run' ? '#ff8a3a' : '#ffa848' });
+    if (q) hit.push({ ...at(q, u, w), z, a, reach, color: kind === 'run' ? '#ff8a3a' : '#ffa848', declared: kind === 'run' || kind === 'idle' || kind === 'entrance' });
   }
   LIGHTS.set(key, hit);
   return hit;
@@ -371,16 +372,32 @@ export const room: RoomArt = {
     for (const w of walls) for (const f of plan.features) if (f.wall === w.wall && w.k.sees(f.a - f.w / 2, -1, f.z0, f.a + f.w / 2, 6, f.z1)) piece(w.k, v, f);
     for (const w of walls) beam(w.k, v, w.wall, w.end, plan);
     for (const w of walls) wallLight(w.k, v, w.wall, w.end, plan);
-    for (const w of walls) candles(w.k, v, w.wall, plan);
+    for (const w of walls) candles(w.k, v, w.wall, plan, lampsOn(v));
     shell(k, v);
     v.pen.restore();
+  },
+  // The light the shell gives (the scene lays its pools, washes and
+  // glows): the candle in each horn sconce and the candle rings, put out
+  // at night, and the high windows, dark while the fire is lit and letting
+  // the moon in at night. The hearth, the braziers, the forge, the long
+  // table and the doors' torch give theirs as props.
+  lights(v): RoomLight[] {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    const G = girtZ(v.H);
+    const out: RoomLight[] = [];
+    for (const wall of ['right', 'left'] as const) for (const a of plan.lamps[wall]) out.push({ kind: 'lamp', wall, u: a + 0.2, v: PD + 1.2, z: lampZ(G) + 1.85, r: 9, halo: 1.8, strength: 0.6 });
+    for (const f of plan.features) {
+      if (f.kind === 'chandelier') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: RING.out, z: G - 7.3, r: 12, halo: 2.4, strength: 0.7 });
+      if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: WIN.w, z0: sillOf(f), z1: sillOf(f) + WIN.h, bars: 1, rails: 1, strength: 0, night: '#9fb6ee', moon: 0.85 });
+    }
+    return out;
   },
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     v.pen.save();
     firelight(v, plan.L);
     for (const f of plan.features) if (f.kind === 'window') snow(new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s), v, f);
-    flicker(v, plan);
+    if (lampsOn(v)) flicker(v, plan);
     v.pen.restore();
   },
 };
@@ -516,38 +533,20 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
   for (const r of plan.runners) runner(k, r);
   rushes(k, v, plan);
-  // The light on the floor: warm before the hearth and round the braziers,
-  // a pool at each lit station, a small one under each sconce.
-  for (const p of decorOf(plan.L)) {
-    const pk = new Kit(pen, propAt(v.at, p), s);
-    if (p.art === DECOR_ART.hearth) {
-      if (!pk.sees(-14, -4, 0, p.len + 14, p.dep + 22, 0)) continue;
-      pk.pool(8, 5, 22, 20, '#ff8a3a', 0.42);
-      pk.pool(8, 6, 12, 9, '#ffb050', 0.4);
-    } else if (p.art === DECOR_ART.brazier) {
-      if (!pk.sees(-9, -9, 0, p.len + 9, p.dep + 9, 0)) continue;
-      pk.pool(p.len / 2, p.dep / 2, 9, 9, '#ff9a48', 0.32);
-    }
-  }
+  // The light on the floor round the candles at the desks (the hearth,
+  // the braziers, the forge, the long table, the doors' torch and the
+  // sconces declare theirs: the scene lays those pools).
   const lights: ReadonlyArray<readonly [SlotKind, number, number, number, number, Color, number]> = [
-    ['run', 4.5, 4.5, 14, 12, '#ff8a3a', 0.42],
     ['write', 2.4, 4.2, 8, 6.5, '#ffb44a', 0.3],
     ['search', 9.5, 3.2, 8, 6, '#ffb44a', 0.3],
     ['read', 11.5, 3, 7, 5, '#ffb44a', 0.24],
     ['think', 4, 3.5, 9, 7, '#ffb44a', 0.22],
-    ['idle', 7.5, 5.5, 13, 9, '#ffb44a', 0.26],
-    ['entrance', 1.5, 2.5, 7, 5, '#ffb44a', 0.26],
-    ['entrance', 6.5, 3, 8, 5, '#9fc8e8', 0.14],
   ];
   for (const [kind, u, w, ru, rv, color, a] of lights) {
     const q = plan.L.slots.find((sl) => sl.kind === kind);
     if (!q) continue;
     const qk = new Kit(pen, propAt(v.at, q), s);
     if (qk.sees(u - ru, w - rv, 0, u + ru, w + rv, 0)) qk.pool(u, w, ru, rv, color, a);
-  }
-  for (const wall of ['right', 'left'] as const) {
-    const wk = new Kit(pen, wallAt(v.at, wall, T), s);
-    for (const a of plan.lamps[wall]) if (wk.sees(a - 5, 0, 0, a + 5, 6, 0)) wk.pool(a, 2.5, 5, 3.5, '#ffb050', 0.22);
   }
 }
 
@@ -954,8 +953,10 @@ function swag(k: Kit, a0: number, a1: number, G: number, lit: boolean): void {
 
 // The firelight on a wall, over the planks and what hangs on them: the hall
 // falls dark away from the fires, and each light warms the wall nearest it,
-// the more the nearer it stands (a wide faint wash from far off, a bright
-// pool close by); each sconce warms the planks round it.
+// the more the nearer it stands (a wide faint wash from far off; close by,
+// a light the scene knows of washes the wall itself, so only the candles
+// at the desks are drawn here). Under each window the cold of the night,
+// stronger with the lamps out.
 function wallLight(k: Kit, v: RoomView, wall: Wall, end: number, plan: Plan): void {
   const { T, H } = v;
   const G = girtZ(H);
@@ -968,15 +969,13 @@ function wallLight(k: Kit, v: RoomView, wall: Wall, end: number, plan: Plan): vo
   for (const l of lightsOf(plan.L)) {
     const d = wall === 'right' ? l.y - T : l.x - T;
     const along = wall === 'right' ? l.x : l.y;
-    if (d < 0) continue;
+    if (d < 0 || (l.declared && d < 6)) continue;
     const a = l.a / (1 + (d / l.reach) ** 2);
     if (a < 0.025) continue;
     glow(k, along, Math.min(l.z, G - 4), 6 + d * 0.9 + l.reach * 0.5, 5 + d * 0.45 + l.reach * 0.35, T, end, 0, top, l.color, a);
   }
-  const lz = lampZ(G);
-  for (const a of plan.lamps[wall]) glow(k, a, lz + 1.6, 6, 5.5, T, end, 0, top, '#ffa848', 0.3);
-  // the night's cold light round the windows
-  for (const f of plan.features) if (f.wall === wall && f.kind === 'window') glow(k, f.a, f.z0 + 4, 5, 5, T, end, f.z0 - 2, f.z1 + 3, C.frost, 0.16);
+  // the night's cold light round the windows, washing down the daub
+  for (const f of plan.features) if (f.wall === wall && f.kind === 'window') glow(k, f.a, f.z0 + 1.5, 5.5, 8, T, end, f.z0 - 6, f.z1 + 3, C.frost, lampsOn(v) ? 0.12 : 0.3);
 }
 
 // A soft light (screen) on the wall's plane round (cu, cz), ru along by rz
@@ -1012,25 +1011,29 @@ function glow(k: Kit, cu: number, cz: number, ru: number, rz: number, u0: number
 
 // The candles over the dark: a horn sconce on each lit post, the flames of
 // the candle rings.
-function candles(k: Kit, v: RoomView, wall: Wall, plan: Plan): void {
+function candles(k: Kit, v: RoomView, wall: Wall, plan: Plan, on: boolean): void {
   const G = girtZ(v.H);
   const lz = lampZ(G);
-  for (const a of plan.lamps[wall]) if (k.sees(a - 1.5, 0, lz - 3, a + 1.5, PD + 2, lz + 3)) sconce(k, a, lz);
+  for (const a of plan.lamps[wall]) if (k.sees(a - 1.5, 0, lz - 3, a + 1.5, PD + 2, lz + 3)) sconce(k, a, lz, on);
   for (const f of plan.features) {
     if (f.wall !== wall || f.kind !== 'chandelier' || !k.sees(f.a - 3, 0, f.z0, f.a + 3, 7, f.z1)) continue;
-    for (const [u, w, z] of ringCandles(f, G)) flame(k, u, w, z + 1.25, 0.85, 0.5, 0.4);
+    for (const [u, w, z] of ringCandles(f, G)) {
+      if (on) flame(k, u, w, z + 1.25, 0.85, 0.5, 0.4);
+      else k.line([[u, w, z + 0.95], [u, w, z + 1.25]], INK, Math.max(0.7, 0.07 * k.s));
+    }
   }
 }
 
 // A drinking horn held out from the post at `a` on an iron strap, its mouth
-// up holding a lit candle.
-function sconce(k: Kit, a: number, z: number): void {
+// up holding a candle, lit (`on`) or snuffed for the night.
+function sconce(k: Kit, a: number, z: number, on: boolean): void {
   const n = PD;
   k.rod([[a, n - 0.05, z - 1.75], [a, n + 0.35, z - 1.75], [a + 0.05, n + 0.75, z - 1.0]], C.ironDark, 0.18);
   k.disc(a, n + 0.02, z - 1.75, 0.18, C.ironLight, 0);
   horn(k, [[a + 0.2, n + 1.2, z + 0.9], [a + 0.15, n + 1.15, z + 0.1], [a + 0.05, n + 0.85, z - 0.8], [a, n + 0.45, z - 1.5], [a, n + 0.15, z - 1.9]], 0.46, false);
   k.cyl(a + 0.2, n + 1.2, z + 0.7, 0.2, 0.75, C.wax);
-  flame(k, a + 0.2, n + 1.2, z + 1.85, 0.9, 0.5, 0.5);
+  if (on) flame(k, a + 0.2, n + 1.2, z + 1.85, 0.9, 0.5, 0.5);
+  else k.line([[a + 0.2, n + 1.2, z + 1.45], [a + 0.2, n + 1.2, z + 1.75]], INK, Math.max(0.7, 0.07 * k.s));
 }
 
 // ── wall pieces ──────────────────────────────────────────────────────────────
@@ -1636,18 +1639,19 @@ function snow(k: Kit, v: RoomView, f: Feature): void {
   pen.restore();
 }
 
-// The hearth's light breathing on the floor and anyone round it.
+// The hearth's light breathing on the floor before it (the scene lays its
+// steady pool; this is only the flicker, kept small).
 function firelight(v: RoomView, L: Layout): void {
   const pit = decorOf(L).find((p) => p.art === DECOR_ART.hearth);
   if (!pit) return;
   const t = v.t;
   const n = 0.5 + 0.5 * (0.6 * Math.sin(t * 5.3) + 0.4 * Math.sin(t * 9.1 + 1.3));
   const pk = new Kit(v.pen, propAt(v.at, pit), v.s);
-  pk.pool(8 + Math.sin(t * 2.3) * 0.4, 7, 16, 14, C.ember, 0.06 + 0.06 * n);
+  pk.pool(8 + Math.sin(t * 2.3) * 0.4, 6, 10, 8, C.ember, 0.08 + 0.1 * n);
 }
 
 // The candles' flicker: a soft breath of light round each sconce and each
-// candle ring.
+// candle ring (none at night: they are snuffed).
 function flicker(v: RoomView, plan: Plan): void {
   const G = girtZ(v.H);
   const lz = lampZ(G);

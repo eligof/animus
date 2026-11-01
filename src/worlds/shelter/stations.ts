@@ -199,6 +199,7 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 12,
+  light: [{ kind: 'screen', u: 6, v: 3, z: 8.6, color: '#7dff9a', r: 5, halo: 0 }], // the radar scope
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'search', 12, (k) => {
@@ -455,6 +456,7 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 12,
+  light: [{ kind: 'screen', u: 4.5, v: 4.3, z: 9, color: '#7dff9a', r: 5, halo: 0 }], // the green screen
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'web', 12, (k) => {
@@ -646,6 +648,7 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 13,
+  light: [{ kind: 'glow', u: 12.5, v: 4.8, z: 6, color: '#f0892e', r: 9, halo: 0, strength: 0.7 }], // the jukebox's bands
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'idle', 13, (k) => {

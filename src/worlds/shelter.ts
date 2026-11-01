@@ -52,5 +52,9 @@ export const shelter: WorldDef = {
   costume: 'jumpsuit',
   critter: { kind: 'rat', body: hex('#8f857a') }, // a shelter rat
   finale: { colors: [[63, 176, 168], [240, 137, 46], [239, 230, 204]] }, // teal, orange and cream confetti
+  // no evening down here (the light is all lamps); the night shift: the
+  // capsules out, a teal dark carried by the amber emergency lamps, the
+  // jukebox and the screens
+  light: { night: { tint: [60, 90, 110], strength: 0.5 } },
   build: { colors: [hex('#8e9c9a'), hex('#3f9e9a'), hex('#e8833a'), hex('#7fe07a')], shape: 'machine' }, // a small reactor, steel and teal with orange and a green glow
 };

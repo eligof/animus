@@ -36,6 +36,8 @@ const hearth: PropArt = {
   len: 22,
   dep: 9,
   height: 12,
+  // the hall's great light, burning all night
+  light: [{ kind: 'fire', u: 7.4, v: 4.3, z: 3.6, r: 18, halo: 4, strength: 1.2 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -496,6 +498,7 @@ const brazier: PropArt = {
   len: 4,
   dep: 4,
   height: 7,
+  light: [{ kind: 'fire', u: 2, v: 2, z: 5.4, r: 9, halo: 0 }], // its own flickering glow draws the halo
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {

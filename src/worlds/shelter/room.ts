@@ -5,7 +5,8 @@ import { hub, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { hashString } from '../../world/rng.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { fillPts, hazard, hull, mote, rivets, wheel } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
@@ -216,11 +217,27 @@ export const room: RoomArt = {
     const wild = plan.features.find((f) => f.kind === 'tube');
     v.pen.save();
     for (const f of plan.features) {
-      if (f.kind !== 'tube') continue;
+      if (f.kind !== 'tube' || !lampsOn(v)) continue;
       flicker(new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s), v, f, f === wild);
     }
     for (const wall of ['right', 'left'] as const) steam(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, wall);
     v.pen.restore();
+  },
+  // The light the shell gives (the scene lays its pools, washes and
+  // glows): the capsule lights, out on the night shift; the amber
+  // emergency lamps on the frieze, always on, carrying the room at night;
+  // and the windows, the hydroponics bay's grow light coming through them
+  // (turned low at night).
+  lights(v): RoomLight[] {
+    const out: RoomLight[] = [];
+    for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+      if (f.kind === 'tube') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 0.9, z: capZ(v.H), color: '#fff1cf', r: 13, halo: 2.2, strength: 0.85 });
+      if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2.8, z0: midZ(v.H) - 3.2, z1: midZ(v.H) + 3.2, color: '#f2f0c4', strength: 0.4, night: '#d8f0a0', moon: 0.25 });
+    }
+    for (const wall of ['right', 'left'] as const) {
+      for (const a of emergencyOf(v.T, wall === 'right' ? v.W : v.D)) out.push({ kind: 'glow', wall, u: a, v: 0.9, z: topPipe(v.H) - 2.2, color: '#ffb347', r: 10, halo: 1.5, strength: 0.45 });
+    }
+    return out;
   },
 };
 
@@ -401,18 +418,21 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     // the contact shade along the wall's foot
     wk.poly([[lo, 0, 0.04], [hi, 0, 0.04], [hi, 3.5, 0.04], [lo, 3.5, 0.04]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#140d0470'], [0.35, '#140d0424'], [1, '#140d0400']]), 0);
   }
-  // Cool pools under the capsule lights.
-  for (const f of plan.features) {
-    if (f.kind !== 'tube') continue;
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (wk.sees(f.a - 14, 0, 0, f.a + 14, 14, 0)) {
-      wk.pool(f.a, 5, 12, 9, '#d6fff0', 0.14);
-      wk.pool(f.a, 2.5, 6, 3.5, '#e8fff4', 0.12);
+  // A gloss streak on the tiles under each capsule light while it is on
+  // (the scene lays the lights' pools).
+  if (lampsOn(v)) {
+    for (const f of plan.features) {
+      if (f.kind !== 'tube') continue;
+      const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
+      if (!wk.sees(f.a - 3, 0, 0, f.a + 3, 14, 0)) continue;
+      wk.pool(f.a, 7, 1.5, 6.5, '#fff8e6', 0.16);
+      wk.pool(f.a, 5.5, 0.7, 3.5, '#ffffff', 0.12);
     }
   }
-  // Lamp light where the stations have lamps or glow.
+  // Lamp light where the desk lamp and the radio's dial glow (the
+  // jukebox and the screens declare theirs).
   const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
-  for (const [kind, u, w, r, a, c] of [['write', 0.8, 0.5, 8, 0.14, '#ffd890'], ['think', 0.75, 0.6, 9, 0.16, '#ffb860'], ['idle', 0.85, 0.5, 11, 0.14, '#ffc8e8'], ['web', 0.5, 0.7, 7, 0.12, '#9dffb0'], ['search', 0.5, 1.2, 7, 0.1, '#9dffb0']] as const) {
+  for (const [kind, u, w, r, a, c] of [['write', 0.8, 0.5, 8, 0.14, '#ffd890'], ['think', 0.75, 0.6, 9, 0.16, '#ffb860']] as const) {
     const q = slot(kind);
     if (!q) continue;
     const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
@@ -534,7 +554,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   bulkheads(k, v, framing(T, end, mine).ribs, plan.diner?.wall === wall ? plan.diner : null, tone);
   // What hangs on the wall.
   for (const f of mine) {
-    if (f.kind === 'tube') capsuleArt(k, v, f, tone);
+    if (f.kind === 'tube') capsuleArt(k, v, f, tone, lampsOn(v));
     else if (f.kind === 'pipes') pipesArt(k, v, f);
     else if (f.kind === 'window') windowArt(k, v, f, tone);
     else if (f.kind === 'board') boardArt(k, v, f);
@@ -545,8 +565,9 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'vent') ventArt(k, v, f);
     else if (f.kind === 'mural') muralArt(k, v, f);
   }
-  // The pipe bundle along the top.
+  // The pipe bundle along the top, and the emergency lamps on the frieze.
   pipeRun(k, v, lo, hi, end);
+  for (const a of emergencyOf(T, end)) if (a > lo - 2 && a < hi + 2) emergency(k, a, topPipe(H) - 2.2, lampsOn(v));
 }
 
 // Where a wall's raised frames stand (every other panel) and its heavy
@@ -770,12 +791,12 @@ function pipeRun(k: Kit, v: RoomView, lo: number, hi: number, end: number): void
 // A capsule light: a steel mounting plate, a rounded chrome housing standing
 // out of it round a tall ribbed lens lit from inside, its light washed over
 // the plates round it (the overlay makes it hum or flicker).
-function capsuleArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => Color): void {
+function capsuleArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => Color, on: boolean): void {
   const z = capZ(v.H);
   const a = f.a;
   const hh = CAP_H / 2;
   if (!k.sees(a - 6, 0, z - hh - 6, a + 6, 1.5, z + hh + 3)) return;
-  k.wash(a, 0.02, z - 0.8, 6, 10, '#e6fff4', 0.18);
+  if (on) k.wash(a, 0.02, z - 0.8, 6, 10, '#e6fff4', 0.18);
   k.shadow(a + 0.3, 0.05, 1.4, 0.5, 0.18, z - hh - 0.6);
   // the plate
   k.poly(rrect(a, 0.02, z, 1.6, hh + 0.6, 1.4), tone(FRAME, 0.12), k.thin);
@@ -784,8 +805,26 @@ function capsuleArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number
   const front = rrect(a, 0.8, z, 1.05, hh, 1.05).map(([u, n, zz]) => k.p(u, n, zz));
   fillPts(k, hull([...back, ...front]), shade(C.chrome, -0.3), k.lw);
   k.poly(rrect(a, 0.8, z, 1.05, hh, 1.05), C.chrome, k.thin);
-  lens(k, a, z, '#f4fff9', '#bfe8d8');
-  k.halo(a, 1.1, z, 3.0, '#e8fff4', 0.22);
+  if (on) lens(k, a, z, '#f4fff9', '#bfe8d8');
+  else lens(k, a, z, '#8a9a92', '#5f6d66');
+}
+
+// The amber emergency lamps along the frieze: one every 24 units from 12
+// in, each wall.
+function emergencyOf(T: number, end: number): number[] {
+  const out: number[] = [];
+  for (let a = T + 12; a < end - 4; a += 24) out.push(a);
+  return out;
+}
+
+// An emergency lamp on the frieze at `a`, its lens's middle at `z`: a
+// steel housing, a caged amber lens (bright on the night shift, steady
+// and low by day).
+function emergency(k: Kit, a: number, z: number, on: boolean): void {
+  if (!k.sees(a - 1.2, 0, z - 1.4, a + 1.2, 1.2, z + 1.4)) return;
+  k.box(a - 0.85, 0, z - 1.1, 1.7, 0.45, 2.2, C.steelDark, { line: k.thin, stripe: false });
+  k.poly(rrect(a, 0.85, z, 0.55, 0.8, 0.5), on ? '#e89a48' : '#ffd27a', k.thin);
+  if (k.s >= 3) k.segs([[[a - 0.55, 0.9, z], [a + 0.55, 0.9, z]], [[a, 0.9, z - 0.8], [a, 0.9, z + 0.8]]], C.steelDark, Math.max(0.6, 0.08 * k.s));
 }
 
 // A capsule's ribbed lens, light at its middle, `dark` at its ends.
@@ -1121,6 +1160,15 @@ function muralArt(k: Kit, v: RoomView, f: Feature): void {
   k.trace(pic);
   k.paint(null, k.thin);
   k.line(rrect(a, n + 0.02, zc, hw - 0.2, hh - 0.2, 1.2).slice(5, 13), withAlpha('#ffffff', 0.6), Math.max(0.6, 0.1 * s));
+  // a chrome picture lamp over it on two arms, its light down the
+  // painting while the lights are on
+  const zl = zc + hh + 0.9;
+  for (const du of [-hw * 0.45, hw * 0.45]) k.rod([[a + du, 0.05, zl + 0.6], [a + du, 1.3, zl + 0.2]], C.steelDark, 0.14);
+  k.box(a - hw * 0.62, 0.9, zl - 0.25, hw * 1.24, 0.9, 0.55, C.chrome, { line: k.thin, round: 0.25 });
+  if (lampsOn(v)) {
+    k.wash(a, n + 0.05, zc + hh * 0.35, hw * 0.95, hh * 1.1, '#fff3d8', 0.28);
+    k.line([[a - hw * 0.55, 1.35, zl - 0.3], [a + hw * 0.55, 1.35, zl - 0.3]], '#fff8e0', Math.max(0.8, 0.14 * s));
+  }
 }
 
 // A starburst wall clock: brass spikes round a cream face, balls on the
