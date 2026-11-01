@@ -70,6 +70,7 @@ const CROWD = { cols: 9, rows: 4 };
 const BAND = { cols: 8, rows: 4, max: 3 };
 const ERROR_MS = 5000; // an error stays on show this long, whatever comes next
 const SMOKE_MS = 4000;
+const SLATE: RGB = [142, 137, 150]; // an error's smoke: a cartoon puff in slate (see fx.ts)
 // A working activity sends a roaming agent to its workstation only once it
 // has lasted this long; in between the pose changes in place.
 const SETTLE_MS = 3000;
@@ -886,7 +887,7 @@ export class Stage {
     const cy = (r.y0 + r.y1) / 2;
     const rng = this.rng;
     for (let i = 0; i < 8; i++) {
-      this.add({ ...smoke(cx + rng.range(-3, 3), cy + rng.range(-1.5, 1.5), 0.5 + rng.next(), rng, [214, 206, 196]), life: 0.6 + rng.next() * 0.4 });
+      this.add({ ...smoke(cx + rng.range(-3, 3), cy + rng.range(-1.5, 1.5), 0.5 + rng.next(), rng, [216, 209, 200]), life: 0.6 + rng.next() * 0.4 });
     }
     for (let i = 0; i < 10; i++) {
       const ang = (i / 10) * Math.PI * 2;
@@ -1278,7 +1279,7 @@ export class Stage {
         const sp = 5 + r.next() * 9;
         this.add({ kind: 'spark', x, y, z: 1, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: 6 + r.next() * 10, life: 0.5 + r.next() * 0.5, color: r.pick<RGB>([[255, 214, 120], [255, 128, 48], pal.bad]), glow: true, gravity: 24 });
       }
-      for (let i = 0; i < 10; i++) this.add(smoke(x + r.range(-2, 2), y + r.range(-2, 2), 1 + r.next() * 3, r, [96, 92, 98]));
+      for (let i = 0; i < 10; i++) this.add(smoke(x + r.range(-2, 2), y + r.range(-2, 2), 1 + r.next() * 3, r, SLATE));
       this.life.boom(x, y, a, this.cast.values());
       a.error = { until: now + ERROR_MS, text: a.info.detail || 'tool failed', x, y };
     }
@@ -1286,8 +1287,8 @@ export class Stage {
     // smokes and '!'s keep rising for a while anyway.
     const err = a.error && now < a.error.until ? a.error : null;
     if (err && now < err.until - ERROR_MS + SMOKE_MS && r.next() < dt * 14) {
-      const grey = 70 + r.int(0, 40);
-      this.add({ ...smoke(err.x + r.range(-1.5, 1.5), err.y + r.range(-1.5, 1.5), 1, r, [grey, grey - 4, grey + 2]), life: 1.6 + r.next() });
+      const k = r.int(-10, 10);
+      this.add({ ...smoke(err.x + r.range(-1.5, 1.5), err.y + r.range(-1.5, 1.5), 1, r, [SLATE[0] + k, SLATE[1] + k, SLATE[2] + k]), life: 1.6 + r.next() });
     }
     if ((act === 'error' || err) && r.next() < dt / 0.7) this.glyphs.push({ x: a.x, y: a.y, z: head + 4, vz: 4, ch: '!', color: pal.bad, life: 0.8 });
     // (after a high-five, if it is giving one: see life.ts)

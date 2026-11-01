@@ -6,15 +6,14 @@ import { join, relative } from 'node:path';
 import { clearSprites, spriteStats } from '../src/art/figure.ts';
 import { LOOP } from '../src/art/figure/rig.ts';
 import { Scene } from '../src/art/scene.ts';
-import { buildSprite } from '../src/art/scene/build.ts';
+import { buildSprite, wallValue } from '../src/art/scene/build.ts';
 import { compare, depthOrder, pointVsBox } from '../src/art/scene/depth.ts';
 import type { Drawable } from '../src/art/scene/depth.ts';
-import { Canvas } from '../src/art/canvas.ts';
-import { isoBox } from '../src/art/iso.ts';
 import type { Plate } from '../src/art/plate.ts';
 import type { Bitmap } from '../src/art/types.ts';
 import { Screen } from '../src/term/screen.ts';
 import { getTheme } from '../src/themes/index.ts';
+import { SHAPES, blueprint } from '../src/world/build.ts';
 import type { Block } from '../src/world/build.ts';
 import { traitsFor } from '../src/world/character.ts';
 import type { CritterFrame, FigureFrame, LabelFrame, SceneFrame } from '../src/world/frame.ts';
@@ -485,29 +484,83 @@ test('the selected figure stands in a ring of its colour, the hurt in a pulsing 
   assert.notDeepEqual(redRow(h1), redRow(h2), 'it pulses');
 });
 
-test('a build is one merged shape: far less outline than cube by cube', () => {
-  const blocks: Block[] = [];
-  for (let z = 0; z < 6; z++) for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) blocks.push({ x: 20 + x, y: 20 + y, z, c: (x + z) % 2 });
-  const colors: Array<[number, number, number]> = [[200, 120, 70], [230, 220, 190]];
-  const sp = buildSprite(blocks, [], colors, [120, 230, 255], S, '#101018')!;
-  const inky = (b: Bitmap) => {
-    let n = 0;
-    for (let o = 0; o < b.data.length; o += 4) if (b.data[o + 3] > 200 && b.data[o] < 40 && b.data[o + 1] < 40 && b.data[o + 2] < 50) n++;
-    return n;
+test('a build is a smooth sculpted shape, not a staircase of cubes, and what is still to come a clean faint ghost', () => {
+  const at = (bs: Block[], dx: number) => bs.map((b) => ({ ...b, x: b.x + dx, y: b.y + dx }));
+  const colors: Array<[number, number, number]> = [[200, 160, 110], [170, 130, 90], [210, 190, 150], [80, 200, 190]];
+  const ghost: [number, number, number] = [120, 230, 255];
+  const s = 10;
+  const blocks = at(blueprint('pyramid', colors.length, 8, 18), 30);
+  const whole = buildSprite({ shape: 'pyramid', blocks, pending: [], colors, ghost }, s, '#101018');
+  const b = whole.body!;
+  const alpha = (x: number, y: number) => b.img.data[4 * (y * b.img.width + x) + 3];
+  // The left edge of its silhouette from the apex down its slope: a
+  // straight line (the blocks' would step a unit, s px, at a time).
+  const left: Array<[number, number]> = [];
+  for (let y = 0; y < b.img.height; y++) {
+    let x = 0;
+    while (x < b.img.width && alpha(x, y) < 128) x++;
+    if (x < b.img.width) left.push([y, x]);
+  }
+  const apex = left[0][0];
+  const corner = left.reduce((m, q) => (q[1] < m[1] ? q : m))[0];
+  const slope = left.filter(([y]) => y > apex + (corner - apex) * 0.2 && y < apex + (corner - apex) * 0.75);
+  assert.ok(slope.length > 40, `${slope.length} rows of slope`);
+  const n = slope.length;
+  const my = slope.reduce((t, q) => t + q[0], 0) / n;
+  const mx = slope.reduce((t, q) => t + q[1], 0) / n;
+  const k = slope.reduce((t, q) => t + (q[0] - my) * (q[1] - mx), 0) / slope.reduce((t, q) => t + (q[0] - my) ** 2, 0);
+  const off = Math.max(...slope.map(([y, x]) => Math.abs(x - (mx + k * (y - my)))));
+  assert.ok(off < 1.6, `the slope strays ${off.toFixed(2)} px from a straight line`);
+  assert.ok(Math.max(...slope.slice(1).map(([, x], i) => Math.abs(x - slope[i][1]))) <= 2, 'no steps');
+  // It stands in a soft shadow of its own on the floor.
+  assert.ok(whole.floor, 'a contact shadow');
+  let dark = 0;
+  for (let o = 3; o < whole.floor!.img.data.length; o += 4) if (whole.floor!.img.data[o] > 30) dark++;
+  assert.ok(dark > 500, `${dark} shadow pixels`);
+  // Half laid: the rest is a faint ghost, one even fill (no scan lines)
+  // inside a light outline; nothing laid: a ghost alone, no shadow yet.
+  const half = buildSprite({ shape: 'pyramid', blocks: blocks.slice(0, blocks.length >> 1), pending: blocks.slice(blocks.length >> 1), colors, ghost }, s, '#101018').body!;
+  const fill: number[] = [];
+  for (let o = 3; o < half.img.data.length; o += 4) if (half.img.data[o] > 15 && half.img.data[o] < 100) fill.push(half.img.data[o]);
+  fill.sort((p, q) => p - q);
+  const mid = fill[fill.length >> 1];
+  assert.ok(fill.length > 800 && mid > 30 && mid < 60, `${fill.length} faint pixels, median alpha ${mid}`);
+  assert.ok(fill.filter((a) => Math.abs(a - mid) <= 6).length > fill.length * 0.8, 'one even fill');
+  const none = buildSprite({ shape: 'pyramid', blocks: [], pending: blocks, colors, ghost }, s, '#101018');
+  assert.ok(none.body && !none.floor);
+  let solid = 0;
+  for (let o = 3; o < none.body.img.data.length; o += 4) if (none.body.img.data[o] > 200) solid++;
+  assert.ok(solid < 0.12 * fill.length, `a ghost alone is see-through (${solid} opaque pixels)`);
+});
+
+test('every build shape is drawn whole, cut and as a ghost, and pale ones keep under a dark room\'s walls', () => {
+  const colors: Array<[number, number, number]> = [[235, 235, 228], [220, 222, 226], [240, 236, 220], [255, 220, 120]];
+  const lum = (d: Uint8ClampedArray) => {
+    const v: number[] = [];
+    for (let o = 0; o < d.length; o += 4) if (d[o + 3] === 255) v.push((0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2]));
+    v.sort((p, q) => p - q);
+    return v[v.length >> 1];
   };
-  // The same blocks as outlined cubes, back to front.
-  const cubes = new Canvas(sp.img.width, sp.img.height);
-  const at = (x: number, y: number, z: number): [number, number] => [(x - y) * S - sp.x, ((x + y) * S) / 2 - z * S - sp.y];
-  for (const b of [...blocks].sort((p, q) => p.x + p.y + p.z - (q.x + q.y + q.z))) isoBox(cubes, at, b.x, b.y, b.z, 1, 1, 1, b.c ? '#e6dcbe' : '#c87846', { ink: '#101018' });
-  const merged = inky(sp.img);
-  const each = inky(cubes);
-  assert.ok(merged > 0, 'it has an outline');
-  assert.ok(merged * 3 < each, `${merged} ink pixels merged vs ${each} cube by cube`);
-  // Its pending part is a translucent hologram over it.
-  const ghost = buildSprite(blocks.slice(0, 108), blocks.slice(108), colors, [120, 230, 255], S, '#101018')!;
-  let soft = 0;
-  for (let o = 3; o < ghost.img.data.length; o += 4) if (ghost.img.data[o] > 0 && ghost.img.data[o] < 200) soft++;
-  assert.ok(soft > 500, `${soft} translucent pixels`);
+  for (const shape of SHAPES) {
+    const blocks = blueprint(shape, colors.length, 6, 16).map((b) => ({ ...b, x: b.x + 30, y: b.y + 30 }));
+    for (const k of [0, 0.35, 0.7, 1]) {
+      const n = Math.round(blocks.length * k);
+      const sp = buildSprite({ shape, blocks: blocks.slice(0, n), pending: blocks.slice(n), colors, ghost: [120, 230, 255] }, 8, '#101018');
+      assert.ok(sp.body, `${shape} at ${k}`);
+      assert.equal(!!sp.floor, n > 0, `${shape} at ${k}: a shadow once a brick is laid`);
+    }
+    const lit = lum(buildSprite({ shape, blocks, pending: [], colors, ghost: [120, 230, 255] }, 8, '#101018').body!.img.data);
+    const dim = lum(buildSprite({ shape, blocks, pending: [], colors, ghost: [120, 230, 255] }, 8, '#101018', 60).body!.img.data);
+    assert.ok(lit > 150 && dim < 110, `${shape}: ${lit.toFixed(0)} in a bright room, ${dim.toFixed(0)} in a dark one`);
+  }
+  // The walls' value is read once per room and size; no wall, no limit.
+  const room = { draw() {} };
+  const L = { W: 60, D: 60, H: 20, T: 4, slots: [] };
+  let reads = 0;
+  assert.equal(wallValue(room, L, () => (reads++, 90)), 90);
+  assert.equal(wallValue(room, L, () => (reads++, 10)), 90);
+  assert.ok(reads > 20 && reads < 400);
+  assert.equal(wallValue({ draw() {} }, L, () => null), 255);
 });
 
 test('particles fade out over the end of their life', () => {

@@ -267,3 +267,54 @@ test('the build ghost is cyan in a warm world and amber in a cold one', async ()
   assert.ok(f.builds[0].pending.length > 40 && f.builds[0].blocks.length === 0);
   assert.equal(f.builds[0].colors, mines.build.colors);
 });
+
+test('a sculpted build stays inside the box its blocks sort by, whole or going up, in every room size', async () => {
+  // What figures are depth-sorted against is the blocks' box; the drawing
+  // (but the beacon's light over its top) must not stick out of it, or a
+  // figure walking past would be drawn on the wrong side of it.
+  const { buildSprite } = await import('../src/art/scene/build.ts');
+  const s = 6;
+  for (const [R, H] of [[3.5, 12], [4.5, 14], [8.5, 21], [9.5, 23]]) {
+    for (const shape of SHAPES) {
+      const blocks = blueprint(shape, FOUR.length, R, H).map((b) => ({ ...b, x: b.x + 40, y: b.y + 40 }));
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      let z1 = 0;
+      for (const b of blocks) {
+        x0 = Math.min(x0, b.x);
+        y0 = Math.min(y0, b.y);
+        x1 = Math.max(x1, b.x + 1);
+        y1 = Math.max(y1, b.y + 1);
+        z1 = Math.max(z1, b.z + 1);
+      }
+      // The box's outline on screen: left, right and front corners, and
+      // the top a little over the highest block (the lantern, the orb).
+      const P = (x: number, y: number, z: number) => [(x - y) * s, ((x + y) * s) / 2 - z * s];
+      const left = P(x0, y1, 0)[0];
+      const right = P(x1, y0, 0)[0];
+      const front = (x: number) => Math.min(P(x0, y1, 0)[1] + ((x - left) / (P(x1, y1, 0)[0] - left)) * (P(x1, y1, 0)[1] - P(x0, y1, 0)[1]), P(x1, y1, 0)[1] + ((x - P(x1, y1, 0)[0]) / (right - P(x1, y1, 0)[0])) * (P(x1, y0, 0)[1] - P(x1, y1, 0)[1]));
+      for (const k of [0.5, 1]) {
+        const n = Math.round(blocks.length * k);
+        const sp = buildSprite({ shape, blocks: blocks.slice(0, n), pending: blocks.slice(n), colors: FOUR, ghost: [127, 232, 255] }, s, '#101018').body!;
+        const d = sp.img.data;
+        let out = 0;
+        let worst = '';
+        for (let y = 0; y < sp.img.height; y++) {
+          for (let x = 0; x < sp.img.width; x++) {
+            if (d[4 * (y * sp.img.width + x) + 3] < 160) continue;
+            const X = x + sp.x;
+            const Y = y + sp.y;
+            const pad = 2.2;
+            if (X < left - pad || X > right + pad || Y > front(X) + pad || Y < P(x0, y0, z1 + 3)[1] - pad) {
+              out++;
+              worst = `${X},${Y}`;
+            }
+          }
+        }
+        assert.ok(out === 0, `${shape} R${R} H${H} at ${k}: ${out} pixels outside its box (e.g. ${worst})`);
+      }
+    }
+  }
+});

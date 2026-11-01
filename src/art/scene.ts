@@ -62,7 +62,7 @@ import { framesOf } from './npc/acts.ts';
 import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
-import { buildSprite, pileSprite } from './scene/build.ts';
+import { buildSprite, pileSprite, wallValue } from './scene/build.ts';
 import { POP_STEPS, type DeskSprite, deskPictures, deskStats, growth, loopSprite, popping } from './scene/desk.ts';
 import type { Sprite } from './scene/build.ts';
 import { depthOrder, slotOf } from './scene/depth.ts';
@@ -130,7 +130,8 @@ const PILL_ALPHA = 20;
 // or an animated prop (drawn on its own, or live).
 // `tone` is its grade (the room's when left out; see Tone).
 type Item = Drawable & { id: string; img?: Bitmap; x: number; y: number; tone?: Tone; anim?: { p: PlacedProp; i: number; active: boolean; local?: boolean } };
-type Build = { sprite: Sprite | null; box: [number, number, number, number, number]; seen: number };
+// A build's body and its shadow on the floor (drawn with the floors).
+type Build = { sprite: Sprite | null; floor: Sprite | null; box: [number, number, number, number, number]; seen: number };
 // A prop's picture in two parts: its body (inside the outline of its box),
 // drawn in depth order, and what it lays on the floor round it (its
 // shadow, a pool of light), drawn under everyone.
@@ -768,8 +769,8 @@ export class Scene {
     for (const b of f.builds) {
       if ((b.blocks.length || b.pending.length) && !l.builds.has(this.buildKey(b))) {
         yield () => {
-          const e = this.buildAt(l, b, ink);
-          if (e.sprite) out.push(picOf(e.sprite.img, gr.room));
+          const e = this.buildAt(l, b, ink, f);
+          for (const part of [e.sprite, e.floor]) if (part) out.push(picOf(part.img, gr.room));
         };
       }
       if (b.pile && !l.piles.has(this.pileKey(b.pile))) {
@@ -954,8 +955,9 @@ export class Scene {
     return `${pr.x0},${pr.y0},${pr.x1},${pr.y1}`;
   }
 
-  // A build as it stands, drawn at the layer's scale (once per state).
-  private buildAt(l: Layer, b: SceneFrame['builds'][number], ink: string): Build {
+  // A build as it stands, drawn at the layer's scale (once per state), its
+  // colours kept under the room's walls (see wallValue).
+  private buildAt(l: Layer, b: SceneFrame['builds'][number], ink: string, f: SceneFrame): Build {
     const key = this.buildKey(b);
     let e = l.builds.get(key);
     if (!e) {
@@ -971,11 +973,29 @@ export class Scene {
         y1 = Math.max(y1, q.y + 1);
         z1 = Math.max(z1, q.z + 1);
       }
-      e = { sprite: buildSprite(b.blocks, b.pending, b.colors, b.ghost, l.s, ink), box: [x0, y0, x1, y1, z1], seen: this.renders };
+      const sp = buildSprite(b, l.s, ink, this.wallsOf(f, l));
+      e = { sprite: sp.body, floor: sp.floor, box: [x0, y0, x1, y1, z1], seen: this.renders };
       l.builds.set(key, e);
       this.stats.builds++;
     }
     return e;
+  }
+
+  // How bright the room's walls are (see wallValue), read off the base
+  // tiles at the layer's scale (painted here if not yet), once per room;
+  // where only the backdrop shows there is no wall.
+  private wallsOf(f: SceneFrame, l: Layer): number {
+    const back = f.world.backdrop;
+    return wallValue(f.world.room, f.room.L, (x, y, z) => {
+      const px = Math.floor((x - y) * l.s);
+      const py = Math.floor(((x + y) * l.s) / 2 - z * l.s);
+      const tx = Math.floor(px / TILE);
+      const ty = Math.floor(py / TILE);
+      const d = this.tile(f, l, tx, ty, false).img.data;
+      const o = 4 * ((py - ty * TILE) * TILE + (px - tx * TILE));
+      if (Math.abs(d[o] - back[0]) + Math.abs(d[o + 1] - back[1]) + Math.abs(d[o + 2] - back[2]) < 30) return null;
+      return 0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2];
+    });
   }
 
   private pileAt(l: Layer, b: SceneFrame['builds'][number], ink: string): Sprite {
@@ -1060,10 +1080,11 @@ export class Scene {
     }
     f.builds.forEach((b, j) => {
       if (b.blocks.length || b.pending.length) {
-        const e = this.buildAt(l, b, ink);
+        const e = this.buildAt(l, b, ink, f);
         e.seen = this.renders;
+        const [x0, y0, x1, y1, z1] = e.box;
+        if (e.floor) floors.push(sprite(`build-floor:${j}`, e.floor, { x0, y0, x1, y1, h: 0, point: false }));
         if (e.sprite) {
-          const [x0, y0, x1, y1, z1] = e.box;
           const it = sprite(`build:${j}`, e.sprite, { x0, y0, x1, y1, h: z1, point: false });
           if (seen(it)) out.push(it);
         }
