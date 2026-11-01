@@ -1,5 +1,6 @@
 import { shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
 import { chair, crown, cup, frustum, jarCandle, leaf, pot } from './bits.ts';
 import type { Kit, P3 } from './kit.ts';
@@ -147,20 +148,23 @@ function arc(cu: number, cv: number, z: number, r: number): P3[] {
 }
 
 // ── a floor lamp ────────────────────────────────────────────────────────────
-// Brass, with a pleated cream shade and a fringe; its light pools on the
-// floor round its foot.
+// Brass, with a pleated cream shade and a fringe; it gives the light the
+// scene pools round its foot (see `light`), its shade glowing while the
+// lights are on and dull when they are off.
 const lamp: PropArt = {
   len: 5,
   dep: 5,
   height: 17,
+  light: [{ kind: 'lamp', u: 2.5, v: 2.5, z: 14.2, r: 11 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 2.5;
-    k.pool(c, c, 2.5, 2.5, '#ffd890', 0.5);
+    const on = lampsOn(v);
     k.shadow(c, c, 1.3, 1.3, 0.3);
     k.cyl(c, c, 0, 1.0, 0.3, C.brass);
     k.rod([[c, c, 0.3], [c, c, 13.2]], C.brass, 0.17);
-    frustum(k, c, c, 13.0, 2.0, 15.6, 1.2, hash(v.seed, 21) < 0.5 ? '#f3e2bd' : '#e8c27a', '#fff3cf');
+    const cloth = hash(v.seed, 21) < 0.5 ? '#f3e2bd' : '#e8c27a';
+    frustum(k, c, c, 13.0, 2.0, 15.6, 1.2, on ? cloth : shade(cloth, -0.25), on ? '#fff3cf' : '#8a7a62');
     const pen = k.pen;
     pen.beginPath();
     for (let i = 0; i <= 14; i++) {
@@ -172,7 +176,6 @@ const lamp: PropArt = {
     pen.strokeStyle = '#c98a3a';
     pen.lineWidth = Math.max(0.8, 0.1 * k.s);
     pen.stroke();
-    k.halo(c, c, 14.2, 2.4, '#ffd890', 0.5);
   },
 };
 
