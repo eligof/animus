@@ -23,7 +23,7 @@ import { budget } from './helpers.ts';
 // a stockpile round the stores and each stack) and the room is well
 // furnished; warm round the campfire, a seat on a log, a look at the hills;
 // the shell, its firelight and fireflies and every prop stay within their
-// time budgets; the room's two stacks are one of logs and one of steel; the
+// time budgets; the room's stacks are logs and steel, both kinds; the
 // overlay, drawn a piece at a time as the scene draws it, skips what is off
 // the piece and nothing on it.
 
@@ -197,10 +197,11 @@ test('Frontier Colony decor: every piece is in DECOR_ART, and each finds floor i
   for (const [name, art] of Object.entries(DECOR_ART)) assert.ok(room.props.some((p) => p.art === art), `${name} found no floor`);
 });
 
-test('Frontier Colony decor: of the two stacks in the room one is logs and one steel bars, each inside its footprint', () => {
+test('Frontier Colony decor: the stacks in the room are logs and steel bars, both kinds, each inside its footprint', () => {
   const room = planRoom(colony, planLayout(375, 220, 'colony'), hashString('colony'));
   const stacks = room.props.filter((p) => p.art === DECOR_ART.stack);
-  assert.equal(stacks.length, 2, `${stacks.length} stacks placed`);
+  // a big room grows its decor (see moreDecor in world/room.ts): two at least
+  assert.ok(stacks.length >= 2, `${stacks.length} stacks placed`);
   const kinds = stacks.map((p) => {
     for (const s of [4, 16]) {
       for (const { wall, island } of VIEWS) {
@@ -221,7 +222,7 @@ test('Frontier Colony decor: of the two stacks in the room one is logs and one s
     }
     return cool > warm ? 'steel' : 'logs';
   });
-  assert.deepEqual([...kinds].sort(), ['logs', 'steel']);
+  assert.deepEqual([...new Set(kinds)].sort(), ['logs', 'steel']);
 });
 
 test('Frontier Colony overlay: measured it marks every window; drawn onto one window it paints just what the whole frame paints there', () => {
