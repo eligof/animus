@@ -134,6 +134,21 @@ test('snowy room: the walls keep their falls, windows and lanterns off the stati
   }
 });
 
+test('snowy room: the mammoth in the ice sits above the wall pieces, under the icicles and clear of the falls', () => {
+  for (const [w, h] of [[600, 400], [375, 220], [300, 165], [250, 145], [200, 120]]) {
+    const L = planLayout(w, h, 'snowy');
+    const { features, frozen } = planFor(L.W, L.D, L.H, L.T);
+    assert.ok(frozen, `${L.W}: no mammoth`);
+    const end = frozen.wall === 'right' ? L.W : L.D;
+    const half = 9 * frozen.m; // its tusk reaches a little past its 14 units
+    assert.ok(frozen.a - half >= L.T && frozen.a + half <= end, `${L.W}: the mammoth off its wall`);
+    assert.ok(frozen.z >= 19 && frozen.z + 9 * frozen.m <= L.H - 7, `${L.W}: the mammoth at ${frozen.z} x ${frozen.m} out of its band`);
+    for (const f of features.filter((g) => g.kind === 'falls' && g.wall === frozen.wall)) {
+      assert.ok(frozen.a + 7 * frozen.m <= f.a - f.w / 2 || frozen.a - 7 * frozen.m >= f.a + f.w / 2, `${L.W}: the mammoth behind the falls`);
+    }
+  }
+});
+
 test('snowy room: snow sifts down at the skylights and blows in at the gate', () => {
   const flakes = (art: PropArt, active: boolean) => {
     const out: Particle[] = [];
