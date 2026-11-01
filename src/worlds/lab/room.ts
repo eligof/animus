@@ -9,16 +9,19 @@ import { bolt, bulb, beaker, erlenmeyer, gauge, hazard, mutant, pilot, pot, ring
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, withAlpha } from './kit.ts';
 
-// The lab's shell on a stormy night: a checker floor of pale and slate
-// tiles, a mint-tiled dado under white subway tile, steel-framed windows
-// onto the storm, a painted band up top where pipes run, and between the
-// stations the wall's furniture: the generator (a cabinet of dials and a
-// knife switch with valves glowing on top and a Jacob's ladder over it),
-// a periodic table, shelves of reagents, hazard signs, a first-aid box and
-// extinguisher, a cork board of notes, a clock and caged lamps. Mats and
-// pools of light lie on the floor where the stations stand. Every piece sits
-// in the free stretches of wall between the stations, worked out from the
-// same plan the stage uses, so nothing hangs behind a shelf or a door.
+// The lab's shell on a stormy night: a modern lab fitted into an old
+// tower. A checker floor of pale and slate tiles, a mint-tiled dado under
+// white subway tile, and above the tile the tower's own ashlar, where the
+// pipes run; tall pointed lancets in stone surrounds onto the storm, their
+// heads rising into the stone. Between the stations the wall's furniture:
+// the generator in a dark pointed bay of its own (a cabinet of dials and a
+// knife switch with valves glowing on top and a Jacob's ladder over it, a
+// scorch on the floor where it once got away), a periodic table, shelves
+// of reagents, hazard signs, a first-aid box and extinguisher, a cork
+// board of notes, a clock and caged lamps. Mats and pools of light lie on
+// the floor where the stations stand. Every piece sits in the free
+// stretches of wall between the stations, worked out from the same plan
+// the stage uses, so nothing hangs behind a shelf or a door.
 
 type Wall = 'left' | 'right';
 type Kind = 'gen' | 'window' | 'periodic' | 'shelf' | 'signs' | 'aid' | 'board' | 'clock' | 'lamp';
@@ -30,6 +33,8 @@ const WAIN = 8; // the mint dado's top
 const SKIRT = 1; // the cove at the foot of the wall
 const CHECK = 6; // floor tile side
 const GEN = 17; // the generator's bay
+const WIN = 12; // a window's width, its stone surround and all
+const HEAD = 0.8; // a lancet's pointed head: its rise over the glass's width
 
 // ── the plan ───────────────────────────────────────────────────────────────
 
@@ -79,40 +84,54 @@ function features(L: Layout): Feature[] {
     spans.splice(spans.indexOf(pick), 1, { wall: pick.wall, a0: pick.a0, a1: mid - bay / 2 - 2 }, { wall: pick.wall, a0: mid + bay / 2 + 2, a1: pick.a1 });
     break;
   }
-  const WIDTH: Record<Kind, number> = { gen: GEN, window: 10, periodic: 13, shelf: 9, signs: 7, aid: 5, board: 9, clock: 4, lamp: 2 };
+  const WIDTH: Record<Kind, number> = { gen: GEN, window: WIN, periodic: 13, shelf: 9, signs: 7, aid: 5, board: 9, clock: 4, lamp: 2 };
   const ORDER: Kind[] = ['window', 'periodic', 'window', 'shelf', 'window', 'board', 'window', 'signs', 'window', 'aid', 'window', 'clock', 'window', 'shelf', 'window', 'signs'];
   const cap: Partial<Record<Kind, number>> = { periodic: 1, board: 1, clock: 1, aid: 2, shelf: 2, signs: 3 };
   const count: Partial<Record<Kind, number>> = {};
   const windows = { left: 0, right: 0 };
+  // A wall with no stretch wide enough for a full window gets a narrower one.
+  const narrow = { left: !spans.some((s) => s.wall === 'left' && s.a1 - s.a0 >= WIN), right: !spans.some((s) => s.wall === 'right' && s.a1 - s.a0 >= WIN) };
   let n = 0;
   spans.sort((p, q) => (p.wall === q.wall ? p.a0 - q.a0 : p.wall === 'right' ? -1 : 1));
   for (const s of spans) {
     const len = s.a1 - s.a0;
     const kinds: Kind[] = [];
+    const ws: number[] = [];
     let used = 0;
-    const room = (k: Kind) => used + WIDTH[k] + (kinds.length ? 4 : 0) <= len;
+    const fits = (w: number) => used + w + (kinds.length ? 4 : 0) <= len;
+    const room = (k: Kind) => fits(WIDTH[k]);
     for (;;) {
       let k: Kind | undefined;
-      if (!windows[s.wall] && room('window')) k = 'window';
+      let kw = 0;
+      if (!windows[s.wall]) {
+        for (const w of narrow[s.wall] ? [WIN, WIN - 2] : [WIN]) {
+          if (!k && fits(w)) {
+            k = 'window';
+            kw = w;
+          }
+        }
+      }
       for (let i = 0; !k && i < ORDER.length; i++) {
         const c = ORDER[(n + i) % ORDER.length];
         if ((count[c] ?? 0) < (cap[c] ?? Infinity) && room(c)) k = c;
       }
       k ??= room('signs') && (count.signs ?? 0) < 5 ? 'signs' : room('lamp') ? 'lamp' : undefined;
       if (!k) break;
-      used += WIDTH[k] + (kinds.length ? 4 : 0);
+      kw ||= WIDTH[k];
+      used += kw + (kinds.length ? 4 : 0);
       kinds.push(k);
+      ws.push(kw);
       count[k] = (count[k] ?? 0) + 1;
       if (k === 'window') windows[s.wall]++;
       n++;
     }
     if (!kinds.length) continue;
-    const gap = (len - kinds.reduce((m, k) => m + WIDTH[k], 0)) / (kinds.length + 1);
+    const gap = (len - ws.reduce((m, w) => m + w, 0)) / (kinds.length + 1);
     const first = out.length;
     let at = s.a0 + gap;
     kinds.forEach((k, i) => {
-      out.push({ wall: s.wall, kind: k, a: at + WIDTH[k] / 2, w: WIDTH[k], k: n * 7 + i });
-      at += WIDTH[k] + gap;
+      out.push({ wall: s.wall, kind: k, a: at + ws[i] / 2, w: ws[i], k: n * 7 + i });
+      at += ws[i] + gap;
     });
     // Lamps between neighbours with room for them.
     for (let i = 0; i + 1 < kinds.length; i++) {
@@ -125,14 +144,42 @@ function features(L: Layout): Feature[] {
   return out;
 }
 
-// Windows: sill and head (z) for a wall H tall; the tile runs a little
-// above them, the painted band from there to the cornice.
-export function windowZ(H: number): { z0: number; z1: number } {
+// Windows: tall lancets. Sill, where the pointed head springs and its
+// point (z) for a wall H tall: the point stays under the pipes, the head
+// rises 0.8 of the glass's width (less in a low room), and the tile stops
+// where the heads spring, so they rise into the stone.
+export function windowZ(H: number): { z0: number; zs: number; z1: number } {
   const z0 = WAIN + 3.5;
-  return { z0, z1: Math.min(H - 13, z0 + 26) };
+  const z1 = Math.min(H - 9.2, z0 + 30);
+  return { z0, zs: z1 - Math.min(HEAD * (WIN - 1.6), (z1 - z0) * 0.62), z1 };
 }
-const tileTop = (H: number) => windowZ(H).z1 + 2.5;
-const lampZ = (H: number) => Math.min(windowZ(H).z1 - 2, 26);
+const tileTop = (H: number) => windowZ(H).zs;
+const lampZ = (H: number) => Math.min(windowZ(H).zs + 2.5, 26);
+
+// A pointed (two-centred) arch over a+-h whose head rises `rise` from its
+// springing: the radius of each of its two arcs.
+const archR = (h: number, rise: number) => (h * h + rise * rise) / (2 * h);
+
+// The outline of a pointed opening on the plane v = n: up the left jamb
+// from z0, the head's two arcs (each centred on the springing line past
+// the middle) to the point, down the right jamb. `d` grows it outward (the
+// arcs' offsets are arcs about the same centres), for a surround.
+function lancet(a: number, h: number, R: number, zs: number, z0: number, d: number, n: number, steps = 10): P3[] {
+  const c = R - h;
+  const r = R + d;
+  const top = Math.acos(-c / r);
+  const pts: P3[] = [[a - h - d, n, z0]];
+  for (let i = 0; i <= steps; i++) {
+    const t = Math.PI + (top - Math.PI) * (i / steps);
+    pts.push([a + c + r * Math.cos(t), n, zs + r * Math.sin(t)]);
+  }
+  for (let i = steps; i >= 0; i--) {
+    const t = Math.PI + (top - Math.PI) * (i / steps);
+    pts.push([a - c - r * Math.cos(t), n, zs + r * Math.sin(t)]);
+  }
+  pts.push([a + h + d, n, z0]);
+  return pts;
+}
 
 // The Jacob's ladder over the generator: its rods' feet and tops.
 const LADDER = { u: 4, z0: 17.4, z1: 29, gap0: 0.35, gap1: 2.2 };
@@ -226,7 +273,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     pen.moveTo(a[0], a[1]);
     pen.lineTo(b[0], b[1]);
   }
-  pen.strokeStyle = '#5e7a7e80';
+  pen.strokeStyle = '#3f5a5e80';
   pen.lineWidth = Math.max(0.7, 0.09 * s);
   pen.lineCap = 'butt';
   pen.stroke();
@@ -279,6 +326,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   if (gen) {
     const gk = new Kit(pen, wallAt(v.at, gen.wall, T), s);
     hazard(gk, [[gen.a - 7.5, 2.6, 0.04], [gen.a + 7.5, 2.6, 0.04], [gen.a + 7.5, 5.4, 0.04], [gen.a - 7.5, 5.4, 0.04]], 0.7);
+    scorch(gk, gen.a + 1.5, 4.2, gen.k);
     gk.pool(gen.a + LADDER.u, 4, 12, 9, '#a68cff', 0.22);
   }
   for (const [kind, u, w, r, c, a] of [
@@ -301,24 +349,45 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
 }
 
-// A rubber anti-fatigue mat: dark, round-cornered, dotted.
+// A rubber anti-fatigue mat: slate, round-cornered, dotted, a band of
+// hazard yellow along its front edge (so an empty one reads as a mat, not
+// a hole in the floor).
 function mat(k: Kit, u0: number, v0: number, du: number, dv: number): void {
   const z = 0.04;
   k.shadow(u0 + du / 2, v0 + dv / 2, du * 0.55, dv * 0.6, 0.1);
-  k.poly([[u0, v0, z], [u0 + du, v0, z], [u0 + du, v0 + dv, z], [u0, v0 + dv, z]], '#3b4a50', k.thin, 0.5);
-  k.poly([[u0 + 0.5, v0 + 0.5, z], [u0 + du - 0.5, v0 + 0.5, z], [u0 + du - 0.5, v0 + dv - 0.5, z], [u0 + 0.5, v0 + dv - 0.5, z]], '#45565c', 0, 0.3);
+  k.poly([[u0, v0, z], [u0 + du, v0, z], [u0 + du, v0 + dv, z], [u0, v0 + dv, z]], '#55676c', k.thin, 0.5);
+  k.poly([[u0 + 0.5, v0 + 0.5, z], [u0 + du - 0.5, v0 + 0.5, z], [u0 + du - 0.5, v0 + dv - 0.5, z], [u0 + 0.5, v0 + dv - 0.5, z]], '#61747a', 0, 0.3);
+  k.poly([[u0 + 0.35, v0 + dv - 0.6, z], [u0 + du - 0.35, v0 + dv - 0.6, z], [u0 + du - 0.35, v0 + dv - 0.25, z], [u0 + 0.35, v0 + dv - 0.25, z]], withAlpha(C.hazard, 0.7), 0);
   if (!k.fine) return;
   const pen = k.pen;
   pen.beginPath();
   for (let a = u0 + 1; a < u0 + du - 0.7; a += 0.9) {
-    for (let b = v0 + 1; b < v0 + dv - 0.7; b += 0.9) {
+    for (let b = v0 + 1; b < v0 + dv - 1.1; b += 0.9) {
       const [x, y] = k.p(a, b, z);
       const r = 0.13 * k.s;
       pen.moveTo(x + r, y);
       pen.ellipse(x, y, r, r * 0.5, 0, 0, Math.PI * 2);
     }
   }
-  pen.fillStyle = '#2e3b40';
+  pen.fillStyle = '#4a5b60';
+  pen.fill();
+}
+
+// Where the generator once got away from them: soot burnt into the floor
+// and over the hazard paint, thin rays thrown out from it.
+function scorch(k: Kit, cu: number, cv: number, seed: number): void {
+  k.shadow(cu, cv, 3.6, 2.3, 0.3);
+  k.shadow(cu, cv, 1.6, 1.0, 0.22);
+  const pen = k.pen;
+  pen.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const th = (i / 6) * Math.PI * 2 + hash(seed, i, 95) * 0.8;
+    const len = 2.6 + hash(seed, i, 96) * 1.6;
+    const w = 0.22;
+    const [c, s] = [Math.cos(th), Math.sin(th)];
+    k.trace([[cu + c * 1.2 - s * w, cv + (s * 1.2 + c * w) * 0.7, 0.03], [cu + c * len, cv + s * len * 0.7, 0.03], [cu + c * 1.2 + s * w, cv + (s * 1.2 - c * w) * 0.7, 0.03]]);
+  }
+  pen.fillStyle = withAlpha('#14262b', 0.32);
   pen.fill();
 }
 
@@ -343,37 +412,38 @@ function oval(k: Kit, cu: number, cv: number, ru: number, rv: number): void {
 
 // ── walls ──────────────────────────────────────────────────────────────────
 
-// The painted band above the tile, darker toward the cornice.
-const BAND: ReadonlyArray<readonly [number, Color]> = [[0, '#9fc2bd'], [0.45, '#7ea6a2'], [1, '#5a807f']];
-
 function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
-  const { pen, s } = k;
+  const { s } = k;
   const { T, H } = v;
   const end = wall === 'right' ? v.W : v.D;
   const lit = k.lit(0, 1);
   const tone = (c: Color, d = 0.12) => (lit ? c : shade(c, -d));
   const top = tileTop(H);
-  // The painted band, the white subway tile, the mint dado.
-  k.poly([[T, 0, top], [end, 0, top], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, top, H, BAND.map(([t, c]) => [t, tone(c)] as const)), 0);
-  k.poly([[T, 0, WAIN], [end, 0, WAIN], [end, 0, top], [T, 0, top]], k.vgrad(T, 0, WAIN, top, [[0, tone('#e3eeea')], [0.5, tone(C.tile)], [1, tone('#e6efec')]]), 0);
+  // The tower's stone, the white subway tile (dimming toward it), the
+  // mint dado.
+  ashlar(k, T, end, top, H - 2.4, tone);
+  k.poly([[T, 0, WAIN], [end, 0, WAIN], [end, 0, top], [T, 0, top]], k.vgrad(T, 0, WAIN, top, [[0, tone('#e6efec')], [0.45, tone('#dde9e5')], [1, tone('#b4c8c5')]]), 0);
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, WAIN], [T, 0, WAIN]], tone(C.mint), 0);
   grout(k, T, end, WAIN, top, 3, 1.5, withAlpha(lit ? '#7fa29c' : '#6d8f8a', 0.5));
   grout(k, T, end, SKIRT, WAIN, 2, 2, withAlpha('#4f9a85', 0.55));
   // the far corner in shadow
   k.poly([[T, 0, 0], [T + 9, 0, 0], [T + 9, 0, H], [T, 0, H]], k.grad([T, 0, 0], [T + 9, 0, 0], [[0, '#0a1e2430'], [1, '#0a1e2400']]), 0);
-  // cove, the dado's cap, the trim over the tile, the cornice
+  // cove, the dado's cap, the trim over the tile and the stone string
+  // course on it, the cornice
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, SKIRT], [T, 0, SKIRT]], tone(C.tealDark), 0);
   k.box(T, 0, WAIN, end - T, 0.4, 0.55, C.teal, { line: k.thin, stripe: false });
+  k.poly([[T, 0, top - 1.5], [end, 0, top - 1.5], [end, 0, top - 0.5], [T, 0, top - 0.5]], k.vgrad(T, 0, top - 1.5, top - 0.5, [[0, '#0a1e2400'], [1, '#0a1e2430']]), 0);
   k.box(T, 0, top - 0.5, end - T, 0.3, 0.5, C.teal, { line: k.thin, stripe: false });
-  k.poly([[T, 0, H - 2.4], [end, 0, H - 2.4], [end, 0, H], [T, 0, H]], tone('#dbe6e3'), 0);
-  k.box(T, 0, H - 1.3, end - T, 0.5, 0.9, '#eef4f2', { line: k.thin, stripe: false });
-  k.line([[T, 0, H - 2.4], [end, 0, H - 2.4]], shade('#dbe6e3', -0.3), Math.max(0.8, 0.12 * s));
+  k.box(T, 0, top, end - T, 0.55, 0.75, '#93a19e', { line: k.thin, stripe: false });
+  k.poly([[T, 0, H - 2.4], [end, 0, H - 2.4], [end, 0, H], [T, 0, H]], tone('#6c7a78'), 0);
+  k.box(T, 0, H - 1.3, end - T, 0.5, 0.9, '#98a5a2', { line: k.thin, stripe: false });
+  k.line([[T, 0, H - 2.4], [end, 0, H - 2.4]], C.stoneDark, Math.max(0.8, 0.12 * s));
   pipes(k, v, end, lit);
   for (const f of plan.features) {
     if (f.wall !== wall) continue;
     if (f.kind === 'window' && hash(f.k, 81) < 0.6) vent(k, v, f.a, f.k);
     if (f.kind === 'window') windowArt(k, v, f, lit);
-    else if (f.kind === 'gen') generator(k, v, f);
+    else if (f.kind === 'gen') generator(k, v, f, lit);
     else if (f.kind === 'periodic') periodic(k, v, f);
     else if (f.kind === 'shelf') shelf(k, f);
     else if (f.kind === 'signs') signs(k, f);
@@ -382,6 +452,77 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'clock') clock(k, v, f);
     else if (f.kind === 'lamp') lamp(k, v, f);
   }
+}
+
+// The old tower's ashlar across a wall from z0 to z1: courses two high of
+// blocks three to five long (each course its own run of lengths, so the
+// joints never line up), a block in ten a shade lighter and one a shade
+// darker, the lit arris along each block's top and its lit end when zoomed
+// in, and the stone darkening toward the ceiling. Flat fills only: dressed
+// stone, not rubble.
+function ashlar(k: Kit, a0: number, a1: number, z0: number, z1: number, tone: (c: Color, d?: number) => Color): void {
+  const { pen, s } = k;
+  if (z1 - z0 < 1) return;
+  const BH = 2;
+  k.poly([[a0, 0, z0], [a1, 0, z0], [a1, 0, z1], [a0, 0, z1]], k.vgrad(a0, 0, z0, z1, [[0, tone('#83928f')], [0.55, tone(C.stone)], [1, tone('#5d6b6a')]]), 0);
+  const m = 5 * s * 2;
+  const light: P3[][] = [];
+  const dark: P3[][] = [];
+  const arris: P3[][] = [];
+  const joints: Array<[P3, P3]> = [];
+  const lightSide = k.lit(-1, 0);
+  const e = 0.12;
+  let r = 0;
+  for (let z = z0; z < z1 - 0.2; z += BH, r++) {
+    const zt = Math.min(z1, z + BH);
+    if (z > z0) joints.push([[a0, 0.01, z], [a1, 0.01, z]]);
+    let i = 0;
+    for (let a = a0 - hash(r, 92) * 3; a < a1; i++) {
+      const len = 3 + Math.floor(hash(r, i, 93) * 3);
+      const b0 = Math.max(a0, a);
+      const b1 = Math.min(a1, a + len);
+      a += len;
+      const [x, y] = k.p((b0 + b1) / 2, 0, z);
+      if (!near(pen, x, y, m)) continue;
+      if (b1 < a1) joints.push([[b1, 0.01, z], [b1, 0.01, zt]]);
+      const q: P3[] = [[b0, 0.01, z], [b1, 0.01, z], [b1, 0.01, zt], [b0, 0.01, zt]];
+      const h = hash(r, i, 91);
+      if (h < 0.1) light.push(q);
+      else if (h > 0.9) dark.push(q);
+      if (k.fine) arris.push(lightSide ? [[b0 + e, 0.02, z + e], [b0 + e, 0.02, zt - e], [b1 - e, 0.02, zt - e]] : [[b1 - e, 0.02, z + e], [b1 - e, 0.02, zt - e], [b0 + e, 0.02, zt - e]]);
+    }
+  }
+  for (const [list, c] of [[light, withAlpha('#ffffff', 0.08)], [dark, withAlpha('#0a1e24', 0.11)]] as const) {
+    if (!list.length) continue;
+    pen.beginPath();
+    for (const q of list) k.trace(q);
+    pen.fillStyle = c;
+    pen.fill();
+  }
+  pen.beginPath();
+  for (const [p, q] of joints) {
+    const [x0, y0] = k.p(...p);
+    const [x1, y1] = k.p(...q);
+    pen.moveTo(x0, y0);
+    pen.lineTo(x1, y1);
+  }
+  pen.strokeStyle = tone(C.mortar);
+  pen.lineWidth = Math.max(0.6, 0.1 * s);
+  pen.lineCap = 'butt';
+  pen.stroke();
+  if (!arris.length) return;
+  pen.beginPath();
+  for (const q of arris) {
+    q.forEach(([u, w, zz], i) => {
+      const [x, y] = k.p(u, w, zz);
+      if (i) pen.lineTo(x, y);
+      else pen.moveTo(x, y);
+    });
+  }
+  pen.strokeStyle = withAlpha(C.stoneLight, 0.5);
+  pen.lineWidth = Math.max(0.6, 0.08 * s);
+  pen.lineJoin = 'round';
+  pen.stroke();
 }
 
 // Grout across a wall from a0 to a1 between z0 and z1: courses `th` tall,
@@ -457,21 +598,25 @@ function pipes(k: Kit, v: RoomView, end: number, lit: boolean): void {
   }
 }
 
-// A steel-framed window onto the storm: the reveal, the night beyond (clouds,
-// a hill with a tower or a town, rain), a grid of glazing bars and a sill
-// with something left on it.
+// A tall lancet onto the storm in a surround of dressed stone (jambs of
+// blocks, a head of voussoirs and a keystone at its point): the night
+// beyond (clouds, a hill with a tower or a town, rain) through two pointed
+// lights under a roundel, and a stone sill with something left on it.
 function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const { pen, s } = k;
-  const { z0, z1 } = windowZ(v.H);
+  const { z0, zs, z1 } = windowZ(v.H);
   const w = f.w - 1.6;
   const a = f.a;
-  const u0 = a - w / 2;
-  const u1 = a + w / 2;
+  const h = w / 2;
+  const rise = z1 - zs;
+  const R = archR(h, rise);
+  const u0 = a - h;
+  const u1 = a + h;
   const depth = 0.9;
-  // casing and reveal
-  k.poly([[u0 - 0.8, 0.05, z0 - 0.3], [u1 + 0.8, 0.05, z0 - 0.3], [u1 + 0.8, 0.05, z1 + 0.8], [u0 - 0.8, 0.05, z1 + 0.8]], lit ? '#dfe9e6' : shade('#dfe9e6', -0.12), k.lw);
-  const open: P3[] = [[u0, 0.06, z0], [u1, 0.06, z0], [u1, 0.06, z1], [u0, 0.06, z1]];
-  k.poly(open, lit ? '#b9cbc8' : shade('#b9cbc8', -0.14), 0);
+  const tone = (c: Color, d = 0.12) => (lit ? c : shade(c, -d));
+  surround(k, a, h, R, zs, z0, tone);
+  const open = lancet(a, h, R, zs, z0, 0, 0.06);
+  k.poly(open, tone('#b9cbc8', 0.14), 0);
   pen.save();
   pen.beginPath();
   k.trace(open);
@@ -494,10 +639,12 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
     pen.lineWidth = Math.max(0.7, 0.1 * s);
     pen.stroke();
   }
-  // the moon behind the clouds, on some windows
+  // the moon behind the clouds, on some windows, low in the head
   if (hash(f.k, 14) < 0.35) {
-    k.halo(u0 + w * 0.7, -depth, z1 - 4, 3, '#dfe8ff', 0.35);
-    const [mx, my] = k.p(u0 + w * 0.7, -depth, z1 - 4);
+    const mu = a + (hash(f.k, 13) < 0.5 ? -0.2 : 0.2) * w;
+    const mz = zs + (z1 - zs) * 0.3;
+    k.halo(mu, -depth, mz, 3, '#dfe8ff', 0.35);
+    const [mx, my] = k.p(mu, -depth, mz);
     pen.beginPath();
     pen.arc(mx, my, 1.1 * s, 0, Math.PI * 2);
     pen.fillStyle = '#eef2ff';
@@ -552,24 +699,57 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   pen.strokeStyle = '#c8dcf055';
   pen.lineWidth = Math.max(0.7, 0.09 * s);
   pen.stroke();
-  // inner shadow under the head of the reveal
-  k.poly([back(u0 - 1, z1 - 2.5), back(u1 + 1, z1 - 2.5), back(u1 + 1, z1), back(u0 - 1, z1)], k.vgrad(a, -depth, z1 - 2.5, z1, [[0, '#00000000'], [1, '#0a0a1a66']]), 0);
-  pen.restore();
-  // glazing bars: three lights across, a pivoting middle band
-  const bar = '#4f6f78';
-  const bw = Math.max(1, 0.24 * s);
+  // inner shadow under the point of the reveal
+  k.poly([back(u0 - 1, z1 - 3), back(u1 + 1, z1 - 3), back(u1 + 1, z1), back(u0 - 1, z1)], k.vgrad(a, -depth, z1 - 3, z1, [[0, '#00000000'], [1, '#0a0a1a66']]), 0);
+  // the tracery: a mullion, two pointed lights springing with the head,
+  // a roundel over them, transoms across the lights
   const n = -depth * 0.5;
-  const bars: P3[][] = [];
-  for (const f2 of [1 / 3, 2 / 3]) bars.push([[u0 + w * f2, n, z0], [u0 + w * f2, n, z1]]);
-  const rows = Math.max(2, Math.round((z1 - z0) / 5));
-  for (let r = 1; r < rows; r++) bars.push([[u0, n, z0 + ((z1 - z0) * r) / rows], [u1, n, z0 + ((z1 - z0) * r) / rows]]);
-  for (const b of bars) k.line(b, INK, bw + k.thin * 1.2);
-  for (const b of bars) k.line(b, lit ? bar : shade(bar, -0.15), bw);
+  pen.beginPath();
+  k.trace([[a, n, z0], [a, n, zs]]);
+  for (const side of [-1, 1]) {
+    const sub = lancet(a + (side * h) / 2, h / 2, R / 2, zs, zs, 0, n);
+    sub.forEach(([uu, nn, zz], i) => {
+      const [x, y] = k.p(uu, nn, zz);
+      if (i) pen.lineTo(x, y);
+      else pen.moveTo(x, y);
+    });
+  }
+  const rows = Math.max(1, Math.round((zs - z0) / 4.5));
+  for (let r = 1; r < rows; r++) {
+    const zz = z0 + ((zs - z0) * r) / rows;
+    const [x0, y0] = k.p(u0, n, zz);
+    const [x1, y1] = k.p(u1, n, zz);
+    pen.moveTo(x0, y0);
+    pen.lineTo(x1, y1);
+  }
+  // the roundel fits between the lights' heads and the point
+  const zc = zs + rise * 0.64;
+  const c = R - h;
+  const rr = 0.78 * Math.min(R - Math.hypot(c, zc - zs), Math.hypot(R / 2, zc - zs) - R / 2);
+  if (rr > 0.5) {
+    for (let i = 0; i <= 24; i++) {
+      const t = (i / 24) * Math.PI * 2;
+      const [x, y] = k.p(a + Math.cos(t) * rr, n, zc + Math.sin(t) * rr);
+      if (i) pen.lineTo(x, y);
+      else pen.moveTo(x, y);
+    }
+  }
+  const bar = tone('#4f6f78', 0.15);
+  const bw = Math.max(1, 0.24 * s);
+  pen.strokeStyle = INK;
+  pen.lineWidth = bw + k.thin * 1.2;
+  pen.lineJoin = 'round';
+  pen.lineCap = 'round';
+  pen.stroke();
+  pen.strokeStyle = bar;
+  pen.lineWidth = bw;
+  pen.stroke();
+  pen.restore();
   pen.beginPath();
   k.trace(open);
   k.paint(null, k.thin);
-  // the steel sill and what is on it
-  k.box(u0 - 0.9, 0, z0 - 0.8, w + 1.8, 1.1, 0.6, '#c8d6d4', { line: k.lw });
+  // the stone sill and what is on it
+  k.box(u0 - 0.9, 0, z0 - 0.8, w + 1.8, 1.1, 0.6, tone('#a3afad', 0.08), { line: k.lw });
   const kind = Math.floor(hash(f.k, 31) * 4);
   const su = a + (hash(f.k, 32) < 0.5 ? -1 : 1) * (w / 2 - 1.2);
   if (kind === 0) erlenmeyer(k, su, 0.55, z0 - 0.2, 1.6, C.magenta, 0.4);
@@ -582,18 +762,82 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   }
 }
 
-// ── the generator ─────────────────────────────────────────────────────────
-// A steel cabinet against the wall: a knife switch on a slate panel, two big
-// dials and a row of pilot lights; valves glowing in a row on top, a
-// Jacob's ladder over it (its arc climbs in the overlay) and fat cables up
-// to the pipes.
+// A pointed opening's stone surround, `SUR` wide: the jambs in blocks,
+// the head in seven voussoirs about the arcs' centres,
+// a paler keystone standing proud at the point.
+const SUR = 0.8;
 
-function generator(k: Kit, v: RoomView, f: Feature): void {
+function surround(k: Kit, a: number, h: number, R: number, zs: number, z0: number, tone: (c: Color, d?: number) => Color): void {
+  const { pen, s } = k;
+  const n = 0.05;
+  k.poly(lancet(a, h, R, zs, z0 - 0.3, SUR, n), tone('#8d9a98'), k.lw);
+  const c = R - h;
+  const top = Math.acos(-c / R);
+  // a point on the left arc (t from pi at the springing to `top` at the
+  // point) at radius r, mirrored to the right for side 1
+  const at = (t: number, r: number, side: number): P3 => [a + side * -(c + r * Math.cos(t)), n + 0.01, zs + r * Math.sin(t)];
+  pen.beginPath();
+  const seg = (p: P3, q: P3) => {
+    const [x0, y0] = k.p(...p);
+    const [x1, y1] = k.p(...q);
+    pen.moveTo(x0, y0);
+    pen.lineTo(x1, y1);
+  };
+  for (const side of [-1, 1]) {
+    for (const f of [1 / 3.5, 2 / 3.5]) {
+      const t = Math.PI + (top - Math.PI) * f;
+      seg(at(t, R, side), at(t, R + SUR, side));
+    }
+    // the jambs' joints
+    for (let z = z0 + 2.2; z < zs - 0.6; z += 2.2) {
+      const u = a + side * h;
+      seg([u, n + 0.01, z], [u + side * SUR, n + 0.01, z]);
+    }
+    seg([a + side * h, n + 0.01, zs], [a + side * (h + SUR), n + 0.01, zs]);
+  }
+  pen.strokeStyle = tone(C.stoneDark);
+  pen.lineWidth = Math.max(0.8, 0.13 * s);
+  pen.lineCap = 'butt';
+  pen.stroke();
+  // the keystone
+  const tk = Math.PI + (top - Math.PI) * (3 / 3.5);
+  const rOut = Math.sqrt((R + SUR) ** 2 - c * c);
+  k.poly([at(tk, R, -1), at(tk, R + SUR + 0.3, -1), [a, n + 0.02, zs + rOut + 0.45], at(tk, R + SUR + 0.3, 1), at(tk, R, 1), [a, n + 0.02, zs + Math.sqrt(R * R - c * c)]], tone('#a3afad'), k.thin);
+}
+
+// ── the generator ─────────────────────────────────────────────────────────
+// A steel cabinet in a pointed bay of its own: a knife switch on a slate
+// panel, two big dials and a row of pilot lights; valves glowing in a row on
+// top, a plasma globe, a Jacob's ladder over it (its arc climbs in the
+// overlay) and fat cables up to the pipes.
+
+// The generator's bay: a pointed recess cut into the wall from the floor,
+// dark inside (darker up in its head), in a stone surround like the
+// windows'. The cabinet, the glowing valves and the ladder's arc stand out
+// against it: the room's focal point.
+function bay(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
+  const tone = (c: Color, d = 0.12) => (lit ? c : shade(c, -d));
+  const h = f.w / 2 - SUR - 0.1;
+  const z1 = Math.min(v.H - 9.2, LADDER.z1 + 3);
+  const rise = Math.min(h * 1.6, z1 - 12);
+  const zs = z1 - rise;
+  const R = archR(h, rise);
+  surround(k, f.a, h, R, zs, 0.3, tone);
+  const open = lancet(f.a, h, R, zs, 0, 0, 0.06);
+  k.poly(open, k.vgrad(f.a, 0.06, 0, z1, [[0, tone('#26363c')], [0.5, tone('#1d2b31')], [1, tone('#111b20')]]), k.thin);
+  // the recess's lit side and its soffit's shadow
+  const side = k.lit(1, 0) ? -1 : 1;
+  const e = f.a + side * h;
+  k.poly([[e, 0.07, 0], [e - side * 0.9, 0.07, 0], [e - side * 0.9, 0.07, zs], [e, 0.07, zs]], k.grad([e, 0, 0], [e - side * 0.9, 0, 0], [[0, withAlpha('#5f7479', 0.5)], [1, withAlpha('#5f7479', 0)]]), 0);
+}
+
+function generator(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const { pen, s } = k;
   const a = f.a;
   const out = 1.7;
   const z1 = 15;
   const steel = '#57767f';
+  bay(k, v, f, lit);
   // the cables first, behind everything: up the wall to the pipes
   const top = v.H - 6.5;
   if (top > z1 + 4) {
@@ -664,6 +908,7 @@ function generator(k: Kit, v: RoomView, f: Feature): void {
     k.glass(u, 0.9, [[z1 + 1, 0.4], [z1 + 2.6, 0.4], [z1 + 3.1, 0.25], [z1 + 3.25, 0.06]], null);
     k.line([[u - 0.15, 0.9, z1 + 1.4], [u - 0.15, 0.9, z1 + 2.4], [u + 0.15, 0.9, z1 + 2.4], [u + 0.15, 0.9, z1 + 1.4]], '#ffcf7a', Math.max(0.8, 0.1 * s));
   }
+  plasma(k, a + 1, 0.9, z1 + 0.5, f.k);
   // the Jacob's ladder: two insulators and the rods in a V
   const L = LADDER;
   const lu = a + L.u;
@@ -672,6 +917,57 @@ function generator(k: Kit, v: RoomView, f: Feature): void {
     for (let j = 0; j < 3; j++) k.cyl(u, 0.9, z1 + 0.5 + j * 0.6, 0.5 - j * 0.04, 0.45, '#efe8dc', { line: k.thin });
     k.rod([[u, 0.9, z1 + 2.2], [lu + sgn * L.gap0, 0.9, L.z0], [lu + sgn * (L.gap0 + (L.gap1 - L.gap0) * 0.4), 0.9, L.z0 + (L.z1 - L.z0) * 0.5], [lu + sgn * L.gap1, 0.9, L.z1]], C.copper, 0.16);
   }
+}
+
+// A plasma globe on an iron foot: a glass ball full of violet, threads of
+// light from its core to the glass (still: it is lit, not moving), the
+// glass's glint at its upper left.
+function plasma(k: Kit, u: number, n: number, z0: number, seed: number): void {
+  const { pen, s } = k;
+  const r = 1.45;
+  k.cyl(u, n, z0, 0.8, 0.45, C.iron, { line: k.thin });
+  k.cyl(u, n, z0 + 0.45, 0.4, 0.35, '#2d363b', { line: k.thin });
+  const zc = z0 + 0.8 + r * 0.9;
+  const [x, y] = k.p(u, n, zc);
+  const R = r * s;
+  const g = pen.createRadialGradient(x, y, 0, x, y, R);
+  g.addColorStop(0, '#fbf6ff');
+  g.addColorStop(0.18, '#d9c8ff');
+  g.addColorStop(0.55, '#8f6ef0');
+  g.addColorStop(1, '#3b2a78');
+  pen.beginPath();
+  pen.arc(x, y, R, 0, Math.PI * 2);
+  pen.fillStyle = g;
+  pen.fill();
+  // the threads, forking toward the glass
+  pen.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const th = (i / 6) * Math.PI * 2 + hash(seed, i, 97) * 0.7;
+    let px = x;
+    let py = y;
+    pen.moveTo(px, py);
+    for (let j = 1; j <= 4; j++) {
+      const t = j / 4;
+      const wob = (hash(seed, i * 5 + j, 98) - 0.5) * 0.5;
+      px = x + Math.cos(th + wob) * R * 0.92 * t;
+      py = y + Math.sin(th + wob) * R * 0.92 * t;
+      pen.lineTo(px, py);
+    }
+  }
+  pen.strokeStyle = '#f1e8ffd0';
+  pen.lineWidth = Math.max(0.7, 0.07 * s);
+  pen.lineJoin = 'round';
+  pen.stroke();
+  // the glint, then the ink round the glass
+  pen.beginPath();
+  pen.arc(x, y, R * 0.72, Math.PI * 1.08, Math.PI * 1.42);
+  pen.strokeStyle = '#ffffffb0';
+  pen.lineWidth = Math.max(0.8, 0.14 * s);
+  pen.lineCap = 'round';
+  pen.stroke();
+  pen.beginPath();
+  pen.arc(x, y, R, 0, Math.PI * 2);
+  k.paint(null, k.thin);
 }
 
 // The arc on the Jacob's ladder, climbing from the rods' feet to their tops
@@ -694,9 +990,9 @@ function ladderArc(k: Kit, v: RoomView, f: Feature): void {
 }
 
 // Lightning, now and then, in each window: the glass flashes and a fork
-// runs down the sky (above anyone's head).
+// runs down the sky (above anyone's head), all inside the lancet.
 function lightning(k: Kit, v: RoomView, f: Feature): void {
-  const { z0, z1 } = windowZ(v.H);
+  const { z0, zs, z1 } = windowZ(v.H);
   const period = 7 + hash(f.k, 41) * 9;
   const off = hash(f.k, 42) * period;
   const ph = (v.t + off) % period;
@@ -707,12 +1003,19 @@ function lightning(k: Kit, v: RoomView, f: Feature): void {
   const strike = Math.floor((v.t + off) / period);
   const depth = 0.85;
   const flash = ph < 0.17 ? 0.5 : ph < 0.33 ? 0.15 : 0.32;
+  const pen = k.pen;
+  pen.save();
+  pen.beginPath();
+  k.trace(lancet(f.a, w / 2, archR(w / 2, z1 - zs), zs, z0, 0, 0.06));
+  pen.clip();
   k.poly([[f.a - w / 2, -depth, lo], [f.a + w / 2, -depth, lo], [f.a + w / 2, -depth, z1], [f.a - w / 2, -depth, z1]], withAlpha('#dfe8ff', flash * 0.6), 0);
-  const u = f.a + (hash(f.k, strike, 43) - 0.5) * w * 0.6;
-  const pts = zigzag([u, -depth, z1 - 0.3], [u + (hash(f.k, strike, 44) - 0.5) * 3, -depth, lo + 0.3], 7, 0.9, f.k + strike * 13);
+  const top = Math.max(lo + 3, zs + (z1 - zs) * 0.5);
+  const u = f.a + (hash(f.k, strike, 43) - 0.5) * w * 0.5;
+  const pts = zigzag([u, -depth, top], [u + (hash(f.k, strike, 44) - 0.5) * 3, -depth, lo + 0.3], 7, 0.9, f.k + strike * 13);
   k.line(pts, '#ffffffd0', Math.max(1, 0.18 * k.s));
   const mid = pts[3];
   k.line([mid, [mid[0] + 1.3, -depth, mid[2] - 1.4], [mid[0] + 1.6, -depth, mid[2] - 2.6]], '#ffffffa0', Math.max(0.8, 0.12 * k.s));
+  pen.restore();
 }
 
 // ── charts, shelves, signs ───────────────────────────────────────────────────
@@ -909,7 +1212,7 @@ function board(k: Kit, v: RoomView, f: Feature): void {
 
 // A round wall clock, its hands at ten past ten.
 function clock(k: Kit, v: RoomView, f: Feature): void {
-  const z = Math.min(windowZ(v.H).z1 - 4, WAIN + 14);
+  const z = Math.min(windowZ(v.H).zs + 1, WAIN + 14);
   const c: P3 = [f.a, 0.3, z];
   k.shadow(f.a + 0.2, 0.25, 1.8, 0.4, 0.12, z - 1.8);
   fillPts(k, ring(k, c, [0, 1, 0], 1.7, 28), C.iron, k.lw);
@@ -970,9 +1273,10 @@ function lamp(k: Kit, v: RoomView, f: Feature): void {
   pen.stroke();
 }
 
-// A round louvred vent up in the band, a fan behind its grille.
+// A round louvred vent up in the stone over a window (where the wall is
+// tall enough), a fan behind its grille.
 function vent(k: Kit, v: RoomView, a: number, seed: number): void {
-  const z = tileTop(v.H) + 7 + hash(seed, 82) * 3;
+  const z = windowZ(v.H).z1 + 3.8 + hash(seed, 82) * 2;
   if (z + 3 > v.H - 8) return;
   const c: P3 = [a, 0.15, z];
   k.box(a - 2.2, 0, z - 2.2, 4.4, 0.25, 4.4, '#c8d6d4', { line: k.lw, stripe: false });
@@ -1017,8 +1321,8 @@ const path2 = (pen: Pen, pts: ReadonlyArray<readonly [number, number]>) => {
 function shell(k: Kit, v: RoomView): void {
   const { pen } = k;
   const { W, D, H, T } = v;
-  const cap = '#d6e2df';
-  const cut = '#8fa3a3';
+  const cap = '#a7b4b1'; // the tower wall's coping
+  const cut = '#7a8986';
   // the floor's cut edges, a band of tile on top
   k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side('#5a6c70', 0, 1), k.lw);
   k.poly([[W, T, 0], [W, D, 0], [W, D, -SLAB], [W, T, -SLAB]], k.side('#5a6c70', 1, 0), k.lw);
@@ -1028,7 +1332,7 @@ function shell(k: Kit, v: RoomView): void {
   k.poly([[W, 0, -SLAB], [W, T, -SLAB], [W, T, H], [W, 0, H]], k.side(mix(cap, cut, 0.5), 1, 0), k.lw);
   for (const [p, q] of [[[0, D], [T, D]], [[W, 0], [W, T]]] as const) {
     pen.beginPath();
-    for (let z = 1; z < H - 0.5; z += 1) {
+    for (let z = 2; z < H - 0.5; z += 2) {
       const [x0, y0] = k.p(p[0] + (q[0] - p[0]) * 0.18, p[1] + (q[1] - p[1]) * 0.18, z);
       const [x1, y1] = k.p(p[0] + (q[0] - p[0]) * 0.82, p[1] + (q[1] - p[1]) * 0.82, z);
       pen.moveTo(x0, y0);

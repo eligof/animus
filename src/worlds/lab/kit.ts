@@ -26,8 +26,16 @@ export const C = {
   teal: '#2a8f84',
   tealDark: '#1d6a63',
   plaster: '#dfeae6',
-  floorA: '#9db5b3',
-  floorB: '#7d9a9b',
+  // the checker, keyed for night: pale and slate far enough apart that
+  // white coats read on either
+  floorA: '#8aa3a2',
+  floorB: '#58757a',
+  // the old tower's stone above the tile: ashlar, its mortar, the lit
+  // arris of a block, the dark of a chamfer
+  stone: '#7b8a88',
+  stoneLight: '#a5b3b0',
+  stoneDark: '#3e4a49',
+  mortar: '#465250',
   // materials
   steel: '#b9c6cb',
   steelDark: '#7f8e96',
