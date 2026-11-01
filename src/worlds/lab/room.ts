@@ -254,9 +254,9 @@ export const room: RoomArt = {
     for (const f of fs) {
       if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 1.6, z0, z1: zs + (z1 - zs) * 0.5, bars: 1, rails, color: '#c9d6ff', strength: 0.3, night: '#9fb6ee', moon: 1.3 });
       else if (f.kind === 'gen') {
-        out.push({ kind: 'glow', wall: f.wall, u: f.a + GLOBE.u, v: 0.9, z: GLOBE.z, color: '#b49cff', r: 13, strength: 1.2, halo: 3.5 });
+        out.push({ kind: 'glow', wall: f.wall, u: f.a + GLOBE.u, v: 0.9, z: GLOBE.z, color: '#b49cff', r: 16, strength: 1.5, halo: 3.5 });
         out.push({ kind: 'glow', wall: f.wall, u: f.a - 3.35, v: 0.9, z: 17.2, color: '#ffae5a', r: 7, strength: 0.6, halo: 1.5 });
-      } else if (f.kind === 'lamp') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.6, z: lampZ(v.H), color: '#e9fbff', r: 10, strength: 0.8 });
+      } else if (f.kind === 'lamp') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.6, z: lampZ(v.H), color: '#ffd49a', r: 12, strength: 1 });
     }
     return out;
   },
@@ -402,11 +402,11 @@ function scorch(k: Kit, cu: number, cv: number, seed: number): void {
   pen.fill();
 }
 
-// A braided oval rug: rings of warm colour.
+// A braided oval rug: rings of plum and teal.
 function oval(k: Kit, cu: number, cv: number, ru: number, rv: number): void {
   const z = 0.05;
   k.shadow(cu, cv, ru * 1.05, rv * 1.05, 0.1);
-  const rings: Color[] = ['#a8552e', '#e3a64a', '#c86a3a', '#3f8a80', '#e8c27a', '#b4582f', '#e3a64a'];
+  const rings: Color[] = ['#5a2f45', '#a8708a', '#7a3a52', '#3f8a80', '#c9a0b4', '#6a3448', '#a8708a'];
   const pen = k.pen;
   rings.forEach((c, i) => {
     const f = 1 - i / rings.length;
@@ -1275,7 +1275,7 @@ function lamp(k: Kit, v: RoomView, f: Feature): void {
   if (on) {
     pen.save();
     pen.globalCompositeOperation = 'screen';
-    k.poly([[a - 0.7, 0.05, z - 0.8], [a + 0.7, 0.05, z - 0.8], [a + 4.5, 0.05, z - 12], [a - 4.5, 0.05, z - 12]], k.vgrad(a, 0.05, z - 12, z, [[0, '#e9fbff00'], [1, '#e9fbff2c']]), 0);
+    k.poly([[a - 0.7, 0.05, z - 0.8], [a + 0.7, 0.05, z - 0.8], [a + 4.5, 0.05, z - 12], [a - 4.5, 0.05, z - 12]], k.vgrad(a, 0.05, z - 12, z, [[0, '#ffd49a00'], [1, '#ffd49a40']]), 0);
     pen.restore();
   }
   // the backplate and the arm
