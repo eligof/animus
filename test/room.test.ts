@@ -222,7 +222,7 @@ test('a stretch of wall kept clear: nothing stands on the floor before it, nor w
     const keep = hearth(K);
     const kept = planRoom({ ...cafe, reserve: hearth }, K, hashString('cafe'));
     for (const p of decorOf(kept.props)) assert.ok(!veils(K, keep, footprint(p), p.art.height), `cafe ${side}: a ${p.art.len}x${p.art.dep} piece before the hearth`);
-    if (decorOf(planRoom(cafe, K, hashString('cafe')).props).some((p) => veils(K, keep, footprint(p), p.art.height))) moved++;
+    if (decorOf(planRoom({ ...cafe, reserve: undefined }, K, hashString('cafe')).props).some((p) => veils(K, keep, footprint(p), p.art.height))) moved++;
   }
   assert.ok(moved > 0, 'nothing stood before the hearth anyway');
 });
