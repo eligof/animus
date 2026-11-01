@@ -366,6 +366,8 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   for (const q of scuffs) k.trace(q, 0.6);
   pen.fillStyle = withAlpha('#5e4220', 0.09);
   pen.fill();
+  // A big room's walkway painted round the middle of the floor.
+  if (W - T > 120) lanes(k, hub(plan.L), Math.round(0.17 * (W - T)));
   // Shade: darker toward the walls' feet and the far corner.
   const corner = k.p(T, T, 0);
   const far = k.p(W, D, 0);
@@ -453,6 +455,55 @@ function mat(k: Kit, len: number, dep: number): void {
   const ribs: Array<[P3, P3]> = [];
   for (let w2 = v0 + 0.45; w2 < v1 - 0.3; w2 += 0.42) ribs.push([[u0 + 0.35, w2, 0.05], [u0 + w - 0.35, w2, 0.05]]);
   k.segs(ribs, withAlpha('#6a716d', 0.7), Math.max(0.6, 0.09 * k.s));
+}
+
+// A walkway painted round the square of floor r either side of (h.x,
+// h.y): a lane 3 wide between cream lines with teal edges, teal chevrons
+// along it pointing the way round, and a few oil stains by it.
+function lanes(k: Kit, h: { x: number; y: number }, r: number): void {
+  const { pen, s } = k;
+  if (!k.sees(h.x - r - 6, h.y - r - 6, 0, h.x + r + 6, h.y + r + 6, 0)) return;
+  const sq = (d: number, z: number): P3[] => [[h.x - d, h.y - d, z], [h.x + d, h.y - d, z], [h.x + d, h.y + d, z], [h.x - d, h.y + d, z]];
+  const band = (d0: number, d1: number, c: Color) => {
+    pen.beginPath();
+    k.trace(sq(d0, 0.02));
+    k.trace(sq(d1, 0.02).reverse());
+    pen.fillStyle = c;
+    pen.fill();
+  };
+  band(r + 1.9, r + 1.5, C.teal);
+  band(r + 1.5, r + 0.9, C.cream);
+  band(r - 0.9, r - 1.5, C.cream);
+  band(r - 1.5, r - 1.9, C.teal);
+  // the chevrons, clockwise round the square (seen from above)
+  const sides: Array<[number, number, number, number]> = [[h.x - r, h.y - r, 1, 0], [h.x + r, h.y - r, 0, 1], [h.x + r, h.y + r, -1, 0], [h.x - r, h.y + r, 0, -1]];
+  const marks: Array<[P3, P3]> = [];
+  for (const [x0, y0, dx, dy] of sides) {
+    for (let t = 4; t < 2 * r - 3; t += 6) {
+      const [cx, cy] = [x0 + dx * t, y0 + dy * t];
+      const tip: P3 = [cx + dx * 0.5, cy + dy * 0.5, 0.03];
+      marks.push([[cx - dx * 0.4 - dy * 0.75, cy - dy * 0.4 + dx * 0.75, 0.03], tip], [[cx - dx * 0.4 + dy * 0.75, cy - dy * 0.4 - dx * 0.75, 0.03], tip]);
+    }
+  }
+  k.segs(marks, withAlpha(C.teal, 0.85), Math.max(0.8, 0.28 * s), 'round');
+  // oil stains by it
+  pen.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const side = sides[Math.floor(hash(i, 91) * 4)];
+    const t = 3 + hash(i, 92) * (2 * r - 6);
+    const out = (hash(i, 93) < 0.5 ? -1 : 1) * (2.6 + hash(i, 94) * 1.5);
+    const cx = side[0] + side[2] * t - side[3] * out;
+    const cy = side[1] + side[3] * t + side[2] * out;
+    const blob: P3[] = [];
+    for (let m = 0; m < 8; m++) {
+      const th = (m / 8) * Math.PI * 2;
+      const rr = (1.0 + hash(i, m, 95) * 0.7) * (0.8 + hash(i, 96) * 0.6);
+      blob.push([cx + Math.cos(th) * rr * 1.3, cy + Math.sin(th) * rr, 0.03]);
+    }
+    k.trace(blob, 0.6);
+  }
+  pen.fillStyle = withAlpha('#3a2a1a', 0.15);
+  pen.fill();
 }
 
 // An oval braided rug centred on (cu, cv), ru x rv: rings of mustard,

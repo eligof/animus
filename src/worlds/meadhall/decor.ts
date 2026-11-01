@@ -21,8 +21,10 @@ type Spawn = (p: Particle) => void;
 // ── the hearth ──────────────────────────────────────────────────────────────
 // A long raised pit of fieldstones against the wall, soot on the planks
 // behind it: a bed of coals, split logs along it and flames licking along
-// them; a cauldron hung from an iron tripod over its near end and a stack
-// of firewood beside it. Embers and smoke rise off it, steam off the pot.
+// them; a cauldron hung from an iron tripod over its near end. Embers and
+// smoke rise off it, steam off the pot. Short enough (17.5) to find a
+// stretch of wall in the smallest hall, whose firewood stands apart (the
+// woodpile).
 
 const PIT = { u0: 1.0, u1: 16.0, v0: 1.2, v1: 7.4, rim: 1.1, h: 2.0, bed: 1.1 };
 const POT = { u: 13.2, v: 4.3, z: 2.9, r: 1.35, h: 2.2 };
@@ -33,7 +35,7 @@ const FEET: P3[] = [[11.0, 0.5, 0], [16.9, 3.0, 0], [12.4, 8.6, 0]];
 const FIRE = [3.4, 5.6, 7.8, 10.0];
 
 const hearth: PropArt = {
-  len: 22,
+  len: 17.5,
   dep: 9,
   height: 12,
   // the hall's great light, burning all night
@@ -49,7 +51,7 @@ const hearth: PropArt = {
         blot(k, 8.6, 0.05, 4.6, 8.2, 6.6, '#120804', 0.5);
         blot(k, 8.6, 0.06, 3.6, 7.4, 5.4, '#ff8a3d', 0.22, 'screen');
       }
-      k.shadow(10.8, 4.4, 10.8, 4.3, 0.32);
+      k.shadow(8.8, 4.4, 8.6, 4.3, 0.32);
       // the far rims: along the wall and at the far end
       rimBlock(k, u0, v0, u1 - u0, rim, h, v.seed);
       rimBlock(k, u0, v0 + rim, rim, v1 - v0 - 2 * rim, h, v.seed + 1);
@@ -93,10 +95,6 @@ const hearth: PropArt = {
       // the near legs of the tripod
       for (const f of FEET.slice(1)) k.rod([APEX, f], C.ironDark, 0.22);
       k.disc(APEX[0], APEX[1], APEX[2], 0.32, C.ironDark, k.thin);
-      // the firewood stacked by it, cut ends to the room
-      const rows: Array<[number, number]> = [[1.6, 0.68], [2.95, 0.68], [4.3, 0.68], [5.65, 0.68], [2.27, 1.85], [3.62, 1.85], [4.97, 1.85], [2.95, 3.0], [4.3, 3.0]];
-      k.shadow(19.4, 3.8, 2.8, 3.2, 0.26);
-      for (const [i, [w, z]] of rows.entries()) log(k, 17.6 + hash(v.seed, i, 5) * 0.4, 21.4 + hash(v.seed, i, 6) * 0.3, w, z, 0.66, ['#7a5232', '#6a4428', '#86593a'][i % 3]);
     });
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {

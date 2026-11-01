@@ -10,8 +10,9 @@ import { C, INK, hash, kitOf, withAlpha } from './kit.ts';
 // and cream checker), steel shelves of canned food (plain bands, no labels
 // to read), a bank of lockers, an iron cot, a chest of drawers with a lamp
 // on it, an office water cooler, pedestal tables with folding chairs on
-// rubber mats, olive water drums on a pallet and a mutant potted plant
-// with a faint glow. All still
+// rubber mats, olive water drums on a pallet, a mutant potted plant with a
+// faint glow, a hydroponic rack of greens under grow bars and a pallet of
+// ration crates. All still
 // (drawn once into the scene's static layer), each on its own soft shadow,
 // varied by the placement's seed.
 
@@ -536,16 +537,74 @@ const table: PropArt = {
   },
 };
 
+// ── a hydroponic rack ───────────────────────────────────────────────────────
+// A steel rack of three planter troughs, leafy greens in each with a few
+// tomatoes, a warm grow bar under each shelf over them.
+const planters: PropArt = {
+  len: 8,
+  dep: 3,
+  height: 12.5,
+  draw(v: PropView): void {
+    const k = kitOf(v);
+    k.shadow(4, 1.6, 4.3, 1.8, 0.28);
+    const posts: Array<[number, number]> = [[0.3, 0.3], [7.45, 0.3], [0.3, 2.45], [7.45, 2.45]];
+    for (const [u, w] of posts.slice(0, 2)) k.box(u, w, 0, 0.25, 0.25, 12.0, C.steelDark, { line: k.thin, stripe: false });
+    for (const [i, z] of [0.4, 4.4, 8.4].entries()) {
+      // the grow bar under the shelf over this tier
+      if (i < 2) k.box(0.9, 1.0, z + 3.3, 6.2, 0.5, 0.3, '#fff3c4', { line: k.thin, stripe: false });
+      // the trough, its soil, the greens along it
+      k.box(0.4, 0.4, z, 7.2, 2.2, 1.1, C.tealDark, { line: k.lw });
+      k.poly([[0.6, 0.6, z + 1.11], [7.4, 0.6, z + 1.11], [7.4, 2.4, z + 1.11], [0.6, 2.4, z + 1.11]], '#4a3826', 0);
+      for (let j = 0; j < 7; j++) {
+        const u = 1.0 + j * 1.0;
+        const r = 0.55 + hash(v.seed, i * 7 + j, 3) * 0.25;
+        k.face(u, 2.5, z + 1.5 + r * 0.5, r, (i + j) % 3 ? C.leaf : C.leafOdd, k.thin * 0.7, 12);
+        if (hash(v.seed, i * 7 + j, 4) < 0.3) k.face(u + 0.25, 2.55, z + 1.4, 0.2, '#e05040', 0, 8);
+      }
+      if (i > 0) k.box(0.3, 0.3, z - 0.35, 7.4, 2.4, 0.25, C.steel, { line: k.thin });
+    }
+    k.box(0.3, 0.3, 12.0, 7.4, 2.4, 0.25, C.steel, { line: k.thin });
+    for (const [u, w] of posts.slice(2)) k.box(u, w, 0, 0.25, 0.25, 12.2, C.steelDark, { line: k.thin, stripe: false });
+  },
+};
+
+// ── a pallet of ration crates ───────────────────────────────────────────────
+// Mustard crates of rations on a wooden pallet, orange straps round them,
+// a plain stencilled band on each (no words).
+const crates: PropArt = {
+  len: 6,
+  dep: 5,
+  height: 5.6,
+  draw(v: PropView): void {
+    const k = kitOf(v);
+    k.shadow(3, 2.5, 3.2, 2.7, 0.28);
+    k.box(0.2, 0.2, 0, 5.6, 4.6, 0.55, C.wood, { line: k.lw });
+    if (k.s >= 3) k.segs([[[0.2, 1.4, 0.56], [5.8, 1.4, 0.56]], [[0.2, 2.5, 0.56], [5.8, 2.5, 0.56]], [[0.2, 3.6, 0.56], [5.8, 3.6, 0.56]]], C.woodDark, Math.max(0.6, 0.08 * k.s));
+    const crate = (u0: number, v0: number, z0: number, du: number, dv: number, dz: number, i: number) => {
+      const c = hash(v.seed, i, 5) < 0.5 ? C.mustard : shade(C.mustard, -0.12);
+      k.box(u0, v0, z0, du, dv, dz, c, { line: k.lw });
+      const um = u0 + du / 2;
+      k.segs([[[um, v0, z0 + dz + 0.01], [um, v0 + dv, z0 + dz + 0.01]], [[um, v0 + dv + 0.01, z0], [um, v0 + dv + 0.01, z0 + dz]]], C.orange, Math.max(0.8, 0.2 * k.s));
+      k.line([[u0 + 0.4, v0 + dv + 0.02, z0 + dz * 0.6], [um - 0.4, v0 + dv + 0.02, z0 + dz * 0.6]], withAlpha(INK, 0.5), Math.max(0.6, 0.12 * k.s));
+    };
+    crate(0.4, 0.4, 0.55, 2.6, 4.2, 2.4, 0);
+    crate(3.1, 0.4, 0.55, 2.5, 4.2, 2.4, 1);
+    crate(1.2, 0.8, 2.95, 3.4, 3.2, 2.2, 2);
+  },
+};
+
 export const DECOR: NonNullable<WorldDef['decor']> = [
   { art: kitchen, count: 1, place: 'wall' },
-  { art: lockers, count: 1, place: 'wall' },
+  { art: lockers, count: 2, place: 'wall' },
   { art: cans, count: 2, place: 'wall' },
-  { art: cot, count: 1, place: 'wall' },
-  { art: dresser, count: 1, place: 'wall' },
-  { art: water, count: 1, place: 'wall' },
-  { art: table, count: 2, place: 'floor' },
+  { art: planters, count: 2, place: 'wall' },
+  { art: cot, count: 2, place: 'wall' },
+  { art: dresser, count: 2, place: 'wall' },
+  { art: water, count: 2, place: 'wall' },
+  { art: crates, count: 2, place: 'floor' },
   { art: drums, count: 2, place: 'floor' },
+  { art: table, count: 2, place: 'floor' },
   { art: mutant, count: 1, place: 'floor' },
 ];
 
-export const DECOR_ART = { kitchen, lockers, cans, cot, dresser, water, table, drums, mutant };
+export const DECOR_ART = { kitchen, lockers, cans, planters, cot, dresser, water, table, drums, mutant, crates };
