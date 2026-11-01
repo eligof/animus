@@ -1,14 +1,15 @@
 import type { At } from '../../art/iso.ts';
 import { frame, mix, shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import { planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import type { Quad } from './bits.ts';
 import { cable, code, droop, rain, sticker, STICKERS } from './bits.ts';
 import type { P3 } from './kit.ts';
-import { C, INK, Kit, hash, on, withAlpha } from './kit.ts';
+import { C, INK, Kit, hash, hullPts, on, withAlpha } from './kit.ts';
 
 // The den's shell: a basement at night, lit by its screens. Dark painted
 // cinder block over a darker band with a green line round it, a cable tray
@@ -185,6 +186,15 @@ const ZS: Record<Kind, readonly [number, number]> = {
   pipe: [0, 0],
 };
 
+// What the room planner keeps clear (see WorldDef.reserve): the video wall
+// and the rain it spills either side, from its foot up, out to 14 units, so
+// the arcades and the printer stand elsewhere and only low things (pizza
+// boxes, a lounger) stand before it.
+export function denReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number }> {
+  const f = planFor(L.W, L.D, L.H, L.T).features.find((g) => g.kind === 'rainwall');
+  return f ? [{ wall: f.wall, a0: f.a - f.w / 2 - SPILL, a1: f.a + f.w / 2 + SPILL, out: 14, z: f.z0 }] : [];
+}
+
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots, but the seats round the lounge rather than warm ones;
 // warm by the servers' exhaust; a look at the video wall, the whiteboard
@@ -216,6 +226,7 @@ export const room: RoomArt = {
     v.pen.save();
     floor(k, v, plan);
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
+    if (!lampsOn(v)) for (const f of plan.features) if (f.kind === 'window') moonbeam(k, v, f);
     shell(k, v);
     v.pen.restore();
   },
@@ -229,6 +240,21 @@ export const room: RoomArt = {
     v.pen.save();
     for (const q of wallPanels(f)) heads(k, q.quad, v.t, q.seed, q.cols, q.rows);
     v.pen.restore();
+  },
+  // The light the shell gives (see RoomLight): the video wall and the
+  // monitors on their arms (screens: on all night, what lights the den),
+  // the neon (glows), and the moon through the high windows. The stations
+  // give their own (see stations.ts).
+  lights(v): RoomLight[] {
+    const out: RoomLight[] = [];
+    for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+      const m = (f.z0 + f.z1) / 2;
+      if (f.kind === 'rainwall') for (const du of [-1, 0, 1]) out.push({ kind: 'screen', wall: f.wall, u: f.a + (du * f.w) / 3, v: 0.8, z: m, color: C.green, r: 9, strength: 0.6, halo: 3.6 });
+      else if (f.kind === 'screens') out.push({ kind: 'screen', wall: f.wall, u: f.a, v: 1.3, z: f.z0 + 2.5, color: C.green, r: 7, strength: 0.5, halo: 2.6 });
+      else if (f.kind === 'neon') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: m, color: neonColor(f.k), r: 7, strength: 0.6, halo: 2.6 });
+      else if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w, z0: f.z0, z1: f.z1, bars: 3, color: C.moon, strength: 0.25, night: '#9fb6ee', moon: 0.7 });
+    }
+    return out;
   },
 };
 
@@ -335,30 +361,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const wk = new Kit(pen, frame(v.at, write.wall, write.x0, write.y0), s);
     wk.poly([[0.2, 4.2, 0.03], [6.0, 4.2, 0.03], [6.0, 9.2, 0.03], [0.2, 9.2, 0.03]], '#cfe6e01e', k.thin * 0.6, 0.6);
   }
-  // Screen light on the floor before the stations, and the lounge's lamp.
-  for (const [kind, u, w, r, c, a] of [
-    ['write', 0.5, 1.3, 12, C.green, 0.26],
-    ['think', 0.45, 1.3, 15, C.green, 0.32],
-    ['search', 0.5, 1.8, 11, C.cyan, 0.2],
-    ['web', 0.5, 0.8, 10, C.amber, 0.2],
-    ['run', 0.5, 0.7, 12, C.magenta, 0.18],
-    ['idle', 0.6, 0.55, 15, C.lamp, 0.24],
-    ['read', 0.85, 1.4, 8, C.lamp, 0.14],
-    ['entrance', 0.5, 1.4, 9, C.moon, 0.12],
-  ] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    qk.pool(q.len * u, q.dep * w, r, r * 0.75, c, a);
-  }
-  // Under the wall pieces that glow: the video wall, monitors and neon.
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (f.kind === 'rainwall') wk.pool(f.a, 5, f.w * 0.6, 9, C.green, 0.18);
-    else if (f.kind === 'screens') wk.pool(f.a, 4, 8, 6, C.green, 0.12);
-    else if (f.kind === 'neon') wk.pool(f.a, 3, 6, 4.5, neonColor(f.k), 0.12);
-    else if (f.kind === 'window') wk.pool(f.a, 2.5, 5, 3.5, C.moon, 0.07);
-  }
+  // (The light on the floor is declared: room.lights, the stations' own.)
 }
 
 // Two or three cables from the foot of the nearer wall to an island's
@@ -716,6 +719,36 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   }
 }
 
+// With the lights off, the moonlight through a high window shows in the
+// dust: a pale beam from the opening down to its patch on the floor (the
+// engine lays the patch; the beam follows the same light, from the upper
+// left: a point z up lands z / 1.6 along x and z / 3.2 along y).
+function moonbeam(k: Kit, v: RoomView, f: Feature): void {
+  const { T } = v;
+  const u0 = f.a - f.w / 2;
+  const u1 = f.a + f.w / 2;
+  const at = (a: number, z: number, down: boolean): P3 => {
+    const [x, y] = f.wall === 'right' ? [a, T] : [T, a];
+    return down ? [x + z / 1.6, y + z / 3.2, 0] : [x, y, z];
+  };
+  const pts = [u0, u1].flatMap((a) => [f.z0, f.z1].flatMap((z) => [at(a, z, false), at(a, z, true)]));
+  const hull = hullPts(pts.map((p) => k.p(...p)));
+  const [wx, wy] = k.p(...at(f.a, (f.z0 + f.z1) / 2, false));
+  const [fx, fy] = k.p(...at(f.a, (f.z0 + f.z1) / 2, true));
+  const g = k.pen.createLinearGradient(wx, wy, fx, fy);
+  g.addColorStop(0, withAlpha(C.moon, 0.16));
+  g.addColorStop(0.7, withAlpha(C.moon, 0.06));
+  g.addColorStop(1, withAlpha(C.moon, 0.02));
+  k.pen.save();
+  k.pen.globalCompositeOperation = 'screen';
+  k.pen.beginPath();
+  hull.forEach(([x, y], i) => (i ? k.pen.lineTo(x, y) : k.pen.moveTo(x, y)));
+  k.pen.closePath();
+  k.pen.fillStyle = g;
+  k.pen.fill();
+  k.pen.restore();
+}
+
 // The video wall's panels: their quads (on the plane v = 0.55) and rain.
 type Panel = { quad: Quad; seed: number; cols: number; rows: number };
 function wallPanels(f: Feature): Panel[] {
@@ -743,7 +776,7 @@ function wallPanels(f: Feature): Panel[] {
 // tray.
 function rainWall(k: Kit, v: RoomView, f: Feature, plan: Plan): void {
   const { a, w, z0, z1 } = f;
-  k.wash(a, 0.02, (z0 + z1) / 2, w * 0.85, (z1 - z0) * 0.9, C.green, 0.22);
+  k.wash(a, 0.02, (z0 + z1) / 2, w * 0.85, (z1 - z0) * 0.9, C.green, 0.1);
   const wins = plan.features.filter((g) => g.wall === f.wall && g.kind === 'window');
   spill(k, f, (u) => (wins.some((g) => Math.abs(u - g.a) < g.w / 2 + 1.2) ? tops(v.H).win0 - 1.2 : z1 + 6), z0 > LOW + 13 ? LOW + 13.5 : BASE + 0.6);
   k.shadow(a + 0.3, 0.4, w * 0.5, 0.8, 0.2, z0 - 0.4);
@@ -846,7 +879,7 @@ function screens(k: Kit, v: RoomView, f: Feature): void {
   const { a, w, z0 } = f;
   const pw = 3.9;
   const ph = 2.6;
-  k.wash(a, 0.02, z0 + 3, w * 0.6, 5, C.green, 0.14);
+  k.wash(a, 0.02, z0 + 3, w * 0.6, 5, C.green, 0.06);
   const { tray } = tops(v.H);
   for (let i = 0; i < 3; i++) {
     const cu = a - w / 2 + 0.6 + pw / 2 + i * (pw + 0.85);
@@ -1157,7 +1190,7 @@ function neon(k: Kit, v: RoomView, f: Feature): void {
     }
     pts.push(P(-0.75, -0.9), P(-0.4, -0.6), P(-0.1, -0.9), P(0.2, -0.6), P(0.5, -0.9), P(0.75, -0.6), P(0.75, 0.15));
   } else pts = [P(0, 1), P(0.8, 0), P(0, -1), P(-0.8, 0), P(0, 1)];
-  k.wash(a, 0.02, cz, r * 2.6, r * 2.2, c, 0.3);
+  k.wash(a, 0.02, cz, r * 2.6, r * 2.2, c, 0.15);
   // the backing and its standoffs
   k.poly([P(-1.15, -1.15), P(1.15, -1.15), P(1.15, 1.2), P(-1.15, 1.2)], '#ffffff10', k.thin * 0.5, 0.2);
   // the tube: a wide soft glow, the colour, a hot core

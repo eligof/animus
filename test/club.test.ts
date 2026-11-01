@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { footprint, planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
 import { hashString } from '../src/world/rng.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { club } from '../src/worlds/club.ts';
@@ -134,6 +134,9 @@ test('club room: the shell knows the stage furniture, keeps its walls off the st
     // the furniture where the stage puts it
     const room = planRoom(club, L, hashString(club.id));
     assert.deepEqual(plan.decor.map(footprint), room.props.filter((p) => !p.slot).map(footprint), `${L.W}: the shell's furniture is not the stage's`);
+    // nothing stands before the mural or on the dance floor
+    const keep = club.reserve!(L);
+    for (const p of room.props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: furniture at ${p.x0}, ${p.y0} in what the club keeps clear`);
     assert.ok(plan.features.some((f) => f.kind === 'bay' && f.sign >= 0), `${L.W}: no neon signs`);
     const signs = [...plan.features, ...plan.over].filter((f) => f.kind === 'bay' && f.sign >= 0);
     assert.ok(signs.length >= 4 && signs.length <= 8, `${L.W}: ${signs.length} neon signs`);

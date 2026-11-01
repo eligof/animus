@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './den/decor.ts';
 import { INK } from './den/kit.ts';
 import { NPCS } from './den/npcs.ts';
-import { denPois, room } from './den/room.ts';
+import { denPois, denReserve, room } from './den/room.ts';
 import { STATIONS } from './den/stations.ts';
 import { WORKSTATION } from './den/workstation.ts';
 
@@ -41,6 +41,10 @@ export const den: WorldDef = {
   ink: INK,
   room,
   pois: denPois,
+  reserve: denReserve,
+  // Lights off, the den is lit by its screens: a light night grade, the
+  // floor's edge shade eased (it reads as dirt on the dark carpet).
+  light: { ao: 0.6, night: { strength: 0.3 } },
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,

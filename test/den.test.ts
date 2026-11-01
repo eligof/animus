@@ -5,7 +5,7 @@ import { frame, project } from '../src/art/iso.ts';
 import { framesFor } from '../src/art/motion.ts';
 import { DESK } from '../src/world/desks.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import { den } from '../src/worlds/den.ts';
 import { DECOR_ART } from '../src/worlds/den/decor.ts';
@@ -144,8 +144,12 @@ test('den room: the walls keep their pieces off the stations, with a video wall 
     for (const f of plan.features.filter((g) => g.wall === rw.wall && g !== rw && g.z0 < rw.z1 && g.z1 > rw.z0 && g.kind !== 'pipe')) {
       assert.ok(Math.abs(f.a - rw.a) >= rw.w / 2 + f.w / 2 + 4.5, `${L.W}: ${f.kind} at ${f.a} stands in the video wall's rain`);
     }
-    // the spots to go and look at are on open floor
+    // the spots to go and look at are on open floor; nothing that stands
+    // in the room hides the video wall
     const room = planRoom(den, L, 1);
+    const keep = den.reserve!(L);
+    assert.equal(keep.length, 1, `${L.W}: the video wall is not kept clear`);
+    for (const p of room.props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: furniture at ${p.x0}, ${p.y0} before the video wall`);
     assert.ok(room.pois.some((p) => p.kind === 'view'), `${L.W}: nothing to look at`);
     assert.ok(room.pois.some((p) => p.kind === 'seat'), `${L.W}: nowhere to sit`);
   }

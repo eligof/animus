@@ -1,10 +1,11 @@
 import { mix, shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { RoomView } from '../types.ts';
 import type { Kit, P3 } from './kit.ts';
 import { C, INK, NEONS, hash, withAlpha } from './kit.ts';
 import type { Feature, Plan, Wall } from './plan.ts';
-import { PAINT, STRIP, TRUSS, fh, muralSpan } from './plan.ts';
+import { EXIT_SIGN, PAINT, STRIP, TRUSS, fh, muralSpan } from './plan.ts';
 import { sign, signColor } from './signs.ts';
 
 // The club's walls: old brick, black-painted along the foot, a neon strip
@@ -208,7 +209,9 @@ function truss(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, part: '
   const z = H - TRUSS;
   const n = 1.9;
   const cans = rig(plan, wall, T, end);
+  const on = lampsOn(v);
   if (part === 'wash') {
+    if (!on) return;
     for (const c of cans) {
       if (!k.seen([[c.a - 5, 0, 0], [c.a + 5, 0, z]], 0)) continue;
       k.wash(c.a, 0.05, z - 9, 3.2, 10, c.c, 0.2);
@@ -244,14 +247,14 @@ function truss(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, part: '
       k.rod([[c.a - 0.75, n, lo - 0.6], [c.a - 0.75, n, lo - 2.2]], C.black, 0.18);
       k.rod([[c.a + 0.75, n, lo - 0.6], [c.a + 0.75, n, lo - 2.2]], C.black, 0.18);
       k.ring(c.a, n, lo - 2.2, 0.75, k.vgrad(c.a, n, lo - 3, lo - 1.4, [[0, '#211b29'], [1, '#4a4356']]), k.thin);
-      k.ring(c.a, n + 0.3, lo - 2.35, 0.38, c.c, 0);
-      k.halo(c.a, n + 0.4, lo - 2.4, 1.6, c.c, 0.55);
+      k.ring(c.a, n + 0.3, lo - 2.35, 0.38, on ? c.c : '#3a3448', 0);
+      if (on) k.halo(c.a, n + 0.4, lo - 2.4, 1.6, c.c, 0.55);
     } else {
       // a par can on its yoke, lens aglow
       k.line([[c.a, n, lo], [c.a, n, lo - 0.7]], INK, Math.max(1, 0.2 * k.s));
       k.box(c.a - 0.45, n - 0.45, lo - 1.9, 0.9, 0.9, 1.25, '#2d2836', { line: k.thin, round: 0.25 });
-      k.ring(c.a, n + 0.47, lo - 1.4, 0.32, c.c, 0);
-      k.halo(c.a, n + 0.5, lo - 1.5, 1.3, c.c, 0.5);
+      k.ring(c.a, n + 0.47, lo - 1.4, 0.32, on ? c.c : '#3a3448', 0);
+      if (on) k.halo(c.a, n + 0.5, lo - 1.5, 1.3, c.c, 0.5);
     }
   }
 }
@@ -285,7 +288,7 @@ function bay(k: Kit, plan: Plan, f: Feature, lit: boolean): void {
   const r = f.r ?? plan.sign.r;
   if (f.sign >= 0) {
     const c = signColor(f.sign);
-    k.wash(f.a, 0.05, z, r * 2.2, r * 1.7, c, 0.32);
+    k.wash(f.a, 0.05, z, r * 2.2, r * 1.7, c, 0.18);
     // some hang on a black board on stand-offs, some straight on the brick
     if (fh(f, 1) < 0.45) {
       k.box(f.a - r - 0.8, 0, z - r - 0.8, 2 * r + 1.6, 0.3, 2 * r + 1.6, '#1d1824', { line: k.thin, round: 0.4, stripe: false });
@@ -432,8 +435,8 @@ function exitDoor(k: Kit, f: Feature, lit: boolean): void {
     k.rect(a + sx * 0.2, 0.49, 0.2, a + sx * (hw - 0.3), 1.4, '#7f8c95', 0);
   }
   // the green sign: a running man and an arrow, glowing
-  const z = h + 1.6;
-  k.wash(a, 0.05, z + 0.8, 4, 2.4, '#3cff8a', 0.3);
+  const z = EXIT_SIGN - 0.85;
+  k.wash(a, 0.05, z + 0.8, 4, 2.4, '#3cff8a', 0.15);
   k.box(a - 1.8, 0, z, 3.6, 0.6, 1.7, '#e9f3ec', { line: k.thin, stripe: false });
   k.rect(a - 1.6, 0.62, z + 0.15, a + 1.6, z + 1.55, '#29d46a', 0);
   const m = (du: number, dz: number): P3 => [a - 0.6 + du, 0.64, z + 0.85 + dz];

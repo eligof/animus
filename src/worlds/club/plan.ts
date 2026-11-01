@@ -35,6 +35,7 @@ export const TILE = 4; // a dance-floor tile, units
 export const STRIP = 17.5; // the neon strip along the walls, just over the heads
 export const PAINT = 6.5; // the black band along the walls' feet
 export const TRUSS = 6; // the lighting truss hangs this far under the wall top
+export const EXIT_SIGN = 13.45; // the middle of the green sign over the fire exit
 // The mural's top on a wall H tall.
 export const muralTop = (H: number) => Math.max(STRIP - 1.6, Math.min(28, H * 0.42));
 // Where the mural hangs (bottom, top): on a tall wall down on the brick, the
@@ -45,11 +46,17 @@ export function muralSpan(H: number): [number, number] {
   return muralTop(H) >= STRIP + 1 ? [2.2, muralTop(H)] : [STRIP + 1.2, H - TRUSS - 2.4];
 }
 
+const LOOSE = new Map<string, Plan>();
 const PLANS = new Map<string, Plan>();
 
-export function planFor(W: number, D: number, H: number, T: number): Plan {
+// The plan from the furniture as it would stand with nothing kept clear
+// (the stage's planRoom without the club's reserve): where the dance floor
+// goes, round that furniture, and what hangs on the walls. What the club
+// keeps clear (clubReserve) comes from this one only, so it never depends
+// on a plan made with it.
+function looseOf(W: number, D: number, H: number, T: number): Plan {
   const key = `${W}x${D}x${H}x${T}`;
-  const hit = PLANS.get(key);
+  const hit = LOOSE.get(key);
   if (hit) return hit;
   let L = planLayout(2 * W + 12, W + H + 12, 'club');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
@@ -60,6 +67,35 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   const plan: Plan = { L, features: [], over: [], dance: null, decor, sign };
   plan.dance = danceFloor(L, decor);
   plan.features = features(plan);
+  LOOSE.set(key, plan);
+  return plan;
+}
+
+// What the room planner keeps clear (see WorldDef.reserve): the floor
+// before the mural, 10 units out (so the high tables and speakers that
+// crowded it gather elsewhere and nothing hides it), and the dance floor
+// with a unit round it (so the furniture moved off the mural does not
+// land on it).
+export function clubReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number } | { x0: number; y0: number; x1: number; y1: number }> {
+  const p = looseOf(L.W, L.D, L.H, L.T);
+  const out: Array<{ wall: Wall; a0: number; a1: number; out: number; z: number } | { x0: number; y0: number; x1: number; y1: number }> = [];
+  for (const f of p.features) if (f.kind === 'mural') out.push({ wall: f.wall, a0: f.a - f.w / 2 - 1, a1: f.a + f.w / 2 + 1, out: 10, z: 0 });
+  const d = p.dance;
+  if (d) out.push({ x0: d.x0 - 1, y0: d.y0 - 1, x1: d.x0 + d.n * TILE + 1, y1: d.y0 + d.n * TILE + 1 });
+  return out;
+}
+
+// The plan the shell draws: the loose plan's dance floor and walls, with
+// the furniture where the stage has it (planned with the reserve) and the
+// signs hung over what stands against the walls.
+export function planFor(W: number, D: number, H: number, T: number): Plan {
+  const key = `${W}x${D}x${H}x${T}`;
+  const hit = PLANS.get(key);
+  if (hit) return hit;
+  const loose = looseOf(W, D, H, T);
+  const { L } = loose;
+  const decor = L.slots.length ? planRoom({ id: 'club', stations: STATIONS, decor: DECOR, npcs: NPCS, reserve: clubReserve } as unknown as WorldDef, L, hashString('club')).props.filter((p) => !p.slot) : [];
+  const plan: Plan = { ...loose, decor, over: [] };
   plan.over = overSigns(plan);
   PLANS.set(key, plan);
   return plan;
