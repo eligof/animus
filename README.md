@@ -450,15 +450,22 @@ labels and chrome without the picture.
 ## Development
 
 ```sh
-node --test "test/**/*.test.ts"                # all tests
-
-# typecheck (TypeScript is not a runtime dependency: devDependencies only,
-# pinned by hash in package-lock.json, the same versions CI uses)
+# devDependencies only (TypeScript, fast-check; nothing at runtime), pinned
+# by hash in package-lock.json, the same versions CI uses
 npm ci --ignore-scripts
-npx tsc -p tsconfig.json
+
+node --test "test/**/*.test.ts"                # all tests
+npx tsc -p tsconfig.json                       # typecheck
 
 node scripts/scene-shot.ts cafe /tmp/cafe.png  # render a world with the demo crew to PNG
 ```
+
+`test/fuzz.test.ts` is property-based (fast-check): what reads input
+animus does not control (transcripts, keys and pastes, the terminal's
+replies, the crews file) and what it sends out (messages, the clipboard,
+pictures, colours) run against generated input. A failure prints its seed
+and the smallest input that breaks it; add that input to the property's
+`examples`.
 
 `scripts/scene-shot.ts <world> <out.png>` renders a world by its id, or by
 its module file (`src/worlds/<id>.ts`) to look at one not registered yet.
