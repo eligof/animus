@@ -27,14 +27,23 @@ import { STATIONS } from './stations.ts';
 // on a rack, and pendant lamps hung from the beam between them, their warm
 // light pooled on the bricks and the floor. The windows' light lies on the
 // concrete in front of them. Every piece sits where the stage's plan
-// leaves the wall free, clear of the tall furniture stood against it.
+// leaves the wall free, clear of the tall furniture stood against it. Over
+// the standing desks, a supergraphic painted straight onto the brick (flat
+// shapes in the room's coral, sunflower, teal and lilac; no word, no mark),
+// over the front door a row of clocks each at its own hour (no numbers),
+// and pothos trailing off the duct here and there.
 // The overlay drifts clouds past the windows, turns the city's lights on
 // and off and lets the neon breathe.
 
 type Wall = 'left' | 'right';
-type Kind = 'window' | 'art' | 'neon' | 'bike' | 'pendant';
-export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number };
-export type Plan = { L: Layout; features: Feature[] };
+type Kind = 'window' | 'art' | 'neon' | 'bike' | 'pendant' | 'mural' | 'clocks';
+// z0..z1: how high a piece hung over the furniture runs.
+export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number; z0?: number; z1?: number };
+// features: on the bare brick between the stations; over: over the
+// furniture stood against the wall (the mural, the clocks); lounge: the
+// floor (x, y) the rug in front of the sofa lies on, if it fits.
+type Area = { x0: number; y0: number; x1: number; y1: number };
+export type Plan = { L: Layout; features: Feature[]; over: Feature[]; lounge: Area | null };
 
 // How many of each the room may have, counted over both walls.
 export const CAP = { art: 3, neon: 1, bike: 1 } as const;
@@ -47,7 +56,7 @@ const BRICK = 3.0; // a brick's length
 const JOINT = 16; // the concrete's sawn joints
 const PLANK = 2.4; // a floor plank's width
 const DEPTH = 1.0; // the windows' glass, set back in the wall
-const WIDTH: Record<Kind, number> = { window: 12, art: 5, neon: 7, bike: 10, pendant: 3 };
+const WIDTH: Record<Kind, number> = { window: 12, art: 5, neon: 7, bike: 10, pendant: 3, mural: 14, clocks: 10.7 };
 export const GAP = 4;
 // Between two pieces, room for a pendant lamp with GAP either side of it.
 const BAY = GAP + WIDTH.pendant + GAP;
@@ -79,7 +88,7 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   let L = planLayout(2 * W + 12, W + H + 12, 'office');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
   const decor = L.slots.length ? planRoom({ id: 'office', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('office')).props.filter((p) => !p.slot) : [];
-  const plan = { L, features: features(L, decor) };
+  const plan = { ...features(L, decor), lounge: lounge(L, decor) };
   PLANS.set(key, plan);
   return plan;
 }
@@ -154,8 +163,9 @@ function orders(kinds: readonly Kind[]): Kind[][] {
 // windows and prints by turns while any fits, the prints up to their cap;
 // each piece into the stretch it leaves the most room in (one without a
 // print, the neon or the bike first, for those), and spread along it (see
-// arrange); then the pendant lamps between (see lamps).
-function features(L: Layout, decor: readonly PlacedProp[]): Feature[] {
+// arrange); then the mural and the clocks over the furniture (see overs)
+// and the pendant lamps between them all (see lamps).
+function features(L: Layout, decor: readonly PlacedProp[]): Omit<Plan, 'lounge'> {
   const spans = (['right', 'left'] as const).flatMap((wall) => stretches(L, wall, decor));
   const kinds: Kind[][] = spans.map(() => []);
   const count: Partial<Record<Kind, number>> = {};
@@ -190,7 +200,119 @@ function features(L: Layout, decor: readonly PlacedProp[]): Feature[] {
     more = put('art', plain) || put('art') || more;
   }
   const pieces = spans.flatMap((s, si) => (kinds[si].length ? arrange(s, kinds[si])!.map(({ kind, a }, i): Feature => ({ wall: s.wall, kind, a, w: WIDTH[kind], k: si * 10 + i })) : []));
-  return [...pieces, ...(['right', 'left'] as const).flatMap((wall) => lamps(L, wall, pieces, decor))];
+  const over = overs(L, pieces, decor);
+  return { L, features: [...pieces, ...(['right', 'left'] as const).flatMap((wall) => lamps(L, wall, [...pieces, ...over], decor))], over };
+}
+
+// Over the furniture stood against a wall: the mural painted on the brick
+// over the standing desks (as wide as WIDTH.mural and as tall as the wall
+// leaves it, from OVER over what stands under it up to the windows' heads
+// under the duct's shadow; none under MURAL_MIN either way), and a row of
+// three clocks over the front door (CLOCK_R round, a little over the
+// door's frame). Each centred on its station (the clocks on the door, AT
+// along it: see the entrance in stations.ts), GAP clear of the pieces
+// either side.
+const OVER = 2.5;
+const MURAL_MIN = 8;
+export const CLOCK_R = 1.55;
+const CLOCKS_W = 6 * CLOCK_R + 1.4;
+const OVERS = [
+  { kind: 'mural', station: 'write', w: WIDTH.mural, gap: OVER, at: null },
+  { kind: 'clocks', station: 'entrance', w: CLOCKS_W, gap: 1.2, at: 4.6 },
+] as const;
+
+function overs(L: Layout, pieces: readonly Feature[], decor: readonly PlacedProp[]): Feature[] {
+  const out: Feature[] = [];
+  const duct = ductAt(L.H);
+  const zmax = Math.min(windowZ(L.H).z1, duct.zc - duct.r - 1.6) - 0.5;
+  for (const o of OVERS) {
+    const q = L.slots.find((sl) => sl.kind === o.station && !sl.island);
+    if (!q) continue;
+    const wall = q.wall;
+    let c = (wall === 'right' ? q.x0 : q.y0) + (o.at ?? q.len / 2);
+    // the mural shrinks to fit, the clocks slide along (within one of
+    // their widths) to where they do
+    const slide = o.kind === 'clocks' ? o.w / 2 : 0;
+    let a0 = c - o.w / 2 - slide;
+    let a1 = c + o.w / 2 + slide;
+    for (const g of pieces) {
+      if (g.wall !== wall) continue;
+      if (g.a < c) a0 = Math.max(a0, g.a + g.w / 2 + GAP);
+      else a1 = Math.min(a1, g.a - g.w / 2 - GAP);
+    }
+    a0 = Math.max(a0, L.T + 2);
+    a1 = Math.min(a1, (wall === 'right' ? L.W : L.D) - 2);
+    if (slide && a1 - a0 >= o.w) {
+      c = Math.min(Math.max(c, a0 + o.w / 2), a1 - o.w / 2);
+      [a0, a1] = [c - o.w / 2, c + o.w / 2];
+    }
+    // the tallest thing stood against the wall under it, as seen against
+    // it (a piece d out is seen d back along the wall, up to its height
+    // less d)
+    let top = 0;
+    for (const p of decor) {
+      const r = footprint(p);
+      const [n0, n1, b0, b1] = wall === 'right' ? [r.y0 - L.T, r.y1 - L.T, r.x0, r.x1] : [r.x0 - L.T, r.x1 - L.T, r.y0, r.y1];
+      if (b1 - n0 > a0 && b0 - n1 < a1) top = Math.max(top, p.art.height - n0);
+    }
+    for (const sl of slotsOn(L, wall)) {
+      const [b0, b1] = wall === 'right' ? [sl.x0, sl.x0 + sl.len] : [sl.y0, sl.y0 + sl.len];
+      if (b1 > a0 && b0 < a1) top = Math.max(top, STATIONS[sl.kind].height);
+    }
+    const z0 = top + o.gap;
+    if (o.kind === 'mural') {
+      if (a1 - a0 >= MURAL_MIN && zmax - z0 >= MURAL_MIN) out.push({ wall, kind: 'mural', a: (a0 + a1) / 2, w: a1 - a0, k: 400, z0, z1: zmax });
+    } else if (a1 - a0 >= o.w - 0.01 && z0 + 2 * CLOCK_R <= zmax) {
+      out.push({ wall, kind: 'clocks', a: c, w: o.w, k: 410, z0, z1: z0 + 2 * CLOCK_R });
+    }
+  }
+  return out;
+}
+
+// The lounge rug: in front of the sofa, a little longer than it and
+// LOUNGE deep, its sides cut back off anything else stood on the floor
+// (the beanbags may sit on it), the stations' footprints and the kitchen's
+// planks; none if that leaves under 60 % of it, or any of it in the front
+// third of the room (where everyone walks).
+const LOUNGE = 7.5;
+
+function lounge(L: Layout, decor: readonly PlacedProp[]): Area | null {
+  const sofa = decor.find((p) => p.art === DECOR_ART.sofa);
+  if (!sofa) return null;
+  const r = footprint(sofa);
+  const out = sofa.wall === 'left' ? { x0: r.x1 + 0.3, y0: r.y0 - 1.5, x1: r.x1 + 0.3 + LOUNGE, y1: r.y1 + 1.5 } : { x0: r.x0 - 1.5, y0: r.y1 + 0.3, x1: r.x1 + 1.5, y1: r.y1 + 0.3 + LOUNGE };
+  const area = (a: Area) => Math.max(0, a.x1 - a.x0) * Math.max(0, a.y1 - a.y0);
+  const full = area(out);
+  out.x0 = Math.max(out.x0, L.T + 0.5);
+  out.y0 = Math.max(out.y0, L.T + 0.5);
+  const kitchen = L.slots.find((q) => q.kind === 'idle');
+  const blocks = [...decor.filter((p) => p !== sofa && p.art !== DECOR_ART.beanbag).map(footprint), ...L.slots.map(slotRect)];
+  if (kitchen) {
+    const k = slotRect(kitchen);
+    blocks.push({ x0: k.x0 - 7.5, y0: k.y0 - 7.5, x1: k.x1 + 7.5, y1: k.y1 + 7.5 });
+  }
+  // cut along the sofa's length (from the end nearer each block), or back
+  // toward the sofa
+  for (const b of blocks) {
+    if (b.x1 <= out.x0 || b.x0 >= out.x1 || b.y1 <= out.y0 || b.y0 >= out.y1) continue;
+    const along = sofa.wall === 'left' ? (['y0', 'y1'] as const) : (['x0', 'x1'] as const);
+    const [lo, hi] = along;
+    const mid = (out[lo] + out[hi]) / 2;
+    const bmid = sofa.wall === 'left' ? (b.y0 + b.y1) / 2 : (b.x0 + b.x1) / 2;
+    const blo = sofa.wall === 'left' ? b.y0 : b.x0;
+    const bhi = sofa.wall === 'left' ? b.y1 : b.x1;
+    const cut = { ...out };
+    if (bmid < mid) cut[lo] = bhi + 0.5;
+    else cut[hi] = blo - 0.5;
+    const back = { ...out };
+    if (sofa.wall === 'left') back.x1 = Math.min(back.x1, b.x0 - 0.5);
+    else back.y1 = Math.min(back.y1, b.y0 - 0.5);
+    const pick = area(cut) >= area(back) ? cut : back;
+    Object.assign(out, pick);
+  }
+  if (area(out) < 0.6 * full || out.x1 - out.x0 < 4 || out.y1 - out.y0 < 4) return null;
+  if (out.x1 + out.y1 > (2 / 3) * (L.W + L.D)) return null;
+  return out;
 }
 
 // About this far apart along bare brick, the pendant lamps.
@@ -329,7 +451,7 @@ export const room: RoomArt = {
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
-const SLABS = [C.concrete, mix(C.concrete, C.concreteLight, 0.45), mix(C.concrete, C.concreteDark, 0.3), mix(C.concrete, '#b3aa9c', 0.5)];
+const SLABS = [C.concrete, mix(C.concrete, C.concreteLight, 0.45), mix(C.concrete, C.concreteDark, 0.3), mix(C.concrete, '#b8ab98', 0.5)];
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen } = k;
@@ -529,9 +651,12 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     pen.fill();
   });
   if (k.fine) k.segs(lips, withAlpha('#3a1a10', 0.22), 0.14 * s);
-  const mortar = tone(C.mortar, 0.18);
-  k.segs(beds, withAlpha(mortar, 0.85), Math.max(0.6, 0.17 * s));
-  k.segs(heads, withAlpha(mortar, 0.85), Math.max(0.6, 0.15 * s));
+  // seen from afar the mortar goes quieter, toward the brick, so the wall
+  // reads as one warm surface rather than a grid
+  const far = s < 10;
+  const mortar = tone(far ? mix(C.mortar, C.brick, 0.35) : C.mortar, 0.18);
+  k.segs(beds, withAlpha(mortar, far ? 0.7 : 0.85), Math.max(0.6, 0.17 * s));
+  k.segs(heads, withAlpha(mortar, far ? 0.7 : 0.85), Math.max(0.6, 0.15 * s));
   // the wall darkens up toward the beam, out of the lamps' reach, and in
   // the far corner
   k.poly([[lo, 0, BASE], [hi, 0, BASE], [hi, 0, top], [lo, 0, top]], k.vgrad(T, 0, BASE, top, [[0, '#1a0c0600'], [0.45, '#1a0c0608'], [1, '#1a0c0648']]), 0);
@@ -553,12 +678,164 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
       if (k.sees(f.a - f.w / 2, 0, 4.5, f.a + f.w / 2, 2.2, 13)) bikeArt(k, f);
     }
   }
+  for (const f of plan.over) {
+    if (f.wall !== wall || !k.sees(f.a - f.w / 2, 0, f.z0! - 1, f.a + f.w / 2, 1, f.z1!)) continue;
+    if (f.kind === 'mural') muralArt(k, v, f, tone);
+    else clocks(k, f);
+  }
   duct(k, v, wall, lo, hi, end, tone);
+  vines(k, v, plan, wall, end);
   beam(k, v, lo, hi);
   for (const f of plan.features) {
     if (f.wall !== wall || f.kind !== 'pendant') continue;
     if (k.sees(f.a - 8, 0, pendantZ(H) - 10, f.a + 8, LAMP_N + 2, H)) pendant(k, v, f);
   }
+}
+
+// The mural: a cream ground painted straight onto the brick and on it flat
+// shapes in the room's colours, a coral quarter-disc rising from one lower
+// corner over a teal band that crosses the panel, a sunflower sun high on
+// the other side and a lilac half-disc at its foot (which side by the
+// seed); the brick's joints show through the paint.
+const MURAL = { ground: '#efe6d6', coral: '#f2765f', sun: '#f6c552', teal: '#43b3a8', lilac: '#a08ade', joint: '#a8957e' } as const;
+
+function muralArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => Color): void {
+  const { pen, s } = k;
+  const [a0, a1, z0, z1] = [f.a - f.w / 2, f.a + f.w / 2, f.z0!, f.z1!];
+  const [w, h] = [a1 - a0, z1 - z0];
+  const n = 0.03;
+  const panel: P3[] = [[a0, n, z0], [a1, n, z0], [a1, n, z1], [a0, n, z1]];
+  k.poly(panel, tone(MURAL.ground, 0.1), 0);
+  pen.save();
+  pen.beginPath();
+  k.trace(panel);
+  pen.clip();
+  const flip = hash(f.k, 1) < 0.5;
+  const X = (t: number) => (flip ? a1 - t * w : a0 + t * w);
+  // the teal band, rising across the panel behind the coral
+  const bw = Math.max(1.6, h * 0.2);
+  k.poly([[X(0), n, z0 + h * 0.3], [X(0), n, z0 + h * 0.3 + bw], [X(1), n, z0 + h * 0.85 + bw], [X(1), n, z0 + h * 0.85]], tone(MURAL.teal, 0.1), 0);
+  // the coral quarter-disc and a ring of the ground inside it
+  const r = Math.min(h * 0.78, w * 0.55);
+  k.poly(circle(X(0), n, z0, r, 40), tone(MURAL.coral, 0.1), 0);
+  k.poly(circle(X(0), n, z0, r * 0.62, 32), tone(MURAL.ground, 0.1), 0);
+  k.poly(circle(X(0), n, z0, r * 0.42, 28), tone(MURAL.coral, 0.1), 0);
+  // the sun, high on the other side, and the lilac half-disc at its foot
+  const rs = Math.min(w, h) * 0.17;
+  k.poly(circle(X(0.76), n, z0 + h * 0.7, rs, 28), tone(MURAL.sun, 0.1), 0);
+  k.poly(circle(X(0.86), n, z0, Math.min(w, h) * 0.2, 28), tone(MURAL.lilac, 0.1), 0);
+  // the brick's joints through the paint
+  const beds: Array<[P3, P3]> = [];
+  const heads: Array<[P3, P3]> = [];
+  for (let rr = 0, zb = BASE; zb < z1; rr++, zb += COURSE) {
+    if (zb > z0) beds.push([[a0, n, zb], [a1, n, zb]]);
+    const zt = Math.min(z1, zb + COURSE);
+    if (zt <= z0) continue;
+    const off = rr & 1 ? BRICK / 2 : 0;
+    for (let a = v.T - off + Math.ceil((a0 - v.T + off) / BRICK) * BRICK; a < a1; a += BRICK) heads.push([[a, n, Math.max(z0, zb)], [a, n, zt]]);
+  }
+  const joint = withAlpha(tone(MURAL.joint, 0.1), 0.45);
+  k.segs(beds, joint, Math.max(0.6, 0.13 * s));
+  k.segs(heads, joint, Math.max(0.6, 0.12 * s));
+  pen.restore();
+  // the paint's edge
+  pen.beginPath();
+  k.trace(panel);
+  k.paint(null, k.thin, withAlpha(INK, 0.3));
+}
+
+// Three wall clocks in a row over the front door, black steel rims round
+// white faces with their hour marks and no numbers, each at its own hour
+// (the offices the team works with), a coral second hand on each.
+const HOURS: ReadonlyArray<readonly [number, number]> = [[10, 10], [3, 40], [7, 25]];
+
+function clocks(k: Kit, f: Feature): void {
+  const { s } = k;
+  const zc = f.z0! + CLOCK_R;
+  HOURS.forEach(([hh, mm], i) => {
+    const a = f.a + (i - 1) * (2 * CLOCK_R + 0.7);
+    k.shadow(a + 0.25, 0.2, CLOCK_R * 0.9, 0.5, 0.12, zc - CLOCK_R - 0.2);
+    k.face(a, 0.05, zc, CLOCK_R, C.frame, k.lw, 32);
+    k.face(a, 0.5, zc, CLOCK_R, C.frame, k.lw, 32);
+    k.face(a, 0.55, zc, CLOCK_R - 0.25, C.white, k.thin, 32);
+    const ticks: Array<[P3, P3]> = [];
+    for (let t = 0; t < 12; t++) {
+      const th = (t / 12) * Math.PI * 2;
+      const r0 = CLOCK_R - (t % 3 ? 0.55 : 0.75);
+      ticks.push([[a + Math.cos(th) * r0, 0.57, zc + Math.sin(th) * r0], [a + Math.cos(th) * (CLOCK_R - 0.42), 0.57, zc + Math.sin(th) * (CLOCK_R - 0.42)]]);
+    }
+    k.segs(ticks, INK, Math.max(0.7, 0.09 * s));
+    const hand = (turns: number, r: number, color: Color, wpx: number) => {
+      const th = Math.PI / 2 - turns * Math.PI * 2;
+      k.line([[a, 0.6, zc], [a + Math.cos(th) * r, 0.6, zc + Math.sin(th) * r]], color, wpx);
+    };
+    hand((hh + mm / 60) / 12, CLOCK_R * 0.45, INK, Math.max(1, 0.18 * s));
+    hand(mm / 60, CLOCK_R * 0.68, INK, Math.max(0.8, 0.12 * s));
+    hand(((i * 23 + 11) % 60) / 60, CLOCK_R * 0.72, C.chartHot, Math.max(0.6, 0.06 * s));
+    k.face(a, 0.62, zc, 0.13, C.chartHot, 0, 10);
+  });
+}
+
+// Pothos off the duct: at a strap (never two straps running), clear of the
+// windows, the neon, the mural, the clocks and the pendants as they are
+// seen, a few leaves on the
+// duct and two or three strands trailing down from under it (never below
+// VINE_LOW, over anyone's head).
+const VINE_LOW = 20;
+
+function vines(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): void {
+  const { n } = DUCT;
+  const { zc, r } = ductAt(v.H);
+  const near = (a: number) =>
+    [...plan.features, ...plan.over].some((f) => {
+      if (f.wall !== wall || f.kind === 'art' || f.kind === 'bike') return false;
+      const c = f.kind === 'pendant' ? f.a - LAMP_N : f.a;
+      return Math.abs(a - c) < f.w / 2 + GAP;
+    });
+  let last = -Infinity;
+  for (let a = 16; a < end - 3; a += 12) {
+    if (a - last < 24 || near(a) || near(a - n - r)) continue;
+    last = a;
+    if (k.sees(a - 4, 0, VINE_LOW, a + 4, n + r + 1, zc + r + 1)) pothos(k, a, n, zc, r, Math.round(a) + (wall === 'right' ? 0 : 500));
+  }
+}
+
+const POTHOS = ['#5c9a4f', '#8cc06a', '#4a8a46'] as const;
+
+function pothos(k: Kit, a: number, n: number, zc: number, r: number, seed: number): void {
+  const { pen, s } = k;
+  // a heart-shaped leaf on a short stalk off the vine at (u, nn, z), turned
+  // `side` of it, `size` across
+  const leaf = (u: number, nn: number, z: number, side: number, size: number, i: number) => {
+    const [x0, y0] = k.p(u, nn, z);
+    const [x, y] = k.p(u + side * 0.55 * size, nn + 0.05, z - 0.2);
+    pen.beginPath();
+    pen.moveTo(x0, y0);
+    pen.lineTo(x, y);
+    pen.strokeStyle = '#3d7440';
+    pen.lineWidth = Math.max(0.6, 0.06 * s);
+    pen.stroke();
+    pen.beginPath();
+    pen.ellipse(x + side * 0.18 * size * s, y + 0.08 * size * s, 0.72 * size * s, 0.5 * size * s, side * 0.6, 0, Math.PI * 2);
+    k.paint(POTHOS[i % POTHOS.length], k.thin * 0.8);
+  };
+  // the strands, from under the duct down in a lazy S, a leaf every so
+  // often, smaller toward the tip
+  const strands = 2 + (hash(seed, 1) < 0.5 ? 1 : 0);
+  for (let j = 0; j < strands; j++) {
+    const u0 = a + (j - (strands - 1) / 2) * 1.3;
+    const len = Math.min(4.5 + hash(seed, j, 2) * 4, zc - r - VINE_LOW);
+    const sway = 0.5 + hash(seed, j, 3) * 0.3;
+    const pts: P3[] = [];
+    for (let t = 0; t <= 1.001; t += 0.1) pts.push([u0 + Math.sin(t * Math.PI * 1.4 + j * 2) * sway, n + r * 0.5, zc - r * 0.6 - t * len]);
+    k.line(pts, '#3d7440', Math.max(0.7, 0.08 * s));
+    for (let i = 1; i < pts.length; i += 2) {
+      const [u, nn, z] = pts[i];
+      leaf(u, nn, z, (i >> 1) & 1 ? 1 : -1, 1.15 - (i / pts.length) * 0.4, i + j);
+    }
+  }
+  // leaves on the duct where it is tied on
+  for (let i = 0; i < 4; i++) leaf(a - 1.1 + i * 0.75, n + r * 0.7, zc + r * (i & 1 ? 0.5 : 0.8), i & 1 ? 1 : -1, 1.1, i + 1);
 }
 
 // The stretch of the wall (along) the pen can see between heights z0..z1.
@@ -655,9 +932,9 @@ function ringX(k: Kit, a: number, n: number, zc: number, r: number): Array<[numb
 }
 
 // ── rugs ────────────────────────────────────────────────────────────────────
-// A flat-woven rug in the meeting corner round the whiteboard, and a round
-// one in the reading nook in front of the bookshelf; none over the kitchen's
-// planks.
+// A flat-woven rug in the meeting corner round the whiteboard, a cream one
+// in front of the sofa and a round one in the reading nook in front of the
+// bookshelf; none over the kitchen's planks.
 function rugs(k: Kit, v: RoomView, plan: Plan): void {
   const slot = (kind: SlotKind) => plan.L.slots.find((q) => q.kind === kind);
   const bar = slot('idle');
@@ -669,13 +946,25 @@ function rugs(k: Kit, v: RoomView, plan: Plan): void {
   const world = (q: Slot, u: number, w: number): [number, number] => (q.wall === 'right' ? [q.x0 + u, q.y0 + w] : [q.x0 + w, q.y0 + u]);
   const think = slot('think');
   if (think) {
-    const [u0, w0, u1, w1] = [-2.5, -1.5, think.len + 2.5, think.dep + 3.5];
+    // the rug round the whiteboard, cut back to the room where it would
+    // run past a wall (dropped if that leaves under 70 % of it)
+    let [u0, w0, u1, w1] = [-2.5, -1.5, think.len + 2.5, think.dep + 3.5];
+    const area = (u1 - u0) * (w1 - w0);
+    const [ox, oy] = [think.x0, think.y0];
+    const [xu, yw] = think.wall === 'right' ? [ox, oy] : [oy, ox];
+    const [hiU, hiW] = think.wall === 'right' ? [v.W - 1, v.D - 1] : [v.D - 1, v.W - 1];
+    [u0, u1] = [Math.max(u0, v.T + 0.5 - xu), Math.min(u1, hiU - xu)];
+    [w0, w1] = [Math.max(w0, v.T + 0.5 - yw), Math.min(w1, hiW - yw)];
     const [x0, y0] = world(think, u0, w0);
     const [x1, y1] = world(think, u1, w1);
-    if (clear(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1))) {
+    if ((u1 - u0) * (w1 - w0) >= 0.7 * area && clear(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1))) {
       const tk = new Kit(k.pen, frame(v.at, think.wall, think.x0, think.y0), v.s);
       if (tk.sees(u0, w0, 0, u1, w1, 0)) blockRug(tk, u0, w0, u1 - u0, w1 - w0);
     }
+  }
+  if (plan.lounge && k.sees(plan.lounge.x0, plan.lounge.y0, 0, plan.lounge.x1, plan.lounge.y1, 0)) {
+    const { x0, y0, x1, y1 } = plan.lounge;
+    berber(k, x0, y0, x1 - x0, y1 - y0);
   }
   const read = slot('read');
   if (read) {
@@ -708,6 +997,38 @@ function blockRug(k: Kit, u0: number, v0: number, du: number, dv: number): void 
     [[u0 + du * 0.66, v0 + dv * 0.1, z + 0.01], [u0 + du * 0.66, v0 + dv * 0.9, z + 0.01]],
   ];
   k.segs(lines, '#e8dcc0', Math.max(0.8, 0.14 * k.s));
+}
+
+// The lounge's rug: a thick cream wool one with a lattice of dark
+// diamonds woven into it and a fringe at its short ends (x0, y0 on the
+// floor, dx by dy).
+function berber(k: Kit, x0: number, y0: number, dx: number, dy: number): void {
+  const z = 0.05;
+  const q = (a0: number, b0: number, a1: number, b1: number): P3[] => [[a0, b0, z], [a1, b0, z], [a1, b1, z], [a0, b1, z]];
+  k.shadow(x0 + dx / 2, y0 + dy / 2, dx * 0.55, dy * 0.55, 0.12);
+  k.poly(q(x0, y0, x0 + dx, y0 + dy), '#ece4d4', k.thin, 0.4);
+  // the lattice: two sets of diagonals, clipped to the rug inside its edge
+  const pen = k.pen;
+  pen.save();
+  pen.beginPath();
+  k.trace(q(x0 + 0.5, y0 + 0.5, x0 + dx - 0.5, y0 + dy - 0.5));
+  pen.clip();
+  const step = 2.4;
+  const lines: Array<[P3, P3]> = [];
+  for (let t = -dy; t < dx + dy; t += step) {
+    lines.push([[x0 + t, y0, z], [x0 + t + dy * 0.75, y0 + dy, z]]);
+    lines.push([[x0 + t + dy * 0.75, y0, z], [x0 + t, y0 + dy, z]]);
+  }
+  k.segs(lines, withAlpha('#3a3532', 0.8), Math.max(0.7, 0.11 * k.s));
+  pen.restore();
+  // the fringe on its two short ends
+  const fringe: Array<[P3, P3]> = [];
+  if (dx <= dy) {
+    for (const yy of [y0, y0 + dy]) for (let x = x0 + 0.4; x < x0 + dx - 0.2; x += 0.6) fringe.push([[x, yy, z], [x, yy + (yy === y0 ? -0.6 : 0.6), z]]);
+  } else {
+    for (const xx of [x0, x0 + dx]) for (let y = y0 + 0.4; y < y0 + dy - 0.2; y += 0.6) fringe.push([[xx, y, z], [xx + (xx === x0 ? -0.6 : 0.6), y, z]]);
+  }
+  k.segs(fringe, '#e2d8c4', Math.max(0.8, 0.12 * k.s));
 }
 
 // A round rug of rings: sunflower, cream, coral and teal, muted.
