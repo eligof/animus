@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './dunes/decor.ts';
 import { INK } from './dunes/kit.ts';
 import { NPCS } from './dunes/npcs.ts';
-import { dunesPois, room } from './dunes/room.ts';
+import { dunesPois, dunesReserve, room } from './dunes/room.ts';
 import { STATIONS } from './dunes/stations.ts';
 import { WORKSTATION } from './dunes/workstation.ts';
 
@@ -55,4 +55,11 @@ export const dunes: WorldDef = {
   critter: { kind: 'beetle', body: hex('#b4682c') }, // a sand beetle
   finale: { colors: [[226, 196, 140], [192, 88, 46], [63, 184, 168]] }, // sand, rust and turquoise confetti
   build: { colors: [hex('#c9a46c'), hex('#a8845a'), hex('#d9bf8f'), hex('#3fb8a8')], shape: 'pyramid' }, // a stone cairn of sandstone, crowned in turquoise
+  // Noon, so no evening tint. The bleached deck darker toward its far
+  // corners so the sun's patches stand out; the wall tops kept warm under
+  // the sails. The night a deep desert blue (the default greys the sand),
+  // the lanterns' flames carrying it.
+  light: { falloff: 1.4, top: 0.6, night: { tint: [20, 45, 210], strength: 0.7, figures: 0.3 } },
+  // the floor the sun through the windows lands on, kept clear of decor
+  reserve: dunesReserve,
 };

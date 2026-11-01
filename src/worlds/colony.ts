@@ -55,4 +55,9 @@ export const colony: WorldDef = {
   critter: { kind: 'husky', body: hex('#8a929e') }, // a husky
   finale: { colors: [[124, 192, 74], [140, 98, 58], [106, 174, 224]] }, // grass green, wood brown and sky blue confetti
   build: { colors: [hex('#8c623a'), hex('#6e4a2a'), hex('#a8a090'), hex('#7cc04a')], shape: 'house' }, // a log cabin with a stone chimney and a green roof
+  // Golden hour: a warm evening over the room, the low sun in through the
+  // windows and the campfire putting back the glow round them. At night a
+  // cool blue-green dark (the default goes purple on the red planks).
+  ambient: { tint: [255, 190, 140], strength: 0.14, figures: 0.5 },
+  light: { night: { tint: [50, 78, 130], strength: 0.55, figures: 0.3 } },
 };

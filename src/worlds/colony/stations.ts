@@ -1,6 +1,7 @@
 import { mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView } from '../types.ts';
 import { bookRow, chair, crate, dusk, fillPts, flames, hull, logU, logV, ring, rock, sack, sprout, wheel } from './bits.ts';
 import type { Kit, P3 } from './kit.ts';
@@ -313,6 +314,8 @@ const run: PropArt = {
   dep: 11,
   height: 16,
   animated: true,
+  // the forge's mouth, glowing day and night
+  light: [{ kind: 'fire', u: (MOUTH.u0 + MOUTH.u1) / 2, v: MOUTH.v + 0.2, z: 2.3, r: 9, strength: 0.8, halo: 2 }],
   draw(v: PropView): void {
     const k = still(v, 'run', 16, (k) => {
       k.shadow(5.5, 5.5, 6.2, 6.0, 0.3);
@@ -596,6 +599,11 @@ const idle: PropArt = {
   height: 8,
   animated: true,
   movesIdle: true,
+  // the campfire, and the torch on its post
+  light: [
+    { kind: 'fire', u: FIRE.u, v: FIRE.v, z: 1.2, r: 15, strength: 1.0, halo: 3.5 },
+    { kind: 'fire', u: TORCH.u, v: TORCH.v, z: TORCH.z + 0.6, r: 6, strength: 0.5, halo: 1.5 },
+  ],
   draw(v: PropView): void {
     const k = still(v, 'idle', 8, (k) => {
       k.shadow(7.5, 5.5, 7.4, 5.2, 0.2);
@@ -631,7 +639,7 @@ const idle: PropArt = {
     const t = v.t;
     k.halo(TORCH.u, TORCH.v, TORCH.z + 0.6, 1.7, '#ffb040', 0.5);
     flames(k, TORCH.u, TORCH.v, TORCH.z - 0.05, 0.28, t * Math.PI + 1.1);
-    k.halo(FIRE.u, FIRE.v, 1.6, 6.0, '#ff8a3a', 0.5 + 0.1 * Math.sin(t * Math.PI * 2));
+    k.halo(FIRE.u, FIRE.v, 1.6, 5.0, '#ff8a3a', 0.32 + 0.08 * Math.sin(t * Math.PI * 2));
     flames(k, FIRE.u, FIRE.v, 0.5, 0.78, t * Math.PI / 2);
     k.halo(FIRE.u, FIRE.v, 1.2, 2.4, '#ffe0a0', 0.45);
     // the pot over it, the front stones, the right seat and the mug
@@ -718,8 +726,11 @@ const entrance: PropArt = {
   dep: 4,
   height: 20,
   animated: true,
+  // the sun lamp over the seed tray, switched off at night
+  light: [{ kind: 'lamp', u: SUN.u, v: SUN.v + 0.3, z: SUN.z - 0.4, color: '#fff2c0', r: 10, strength: 0.7, halo: 2 }],
   draw(v: PropView): void {
     const { u0, u1, h } = DOOR;
+    const on = lampsOn(v);
     const k = still(v, 'entrance', 20, (k) => {
       // the hills beyond the opening
       const out = -0.6;
@@ -728,7 +739,7 @@ const entrance: PropArt = {
       pen.beginPath();
       k.trace([[u0, out, 0], [u1, out, 0], [u1, out, h], [u0, out, h]]);
       pen.clip();
-      dusk(k, u0 - 0.5, u1 + 0.5, 0, h, out, v.seed);
+      dusk(k, u0 - 0.5, u1 + 0.5, 0, h, out, v.seed, !on);
       // a path running out across the grass
       k.poly([[u0 + 1.6, out, 0], [u1 - 1.2, out, 0], [(u0 + u1) / 2 + 0.3, out, 3.0], [(u0 + u1) / 2 - 0.1, out, 3.0]], '#b89a6a', 0);
       pen.restore();
@@ -760,12 +771,14 @@ const entrance: PropArt = {
       const rim = ring(k, [SUN.u, SUN.v, SUN.z], [0, 0.45, 1], 1.25, 20);
       const back = ring(k, [SUN.u, SUN.v - 0.2, SUN.z + 0.75], [0, 0.45, 1], 0.5, 12);
       fillPts(k, hull([...rim, ...back]), '#7a8288', k.lw);
-      fillPts(k, rim, '#fffbe8', k.thin);
-      fillPts(k, ring(k, [SUN.u, SUN.v + 0.02, SUN.z - 0.04], [0, 0.45, 1], 0.6, 14), '#fff8c0', 0);
+      fillPts(k, rim, on ? '#fffbe8' : '#a8a498', k.thin);
+      fillPts(k, ring(k, [SUN.u, SUN.v + 0.02, SUN.z - 0.04], [0, 0.45, 1], 0.6, 14), on ? '#fff8c0' : '#8e8a80', 0);
     });
-    // the sun lamp's glow
-    k.halo(SUN.u, SUN.v + 0.3, SUN.z - 0.3, 3.4, C.sun, 0.55);
-    k.halo(SUN.u, SUN.v + 0.3, SUN.z - 1.0, 1.6, '#ffffff', 0.4);
+    // the sun lamp's glow, while it is on
+    if (on) {
+      k.halo(SUN.u, SUN.v + 0.3, SUN.z - 0.3, 2.4, C.sun, 0.4);
+      k.halo(SUN.u, SUN.v + 0.3, SUN.z - 1.0, 1.6, '#ffffff', 0.4);
+    }
     // the door: shut, or swung in while someone passes
     const th = v.active ? 0.62 + 0.05 * Math.sin(v.t * 2.2) : 0;
     doorLeaf(k, th);

@@ -7,7 +7,7 @@ import { framesFor } from '../src/art/motion.ts';
 import { DESK } from '../src/world/desks.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
 import { hashString } from '../src/world/rng.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import type { PropArt } from '../src/worlds/types.ts';
 import { dunes } from '../src/worlds/dunes.ts';
@@ -162,6 +162,17 @@ test('Dust Outpost room: a drifter\'s rawhide coat stands out from the floor and
   for (const c of [...ADOBE, ...PLATES]) assert.ok(luma(c) - coat >= 12, `the wall's ${c} (${luma(c).toFixed(0)}) is too close to the coat's ${COAT} (${coat.toFixed(0)})`);
   const mean = ADOBE.reduce((m, c) => m + luma(c), 0) / ADOBE.length;
   assert.ok(mean - coat >= 25, `the adobe (${mean.toFixed(0)} on average) is too close to the coat (${coat.toFixed(0)})`);
+});
+
+test('Dust Outpost room: the floor the sun lands on through the windows is kept clear of decor', () => {
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'dunes');
+    const keep = dunes.reserve!(L);
+    assert.ok(keep.length >= 1, `${L.W}: nothing kept clear`);
+    for (const p of planRoom(dunes, L, hashString('dunes')).props.filter((q) => !q.slot)) {
+      assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: decor at ${p.x0}, ${p.y0} stands in the sun's patch`);
+    }
+  }
 });
 
 test('Dust Outpost points of interest: drinks at the bar, tea on the rug, a look at the dunes', () => {

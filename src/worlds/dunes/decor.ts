@@ -1,5 +1,6 @@
 import { mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
 import { band, barrelSide, bottle, crate, gear, glass, jug, keg, lathe, rivets, sack, seams, tube, tubeLamp } from './bits.ts';
 import type { Kit, P3 } from './kit.ts';
@@ -422,15 +423,15 @@ const trestle: PropArt = {
 
 // ── a tube lamp on a pole ────────────────────────────────────────────────────
 // A thin rusty post on three splayed feet carrying a cold-white tube, its
-// cable trailing off down the post; a faint pool of light round it.
+// cable trailing off down the post (its light is the scene's, off at night).
 const lamp: PropArt = {
   len: 3,
   dep: 3,
   height: 16,
+  light: [{ kind: 'lamp', u: 1.5, v: 1.5, z: 13.05, color: '#cfeee8', r: 9, strength: 0.6, halo: 1.6 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 1.5;
-    k.pool(c, c, 2.2, 2.2, C.tubeGlow, 0.16);
     k.shadow(c, c, 1.1, 1.1, 0.3);
     k.line([[c - 0.2, c + 0.5, 0.05], [c - 0.9, c + 1.2, 0.03], [c - 1.4, c + 1.3, 0.03]], '#2e2620', Math.max(0.8, 0.1 * k.s));
     // three feet splayed from a collar, the post up from it
@@ -438,7 +439,7 @@ const lamp: PropArt = {
     k.cyl(c, c, 1.3, 0.3, 0.6, C.steelDark, { line: k.thin });
     k.rod([[c, c, 1.8], [c, c, 10.6]], C.rustDark, 0.22);
     k.line([[c + 0.22, c, 1.9], [c + 0.22, c, 10.4]], withAlpha('#2e2620', 0.9), Math.max(0.7, 0.08 * k.s));
-    tubeLamp(k, c, c, 10.75, 4.6, 0.3);
+    tubeLamp(k, c, c, 10.75, 4.6, 0.3, lampsOn(v));
   },
 };
 

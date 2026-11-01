@@ -8,7 +8,8 @@ import { hashString } from '../../world/rng.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { PropArt, RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { PropArt, RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { ball, dusk } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
@@ -134,11 +135,11 @@ function windowZ(H: number): { z0: number; z1: number } {
 // where: white tile under the research bench and the sick bay (one stretch
 // of it when they stand near each other on a wall), stone slabs under the
 // smithy and the tailoring bench, a stockpile outline round the stores and
-// each stack; and where the standing lamps stand, for their light.
+// each stack.
 
 export type ZoneKind = 'tile' | 'stone' | 'carpet' | 'stock';
 export type Zone = Rect & { kind: ZoneKind };
-type Furnished = { zones: Zone[]; lamps: Array<{ x: number; y: number }> };
+type Furnished = { zones: Zone[] };
 
 const FURNISHED = new Map<string, Furnished>();
 
@@ -153,7 +154,7 @@ function furnished(v: { W: number; D: number; H: number; T: number }): Furnished
   const hit = FURNISHED.get(key);
   if (hit) return hit;
   const { L } = planFor(v.W, v.D, v.H, v.T);
-  const out: Furnished = { zones: [], lamps: [] };
+  const out: Furnished = { zones: [] };
   FURNISHED.set(key, out);
   if (!L.slots.length) return out;
   const world = { id: 'colony', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef;
@@ -185,10 +186,6 @@ function furnished(v: { W: number; D: number; H: number; T: number }): Furnished
   const stores = slot('search');
   if (stores) add('stock', stores.island ? grown(stores, 1) : backed(stores, 1, 1.5));
   for (const p of decor('stack')) add('stock', grown(p, 1));
-  for (const p of decor('lamp')) {
-    const r = footprint(p);
-    out.lamps.push({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
-  }
   return out;
 }
 
@@ -241,6 +238,13 @@ export const room: RoomArt = {
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
     shell(k, v);
     v.pen.restore();
+  },
+  // The light the shell gives: the golden evening through each window, its
+  // cross of glazing bars cut out of the patch on the floor; moonlight at
+  // night. (The fire, the forge and the lamps give theirs as props.)
+  lights(v): RoomLight[] {
+    const { z0, z1 } = windowZ(v.H);
+    return planFor(v.W, v.D, v.H, v.T).features.filter((f) => f.kind === 'window').map((f) => ({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2.4, z0, z1, bars: 1, rails: 1, color: '#ffc68a', strength: 1.0, night: '#9fb6ee', moon: 0.6 }));
   },
   // The scene draws the overlay once through a pen that only measures
   // (to find its pieces: everything must be drawn then, so any pen not a
@@ -365,7 +369,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
   // The zones laid over the planks: tile, then stone, then the stockpiles'
   // outlines.
-  const { zones, lamps } = furnished(v);
+  const { zones } = furnished(v);
   for (const z of zones) if (z.kind === 'tile') tiles(k, z);
   for (const z of zones) if (z.kind === 'stone') slabs(k, z);
   for (const z of zones) if (z.kind === 'carpet') carpet(k, z);
@@ -391,33 +395,9 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const tk = new Kit(pen, frame(v.at, think.wall, think.x0, think.y0), s);
     if (tk.sees(-3, -3, 0, think.len + 3, think.dep + 3, 0)) braided(tk, think.len / 2, think.dep / 2, 7.2, 4.8);
   }
-  // Warm light only round the fire, the forge, the lamps and the door's sun
-  // lamp; the dusk's rosy light under each window.
-  const fire = slot('idle');
-  if (fire) {
-    const fk = new Kit(pen, frame(v.at, fire.wall, fire.x0, fire.y0), s);
-    if (fk.sees(-14, -14, 0, fire.len + 14, fire.dep + 14, 0)) {
-      fk.pool(fire.len / 2, fire.dep * 0.45, 24, 20, '#ff8a3a', 0.42);
-      fk.pool(fire.len / 2, fire.dep * 0.45, 13, 11, '#ffb060', 0.28);
-    }
-  }
-  for (const [kind, u, w, r, a] of [['run', 0.3, 0.6, 12, 0.26], ['entrance', 0.82, 1.4, 10, 0.3]] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    const c = kind === 'entrance' ? C.sun : '#ff9a50';
-    if (qk.sees(-r, -r, 0, q.len + r, q.dep + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
-  for (const p of lamps) {
-    if (!k.sees(p.x - 9, p.y - 9, 0, p.x + 9, p.y + 9, 0)) continue;
-    k.pool(p.x, p.y, 9, 9, '#ffd27a', 0.3);
-    k.pool(p.x, p.y, 4.5, 4.5, '#fff0b0', 0.22);
-  }
-  for (const f of plan.features) {
-    if (f.kind !== 'window') continue;
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (wk.sees(f.a - 8, 0, 0, f.a + 8, 7, 0)) wk.pool(f.a + 1, 3.5, 6, 4.5, '#f8b890', 0.12);
-  }
+  // The light round the fire, the forge, the lamps, the door's sun lamp and
+  // under each window is the scene's (see room.lights and the props'
+  // `light`).
 }
 
 // The zone's corners on the floor, a hair over the planks.
@@ -770,7 +750,7 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   pen.beginPath();
   k.trace(open);
   pen.clip();
-  dusk(k, a - w / 2 - 0.5, a + w / 2 + 0.5, z0, z1, -depth, f.k);
+  dusk(k, a - w / 2 - 0.5, a + w / 2 + 0.5, z0, z1, -depth, f.k, !lampsOn(v));
   // the reveal: the stone's inner face (seen past the -u side), the sill's
   // inside at the foot, and a shadow under the head
   k.poly([[a - w / 2, 0.02, z0], [a - w / 2, -depth, z0], [a - w / 2, -depth, z1], [a - w / 2, 0.02, z1]], k.side('#a49a88', 1, 0, 0.2), 0);
@@ -1084,7 +1064,7 @@ function firelight(v: RoomView, plan: Plan, clip: boolean): void {
   const cv = fire.dep * 0.47;
   const [ru, rv] = [10, 8.5];
   if (clip && !k.sees(cu - ru, cv - rv, 0, cu + ru, cv + rv, 0)) return;
-  k.pool(cu, cv, ru, rv, C.fire, 0.1 + 0.2 * n);
+  k.pool(cu, cv, ru, rv, C.fire, 0.05 + 0.15 * n);
 }
 
 // Fireflies drifting and blinking over the hills outside a window (in the
