@@ -187,6 +187,9 @@ test('a window throws its panes on the floor away from the light (from the upper
   for (const u of [41.5, 46.5]) assert.ok(lum(at(on, b, ...inPatch(u))) > lum(at(none, a, ...inPatch(u))) + 12, `lit at ${u}`);
   // under the bar (u 44), less
   assert.ok(lum(at(on, b, ...inPatch(44))) < lum(at(on, b, ...inPatch(41.5))) - 6, 'the bar');
+  // fading out to nothing at its far end (z near 18)
+  const far: [number, number, number] = [41.5 + 17.6 / 1.6, T + 17.6 / 3.2, 0];
+  assert.ok(Math.abs(lum(at(on, b, ...far)) - lum(at(none, a, ...far))) <= 4, 'no hard far edge');
   // nothing on the floor straight out in front of it
   const front: [number, number, number] = [44 - 4, T + 6, 0];
   assert.ok(Math.abs(lum(at(on, b, ...front)) - lum(at(none, a, ...front))) <= 2);
@@ -236,6 +239,13 @@ test('the evening tint lies over the room and its props in full, over the crew b
   assert.ok(Math.abs(g.room!.rgb[0] - 255 * k(80)) < 0.01);
   assert.ok(Math.abs(g.fig!.rgb[0] - 255 * (1 - 0.2 + (0.2 * 80) / 255)) < 0.01, 'half on the crew');
   assert.equal(gradesOf({ ...amb, ambient: { ...amb.ambient!, figures: 0 } }, true).fig, null, 'none if it says');
+  // at night the evening gives way to the night (by as much as it is
+  // strong), not multiplied whole under it
+  const n = gradesOf(amb, false).room!.rgb[0] / 255;
+  const night = 1 - 0.5 + (0.5 * 62) / 255;
+  assert.ok(Math.abs(n - night * (1 - 0.2 + (0.2 * 80) / 255)) < 0.002, `${n}`);
+  // the crew takes 0.45 of the night as it comes
+  assert.ok(Math.abs(gradesOf(world, false).fig!.rgb[0] / 255 - (1 - 0.225 + (0.225 * 62) / 255)) < 0.002);
   // a lamp's pool shines over it: warmer than the tinted floor round it
   const f = frame(lit([LAMP], { ambient: amb.ambient }), room());
   const b = shot(f);
@@ -265,6 +275,14 @@ test('all of it is drawn once: frame to frame, lit or not, only placements go to
     }
     assert.equal(scene.stats.tiles - tiles, painted, 'and not again');
   }
+});
+
+test('a small light hung high (a string bulb) lights the floor little, close under it', () => {
+  const bulb: RoomLight = { kind: 'glow', wall: 'right', u: 30, v: 0.5, z: 20, r: 1, color: '#ffcf7a' };
+  const none = frame(world, room());
+  const on = frame(lit([bulb]), room());
+  const [a, b] = [shot(none), shot(on)];
+  for (let y = T + 2; y < 20; y += 1) assert.ok(Math.abs(lum(at(on, b, 30, y, 0)) - lum(at(none, a, 30, y, 0))) <= 3, `a spot on the floor at y ${y}`);
 });
 
 test('lights declared on a room are found once a room, in world units, on their wall', () => {

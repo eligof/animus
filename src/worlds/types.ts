@@ -288,11 +288,13 @@ export type RoomLight = (PointLight | WindowLight) & { wall: 'left' | 'right' };
 // the walls and in the back corner, `falloff` the floor darkening toward
 // its far corners (kept light where the crew walks), `top` the walls
 // darkening toward their tops, `turn` the left wall's shade (it faces away
-// from the light), `backs` the soft shadows on the wall behind what stands
+// from the light; 2 as it comes, to bring the left wall near 0.82 of
+// the right), `backs` the soft shadows on the wall behind what stands
 // against it, `pools` every declared light's pool, wash and spill. `night`
 // is how the room looks with the lights off: multiplied toward `tint` by
-// `strength` (cool and dim as it comes), the crew and the locals by
-// `figures` of that (0 to 1).
+// `strength` (cool and dim as it comes; the evening `ambient` gives way to
+// it by as much), the crew and the locals by `figures` of that (0 to 1,
+// 0.45 as it comes).
 export type WorldLight = {
   ao?: number;
   falloff?: number;
