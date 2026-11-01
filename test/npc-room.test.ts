@@ -97,17 +97,20 @@ test('whoever a local serves stands in front of its station, the next beside, on
   assert.ok(pairs >= 1, 'nowhere to wait beside a counter');
 });
 
-test("a world's shell finds the same furniture with its locals: it plans the room from the world's id, stations, decor and locals, as the stage does", () => {
+test("a world's shell finds the same furniture with its locals: it plans the room from the world's id, stations, decor, locals and kept walls, as the stage does", () => {
   // (the shells that find their furniture: see club/plan.ts, office/room.ts,
   // vault/room.ts, meadhall/room.ts, shelter/room.ts, colony/room.ts); the
-  // locals move the decor in some rooms, so a shell without them would not
+  // locals move the decor in some rooms, so a shell without them would not,
+  // nor one without the walls its world keeps clear (WorldDef.reserve). A
+  // big room's more decor comes from these alone (see moreDecor), never
+  // from the world's spots (`pois`), which a shell leaves out.
   let moved = 0;
   for (const id of ['club', 'office', 'vault', 'meadhall', 'shelter', 'colony']) {
     const w = getTheme(id)!;
     for (const side of [80, 97, 108, 125, 132, 150, 160]) {
       const L = planLayout(2 * side + 12, 1000, id);
       const stage = planRoom(w, L, hashString(id)).props.map(footprint);
-      const shell = { id, stations: w.stations, decor: w.decor, npcs: w.npcs } as WorldDef;
+      const shell = { id, stations: w.stations, decor: w.decor, npcs: w.npcs, reserve: w.reserve } as WorldDef;
       assert.deepEqual(planRoom(shell, L, hashString(id)).props.map(footprint), stage, `${id} ${side}`);
       if (JSON.stringify(planRoom({ ...w, npcs: [] }, L, hashString(id)).props.map(footprint)) !== JSON.stringify(stage)) moved++;
     }
