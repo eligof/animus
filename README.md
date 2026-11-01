@@ -412,6 +412,7 @@ off and on, and is remembered.
 | `esc` | close an overlay, else clear the selection |
 | `+` / `-`, `z` | zoom in / out, automatic zoom |
 | `f` | fullscreen scene (hide the header, crew bar and bottom rows) |
+| `b` | crew bar on / off: the room takes its columns (remembered) |
 | `r` | scene / dashboard (remembered) |
 | `l` | lights on / off: evening or night (remembered) |
 | `o` | office life on / off (remembered) |
@@ -440,7 +441,7 @@ Claude Code already keeps on disk:
   for growth.
 
 It writes only its own files: `~/.config/animus/config.json` (world, view,
-lighting, office life, locals) and `~/.config/animus/crews.json` (growth). The one
+lighting, office life, locals, crew bar) and `~/.config/animus/crews.json` (growth). The one
 thing it ever sends is a chat message you type, to the session you picked,
 through that session's local socket (see
 [Talking to an agent](#talking-to-an-agent)).

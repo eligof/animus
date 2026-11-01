@@ -47,7 +47,7 @@ const HELP: Array<[string, string]> = [
   ['r', 'scene / agent dashboard'],
   ['l / o / n', 'lights, office life, locals on/off'],
   ['+ / -', 'zoom in / out (z: auto)'],
-  ['f', 'fullscreen scene (hide the panels)'],
+  ['f / b', 'fullscreen scene · crew bar on/off'],
   ['space', 'pause animation'],
   ['?', 'this help'],
   ['q / ctrl-c', 'quit'],

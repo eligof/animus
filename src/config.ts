@@ -5,10 +5,10 @@ import { dirname, join } from 'node:path';
 // view: the scene (an image, where the terminal shows images) or the agent
 // dashboard (text); auto picks by the terminal. lights: the scene's
 // lighting; officeLife: office life (huddles, coffee runs, high-fives and
-// stand-ups; not `office`, the Startup's theme id). Keys from older
-// versions (pixels, hdTipSeen) are ignored.
+// stand-ups; not `office`, the Startup's theme id); bar: the crew bar.
+// Keys from older versions (pixels, hdTipSeen) are ignored.
 export type ViewPref = 'auto' | 'scene' | 'dashboard';
-export type Config = { theme?: string; view?: ViewPref; lights?: boolean; officeLife?: boolean; npcs?: boolean };
+export type Config = { theme?: string; view?: ViewPref; lights?: boolean; officeLife?: boolean; npcs?: boolean; bar?: boolean };
 
 export function configPath(env: NodeJS.ProcessEnv = process.env): string {
   return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'animus', 'config.json');
@@ -23,6 +23,7 @@ export function loadConfig(path = configPath()): Config {
     if (typeof d?.lights === 'boolean') cfg.lights = d.lights;
     if (typeof d?.officeLife === 'boolean') cfg.officeLife = d.officeLife;
     if (typeof d?.npcs === 'boolean') cfg.npcs = d.npcs;
+    if (typeof d?.bar === 'boolean') cfg.bar = d.bar;
     return cfg;
   } catch {
     return {};

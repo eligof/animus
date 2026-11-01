@@ -11,7 +11,8 @@ const ROSTER_WIDE = 30;
 const ROSTER_MIN_COLS = 110;
 
 // `full`: the scene takes the whole terminal (no header, roster or footer).
-export function computeLayout(cols: number, rows: number, full = false): Layout {
+// `bar`: the crew bar shows where there is room for it (b hides it).
+export function computeLayout(cols: number, rows: number, full = false, bar = true): Layout {
   const tooSmall = cols < MIN_COLS || rows < MIN_ROWS;
   if (full) {
     return {
@@ -24,7 +25,7 @@ export function computeLayout(cols: number, rows: number, full = false): Layout 
   }
   const bodyH = Math.max(0, rows - 3);
   const rw = cols >= 150 ? ROSTER_WIDE : ROSTER_W;
-  const roster = cols >= ROSTER_MIN_COLS ? { x: 0, y: 1, w: rw, h: bodyH } : null;
+  const roster = bar && cols >= ROSTER_MIN_COLS ? { x: 0, y: 1, w: rw, h: bodyH } : null;
   return {
     header: { x: 0, y: 0, w: cols, h: 1 },
     scene: { x: roster ? rw : 0, y: 1, w: roster ? cols - rw : cols, h: bodyH },
