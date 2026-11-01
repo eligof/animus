@@ -430,7 +430,7 @@ function lights(v: { W: number; D: number; H: number; T: number }): RoomLight[] 
   const out: RoomLight[] = [];
   const { z0, z1 } = windowZ(v.H);
   for (const f of planFor(v.W, v.D, v.H, v.T).features) {
-    if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 1, z0, z1, bars: 2, rails: rowsOf(v.H) - 1, color: SUN, strength: 1.4, night: '#9fb6ee', moon: 0.6 });
+    if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 1, z0, z1, bars: 2, rails: rowsOf(v.H) - 1, color: SUN, strength: v.W < 90 ? 0.8 : 1.4, night: '#9fb6ee', moon: 0.6 });
     else if (f.kind === 'pendant') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: LAMP_N, z: pendantZ(v.H) - 0.5, strength: 0.9 });
     else if (f.kind === 'neon') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: 23, color: '#ff5fa2', r: 7, halo: 3, strength: 0.8 });
   }
@@ -531,6 +531,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   k.segs(lips, withAlpha(C.concreteLight, 0.6), Math.max(0.6, 0.1 * s));
   k.segs(joints, withAlpha(C.joint, 0.7), Math.max(0.8, 0.13 * s));
   // The warm plank corner round the kitchen island and its stools.
+  lane(k, plan.L);
   const bar = plan.L.slots.find((q) => q.kind === 'idle');
   if (bar) planks(k, v, bar);
   rugs(k, v, plan);
@@ -551,6 +552,42 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   // (the light on the floor, the windows' evening sun, the pendants' pools
   // and the screens' glow, is the scene's: see room.lights and the props'
   // own `light`)
+}
+
+// A lane painted on the concrete from the front door to the kitchen: out
+// from the door's wall, then along to the island, two worn bands (coral
+// and teal, LANE wide, LANE_GAP apart) in the mural's colours; the
+// kitchen's planks and the rugs lie over it.
+const LANE = 0.9;
+const LANE_GAP = 0.5;
+
+function lane(k: Kit, L: Layout): void {
+  const door = L.slots.find((q) => q.kind === 'entrance');
+  const bar = L.slots.find((q) => q.kind === 'idle');
+  if (!door || !bar) return;
+  const r = slotRect(bar);
+  const end = { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 };
+  // from the door's middle (see the entrance in stations.ts), at the wall
+  const start = door.wall === 'left' ? { x: L.T + 0.6, y: door.y0 + 4.6 } : { x: door.x0 + 4.6, y: L.T + 0.6 };
+  const turn = door.wall === 'left' ? { x: end.x, y: start.y } : { x: start.x, y: end.y };
+  const path = [start, turn, end];
+  const lo = { x: Math.min(start.x, end.x) - 2, y: Math.min(start.y, end.y) - 2 };
+  const hi = { x: Math.max(start.x, end.x) + 2, y: Math.max(start.y, end.y) + 2 };
+  if (!k.sees(lo.x, lo.y, 0, hi.x, hi.y, 0)) return;
+  // each leg's left-hand normal, and a band d to that side of the path
+  const norm = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: -(b.y - a.y) / l, y: (b.x - a.x) / l };
+  };
+  const [n1, n2] = [norm(path[0], path[1]), norm(path[1], path[2])];
+  const band = (d: number): P3[] => [
+    [path[0].x + n1.x * d, path[0].y + n1.y * d, 0.02],
+    [path[1].x + (n1.x + n2.x) * d, path[1].y + (n1.y + n2.y) * d, 0.02],
+    [path[2].x + n2.x * d, path[2].y + n2.y * d, 0.02],
+  ];
+  const off = (LANE + LANE_GAP) / 2;
+  k.line(band(off), withAlpha(C.chartHot, 0.42), LANE * k.s);
+  k.line(band(-off), withAlpha(C.chart, 0.42), LANE * k.s);
 }
 
 // The kitchen's floor: the island's footprint grown by 7 on every side,
