@@ -265,4 +265,19 @@ export type WorldDef = {
   finale: { colors: RGB[] };
   build: { colors: RGB[]; shape: BuildShape };
   pois?(L: Layout): Poi[];
+
+  // ── keep-clear walls (see world/room.ts) ──
+  // Stretches of wall the room planner keeps decor from standing in front
+  // of, for a world's hero pieces (a hearth, a mural, a video wall): on
+  // `wall`, from `a0` to `a1` along it (x on the right wall, y on the left,
+  // as wallGaps counts), out to `out` units into the room from its face. No
+  // decor there stands where it would hide the wall over `z` (a piece h
+  // tall standing d out hides the wall d nearer the corner, up to h - d);
+  // with `z` 0 (the default: a piece that comes down to the floor, as a
+  // hearth does), none stands on the floor before it either. Or a patch of
+  // floor (x0, y0 to x1, y1) no decor stands on (a dance floor). Worked out
+  // from L, from the same plan the shell draws its pieces from; a room the
+  // world plans meanwhile (planRoom, to see where the furniture stands) is
+  // planned without any of it kept clear. See world/room.ts.
+  reserve?(L: Layout): ReadonlyArray<{ wall: 'left' | 'right'; a0: number; a1: number; out: number; z?: number } | { x0: number; y0: number; x1: number; y1: number }>;
 };
