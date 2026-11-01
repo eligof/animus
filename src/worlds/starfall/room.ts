@@ -35,7 +35,7 @@ import { C, INK, Kit, circle, hash, softDot, withAlpha } from './kit.ts';
 // tallest).
 
 type Wall = 'left' | 'right';
-type Kind = 'glass' | 'screen' | 'vent' | 'lamp' | 'inset' | 'hose';
+type Kind = 'glass' | 'screen' | 'vent' | 'lamp' | 'inset' | 'hose' | 'terrarium';
 export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number };
 export type Plan = { L: Layout; features: Feature[] };
 
@@ -86,6 +86,11 @@ const insetZ = (H: number) => {
   return { z0: z0 + 2.2, z1: Math.min(z0 + 13.6, (trayZ(H) ?? H - BAND) - 1.8) };
 };
 const hoseZ = (H: number) => bayZ(H).z0 + 9.4;
+// A terrarium's case, standing on the ledge, clear of the tray.
+const terrZ = (H: number) => {
+  const z0 = TRIM + TRIM_H + 0.4;
+  return { z0, z1: Math.min(z0 + 10, (trayZ(H) ?? H - BAND) - 2.2) };
+};
 
 // ── the plan ───────────────────────────────────────────────────────────────
 
@@ -109,15 +114,16 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
 // they fit (about GLASS.aim wide, side by side with no wall between them,
 // from GLASS.min to GLASS.max), and its stretches too short for glass get
 // a screen, a vent or a slim lamp. The other wall is the base's working
-// side, panels and tech: blue light panels, wall screens with a planet
-// map, hose reels and vents packed along each stretch from TECH (cycled,
-// each kind to its CAP), slim lamps filling what is left.
+// side, panels and tech: terrariums of the planet's flora, blue light
+// panels, wall screens with a planet map, hose reels and vents packed
+// along each stretch from TECH (cycled, each kind to its CAP), slim lamps
+// filling what is left.
 const GLASS_WALL: Wall = 'right';
 const GLASS = { min: 7, aim: 20, max: 26 };
-const WIDTH: Record<Exclude<Kind, 'glass'>, number> = { screen: 8, vent: 4, lamp: 2, inset: 5, hose: 6 };
-const CAP: Partial<Record<Kind, number>> = { screen: 3, vent: 4, hose: 3 };
+const WIDTH: Record<Exclude<Kind, 'glass'>, number> = { screen: 8, vent: 4, lamp: 2, inset: 5, hose: 6, terrarium: 7 };
+const CAP: Partial<Record<Kind, number>> = { screen: 3, vent: 4, hose: 3, terrarium: 2 };
 const PLANET_SIDE: Array<Exclude<Kind, 'glass'>> = ['screen', 'vent'];
-const TECH: Array<Exclude<Kind, 'glass'>> = ['inset', 'screen', 'hose', 'vent', 'inset', 'hose', 'screen', 'vent'];
+const TECH: Array<Exclude<Kind, 'glass'>> = ['terrarium', 'inset', 'screen', 'hose', 'vent', 'inset', 'terrarium', 'hose', 'screen', 'vent'];
 const GAP = 4;
 
 function features(L: Layout): Feature[] {
@@ -203,6 +209,10 @@ function reach(f: Feature, H: number): { a0: number; a1: number; z0: number; z1:
     case 'hose': {
       return { a0: f.a - half - 0.5, a1: f.a + half + 0.5, z0: 0, z1: trayZ(H) ?? hoseZ(H) + 4, n: 1.6 };
     }
+    case 'terrarium': {
+      const { z0, z1 } = terrZ(H);
+      return { a0: f.a - half - 3, a1: f.a + half + 3, z0: z0 - 1, z1: trayZ(H) ?? z1 + 3, n: 1.8 };
+    }
   }
 }
 
@@ -275,7 +285,9 @@ function visibleAlong(k: Kit, a0: number, a1: number, z0: number, z1: number): [
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
-const PLATES = ['#a3a6b6', '#abaebe'] as const;
+const PLATES = ['#9799ab', '#a0a2b4'] as const; // a lavender grey, a step under the walls
+
+const GRATE_BED = '#4b4f66'; // under the grate strips along the walls' feet
 
 // Every third seam carries a recessed light strip, in dashes a plate long.
 const STRIP_EVERY = 3;
@@ -398,7 +410,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const wk = new Kit(pen, wallAt(v.at, wall, T), s);
     const end = wall === 'right' ? W : D;
     if (!wk.sees(T, 0, 0, end, GRATE, 0)) continue;
-    wk.poly([[T, 0, 0], [end, 0, 0], [end, GRATE, 0], [T, GRATE, 0]], C.grate, 0);
+    wk.poly([[T, 0, 0], [end, 0, 0], [end, GRATE, 0], [T, GRATE, 0]], GRATE_BED, 0);
     const [va, vb] = visibleAlong(wk, T, end, 0, 0);
     const slats: Array<[P3, P3]> = [];
     for (let a = Math.max(T + 0.4, Math.floor(va)); a < Math.min(end, vb); a += 0.7) slats.push([[a, 0.35, 0], [a, GRATE - 0.35, 0]]);
@@ -535,6 +547,13 @@ function hubRing(k: Kit, cx: number, cy: number, R: number): void {
 const PW = 8; // a module's width along the wall
 const PH = 8.5; // and its height, about
 const MF = 0.85; // the thickness of a module's frame round its recess
+// The modules' frames (low, middle, high) and recesses: pale greys with a
+// breath of the planet's lavender in them, so the inside answers the pink
+// day outside.
+const FRAMES = ['#d2d0dc', '#d9d7e2', '#e2e0ea', '#b8b5c6'] as const;
+const DADO = '#8a8ca6'; // the slate course's frames
+const DADO_RECESS = '#6f7192'; // and its recesses
+const LOCKERS: readonly Color[] = ['#2fbfa8', '#e06aa8']; // the planet's teal and magenta
 
 // Which way along the wall the screen's left is (light comes from there).
 const leftEnd = (k: Kit): 0 | 1 => (k.p(1, 0, 0)[0] > k.p(0, 0, 0)[0] ? 0 : 1);
@@ -555,7 +574,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const z0 = TRIM + TRIM_H;
   // The modules' frames: one fill over the field, warmer low down on the
   // planet side where its light falls.
-  k.poly([[T, 0, z0], [end, 0, z0], [end, 0, top], [T, 0, top]], k.vgrad(T, 0, z0, top, [[0, tone(glassy ? '#e3dde3' : '#d0d4da')], [0.5, tone(C.frame)], [1, tone('#dfe3e8')]]), 0);
+  k.poly([[T, 0, z0], [end, 0, z0], [end, 0, top], [T, 0, top]], k.vgrad(T, 0, z0, top, [[0, tone(glassy ? '#e6dce4' : FRAMES[0])], [0.5, tone(FRAMES[1])], [1, tone(FRAMES[2])]]), 0);
   // the far corner in shadow
   k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#2a1f3d30'], [1, '#2a1f3d00']]), 0);
   const rows = Math.max(1, Math.round((top - z0) / PH));
@@ -564,14 +583,20 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const under = [...mine.map((f) => reach(f, H)), ...strip.map(([a0, a1]) => ({ a0, a1, z0: sz0 - SKY.frame - 0.5, z1: sz1 + SKY.frame + 0.5 }))];
   if (tz !== null) under.push({ a0: T, a1: end, z0: tz - 1.6, z1: tz + TRAY.h + 0.4 });
   const L0 = leftEnd(k);
+  // The lowest course of modules is slate, a dark foot to the pale wall.
+  k.poly([[T, 0, z0], [end, 0, z0], [end, 0, z0 + ph], [T, 0, z0 + ph]], k.vgrad(T, 0, z0, z0 + ph, [[0, tone(shade(DADO, -0.08))], [1, tone(DADO)]]), 0);
   const seams: P3[][] = [];
   const recess: P3[][] = [];
+  const low: P3[][] = [];
   const dark: P3[][] = [];
   const light: P3[][] = [];
   const corners: P3[][] = [];
   const bolts: P3[] = [];
   const blues: Array<{ a: number; za: number; zb: number }> = [];
   const grilles: Array<[number, number, number]> = [];
+  const blocked = (a: number, a1: number, za: number, zb: number) => under.some((q) => a - 1 < q.a1 && q.a0 < a1 + 1 && za < q.z1 && q.z0 < zb);
+  const lockers = glassy ? [] : lockerBanks(T, end, z0, ph, rows, tz, blocked);
+  const taken = new Set(lockers.map((q) => `${q.a}:${q.r}`));
   for (let a = T; a < end - 0.5; a += PW) {
     if (a + PW < ax0 || a > ax1) continue;
     const a1 = Math.min(end, a + PW);
@@ -585,32 +610,45 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
       const qa = za + MF;
       const qb = zb - MF;
       if (rb - ra > 1) {
-        recess.push(rrect(ra, qa, rb, qb, 0, 0.6, 0.6, 2));
+        (r === 0 ? low : recess).push(rrect(ra, qa, rb, qb, 0, 0.6, 0.6, 2));
         // the recess's inner walls: dark along its top and its screen-left
         // side, lit along its foot and its other side
         const [sl, sr] = L0 === 0 ? [ra, rb] : [rb, ra];
         dark.push([[sl, 0.01, qa + 0.5], [sl, 0.01, qb - 0.12], [sr, 0.01, qb - 0.12]]);
         light.push([[sl, 0.01, qa + 0.12], [sr, 0.01, qa + 0.12], [sr, 0.01, qb - 0.5]]);
       }
-      // orange trim on the frame's corners where four modules meet (and
-      // along the ledge and the band)
-      if (a > T + 0.5) for (const cz of r === 0 ? [za, zb] : [zb]) if (cz < top - 0.5 || r === rows - 1) corners.push(cornerCap(a, cz));
+      // orange trim on the frames' corners along the ledge and the band
+      // only, so the field between stays calm
+      if (a > T + 0.5) {
+        if (r === 0) corners.push(cornerCap(a, za));
+        if (r === rows - 1) corners.push(cornerCap(a, zb));
+      }
       if (k.fine) bolts.push([a + 0.45, 0, za + 0.45], [a1 - 0.45, 0, za + 0.45], [a + 0.45, 0, zb - 0.45], [a1 - 0.45, 0, zb - 0.45]);
       // now and then a module with a blue light glowing in its recess, or a
-      // grille, where nothing hangs over it
-      if (narrow || under.some((q) => a - 1 < q.a1 && q.a0 < a1 + 1 && za < q.z1 && q.z0 < zb)) continue;
+      // grille, where nothing hangs over it (never in the slate course or a
+      // locker)
+      if (r === 0 || narrow || taken.has(`${a}:${r}`) || blocked(a, a1, za, zb)) continue;
       const h = hash(Math.round(a), r, wall === 'right' ? 13 : 14);
-      if (h < (glassy ? 0.1 : 0.2)) blues.push({ a: (a + a1) / 2, za, zb });
-      else if (h < (glassy ? 0.16 : 0.3)) grilles.push([(a + a1) / 2, za, zb]);
+      if (h < (glassy ? 0.06 : 0.07)) blues.push({ a: (a + a1) / 2, za, zb });
+      else if (h < (glassy ? 0.12 : 0.16)) grilles.push([(a + a1) / 2, za, zb]);
     }
   }
   pen.beginPath();
   for (const q of recess) k.trace(q);
-  pen.fillStyle = tone(glassy ? '#bdb9c4' : C.recess);
+  pen.fillStyle = tone(glassy ? '#bfb8c7' : FRAMES[3]);
   pen.fill();
   pen.strokeStyle = withAlpha(INK, 0.35);
   pen.lineWidth = Math.max(0.6, 0.08 * s);
   pen.stroke();
+  pen.beginPath();
+  for (const q of low) k.trace(q);
+  pen.fillStyle = tone(DADO_RECESS);
+  pen.fill();
+  pen.stroke();
+  for (const q of lockers) {
+    const za = z0 + q.r * ph;
+    if (k.sees(q.a, 0, za, q.a + PW, 0.5, za + ph)) locker(k, q.a, za, za + ph, q.c, L0);
+  }
   const edge = (list: P3[][], c: Color, w: number) => {
     if (!list.length) return;
     pen.beginPath();
@@ -682,6 +720,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'vent') vent(k, v, f, lit);
     else if (f.kind === 'inset') lightPanel(k, v, f, lit);
     else if (f.kind === 'hose') hoseReel(k, v, f, lit);
+    else if (f.kind === 'terrarium') terrarium(k, v, f, lit);
     else lamp(k, v, f);
   }
   // The band along the top: a ledge, a strip of small lights, white and
@@ -696,6 +735,63 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   pips(k, dots, '#f4feff', 0.2, 1);
   pips(k, amber, '#fff0d0', 0.2, 1);
   k.line([[T, 0, H - 0.6], [end, 0, H - 0.6]], withAlpha(INK, 0.3), Math.max(0.6, 0.08 * s));
+}
+
+// The working wall's lockers: in the slate course and in the first row of
+// modules clear over the cable tray (tz), the runs of modules that nothing
+// hangs over get banks of two or three doors (a long run several, a plain
+// module or three between them), a bank a colour, the planet's teal and
+// magenta by turns. Worked out along the whole wall, whatever part of it a
+// pen sees, so every tile agrees.
+function lockerBanks(T: number, end: number, z0: number, ph: number, rows: number, tz: number | null, blocked: (a: number, a1: number, za: number, zb: number) => boolean): Array<{ a: number; r: number; c: Color }> {
+  const out: Array<{ a: number; r: number; c: Color }> = [];
+  const over = tz === null ? -1 : Math.ceil((tz + TRAY.h + 0.4 - z0) / ph - 1e-6);
+  let bank = 0;
+  for (const r of [0, over]) {
+    if (r < 0 || r >= rows) continue;
+    const za = z0 + r * ph;
+    let run: number[] = [];
+    const flush = () => {
+      let i = run.length <= 4 ? Math.floor((run.length - Math.min(run.length, 3)) / 2) : 1;
+      while (run.length - i >= 2) {
+        const key = Math.round(run[i]);
+        const n = Math.min(run.length - i, hash(key, r, 16) < 0.5 ? 3 : 2);
+        if (hash(key, r, 15) < 0.8) {
+          const c = LOCKERS[bank++ % LOCKERS.length];
+          for (let m = 0; m < n; m++) out.push({ a: run[i + m], r, c });
+        }
+        i += n + 2 + (hash(key, r, 17) < 0.5 ? 1 : 0);
+      }
+      run = [];
+    };
+    for (let a = T; a < end - 0.5; a += PW) {
+      if (Math.min(end, a + PW) - a >= PW - 0.5 && !blocked(a, a + PW, za, za + ph)) run.push(a);
+      else flush();
+    }
+    flush();
+  }
+  return out;
+}
+
+// A locker door filling the recess of the module from a (along) between
+// za and zb, in colour c: lit from its screen-left edge, a dark lip under
+// the recess's top, vent slots high on it, a white handle bar on the side
+// away from the light and a small status light. (L0: which end of the wall
+// is screen-left, see leftEnd.)
+function locker(k: Kit, a: number, za: number, zb: number, c: Color, L0: 0 | 1): void {
+  const [ra, rb, qa, qb] = [a + MF, a + PW - MF, za + MF, zb - MF];
+  const n = 0.015;
+  const lit = L0 === 0 ? ra : rb;
+  const far = L0 === 0 ? rb : ra;
+  k.poly(rrect(ra, qa, rb, qb, n, 0.6, 0.6, 2), k.hgrad([lit, n, qa], [far, n, qa], [[0, shade(c, 0.16)], [0.5, c], [1, shade(c, -0.12)]]), 0);
+  k.poly([[ra, n + 0.005, qb - 0.55], [rb, n + 0.005, qb - 0.55], [rb, n + 0.005, qb], [ra, n + 0.005, qb]], withAlpha(INK, 0.22), 0);
+  const slots: Array<[P3, P3]> = [];
+  for (let i = 0; i < 3; i++) slots.push([[ra + 1.1, n + 0.01, qb - 1.2 - i * 0.55], [rb - 1.1, n + 0.01, qb - 1.2 - i * 0.55]]);
+  k.segs(slots, withAlpha(shade(c, -0.45), 0.8), Math.max(0.6, 0.14 * k.s), 'round');
+  const ha = far + (lit < far ? -0.9 : 0.9);
+  const hz = qa + (qb - qa) * 0.42;
+  k.rod([[ha, n + 0.25, hz - 1.0], [ha, n + 0.25, hz + 1.0]], C.white, 0.26);
+  pips(k, [[lit + (lit < far ? 0.9 : -0.9), n + 0.02, qa + 0.9]], c === LOCKERS[0] ? '#d9fff6' : '#fff0f8', 0.18, 1);
 }
 
 // An orange corner cap where four modules meet at (a, z): a rounded
@@ -945,6 +1041,8 @@ function ridge(a: number, base: number, amp: number, f1: number, f2: number, ph:
 }
 
 const HAZE = mix(C.hill, C.skyLow, 0.55);
+const RANGE = '#c58ad4'; // the far range, between the sky's pink and the teal hills
+const RANGE_LIT = '#e0b0e6';
 
 function planetView(k: Kit, f: Feature, z0: number, z1: number, sky: Sky): void {
   const { pen } = k;
@@ -970,6 +1068,30 @@ function planetView(k: Kit, f: Feature, z0: number, z1: number, sky: Sky): void 
   pips(k, stars, '#fff6fbcc', 0.1, 0.6);
   // what hangs in the sky: two moons, or a ringed planet low over the hills
   const tall = (z1 - zh) / 25; // how much sky there is, against a tall room's
+  // a far range of lavender peaks behind the hills, lit on their left, a
+  // warm haze at their foot (set along the wall, so bays share one range)
+  const SPK = 3.4;
+  const salt = f.wall === 'right' ? 43 : 44;
+  const lift = Math.max(0.6, Math.min(1, tall));
+  const peaks: Array<[number, number]> = [];
+  for (let i = Math.floor(a0 / SPK) - 1; i <= Math.ceil(a1 / SPK) + 1; i++) peaks.push([i * SPK + (hash(i, salt, 1) - 0.5) * SPK * 0.5, zh + 5 + hash(i, salt, 2) * 3.2 * lift]);
+  const range: P3[] = [[peaks[0][0], n, zh + 2]];
+  const lights: P3[][] = [];
+  peaks.forEach(([u, top], i) => {
+    const next = peaks[i + 1];
+    const dip = next ? (u + next[0]) / 2 : u + SPK / 2;
+    const vz = zh + 4 + hash(i, salt, 3) * 0.8 * lift;
+    range.push([u, n, top], [dip, n, vz]);
+    const prev = i ? (peaks[i - 1][0] + u) / 2 : u - SPK / 2;
+    lights.push([[prev, n, zh + 4.2], [u, n, top], [u + (dip - u) * 0.18, n, zh + 4.2]]);
+  });
+  range.push([range[range.length - 1][0], n, zh + 2]);
+  k.poly(range, RANGE, 0);
+  pen.beginPath();
+  for (const q of lights) k.trace(q);
+  pen.fillStyle = withAlpha(RANGE_LIT, 0.85);
+  pen.fill();
+  k.poly([[a0, n, zh + 3.2], [a1, n, zh + 3.2], [a1, n, zh + 6], [a0, n, zh + 6]], k.vgrad(a, n, zh + 3.2, zh + 6, [[0, withAlpha(C.skyLow, 0.75)], [1, withAlpha(C.skyLow, 0)]]), 0);
   if (sky === 'moons') moons(k, a, n, z1);
   else if (sky === 'planet') ringedPlanet(k, a - 0.4, n, zh + Math.max(5, 9 * tall));
   else if (hash(f.k, 33) < 0.5) {
@@ -1290,6 +1412,83 @@ function lightPanel(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const bars: Array<[P3, P3]> = [];
   for (let z = z0 + 3; z < z1 - 2; z += 2.6) bars.push([[a - half + 1.6, 0.5, z], [a + half - 1.6, 0.5, z]]);
   k.segs(bars, withAlpha('#9ff4ff', 0.55), Math.max(0.6, 0.12 * k.s));
+}
+
+// ── a terrarium ─────────────────────────────────────────────────────────────
+// The base keeps samples of the planet: a steel case standing on the ledge
+// with a glass front, inside a teal glow under a lamp, a mound of the
+// planet's grass and three of its plants (a bulb on a stalk, a spiral
+// frond, a red-cap mushroom), orange corners, a status light on its plinth
+// and a misting line up to the cable tray.
+
+function terrarium(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
+  const { pen, s } = k;
+  const { z0, z1 } = terrZ(v.H);
+  const a = f.a;
+  const half = f.w / 2 - 0.3;
+  const FR = 1.5; // how far the case stands out
+  const F = 0.6; // its frame round the glass
+  const PL = 1.0; // the plinth under the glass
+  const tone = (c: Color) => (lit ? c : shade(c, -0.12));
+  const tz = trayZ(v.H);
+  if (tz !== null) conduit(k, a + half - 1.0, z1, tz, tone);
+  k.wash(a, 0.02, (z0 + z1) / 2, half + 2.6, (z1 - z0) * 0.62, '#7ff0d8', 0.22);
+  // the case's sides: its outline at the wall and at its face, hulled
+  const back = rrect(a - half, z0, a + half, z1, 0, 0.9, 0.5).map((p) => k.p(...p));
+  const face = rrect(a - half, z0, a + half, z1, FR, 0.9, 0.5);
+  fillPts(k, hull([...back, ...face.map((p) => k.p(...p))]), tone(C.metal), k.lw);
+  const [ga0, ga1, gz0, gz1] = [a - half + F, a + half - F, z0 + F + PL, z1 - F];
+  const open = rrect(ga0, gz0, ga1, gz1, FR + 0.01, 0.6, 0.3);
+  pen.save();
+  pen.beginPath();
+  k.trace(open);
+  pen.clip();
+  // inside: a teal glow, brightest under the lamp at the top
+  const n = 0.4;
+  k.poly(rrect(ga0 - 1, gz0 - 1, ga1 + 1, gz1 + 1, n, 0), k.vgrad(a, n, gz0, gz1, [[0, '#17675c'], [0.5, '#2ab8a2'], [1, '#a8f2df']]), 0);
+  k.wash(a, n, gz1 - 0.6, half, 2.4, '#fff6d8', 0.5);
+  k.line([[ga0 + 0.3, n + 0.05, gz1 - 0.25], [ga1 - 0.3, n + 0.05, gz1 - 0.25]], '#fffbe8', Math.max(1, 0.3 * s));
+  // the plants, standing in the back of the mound
+  const ground = gz0 + 1.3;
+  const tall = gz1 - ground - 0.8;
+  puffPlant(k, a + 1.5, n + 0.05, ground - 0.4, tall * 0.5, 0.7, C.flora3, k.thin, f.k);
+  bulbPlant(k, a - 1.2, n + 0.1, ground - 0.4, tall * 0.82, 0.5, 0.85, C.flora, k.thin, 0.45);
+  frondPlant(k, a + 0.5, n + 0.15, ground - 0.4, tall * 0.68, -1, 0.75, C.flora2, k.thin);
+  // the mound of grass across the front, a mushroom and pebbles on it
+  const mound: P3[] = [[ga0 - 1, n + 0.3, gz0 - 1]];
+  for (let i = 0; i <= 12; i++) {
+    const u = ga0 + ((ga1 - ga0) * i) / 12;
+    mound.push([u, n + 0.3, ground + 0.45 * Math.sin(i * 0.9 + f.k) - 0.2 * Math.abs(i - 6) / 6]);
+  }
+  mound.push([ga1 + 1, n + 0.3, gz0 - 1]);
+  k.poly(mound, k.vgrad(a, n, gz0, ground + 0.5, [[0, C.grassDark], [1, C.grass]]), k.thin);
+  mushroom(k, a + 0.15, n + 0.4, ground - 0.5, 0.62, k.thin);
+  mushroom(k, a - 1.9, n + 0.4, ground - 0.7, 0.38, k.thin);
+  pips(k, [[a + 1.9, n + 0.4, gz0 + 0.5], [a - 0.9, n + 0.4, gz0 + 0.35]], '#c9b6e8', 0.22, 1);
+  // the glass: a cool tint and two glints
+  k.poly(open, withAlpha('#d8fff4', 0.1), 0);
+  k.poly([[ga0 + 0.6, FR + 0.02, gz0], [ga0 + 1.2, FR + 0.02, gz0], [ga0 + 2.6, FR + 0.02, gz1], [ga0 + 2.0, FR + 0.02, gz1]], withAlpha('#ffffff', 0.28), 0);
+  k.poly([[ga0 + 1.6, FR + 0.02, gz0], [ga0 + 1.85, FR + 0.02, gz0], [ga0 + 3.25, FR + 0.02, gz1], [ga0 + 3.0, FR + 0.02, gz1]], withAlpha('#ffffff', 0.18), 0);
+  pen.restore();
+  // the face round the glass, lit from the left
+  pen.beginPath();
+  k.trace(face);
+  k.trace(open);
+  pen.fillStyle = k.hgrad([a - half, FR, z1], [a + half, FR, z1], [[0, tone('#eef0f3')], [0.45, tone(C.frame)], [1, tone('#b9bec6')]]);
+  pen.fill('evenodd');
+  pen.beginPath();
+  k.trace(open);
+  k.paint(null, k.thin);
+  pen.beginPath();
+  k.trace(face);
+  k.paint(null, k.lw);
+  for (const [ca, cz] of [[a - half + 0.5, z0 + 0.5], [a + half - 0.5, z0 + 0.5], [a + half - 0.5, z1 - 0.5], [a - half + 0.5, z1 - 0.5]] as const) {
+    k.poly(rrect(ca - 0.4, cz - 0.4, ca + 0.4, cz + 0.4, FR + 0.02, 0.18), tone(C.trimOrange), k.thin * 0.8);
+  }
+  // the plinth: a vent slot and a status light
+  k.line([[a - 1.4, FR + 0.02, z0 + F + PL * 0.45], [a + 0.6, FR + 0.02, z0 + F + PL * 0.45]], tone('#7d838d'), Math.max(0.7, 0.2 * s));
+  k.halo(a + 1.6, FR + 0.05, z0 + F + PL * 0.45, 0.9, C.cyan, 0.5);
+  pips(k, [[a + 1.6, FR + 0.03, z0 + F + PL * 0.45]], '#d8fcff', 0.2, 1);
 }
 
 // ── a hose reel ─────────────────────────────────────────────────────────────

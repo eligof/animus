@@ -220,20 +220,34 @@ export const room: RoomArt = {
 // ── floor ──────────────────────────────────────────────────────────────────
 
 const PLATES = ['#4b5772', '#505c79', '#46526c', '#4d5a76', '#535f7c', '#4a5873'];
+const LANE = '#3c4761'; // the walkways' paint
+const WALK = 3; // a walkway every so many plates
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen } = k;
   const { W, D, T, s } = v;
   const x0 = T + GRATE;
   const y0 = T + GRATE;
-  // Deck plates, one path a tone; a hatch here and there.
-  const tones: Array<Array<[number, number, number, number]>> = PLATES.map(() => []);
+  // Deck plates, one path a tone; a hatch here and there. Every third row
+  // and column of plates, counted from the hub, is a walkway in a darker
+  // paint, a light set in the deck where two cross.
+  const h = hub(plan.L);
+  const [hc, hr] = [Math.floor((h.x - x0) / PLATE), Math.floor((h.y - y0) / PLATE)];
+  const lane = (n: number) => ((n % WALK) + WALK) % WALK === 0;
+  const tones: Array<Array<[number, number, number, number]>> = [...PLATES, LANE].map(() => []);
   const hatches: Array<[number, number, number, number]> = [];
+  const lights: P3[] = [];
   for (let y = y0; y < D; y += PLATE) {
     for (let x = x0; x < W; x += PLATE) {
       const x1 = Math.min(W, x + PLATE);
       const y1 = Math.min(D, y + PLATE);
       if (!k.vis(x, y, 0, x1, y1, 0)) continue;
+      const [lc, lr] = [lane(Math.round((x - x0) / PLATE) - hc), lane(Math.round((y - y0) / PLATE) - hr)];
+      if (lc && lr && x1 - x === PLATE && y1 - y === PLATE) lights.push([x + PLATE / 2, y + PLATE / 2, 0]);
+      if (lc || lr) {
+        tones[PLATES.length].push([x, y, x1, y1]);
+        continue;
+      }
       const i = Math.floor(hash(x, y, 3) * PLATES.length);
       tones[i].push([x, y, x1, y1]);
       if (x1 - x === PLATE && y1 - y === PLATE && hash(x, y, 4) < 0.04) hatches.push([x, y, x1, y1]);
@@ -243,7 +257,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     if (!list.length) return;
     pen.beginPath();
     for (const [a, b, c, d] of list) k.trace([[a, b, 0], [c, b, 0], [c, d, 0], [a, d, 0]]);
-    pen.fillStyle = PLATES[ti];
+    pen.fillStyle = ti < PLATES.length ? PLATES[ti] : LANE;
     pen.fill();
   });
   // Seams between the plates, a lit bevel along each plate's back edges.
@@ -281,11 +295,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     k.poly([[a + 1.2, b + 1.2, 0], [c - 1.2, b + 1.2, 0], [c - 1.2, d - 1.2, 0], [a + 1.2, d - 1.2, 0]], '#56637f', Math.max(0.8, 0.12 * s), 0.6);
     k.poly([[a + 3, b + 3.4, 0], [c - 3, b + 3.4, 0], [c - 3, b + 4.4, 0], [a + 3, b + 4.4, 0]], '#2c3550', 0, 0.4);
   }
-  // Little round lights set in the deck every few plates.
-  const lights: P3[] = [];
-  for (let y = y0 + PLATE * 2; y < D - 2; y += PLATE * 4) for (let x = x0 + PLATE * 2; x < W - 2; x += PLATE * 4) {
-    if (k.vis(x, y, 0, x, y, 0, 8)) lights.push([x, y, 0]);
-  }
+  // The little round lights set in the deck where the walkways cross.
   if (lights.length) {
     for (const [x, y] of lights) k.pool(x, y, 2.2, 2.2, '#5ce8ff', 0.3);
     pen.beginPath();
@@ -370,11 +380,12 @@ function marks(k: Kit, v: RoomView, plan: Plan): void {
     const ik = frameOf(idle);
     if (ik.vis(-3, -3, 0, idle.len + 3, idle.dep + 4, 0, 8)) rug(ik, -2, 4.5, idle.len + 4, idle.dep - 2);
   }
-  // The emblem at the hub, as big as fits clear of the stations.
+  // The emblem at the hub, as big as fits clear of the stations (and in
+  // scale with the room).
   const h = hub(plan.L);
   const rects = plan.L.slots.map(slotRect);
   for (const f of [1, 0.85, 0.7, 0.55]) {
-    const r = 10 * f;
+    const r = Math.min(10, (v.W - v.T) * 0.07) * f;
     const box = { x0: h.x - r, y0: h.y - r, x1: h.x + r, y1: h.y + r };
     if (rects.some((q, i) => {
       const m = plan.L.slots[i].kind === 'idle' ? 4 : 2;
@@ -536,7 +547,11 @@ function hazardRing(k: Kit, cu: number, cv: number, r: number, gap?: readonly [n
 
 // ── walls ──────────────────────────────────────────────────────────────────
 
-const SEAM = '#7f8ca3'; // the wall behind and between the panels
+const SEAM = '#857f86'; // the wall behind and between the panels
+// The panels: a warm cream, padded soft-goods rather than bare metal, so
+// the deck feels like a home against the navy hull (low, middle, high up
+// the wall; the low row under the livery; their lit and shaded edges).
+const PANEL = ['#cdc5b6', '#d9d2c4', '#e6e0d3', '#bfb6a6', '#fbf7ee', '#a39a8c'] as const;
 
 // One wall's modules: [a0, a1) stretches about 9 units wide between ribs.
 function modules(k: Kit, plan: Plan, wall: Wall, T: number, end: number, H: number): Array<[number, number]> {
@@ -575,11 +590,11 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   rows.push([zl + 0.4, split - 0.2, 0.9], [split + 0.2, zm - 0.4, 0.9]);
   pen.beginPath();
   for (const [m0, m1] of mods) for (const [z0, z1, r] of rows.slice(1)) k.trace([[m0 + 0.35, 0, z0], [m1 - 0.35, 0, z0], [m1 - 0.35, 0, z1], [m0 + 0.35, 0, z1]], r);
-  pen.fillStyle = k.vgrad(T, 0, zl, zm, [[0, tone('#b4bfcf')], [0.7, tone('#c3ccda')], [1, tone('#d3dbe6')]]);
+  pen.fillStyle = k.vgrad(T, 0, zl, zm, [[0, tone(PANEL[0])], [0.7, tone(PANEL[1])], [1, tone(PANEL[2])]]);
   pen.fill();
   pen.beginPath();
   for (const [m0, m1] of mods) k.trace([[m0 + 0.35, 0, rows[0][0]], [m1 - 0.35, 0, rows[0][0]], [m1 - 0.35, 0, rows[0][1]], [m0 + 0.35, 0, rows[0][1]]], 0.7);
-  pen.fillStyle = tone('#a7b3c5');
+  pen.fillStyle = tone(PANEL[3]);
   pen.fill();
   // a lit edge along each panel's top, a dark one along its foot
   if (s >= 3) {
@@ -597,8 +612,8 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
       pen.lineCap = 'round';
       pen.stroke();
     };
-    edge(true, tone('#f2f6fb'));
-    edge(false, tone('#8e9bb2'));
+    edge(true, tone(PANEL[4]));
+    edge(false, tone(PANEL[5]));
   }
   // Upper hull plates: two to a module, seams and rows of rivets.
   if (zt - zu > 4) {
@@ -618,7 +633,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   if (k.fine) {
     const pts: P3[] = [];
     for (const [m0, m1] of mods) for (const [z0, z1] of rows.slice(1)) pts.push([m0 + 1.0, 0, z0 + 0.7], [m1 - 1.0, 0, z0 + 0.7], [m0 + 1.0, 0, z1 - 0.7], [m1 - 1.0, 0, z1 - 0.7]);
-    rivets(k, pts, '#f4f7fb', 0.11);
+    rivets(k, pts, PANEL[4], 0.11);
   }
   // the far corner in shadow
   k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#0a0e2033'], [1, '#0a0e2000']]), 0);
@@ -642,21 +657,91 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     for (const r of plan.ribs[wall]) {
       if (k.vis(r - 1, 0, zd, r + 1, 2, zd + 3)) k.box(r - 0.4, 0, zd - 0.25, 0.8, 1.6, 3.1, C.steelDark, { line: k.thin, stripe: false });
     }
+    stowage(k, plan, wall, T, end, zu, zd, zt);
   }
   midTrim(k, v, end, tone);
   // The conduit band, its pipes, and the light bar under it.
   topBand(k, v, plan, wall, end, tone);
   const pz = portZ(H);
+  const ports = plan.features.filter((g) => g.kind === 'porthole');
   for (const f of plan.features) {
     if (f.wall !== wall) continue;
     if (!k.vis(f.a - f.w / 2 - 2, 0, 0, f.a + f.w / 2 + 2, 2, H)) continue;
     if (f.kind === 'viewport') viewportArt(k, v, f, lit);
-    else if (f.kind === 'porthole') porthole(k, f, lit, pz);
+    else if (f.kind === 'porthole') porthole(k, f, lit, pz, ports.indexOf(f));
     else if (f.kind === 'screen') wallScreen(k, f, pz);
     else if (f.kind === 'planter') planterArt(k, f, pz);
     else if (f.kind === 'patch') patch(k, f, pz);
     else if (f.kind === 'vent') vent(k, f, lit);
     else if (f.kind === 'lamp') lamp(k, f, pz);
+  }
+}
+
+// The crew's things stowed on a tall wall's upper hull, as on any station
+// that has lived in orbit a while: a handrail along it just over the trim,
+// and in every other bay between the ribs soft cargo bags strapped to the
+// hull, under the duct in one bay, over it under a cargo net in the next.
+// (zu the upper hull's foot, zd the duct's, zt the conduit band's.)
+const BAGS: readonly Color[] = ['#eef1f6', '#efe6d2', '#d5deeb', '#eef1f6', '#e9dcc4'];
+
+function stowage(k: Kit, plan: Plan, wall: Wall, T: number, end: number, zu: number, zd: number, zt: number): void {
+  const view = plan.features.find((f) => f.wall === wall && f.kind === 'viewport');
+  const clear = (a0: number, a1: number) => !view || a1 < view.a - view.w / 2 - 2.5 || a0 > view.a + view.w / 2 + 2.5;
+  const marks = [T, ...plan.ribs[wall], end];
+  for (let i = 0; i + 1 < marks.length; i++) {
+    const [b0, b1] = [marks[i] + 1.2, marks[i + 1] - 1.2];
+    const low = i % 2 === 0;
+    const [z0, z1] = low ? [zu + 3, zd - 0.6] : [zd + 3.4, zt - 1.8];
+    if (b1 - b0 < 5 || z1 - z0 < 3 || (low && !clear(b0, b1))) continue;
+    if (!k.vis(b0, 0, z0, b1, 2, z1)) continue;
+    const w = 4;
+    const gap = 0.6;
+    const n = Math.min(4, Math.floor((b1 - b0 + gap) / (w + gap)));
+    let u = (b0 + b1) / 2 - (n * w + (n - 1) * gap) / 2;
+    const bags: Array<[number, number, number]> = [];
+    for (let j = 0; j < n; j++) {
+      const h = Math.min(z1 - z0, 3 + hash(i, j, 21) * 1.6);
+      bags.push([u, z0 + (low ? z1 - z0 - h : 0), h]);
+      u += w + gap;
+    }
+    // their shadows on the hull, down and away from the light
+    const sr = k.p(1, 0, 0)[0] > k.p(0, 0, 0)[0] ? 1 : -1;
+    for (const [bu, bz, h] of bags) k.poly([[bu + 0.6 * sr, 0.02, bz - 0.6], [bu + w + 0.6 * sr, 0.02, bz - 0.6], [bu + w + 0.6 * sr, 0.02, bz + h - 0.6], [bu + 0.6 * sr, 0.02, bz + h - 0.6]], '#0a0e2040', 0, 0.6);
+    for (const [j, [bu, bz, h]] of bags.entries()) {
+      k.box(bu, 0, bz, w, 1.5, h, BAGS[Math.floor(hash(i, j, 22) * BAGS.length)], { line: k.lw, stripe: false, round: 0.5 });
+      // a strap round it with its buckle, a carry handle, a tag
+      const m = bu + w * (0.42 + hash(i, j, 23) * 0.16);
+      k.poly([[m - 0.25, 1.51, bz + 0.15], [m + 0.25, 1.51, bz + 0.15], [m + 0.25, 1.51, bz + h - 0.15], [m - 0.25, 1.51, bz + h - 0.15]], C.orange, k.thin * 0.6);
+      k.poly([[m - 0.4, 1.52, bz + h * 0.45], [m + 0.4, 1.52, bz + h * 0.45], [m + 0.4, 1.52, bz + h * 0.45 + 0.6], [m - 0.4, 1.52, bz + h * 0.45 + 0.6]], C.steel, k.thin * 0.6);
+      k.rod([[bu + 0.9, 0.75, bz + h], [bu + 1.0, 0.75, bz + h + 0.5], [bu + 2.0, 0.75, bz + h + 0.5], [bu + 2.1, 0.75, bz + h]], '#5d6a86', 0.16);
+      k.dot(bu + w - 0.6, 1.52, bz + h - 0.6, 0.18, hash(i, j, 24) < 0.5 ? C.cyan : C.yellow);
+    }
+    if (!low) {
+      // the net over them, hooked to the hull at its corners
+      const [n0, n1] = [bags[0][0] - 0.4, bags[bags.length - 1][0] + w + 0.4];
+      const [m0, m1] = [z0 - 0.3, z0 + Math.max(...bags.map((b) => b[2])) + 0.2];
+      const h = m1 - m0;
+      const lines: P3[][] = [];
+      for (let c = n0 - h; c < n1; c += 1.5) lines.push([[c, 1.62, m0], [c + h, 1.62, m1]], [[c, 1.62, m1], [c + h, 1.62, m0]]);
+      k.pen.save();
+      k.pen.beginPath();
+      k.trace([[n0, 1.62, m0], [n1, 1.62, m0], [n1, 1.62, m1], [n0, 1.62, m1]]);
+      k.pen.clip();
+      for (const q of lines) k.line(q, '#3a4562', Math.max(0.8, 0.1 * k.s + k.thin * 0.6));
+      for (const q of lines) k.line(q, '#c9d1dc', Math.max(0.6, 0.1 * k.s));
+      k.pen.restore();
+      k.line([[n0, 1.62, m1], [n1, 1.62, m1]], C.orange, Math.max(0.9, 0.2 * k.s));
+      rivets(k, [[n0, 0.2, m0], [n1, 0.2, m0], [n0, 0.2, m1], [n1, 0.2, m1]], C.steel, 0.2);
+    }
+  }
+  // the handrail, on standoffs, broken round the viewport
+  const zr = zu + 1.6;
+  const runs: Array<[number, number]> = view ? [[T + 1, view.a - view.w / 2 - 3], [view.a + view.w / 2 + 3, end - 1]] : [[T + 1, end - 1]];
+  for (const [r0, r1] of runs) {
+    if (r1 - r0 < 4 || !k.vis(r0, 0, zr - 1, r1, 1, zr + 1)) continue;
+    for (let a = r0 + 1.5; a < r1; a += 6) k.box(a - 0.25, 0, zr - 0.25, 0.5, 0.8, 0.5, C.steelDark, { line: k.thin, stripe: false });
+    k.rod([[r0, 0.85, zr], [r1, 0.85, zr]], C.chrome, 0.24);
+    k.line([[r0, 0.85, zr + 0.08], [r1, 0.85, zr + 0.08]], '#ffffff99', Math.max(0.6, 0.06 * k.s));
   }
 }
 
@@ -846,8 +931,9 @@ function stars(k: Kit, a0: number, a1: number, z0: number, z1: number, n: number
   }
 }
 
-// A round porthole: a thick bolted ring, stars beyond, a glint.
-function porthole(k: Kit, f: Feature, lit: boolean, z: number): void {
+// A round porthole: a thick bolted ring, a glint, and beyond it stars and
+// one small scene (see SCENES), `scene` picking which.
+function porthole(k: Kit, f: Feature, lit: boolean, z: number, scene: number): void {
   const { pen } = k;
   const a = f.a;
   const R = 3.8;
@@ -861,6 +947,8 @@ function porthole(k: Kit, f: Feature, lit: boolean, z: number): void {
   fillPts(k, wallRing(k, a, -0.8, z, R), k.vgrad(a, -0.8, z - R, z + R, [[0, C.space], [1, '#1a2250']]), 0);
   k.halo(a + (hash(f.k, 1) - 0.5) * 2, -0.8, z + (hash(f.k, 2) - 0.5) * 2, R * 0.9, hash(f.k, 3) < 0.5 ? C.nebula : '#3f5fb0', 0.3);
   stars(k, a - R, a + R, z - R, z + R, -0.8, 9, f.k);
+  const [cx, cy] = k.p(a, -0.8, z);
+  SCENES[scene % SCENES.length](k, cx, cy, R * k.s);
   // the reveal's shadow along the top
   fillPts(k, wallRing(k, a, -0.8, z + 0.5, R), '#00000040', 0);
   pen.restore();
@@ -871,6 +959,200 @@ function porthole(k: Kit, f: Feature, lit: boolean, z: number): void {
   for (let i = 0; i < 8; i++) bolts.push([a + Math.cos((i / 8) * Math.PI * 2) * (R + 0.3), 0.33, z + Math.sin((i / 8) * Math.PI * 2) * (R + 0.3)]);
   rivets(k, bolts, '#ffffff', 0.13);
 }
+
+// ── what the portholes look out on ─────────────────────────────────────────
+// One small far scene a porthole, drawn flat on the screen (it is far away)
+// round the glass's middle (x, y), r px its radius, and clipped by the
+// glass: the planet's limb below, the grey moon, one of the station's own
+// solar wings, a supply capsule docked alongside. The portholes take them
+// in turn, so neighbours never show the same one.
+
+type Scene = (k: Kit, x: number, y: number, r: number) => void;
+
+// Screen points along (t) and across (p) an axis at angle th from (x, y),
+// in units of r.
+const axis = (x: number, y: number, r: number, th: number) => (t: number, p: number): [number, number] => [x + (Math.cos(th) * t - Math.sin(th) * p) * r, y + (Math.sin(th) * t + Math.cos(th) * p) * r];
+
+// The world below: the top of a big blue disc across the glass's foot, lit
+// from the upper left, land and cloud on it, a bright rim of air.
+const limb: Scene = (k, x, y, r) => {
+  const pen = k.pen;
+  const pr = r * 2.3;
+  const px = x + r * 0.5;
+  const py = y + r * 2.5;
+  const disc = () => {
+    pen.beginPath();
+    pen.arc(px, py, pr, 0, Math.PI * 2);
+  };
+  // the air's glow over the rim
+  disc();
+  pen.strokeStyle = '#7fc0ff33';
+  pen.lineWidth = r * 0.5;
+  pen.stroke();
+  disc();
+  const sea = pen.createRadialGradient(px - pr * 0.35, py - pr * 0.95, 0, px, py - pr * 0.4, pr * 1.2);
+  sea.addColorStop(0, '#74c0ff');
+  sea.addColorStop(0.45, '#3a86dc');
+  sea.addColorStop(1, '#1d4a94');
+  pen.fillStyle = sea;
+  pen.fill();
+  pen.save();
+  disc();
+  pen.clip();
+  // land, and a streak or two of cloud over it, bent round the limb
+  const on = (phi: number, d: number): [number, number] => [px + Math.sin(phi) * pr * d, py - Math.cos(phi) * pr * d];
+  for (const [phi, d, rx, ry, c] of [[-0.42, 0.97, 0.5, 0.2, '#6cb852'], [-0.05, 0.94, 0.38, 0.16, '#7fc25a'], [0.0, 0.96, 0.14, 0.07, '#d6b673'], [0.22, 0.99, 0.3, 0.12, '#5aa84c']] as const) {
+    const [lx, ly] = on(phi, d);
+    pen.beginPath();
+    pen.ellipse(lx, ly, rx * r, ry * r, phi, 0, Math.PI * 2);
+    pen.fillStyle = c;
+    pen.fill();
+  }
+  pen.lineCap = 'round';
+  for (const [p0, p1, d, w] of [[-0.62, -0.3, 0.985, 0.08], [-0.2, 0.12, 0.9, 0.07], [0.1, 0.3, 0.965, 0.06]] as const) {
+    pen.beginPath();
+    pen.arc(px, py, pr * d, -Math.PI / 2 + p0, -Math.PI / 2 + p1);
+    pen.strokeStyle = '#f6f9ffcc';
+    pen.lineWidth = Math.max(1, w * r);
+    pen.stroke();
+  }
+  // dusk toward the lower right
+  const dusk = pen.createLinearGradient(x - r, y, x + r, y + r);
+  dusk.addColorStop(0, '#0b143000');
+  dusk.addColorStop(0.55, '#0b143000');
+  dusk.addColorStop(1, '#0b1430aa');
+  pen.fillStyle = dusk;
+  pen.fillRect(x - r * 1.2, y - r * 1.2, r * 2.4, r * 2.4);
+  pen.restore();
+  // the bright rim of air, and ink round the disc
+  disc();
+  pen.strokeStyle = '#bfe8ff';
+  pen.lineWidth = Math.max(1, r * 0.08);
+  pen.stroke();
+  disc();
+  pen.strokeStyle = withAlpha(INK, 0.8);
+  pen.lineWidth = Math.max(0.8, k.thin * 0.7);
+  pen.stroke();
+};
+
+// The grey moon, up to the right: lit from the upper left, a few craters.
+const moon: Scene = (k, x, y, r) => {
+  const pen = k.pen;
+  const mx = x + r * 0.2;
+  const my = y - r * 0.12;
+  const mr = r * 0.5;
+  softDot(pen, mx, my, mr * 1.9, '#dfe6ff', 0.3);
+  pen.beginPath();
+  pen.arc(mx, my, mr, 0, Math.PI * 2);
+  const g = pen.createRadialGradient(mx - mr * 0.45, my - mr * 0.45, 0, mx, my, mr * 1.05);
+  g.addColorStop(0, '#f6f7fb');
+  g.addColorStop(0.55, '#c9ccd6');
+  g.addColorStop(1, '#7f849b');
+  pen.fillStyle = g;
+  pen.fill();
+  pen.save();
+  pen.clip();
+  for (const [dx, dy, cr] of [[-0.25, 0.3, 0.22], [0.3, -0.15, 0.17], [0.05, -0.5, 0.12], [0.45, 0.4, 0.1]] as const) {
+    pen.beginPath();
+    pen.arc(mx + dx * mr, my + dy * mr, cr * mr, 0, Math.PI * 2);
+    pen.fillStyle = '#9da2b4aa';
+    pen.fill();
+    pen.beginPath();
+    pen.arc(mx + dx * mr, my + dy * mr, cr * mr, Math.PI * 0.1, Math.PI * 0.9);
+    pen.strokeStyle = '#f2f4f999';
+    pen.lineWidth = Math.max(0.6, mr * 0.04);
+    pen.stroke();
+  }
+  pen.restore();
+  pen.beginPath();
+  pen.arc(mx, my, mr, 0, Math.PI * 2);
+  pen.strokeStyle = withAlpha(INK, 0.85);
+  pen.lineWidth = Math.max(0.8, k.thin * 0.8);
+  pen.stroke();
+};
+
+// A solar panel's blanket on screen points q (a quad): deep blue, lit from
+// the upper left, a grid of cells, ink round it.
+function blanket(k: Kit, q: ReadonlyArray<[number, number]>, cells: number): void {
+  const pen = k.pen;
+  const g = pen.createLinearGradient(q[0][0], q[0][1], q[2][0], q[2][1]);
+  g.addColorStop(0, '#4a72c4');
+  g.addColorStop(1, '#22407a');
+  fillPts(k, q, g, 0);
+  pen.beginPath();
+  for (let i = 1; i < cells; i++) {
+    const f = i / cells;
+    pen.moveTo(q[0][0] + (q[1][0] - q[0][0]) * f, q[0][1] + (q[1][1] - q[0][1]) * f);
+    pen.lineTo(q[3][0] + (q[2][0] - q[3][0]) * f, q[3][1] + (q[2][1] - q[3][1]) * f);
+  }
+  pen.moveTo((q[0][0] + q[3][0]) / 2, (q[0][1] + q[3][1]) / 2);
+  pen.lineTo((q[1][0] + q[2][0]) / 2, (q[1][1] + q[2][1]) / 2);
+  pen.strokeStyle = '#8fb0ecaa';
+  pen.lineWidth = Math.max(0.6, k.thin * 0.5);
+  pen.stroke();
+  fillPts(k, q, null, k.thin * 0.8);
+}
+
+// One of the station's own solar wings: the truss coming in from the lower
+// left, two blankets either side of it running off to the upper right.
+const wing: Scene = (k, x, y, r) => {
+  const P = axis(x - r * 0.35, y + r * 0.35, r, -0.5);
+  for (const [p0, p1] of [[0.12, 0.62], [-0.62, -0.12]] as const) {
+    for (const [t0, t1] of [[0.25, 1.15], [1.25, 2.2]] as const) blanket(k, [P(t0, p0), P(t1, p0), P(t1, p1), P(t0, p1)], 4);
+  }
+  // the truss and the gimbal at its root
+  const pen = k.pen;
+  const [a0, b0] = P(-1.2, 0);
+  const [a1, b1] = P(2.4, 0);
+  for (const [c, w] of [[INK, 0.13 * r + k.thin * 1.4], ['#c9d1dc', 0.13 * r]] as const) {
+    pen.beginPath();
+    pen.moveTo(a0, b0);
+    pen.lineTo(a1, b1);
+    pen.strokeStyle = c;
+    pen.lineWidth = Math.max(1, w);
+    pen.lineCap = 'butt';
+    pen.stroke();
+  }
+  fillPts(k, [P(-0.05, -0.16), P(0.2, -0.16), P(0.2, 0.16), P(-0.05, 0.16)], '#8f9bb0', k.thin * 0.8);
+  const [lx, ly] = P(-0.05, 0);
+  softDot(pen, lx, ly, r * 0.18, '#ffb04a', 0.6);
+};
+
+// A supply capsule docked alongside: a white cone with an orange band and
+// two little windows, its service module and wings behind it, a red light
+// on its nose and a green one on a wingtip.
+const capsule: Scene = (k, x, y, r) => {
+  const pen = k.pen;
+  const P = axis(x + r * 0.05, y - r * 0.05, r, 0.32);
+  for (const s of [1, -1]) blanket(k, [P(-0.95, 0.24 * s), P(-0.55, 0.24 * s), P(-0.55, 1.05 * s), P(-0.95, 1.05 * s)], 3);
+  fillPts(k, [P(-1.05, -0.26), P(-0.4, -0.26), P(-0.4, 0.26), P(-1.05, 0.26)], '#9aa6ba', k.thin * 0.9);
+  const body = [P(-0.42, -0.34), P(0.38, -0.15), P(0.38, 0.15), P(-0.42, 0.34)];
+  const g = pen.createLinearGradient(...P(0, -0.34), ...P(0, 0.34));
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.6, '#e7ecf2');
+  g.addColorStop(1, '#b4bfcf');
+  fillPts(k, body, g, 0);
+  fillPts(k, [P(-0.3, -0.31), P(-0.18, -0.29), P(-0.18, 0.29), P(-0.3, 0.31)], C.orange, 0);
+  for (const t of [0.0, 0.16]) {
+    const [wx, wy] = P(t, -0.12);
+    pen.beginPath();
+    pen.arc(wx, wy, Math.max(0.8, r * 0.05), 0, Math.PI * 2);
+    pen.fillStyle = '#1d2540';
+    pen.fill();
+  }
+  fillPts(k, body, null, k.thin * 0.9);
+  fillPts(k, [P(0.38, -0.11), P(0.48, -0.09), P(0.48, 0.09), P(0.38, 0.11)], '#8f9bb0', k.thin * 0.8);
+  const [nx, ny] = P(0.5, 0);
+  softDot(pen, nx, ny, r * 0.22, '#ff6a7a', 0.7);
+  pen.beginPath();
+  pen.arc(nx, ny, Math.max(0.8, r * 0.05), 0, Math.PI * 2);
+  pen.fillStyle = '#ffd0d6';
+  pen.fill();
+  const [gx, gy] = P(-0.75, 1.05);
+  softDot(pen, gx, gy, r * 0.16, C.green, 0.6);
+};
+
+const SCENES: readonly Scene[] = [limb, moon, wing, capsule];
 
 // A wall screen: a framed display of the station's orbit, glowing.
 function wallScreen(k: Kit, f: Feature, pz: number): void {
