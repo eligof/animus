@@ -120,6 +120,12 @@ const OVERLAY_TILE = 64;
 // How far past the canvas bits are drawn, px, so a pan within an ambient
 // step does not cut those kept from its start.
 const BITS_MARGIN = 64;
+// Where a finished build's lamp glows, up from its top block (see
+// scene/build.ts): the tower's lantern, the machine's beacon, the
+// pyramid's tip, the star on the statue's hat. A house has none: its
+// chimney only smoulders.
+const LAMP_Z: Partial<Record<SceneFrame['builds'][number]['shape'], number>> = { tower: 0.2, machine: -0.35, pyramid: -0.6, statue: -0.6 };
+
 // Steps of the pulses (a hurt figure's ring, a finished build's beacon) and
 // of a glowing bit's fade, so their sprites are few; of a pill's alpha (in
 // twentieths, which the labels' 0.9 and 0.55 fall on).
@@ -983,9 +989,13 @@ export class Scene {
 
   // How bright the room's walls are (see wallValue), read off the base
   // tiles at the layer's scale (painted here if not yet), once per room;
-  // where only the backdrop shows there is no wall.
+  // where only the backdrop shows there is no wall. Read as before the
+  // room's grade (the night, the evening tint), which the build gets after
+  // like everything in the room: graded once, whichever was measured first.
   private wallsOf(f: SceneFrame, l: Layer): number {
     const back = f.world.backdrop;
+    const g = gradesOf(f.world, f.lit).room?.rgb ?? [255, 255, 255];
+    const k = g.map((c) => 255 / Math.max(1, c));
     return wallValue(f.world.room, f.room.L, (x, y, z) => {
       const px = Math.floor((x - y) * l.s);
       const py = Math.floor(((x + y) * l.s) / 2 - z * l.s);
@@ -994,7 +1004,7 @@ export class Scene {
       const d = this.tile(f, l, tx, ty, false).img.data;
       const o = 4 * ((py - ty * TILE) * TILE + (px - tx * TILE));
       if (Math.abs(d[o] - back[0]) + Math.abs(d[o + 1] - back[1]) + Math.abs(d[o + 2] - back[2]) < 30) return null;
-      return 0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2];
+      return Math.min(255, 0.2126 * d[o] * k[0] + 0.7152 * d[o + 1] * k[1] + 0.0722 * d[o + 2] * k[2]);
     });
   }
 
@@ -1428,12 +1438,13 @@ export class Scene {
       addHalo(d, w, h, x, y, g.r * s, p.color, g.a * a);
     }
     for (const b of f.builds) {
-      if (!b.complete) continue;
+      const dz = LAMP_Z[b.shape];
+      if (!b.complete || dz === undefined) continue;
       const cap = b.colors[b.colors.length - 1] ?? [255, 230, 160];
-      const [x, y] = P(b.top.x, b.top.y, b.top.z + 0.6);
+      const [x, y] = P(b.top.x, b.top.y, b.top.z + dz);
       const k = 0.5 + 0.5 * Math.sin(f.t * 2.4);
-      addHalo(d, w, h, x, y, (5 + 1.5 * k) * s, mixRgb(cap, [255, 255, 255], 0.3), 0.45 + 0.2 * k);
-      addHalo(d, w, h, x, y, 1.6 * s, [255, 255, 255], 0.5);
+      addHalo(d, w, h, x, y, (5 + 1.5 * k) * s, mixRgb(cap, [255, 255, 255], 0.15), 0.45 + 0.2 * k);
+      addHalo(d, w, h, x, y, 1.1 * s, mixRgb(cap, [255, 255, 255], 0.45), 0.4);
     }
   }
 
@@ -1462,12 +1473,13 @@ export class Scene {
       halo(`glow:${idOf(p)}`, x, y, g.r * s, p.color, g.a * q);
     }
     f.builds.forEach((b, j) => {
-      if (!b.complete) return;
+      const dz = LAMP_Z[b.shape];
+      if (!b.complete || dz === undefined) return;
       const cap = b.colors[b.colors.length - 1] ?? [255, 230, 160];
-      const [x, y] = P(b.top.x, b.top.y, b.top.z + 0.6);
+      const [x, y] = P(b.top.x, b.top.y, b.top.z + dz);
       const k = Math.round((0.5 + 0.5 * Math.sin(f.t * 2.4)) * (PULSE - 1)) / (PULSE - 1);
-      halo(`beacon:${j}`, x, y, (5 + 1.5 * k) * s, mixRgb(cap, [255, 255, 255], 0.3), 0.45 + 0.2 * k);
-      halo(`beacon-core:${j}`, x, y, 1.6 * s, [255, 255, 255], 0.5);
+      halo(`beacon:${j}`, x, y, (5 + 1.5 * k) * s, mixRgb(cap, [255, 255, 255], 0.15), 0.45 + 0.2 * k);
+      halo(`beacon-core:${j}`, x, y, 1.1 * s, mixRgb(cap, [255, 255, 255], 0.45), 0.4);
     });
   }
 }

@@ -9,9 +9,9 @@
 // While it goes up the solid is cut at the laid height (a fresh course on
 // top, hollow where walls rise round a room), two scaffold poles and a
 // plank stand by it, and the rest shows as a clean ghost: a faint fill in
-// the ghost hue inside a light outline. A soft shadow lies under it on the
-// floor (its own sprite, drawn with the floors, so nobody walking behind
-// it is darkened). The supply pile is a few stacked bricks on a pallet.
+// the ghost hue inside a firm light outline (a plan, not a cloud). A soft
+// shadow lies under it on the floor (its own sprite, drawn with the
+// floors, so nobody walking behind it is darkened). The supply pile is a few stacked bricks on a pallet.
 // All drawn once per change and cached (see Scene) as sprites placed
 // relative to the projected world origin.
 
@@ -1121,7 +1121,7 @@ export function buildSprite(b: BuildLook, s: number, ink: Color, ceil = 255): { 
     form(k, sv, mats);
     const ring = new Canvas(w, h);
     ring.lineJoin = 'round';
-    ring.strokeStyle = mix(gh, '#ffffff', 0.5);
+    ring.strokeStyle = mix(gh, '#ffffff', 0.35);
     ring.lineWidth = Math.max(2, lw * 1.3);
     for (const sil of k.sils) {
       ring.beginPath();
@@ -1135,9 +1135,9 @@ export function buildSprite(b: BuildLook, s: number, ink: Color, ceil = 255): { 
       sil(ring);
       ring.fill();
     }
-    img.globalAlpha = 0.18;
+    img.globalAlpha = 0.13;
     img.drawImage(g, 0, 0);
-    img.globalAlpha = 0.7;
+    img.globalAlpha = 0.75;
     img.drawImage(ring, 0, 0);
     img.globalAlpha = 1;
   }
