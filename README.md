@@ -47,8 +47,8 @@ clone (or a symlink to one). Installing it as a package under
 `node_modules` won't work: Node refuses to strip TypeScript types there.
 
 Start Claude Code in another terminal (or several) and they walk in. The
-terminal needs to be at least 60 x 20; from 110 columns a crew roster shows
-on the right.
+terminal needs to be at least 60 x 20; from 110 columns the crew is listed
+down the left (see [Around the room](#around-the-room)).
 
 ## Views
 
@@ -82,6 +82,35 @@ an agent zooms in on it and follows it, `+` / `-` step the zoom and `z`
 hands it back. `l` turns the lights off for the night: the room goes dark
 and cool, the lamps go out, and fires, screens and moonlit windows carry
 the light.
+
+## Around the room
+
+The bars around the room stay quiet: they sit on the world's own dark
+background, with no panels or rules, and use colour only for who an agent is
+and for what needs you.
+
+- **The header** shows the world on the left. On the right are the counts that
+  are not zero (`4 working · 2 need you · 1 failing · 1 idle`), your account,
+  `live` or `demo`, and the clock.
+- **The crew bar** (on the left, from 110 columns) starts with **NEEDS YOU**
+  while anything does: a failing agent (`✖`), one blocked on you by a
+  question, a permission or a plan to approve (`▲`), and a lead whose turn is
+  over (`◆`). Failing agents come first, then the longest wait. Below that is
+  the crew, team by team, with subagents indented under their lead. Each row
+  has a shape in the agent's colour (`●` working, `○` waiting on its lead,
+  `✔` finished, and the three above), so the state reads without colour too.
+  Then come its name, how long it has been at it (once that is a minute or
+  more), and a dim glyph for the tool it is using. While the crew fits, a
+  line under each working agent says what it is doing. The selected agent
+  always has that line, and a bar in its colour.
+- **The log row** holds only news: what finished or failed, whose turn it
+  is, who asks you, and a test or build run. It shows the newest first,
+  with ages, and only whole items. Without the crew bar (under 110 columns,
+  or in the dashboard) it pins `needs you` first instead, while anything does.
+- **The hint row** shows only the keys for the moment: picking an agent,
+  then talk, cheer, next, hide the card, back. While you type in a chat it
+  shows send and stop typing, and it also changes for the world picker,
+  help and pause. `?` lists every key.
 
 ## Worlds
 
@@ -251,7 +280,8 @@ Without images, the scene's space holds a card per agent in a grid: what it
 is doing and on which tool or file, a ten-minute sparkline of its activity
 with calls per minute, its role, project and subagents, and a flag for a
 recent error. `tab` walks the cards and `enter` opens the chat, docked. The
-header, ticker and keys are the same as in the scene.
+header, log row and keys are the same as in the scene, and the cards take
+the crew bar's columns.
 
 ## What the characters do
 
@@ -381,7 +411,7 @@ off and on, and is remembered.
 | `enter` | talk to the selected agent (see [Talking to an agent](#talking-to-an-agent)) |
 | `esc` | close an overlay, else clear the selection |
 | `+` / `-`, `z` | zoom in / out, automatic zoom |
-| `f` | fullscreen scene (hide the header, roster and footer) |
+| `f` | fullscreen scene (hide the header, crew bar and bottom rows) |
 | `r` | scene / dashboard (remembered) |
 | `l` | lights on / off: evening or night (remembered) |
 | `o` | office life on / off (remembered) |
@@ -499,7 +529,7 @@ Layout:
 - `src/term`: `kitty.ts` (the graphics protocol), `plates.ts` (the sprite
   compositor: sends each sprite once, then only placements that changed),
   the cell screen and diffing ANSI renderer, raw terminal input.
-- `src/ui`: header, roster and footer, help and picker, the agent card, the
+- `src/ui`: header, crew bar and bottom rows, help and picker, the agent card, the
   chat window and its input, the dashboard.
 
 ### Adding a world

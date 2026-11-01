@@ -96,6 +96,23 @@ test('idle session shows idle lead', () => {
   const lead = src.poll(now).find((a) => a.id === 'S1')!;
   assert.equal(lead.activity, 'idle');
   assert.equal(lead.detail, 'waiting for you');
+  // Its turn is over: yours, and it says so (the chrome reads this, not
+  // the words).
+  assert.equal(lead.needs, 'turn');
+});
+
+test('an agent at work needs nothing of you; one asking or with a plan ready does', () => {
+  const now = Date.now();
+  const { root, lead } = setup(now);
+  const src = new ClaudeSource(root, { alive: () => true });
+  const busy = src.poll(now);
+  assert.ok(busy.every((a) => a.needs === undefined), JSON.stringify(busy.map((a) => [a.id, a.needs])));
+  for (const [tool, needs] of [['AskUserQuestion', 'input'], ['ExitPlanMode', 'plan']] as const) {
+    appendFileSync(lead, line({ type: 'assistant', timestamp: iso(now - 500), message: { content: [{ type: 'tool_use', id: tool, name: tool, input: {} }] } }));
+    const l = new ClaudeSource(root, { alive: () => true }).poll(now).find((a) => a.id === 'S1')!;
+    assert.equal(l.activity, 'talk', tool);
+    assert.equal(l.needs, needs, tool);
+  }
 });
 
 test('dead sessions and their subagents vanish', () => {
@@ -116,6 +133,7 @@ test('session waiting on the user shows as talking', () => {
   const lead = new ClaudeSource(root, { alive: () => true }).poll(now).find((a) => a.id === 'S1')!;
   assert.equal(lead.activity, 'talk');
   assert.equal(lead.detail, 'needs your input');
+  assert.equal(lead.needs, 'input');
 });
 
 test('unfinished subagent stays visible during a long generation', () => {

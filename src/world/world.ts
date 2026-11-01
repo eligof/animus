@@ -294,7 +294,7 @@ export class World {
     this.last = null;
     const dash = this.shown === 'dashboard';
     // The cards repeat the roster, so the dashboard takes its columns too.
-    const body = dash && L.roster ? { ...L.scene, w: L.scene.w + L.roster.w } : L.scene;
+    const body = dash && L.roster ? { ...L.scene, x: L.roster.x, w: L.scene.w + L.roster.w } : L.scene;
     const empty = this.stage.actors().length === 0;
     // Kept only from one frame with a card to the next.
     const side = this.cardSide;
@@ -331,8 +331,13 @@ export class World {
       t: (now - this.start) / 1000,
       now,
       paused: this.paused,
-      selectionInFooter: !L.roster,
+      // No crew bar drawn: the log row pins what needs you.
+      pinNeeds: !L.roster || dash,
       chat: this.chatFocus,
+      overlay: this.overlay,
+      card: this.card,
+      view: this.shown,
+      canScene: this.images,
     };
     if (L.header.h) drawHeader(s, L.header, ctx);
     if (L.roster && !dash) drawRoster(s, L.roster, ctx);
@@ -361,6 +366,9 @@ export class World {
         color: a.traits.color,
         palette: this.theme.palette,
         now,
+        // The bottom row lists the card's keys; full screen has no bottom
+        // row, so the card keeps them.
+        keys: this.full,
       },
       box,
       prefer,

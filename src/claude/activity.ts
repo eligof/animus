@@ -7,6 +7,9 @@ const SEARCH = new Set(['Grep', 'Glob', 'LS', 'ToolSearch']);
 const WEB = new Set(['WebFetch', 'WebSearch']);
 const DELEGATE = new Set(['Agent', 'Task', 'Workflow', 'SendMessage', 'Skill']);
 const TALK = new Set(['AskUserQuestion', 'ExitPlanMode']);
+// What those two say while they wait on you (see needsOf).
+export const ASKING = 'asking you…';
+export const PLAN_READY = 'plan ready';
 const PLAN = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'EnterPlanMode']);
 
 export function toolActivity(name: string): Activity {
@@ -83,9 +86,9 @@ function describe(name: string, input: Record<string, unknown>): string {
     case 'Workflow':
       return 'workflow';
     case 'AskUserQuestion':
-      return 'asking you…';
+      return ASKING;
     case 'ExitPlanMode':
-      return 'plan ready';
+      return PLAN_READY;
   }
   if (PLAN.has(name)) return 'planning';
   if (name.startsWith('mcp__')) {

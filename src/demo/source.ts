@@ -180,6 +180,11 @@ export class DemoSource implements AgentSource {
     s.info.activity = activity;
     s.info.detail = this.rng.pick(DETAILS[activity]);
     s.info.since = now;
+    // What it waits on you for (see AgentInfo.needs): a lead's turn over,
+    // or a question put to you.
+    const needs = activity === 'idle' && s.info.role === 'lead' ? 'turn' : activity === 'talk' && s.info.detail.endsWith('?') ? 'input' : undefined;
+    if (needs) s.info.needs = needs;
+    else delete s.info.needs;
     const v = s.vitals;
     const r = this.vrng;
     v.lastAt = now;

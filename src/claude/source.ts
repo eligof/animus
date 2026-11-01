@@ -1,10 +1,10 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import type { Activity, AgentEvent, AgentInfo, AgentSource, Bubble, Gain, SendResult } from '../agents.ts';
+import type { Activity, AgentEvent, AgentInfo, AgentSource, Bubble, Gain, Needs, SendResult } from '../agents.ts';
 import { diffEvents } from '../agents.ts';
 import { roleOf } from '../pet/crew.ts';
 import { projectRoot } from '../pet/project.ts';
-import { clip } from './activity.ts';
+import { ASKING, PLAN_READY, clip } from './activity.ts';
 import { ChatReader } from './chat.ts';
 import { GainReader } from './gains.ts';
 import { entries, sendTo } from './inbox.ts';
@@ -66,6 +66,16 @@ function present(st: TranscriptState, now: number): { activity: Activity; detail
     return { activity: 'think', detail: 'thinking…' };
   }
   return { activity: st.activity, detail: st.detail };
+}
+
+// What an agent waits on you for, if anything (see AgentInfo.needs): its
+// session waiting on a permission prompt, a question or a plan of its
+// own, or, a lead with its turn over, your next message.
+function needsOf(a: AgentInfo, waiting: boolean): Needs | undefined {
+  if (waiting) return 'input';
+  if (a.activity === 'talk') return a.detail === ASKING ? 'input' : a.detail === PLAN_READY ? 'plan' : undefined;
+  if (a.activity === 'idle' && a.role === 'lead') return 'turn';
+  return undefined;
 }
 
 function mtime(p: string): number {
@@ -297,6 +307,8 @@ export class ClaudeSource implements AgentSource {
         if (lead.vitals) lead.vitals.midTool = false;
       }
       else if (s.status === 'waiting') Object.assign(lead, { activity: 'talk', detail: 'needs your input' });
+      const needs = needsOf(lead, s.status === 'waiting');
+      if (needs) lead.needs = needs;
       out.push(lead);
       if (path) out.push(...this.subagents(s.sessionId, path, project, crew, now, seen));
     }
@@ -385,6 +397,8 @@ export class ClaudeSource implements AgentSource {
       else if (st.lastSeen === 0) Object.assign(info, { activity: 'think', detail: 'spinning up' });
       // A finished subagent has no call out, whatever its transcript says.
       if (finished && info.vitals) info.vitals.midTool = false;
+      const needs = needsOf(info, false);
+      if (needs) info.needs = needs;
       out.push(info);
     }
     return out;

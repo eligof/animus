@@ -125,6 +125,11 @@ test('the card shows the agent, its meters and the facts', () => {
   for (const want of ['nova · lead', '4m', 'Edit src/parser.ts', '"Fix the tokenizer edge case"', 'main', 'context', '78%', 'energy', 'health', 'mood', '▲12', 'opus 5.5 · 9m on task · 3 subagents', '[⏎]talk', '[c]heer', '[esc]']) {
     assert.ok(text.includes(want), `missing "${want}" in\n${text}`);
   }
+  // Where the bottom row lists its keys, the card leaves them off.
+  const quiet = new Screen(100, 32);
+  drawCard(quiet, SCENE, opts({ keys: false }), FIG);
+  assert.doesNotMatch(quiet.toText(), /\[⏎\]talk|\[c\]heer|\[esc\]/);
+  assert.match(quiet.toText(), /╰─+╯/, 'the frame is whole');
   // The card sets a background, so the scene's image does not show through.
   const { x, y } = placeCard(SCENE, FIG);
   assert.notEqual(s.bg[y * 100 + x + 5], DEFAULT);

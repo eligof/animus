@@ -47,7 +47,7 @@ for (const id of themeIds()) {
     assert.ok(r.stdout.includes('\x1b['));
     const text = strip(r.stdout);
     assert.equal(text.split('\n').filter(Boolean).length, 36);
-    assert.match(text, /ANIMUS/);
+    assert.match(text, /◆ animus/);
   });
 }
 
