@@ -19,7 +19,7 @@ import { budget } from './helpers.ts';
 // brick walls keep their big windows, prints, neon squiggle, bike and
 // pendant lamps off the stations, the tall furniture and each other, under
 // their caps, each lamp seen in the middle of a full bay and never under
-// the clouds; each window keeps its own city whatever room was drawn
+// the clouds; the mural and the clocks hang clear over the furniture; each window keeps its own city whatever room was drawn
 // before; coffee at the espresso counter, seats at its stools, a look at
 // the skyline; a 150-column room is lively, its decor by the walls and
 // stations (the extra desks backed onto a wall, the beanbags big enough to
@@ -240,6 +240,60 @@ test('The Startup room: each pendant lamp is seen in the middle of a full bay, G
       }
     }
   }
+});
+
+test('The Startup room: the mural and the clocks hang over the furniture, clear of it, of the wall\'s other pieces and the pendants, under the duct', () => {
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'office');
+    const room = planRoom(office, L, hashString('office'));
+    const { features, over } = planFor(L.W, L.D, L.H, L.T);
+    for (const f of over) {
+      const tag = `${L.W}: the ${f.kind} at ${f.a.toFixed(1)} on the ${f.wall} wall`;
+      const end = f.wall === 'right' ? L.W : L.D;
+      const [a0, a1] = [f.a - f.w / 2, f.a + f.w / 2];
+      assert.ok(a0 >= L.T && a1 <= end, `${tag}: off its wall`);
+      assert.ok(f.z1! <= L.H - 5, `${tag}: up in the duct (to ${f.z1})`);
+      for (const g of features) {
+        if (g.wall !== f.wall) continue;
+        const c = g.kind === 'pendant' ? g.a - LAMP_N : g.a;
+        const clear = Math.max(c - g.w / 2 - a1, a0 - (c + g.w / 2));
+        assert.ok(clear >= GAP - 0.5, `${tag}: only ${clear.toFixed(2)} from the ${g.kind} at ${g.a}`);
+      }
+      // over all that stands against the wall under it, as seen against it
+      for (const p of room.props) {
+        const r = footprint(p);
+        const [d0, d1, b0, b1] = f.wall === 'right' ? [r.y0 - L.T, r.y1 - L.T, r.x0, r.x1] : [r.x0 - L.T, r.x1 - L.T, r.y0, r.y1];
+        if (d0 > 2 || !(b1 - d0 > a0 && b0 - d1 < a1)) continue;
+        assert.ok(f.z0! >= p.art.height - d0 + 1, `${tag}: from z ${f.z0} behind something ${p.art.height} tall`);
+      }
+    }
+  }
+  for (const [w, h] of ROOMY) {
+    const L = planLayout(w, h, 'office');
+    const { over } = planFor(L.W, L.D, L.H, L.T);
+    assert.ok(over.some((f) => f.kind === 'mural'), `${L.W}: no mural over the desks`);
+  }
+});
+
+test('The Startup room: the lounge rug lies before the sofa, off the stations and the other furniture (beanbags may sit on it), out of the front of the room', () => {
+  let some = false;
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'office');
+    const room = planRoom(office, L, hashString('office'));
+    const { lounge } = planFor(L.W, L.D, L.H, L.T);
+    if (!lounge) continue;
+    some = true;
+    const meets = (r: { x0: number; y0: number; x1: number; y1: number }) => r.x0 < lounge.x1 && lounge.x0 < r.x1 && r.y0 < lounge.y1 && lounge.y0 < r.y1;
+    for (const p of room.props) {
+      if (p.art === DECOR_ART.sofa || p.art === DECOR_ART.beanbag) continue;
+      assert.ok(!meets(footprint(p)), `${L.W}: the lounge rug ${JSON.stringify(lounge)} under something at ${JSON.stringify(footprint(p))}`);
+    }
+    assert.ok(lounge.x1 + lounge.y1 <= (2 / 3) * (L.W + L.D), `${L.W}: the lounge rug out in the front of the room`);
+    const sofa = room.props.find((p) => p.art === DECOR_ART.sofa)!;
+    const r = footprint(sofa);
+    assert.ok(Math.min(Math.abs(lounge.x0 - r.x1), Math.abs(lounge.y0 - r.y1)) < 1, `${L.W}: the lounge rug away from the sofa`);
+  }
+  assert.ok(some, 'no lounge rug in any room');
 });
 
 test('The Startup windows: each shows its own city, whatever size of room was drawn before', async () => {
