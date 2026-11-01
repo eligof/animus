@@ -19,7 +19,7 @@ import type { SceneFrame } from './world/frame.ts';
 import { World } from './world/world.ts';
 import type { View } from './world/world.ts';
 
-export type RunOpts = { theme: Theme; demo: boolean; fps: number; root: string; view: View; lights?: boolean; officeLife?: boolean; npcs?: boolean };
+export type RunOpts = { theme: Theme; demo: boolean; fps: number; root: string; view: View; lights?: boolean; officeLife?: boolean; npcs?: boolean; bar?: boolean };
 
 // Encodes a picture as PNG (`opaque`: every pixel is, so no alpha needed).
 export type Encode = (b: Bitmap, opaque: boolean) => Uint8Array;
@@ -87,6 +87,7 @@ function makeWorld(o: RunOpts, start: number, liveInterval?: number, crews?: Cre
     lights: o.lights,
     officeLife: o.officeLife,
     npcs: o.npcs,
+    bar: o.bar,
     images: supportsImages(),
     live: o.demo ? null : new ClaudeSource(o.root, liveInterval === undefined ? {} : { intervalMs: liveInterval }),
     demo: o.demo,

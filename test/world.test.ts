@@ -370,6 +370,37 @@ test('config keeps the locals off; anything but true or false is dropped', () =>
   assert.deepEqual(loadConfig(p), { theme: 'club' });
 });
 
+test('b hides the crew bar and shows it again, saved as a preference: the scene takes its columns; a world can start without it', () => {
+  const w = demoWorld(true);
+  w.resize(150, 46);
+  let now = advance(w, 2);
+  const screen = new Screen(150, 46);
+  w.draw(screen, now);
+  assert.equal(w.bar, true);
+  assert.equal(w.scene()!.camera.cells.x, 30);
+  assert.equal(w.handleKey(key('b')), 'prefs');
+  assert.equal(w.bar, false);
+  assert.deepEqual(w.prefs(), { bar: false });
+  now = advance(w, 1, now);
+  w.draw(screen, now);
+  assert.deepEqual(w.scene()!.camera.cells, { x: 0, y: 1, w: 150, h: 43 });
+  assert.equal(w.handleKey(key('b')), 'prefs');
+  now = advance(w, 1, now);
+  w.draw(screen, now);
+  assert.equal(w.scene()!.camera.cells.x, 30);
+  assert.deepEqual(w.prefs(), { bar: true });
+  const off = new World({ theme: getTheme('mines')!, live: null, demo: true, account: null, rootLabel: '~/.claude', start: START, images: true, bar: false });
+  assert.equal(off.bar, false);
+});
+
+test('config keeps the crew bar off; anything but true or false is dropped', () => {
+  const p = join(tempDir('animus-cfg-bar'), 'c.json');
+  saveConfig({ theme: 'cafe', bar: false }, p);
+  assert.deepEqual(loadConfig(p), { theme: 'cafe', bar: false });
+  writeFileSync(p, JSON.stringify({ theme: 'cafe', bar: 'no' }));
+  assert.deepEqual(loadConfig(p), { theme: 'cafe' });
+});
+
 test('only preferences the user changed are saved', () => {
   const w = demoWorld(true);
   assert.deepEqual(w.prefs(), {});

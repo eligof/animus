@@ -27,6 +27,13 @@ test('wide layout has the crew bar on the left, the scene after it', () => {
   assert.deepEqual(W.scene, { x: 30, y: 1, w: 120, h: 43 });
 });
 
+test('the crew bar can be hidden: the scene takes its columns at any width', () => {
+  const L = computeLayout(150, 46, false, false);
+  assert.equal(L.roster, null);
+  assert.deepEqual(L.scene, { x: 0, y: 1, w: 150, h: 43 });
+  assert.deepEqual(L.footer, { x: 0, y: 44, w: 150, h: 2 });
+});
+
 test('narrow layout drops the roster', () => {
   const L = computeLayout(100, 30);
   assert.equal(L.roster, null);

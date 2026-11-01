@@ -45,6 +45,8 @@ export type WorldOpts = {
   officeLife?: boolean;
   // The locals (see world/npcs.ts); on unless said.
   npcs?: boolean;
+  // The crew bar down the left (where there is room for it); on unless said.
+  bar?: boolean;
   // Where the live agents' crews are kept (see pet/store.ts): read at the
   // start, written as they grow. None: they live in memory only.
   crews?: CrewStore;
@@ -113,6 +115,8 @@ export class World {
   private pickerOrigin = '';
   // The scene fills the whole terminal (f): no header, roster or footer.
   full = false;
+  // The crew bar shows where there is room (b hides it, remembered).
+  private barOn: boolean;
   // The selected agent's card shows (i turns it off and on).
   card = true;
   // The side of its character the card took last frame, kept while it
@@ -133,7 +137,7 @@ export class World {
   // breaks as spaces, so a pasted block is one message; anywhere else it
   // is ignored, so pasted letters never act as keys.
   private pasting = false;
-  private touched = { view: false, lights: false, officeLife: false, npcs: false };
+  private touched = { view: false, lights: false, officeLife: false, npcs: false, bar: false };
   private images: boolean;
   private shown: View;
   private last: SceneFrame | null = null;
@@ -149,6 +153,7 @@ export class World {
     this.stage.lit = o.lights ?? true;
     this.stage.office = o.officeLife ?? true;
     this.stage.npcs = o.npcs ?? true;
+    this.barOn = o.bar ?? true;
     this.live = o.live;
     this.demoOn = o.demo;
     this.account = o.account;
@@ -260,7 +265,7 @@ export class World {
   // Lays the stage out for a terminal size; call before the first tick and
   // on every resize so agents spawn on real floors.
   resize(cols: number, rows: number): void {
-    const L = computeLayout(cols, rows, this.full);
+    const L = computeLayout(cols, rows, this.full, this.barOn);
     if (!L.tooSmall) this.ensureLayout(L.scene);
   }
 
@@ -282,7 +287,7 @@ export class World {
   }
 
   draw(s: Screen, now: number): void {
-    const L = computeLayout(s.width, s.height, this.full);
+    const L = computeLayout(s.width, s.height, this.full, this.barOn);
     if (L.tooSmall) {
       this.last = null;
       this.chatHidden = true;
@@ -550,14 +555,19 @@ export class World {
     return this.stage.npcs;
   }
 
-  // Display preferences the user changed this session (with r / l / o),
-  // the only ones worth saving: an automatic view stays automatic.
-  prefs(): { view?: View; lights?: boolean; officeLife?: boolean; npcs?: boolean } {
-    const out: { view?: View; lights?: boolean; officeLife?: boolean; npcs?: boolean } = {};
+  get bar(): boolean {
+    return this.barOn;
+  }
+
+  // Display preferences the user changed this session (with r / l / o /
+  // n / b), the only ones worth saving: an automatic view stays automatic.
+  prefs(): { view?: View; lights?: boolean; officeLife?: boolean; npcs?: boolean; bar?: boolean } {
+    const out: { view?: View; lights?: boolean; officeLife?: boolean; npcs?: boolean; bar?: boolean } = {};
     if (this.touched.view) out.view = this.shown;
     if (this.touched.lights) out.lights = this.stage.lit;
     if (this.touched.officeLife) out.officeLife = this.stage.office;
     if (this.touched.npcs) out.npcs = this.stage.npcs;
+    if (this.touched.bar) out.bar = this.barOn;
     return out;
   }
 
@@ -688,6 +698,10 @@ export class World {
       case 'n':
         this.stage.npcs = !this.stage.npcs;
         this.touched.npcs = true;
+        return 'prefs';
+      case 'b':
+        this.barOn = !this.barOn;
+        this.touched.bar = true;
         return 'prefs';
       case 'space':
         this.paused = !this.paused;

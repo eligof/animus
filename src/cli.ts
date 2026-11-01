@@ -102,6 +102,7 @@ export async function main(argv: string[]): Promise<number> {
   const lights = cfg.lights ?? true;
   const officeLife = cfg.officeLife ?? true;
   const npcs = cfg.npcs ?? true;
+  const bar = cfg.bar ?? true;
 
   if (values.snapshot) {
     const width = num('width', values.width, 120, 20, 1000);
@@ -109,8 +110,8 @@ export async function main(argv: string[]): Promise<number> {
     const at = num('at', values.at, 12, 0, 3600);
     if (width === null || height === null || at === null) return fail('--width/--height/--at must be positive numbers');
     // A snapshot is text: the dashboard, unless the scene was asked for.
-    process.stdout.write(snapshot({ theme, demo, fps, root, view: asked === 'scene' ? 'scene' : 'dashboard', lights, officeLife, npcs, width: Math.floor(width), height: Math.floor(height), at }) + '\n');
+    process.stdout.write(snapshot({ theme, demo, fps, root, view: asked === 'scene' ? 'scene' : 'dashboard', lights, officeLife, npcs, bar, width: Math.floor(width), height: Math.floor(height), at }) + '\n');
     return 0;
   }
-  return runInteractive({ theme, demo, fps, root, view, lights, officeLife, npcs });
+  return runInteractive({ theme, demo, fps, root, view, lights, officeLife, npcs, bar });
 }
