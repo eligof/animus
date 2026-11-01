@@ -13,9 +13,12 @@ import { STRIPS, rig, wallFace } from './walls.ts';
 // The club's shell: a brick basement (see walls.ts) over polished dark
 // concrete, the light-up dance floor in the middle of it caught mid-chase,
 // a plum rug under the lounge, and pools of coloured light where the
-// stations glow. The overlay is what moves up in the air, over everyone's
-// heads: the mirror ball turning over the dance floor, its sparkles
-// sweeping the walls, and a sign whose tube is on the blink.
+// stations glow. What moves in the shell itself (room.floor, under
+// everyone, a kept two-second loop): the dance floor's tiles on the beat,
+// the moving heads' beams sweeping it and the ball's sparkles on the
+// walls. The overlay is what moves up in the air, over everyone's heads:
+// the mirror ball turning over the dance floor, and a sign whose tube is
+// on the blink.
 
 const SLAB = 2.5; // the floor's thickness, shown along the front cut
 
@@ -35,22 +38,24 @@ export const room: RoomArt = {
     const plan = planFor(v.W, v.D, v.H, v.T);
     v.pen.save();
     ball(new Kit(v.pen, v.at, v.s), v, plan);
-    // the ball's sparkles are the rig's light thrown back: gone with it
-    if (lampsOn(v)) for (const wall of ['right', 'left'] as const) sparkles(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
     flicker(v, plan);
     v.pen.restore();
   },
-  // What moves on the floor, under the dancers, round a loop of four beats
-  // (two seconds; the scene keeps each picture of it): the dance floor's
-  // tiles lighting up (on with the lights off too: lit from under its
-  // glass), and with the lights on the moving heads' beams sweeping it.
+  // What moves in the shell, under the dancers and whatever stands before
+  // the walls, round a loop of four beats (two seconds; the scene keeps
+  // each picture of it): the dance floor's tiles lighting up (on with the
+  // lights off too: lit from under its glass), and with the lights on the
+  // moving heads' beams sweeping it and the ball's sparkles on the walls
+  // (the rig's light thrown back: gone with it).
   floor(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
-    if (!plan.dance) return;
     v.pen.save();
     const k = new Kit(v.pen, v.at, v.s);
-    danceTiles(k, plan.dance, v.t);
-    if (lampsOn(v)) beams(k, v, plan);
+    if (plan.dance) danceTiles(k, plan.dance, v.t);
+    if (lampsOn(v)) {
+      beams(k, v, plan);
+      for (const wall of ['right', 'left'] as const) sparkles(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, wall);
+    }
     v.pen.restore();
   },
   // The light the shell gives (see RoomLight): each neon sign and the fire
@@ -545,9 +550,11 @@ function ball(k: Kit, v: RoomView, plan: Plan): void {
   pen.stroke();
 }
 
-// The ball's sparkles drifting along a wall between the strip and the
-// truss, twinkling.
-function sparkles(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
+// The ball's sparkles on a wall between the strip and the truss: each
+// fades in, drifts a few units the way the ball turns and fades out round
+// the floor loop's two seconds (see room.floor), their phases spread so
+// some are always lit, twinkling.
+function sparkles(k: Kit, v: RoomView, wall: Wall): void {
   const { T, H } = v;
   const end = wall === 'right' ? v.W : v.D;
   const len = end - T - 2;
@@ -560,10 +567,12 @@ function sparkles(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const tint: Color[] = ['#ffffff', '#ffd0f0', '#c8f8ff', '#ffffff', '#f0ffd0'];
   for (let i = 0; i < n; i++) {
     const salt = wall === 'right' ? 61 : 62;
-    const speed = 2.2 + hash(i, salt, 1) * 1.6;
-    const a = T + 1 + ((((hash(i, salt, 2) * len + dir * v.t * speed) % len) + len) % len);
+    // how far round its own two seconds: in, across, out
+    const u = (((v.t / SWEEP + hash(i, salt, 1)) % 1) + 1) % 1;
+    const a = T + 1 + hash(i, salt, 2) * (len - 6) + 3 + dir * (u - 0.5) * 6;
     const z = z0 + hash(i, salt, 3) * (z1 - z0);
-    const tw = 0.55 + 0.45 * Math.sin(v.t * (3 + hash(i, salt, 4) * 3) + i * 2.1);
+    const tw = Math.sin(Math.PI * u) * (0.7 + 0.3 * Math.sin((2 * Math.PI * (2 + (i % 3)) * v.t) / SWEEP + i * 2.1));
+    if (tw <= 0.02) continue;
     const [x, y] = k.p(a, 0.1, z);
     if (x < -8 || y < -8 || x > pen.width + 8 || y > pen.height + 8) continue;
     const c = tint[i % tint.length];

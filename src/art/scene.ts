@@ -62,6 +62,7 @@ import { framesOf } from './npc/acts.ts';
 import type { Pic, Placed, Plate } from './plate.ts';
 import { composite } from './plate.ts';
 import { Bounds } from './scene/bounds.ts';
+import type { Mark } from './scene/bounds.ts';
 import { buildSprite, pileSprite, wallValue } from './scene/build.ts';
 import { POP_STEPS, type DeskSprite, deskPictures, deskStats, growth, loopSprite, popping } from './scene/desk.ts';
 import type { Sprite } from './scene/build.ts';
@@ -117,6 +118,36 @@ const GAP = 16;
 // The overlay is laid out in tiles this big, each cropped: rain on a window
 // is a few thin streaks across a slanted pane.
 const OVERLAY_TILE = 64;
+// How far over the walls' tops (units) a room's art may reach and still be
+// measured whole (a mirror ball's chain into the dark, a beacon).
+const OVER_TOP = 24;
+
+// What `draw` paints, measured in world pixels (the world's origin at 0, 0;
+// `at` is its projection): each mark, the box round them all, and whether
+// any light was laid on. The pen spans the whole room, the projection
+// shifted into it, so art that leaves out what falls outside its pen (a
+// world's own culling, as its Kit.seen) leaves out nothing here. Measured
+// on a pen at the world's origin, everything left of the back corner (the
+// left wall, the floor's left half: x < y) fell outside it, went unmeasured,
+// and was then drawn only where some other piece's box reached: the club's
+// leftmost beam cut off as it swept.
+type Measured = { marks: Mark[]; light: boolean; x0: number; y0: number; x1: number; y1: number };
+function measure(L: { W: number; D: number; H: number }, s: number, draw: (pen: Pen, at: Project) => void): Measured {
+  const ox = (L.D + 8) * s;
+  const oy = (L.H + OVER_TOP) * s;
+  const B = new Bounds(Math.ceil((L.W + L.D + 16) * s), Math.ceil(((L.W + L.D) / 2 + L.H + OVER_TOP + 8) * s));
+  B.save();
+  draw(B, (x, y, z) => [(x - y) * s + ox, ((x + y) * s) / 2 - z * s + oy]);
+  B.restore();
+  return {
+    marks: B.marks.map((m) => ({ ...m, x0: m.x0 - ox, x1: m.x1 - ox, y0: m.y0 - oy, y1: m.y1 - oy })),
+    light: B.light,
+    x0: B.x0 - ox,
+    y0: B.y0 - oy,
+    x1: B.x1 - ox,
+    y1: B.y1 - oy,
+  };
+}
 // How far past the canvas bits are drawn, px, so a pan within an ambient
 // step does not cut those kept from its start.
 const BITS_MARGIN = 64;
@@ -1275,8 +1306,12 @@ export class Scene {
       const [x, y, zz] = toWorld(p, u, v, z);
       return [(x - y) * s, ((x + y) * s) / 2 - zz * s];
     };
-    const B = new Bounds(TILE, TILE);
-    this.drawProp(B, p, rel, s, time, active, f.lit);
+    const B = measure(f.room.L, s, (pen, at) =>
+      this.drawProp(pen, p, (u, v, z) => {
+        const [x, y, zz] = toWorld(p, u, v, z);
+        return at(x, y, zz);
+      }, s, time, active, f.lit),
+    );
     if (!(B.x1 > B.x0 && B.y1 > B.y0)) return null;
     const { x0, y0, x1, y1 } = B;
     const at = (u: number, v: number, z: number): [number, number] => {
@@ -1326,10 +1361,7 @@ export class Scene {
     const at = { ...f, t: step / AMBIENT_FPS };
     const s = l.s;
     const P0: Project = (x, y, z) => [(x - y) * s, ((x + y) * s) / 2 - z * s];
-    const B = new Bounds(TILE, TILE);
-    B.save();
-    draw(this.roomView(at, B, P0, s));
-    B.restore();
+    const B = measure(f.room.L, s, (pen, p) => draw(this.roomView(at, pen, p, s)));
     const pieces = clusters(B.marks, GAP).map((b) => {
       const x0 = Math.floor(b.x0);
       const y0 = Math.floor(b.y0);
@@ -1372,10 +1404,7 @@ export class Scene {
     const P0: Project = (x, y, z) => [(x - y) * s, ((x + y) * s) / 2 - z * s];
     if (this.over.tag !== tag) {
       this.stats.overlays++;
-      const B = new Bounds(TILE, TILE);
-      B.save();
-      draw(this.roomView(f, B, P0, s));
-      B.restore();
+      const B = measure(f.room.L, s, (pen, p) => draw(this.roomView(f, pen, p, s)));
       this.over = { tag, pieces: clusters(B.marks, GAP), drawn: new Map() };
     }
     const { pieces, drawn } = this.over;
