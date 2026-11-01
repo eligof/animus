@@ -240,10 +240,17 @@ export function starfallPois(L: Layout): Poi[] {
   return out.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) }));
 }
 
-// What the planner keeps decor from hiding: the terrariums on the working
-// wall (they stand on the ledge, so only what reaches over its foot).
+// What the planner keeps decor from hiding: the glass bays onto the planet
+// and the deck at their feet where their light starts, and the terrariums
+// on the working wall (they stand on the ledge, so only what reaches over
+// its foot).
 export function starfallReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number }> {
-  return planFor(L.W, L.D, L.H, L.T).features.filter((f) => f.kind === 'terrarium').map((f) => ({ wall: f.wall, a0: f.a - f.w / 2 - 0.5, a1: f.a + f.w / 2 + 0.5, out: 7, z: TRIM + TRIM_H + 2 }));
+  const out: Array<{ wall: Wall; a0: number; a1: number; out: number; z: number }> = [];
+  for (const f of planFor(L.W, L.D, L.H, L.T).features) {
+    if (f.kind === 'glass') out.push({ wall: f.wall, a0: f.a - f.w / 2, a1: f.a + f.w / 2, out: 5, z: 0 });
+    else if (f.kind === 'terrarium') out.push({ wall: f.wall, a0: f.a - f.w / 2 - 0.5, a1: f.a + f.w / 2 + 0.5, out: 7, z: TRIM + TRIM_H + 2 });
+  }
+  return out;
 }
 
 // ── drawing ────────────────────────────────────────────────────────────────
