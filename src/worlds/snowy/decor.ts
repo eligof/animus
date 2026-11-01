@@ -291,18 +291,21 @@ const skylight: PropArt = {
     const pen = k.pen;
     pen.save();
     pen.globalCompositeOperation = 'screen';
-    const g = pen.createLinearGradient(0, ty, 0, by);
-    g.addColorStop(0, withAlpha(sky, 0));
-    g.addColorStop(0.55, withAlpha(sky, 0.15));
-    g.addColorStop(1, withAlpha(sky, lampsOn(v) ? 0.33 : 0.45));
-    pen.beginPath();
-    pen.moveTo(bx - w * 0.7, ty);
-    pen.lineTo(bx + w * 0.7, ty);
-    pen.lineTo(bx + w, by);
-    pen.lineTo(bx - w, by);
-    pen.closePath();
-    pen.fillStyle = g;
-    pen.fill();
+    // (three nested columns, the outer ones fainter, so its sides are soft)
+    for (const f of [1, 0.7, 0.4]) {
+      const g = pen.createLinearGradient(0, ty, 0, by);
+      g.addColorStop(0, withAlpha(sky, 0));
+      g.addColorStop(0.55, withAlpha(sky, 0.05));
+      g.addColorStop(1, withAlpha(sky, lampsOn(v) ? 0.11 : 0.15));
+      pen.beginPath();
+      pen.moveTo(bx - w * 0.7 * f, ty);
+      pen.lineTo(bx + w * 0.7 * f, ty);
+      pen.lineTo(bx + w * f, by);
+      pen.lineTo(bx - w * f, by);
+      pen.closePath();
+      pen.fillStyle = g;
+      pen.fill();
+    }
     pen.restore();
     // the heap
     k.shadow(c, c, 2.8, 2.6, 0.18);

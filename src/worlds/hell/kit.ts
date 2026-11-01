@@ -237,7 +237,7 @@ export class Kit {
   }
 
   // A pool of light lying on a level plane, ru x rv units.
-  pool(cu: number, cv: number, ru: number, rv: number, color: Color, a: number, z = 0, op: 'screen' | 'lighter' = 'screen'): void {
+  pool(cu: number, cv: number, ru: number, rv: number, color: Color, a: number, z = 0, op: 'screen' | 'lighter' | 'source-over' = 'screen'): void {
     const [cx, cy] = this.p(cu, cv, z);
     const pen = this.pen;
     pen.save();
