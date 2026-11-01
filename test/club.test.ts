@@ -8,7 +8,8 @@ import { hashString } from '../src/world/rng.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { club } from '../src/worlds/club.ts';
 import { DECOR_ART } from '../src/worlds/club/decor.ts';
-import { TILE, planFor } from '../src/worlds/club/plan.ts';
+import { STRIP, TILE, TRUSS, muralSpan, planFor } from '../src/worlds/club/plan.ts';
+import { rig } from '../src/worlds/club/walls.ts';
 import type { PropArt } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
@@ -125,7 +126,7 @@ test('club stations: worked ones give off notes and sparkle; the fog machine bre
   assert.ok(fog.length >= 3 && fog.every((p) => p.kind === 'smoke'), 'the fog machine puffs smoke');
 });
 
-test('club room: the shell knows the stage furniture, keeps its walls off the stations and lays a clear dance floor', () => {
+test('club room: the shell knows the stage furniture, keeps its walls off the stations, hangs its signs clear and lays a clear dance floor', () => {
   for (const [w, h] of [[375, 220], [300, 165], [200, 120], [160, 110], [600, 400]]) {
     const L = planLayout(w, h, 'club');
     const plan = planFor(L.W, L.D, L.H, L.T);
@@ -134,6 +135,22 @@ test('club room: the shell knows the stage furniture, keeps its walls off the st
     const room = planRoom(club, L, hashString(club.id));
     assert.deepEqual(plan.decor.map(footprint), room.props.filter((p) => !p.slot).map(footprint), `${L.W}: the shell's furniture is not the stage's`);
     assert.ok(plan.features.some((f) => f.kind === 'bay' && f.sign >= 0), `${L.W}: no neon signs`);
+    const signs = [...plan.features, ...plan.over].filter((f) => f.kind === 'bay' && f.sign >= 0);
+    assert.ok(signs.length >= 4 && signs.length <= 8, `${L.W}: ${signs.length} neon signs`);
+    assert.equal(new Set(signs.map((f) => f.sign)).size, signs.length, `${L.W}: a sign twice`);
+    // a sign over a station or furniture hangs clear of its top, on its wall
+    for (const f of plan.over) {
+      const end = f.wall === 'right' ? L.W : L.D;
+      assert.ok(f.a - f.w / 2 >= L.T && f.a + f.w / 2 <= end, `${L.W}: a sign over something off its wall`);
+      const foot = plan.sign.z - (f.r ?? plan.sign.r);
+      const under = [...slotsOn(L, f.wall), ...room.props.filter((p) => !p.slot && !p.island && p.wall === f.wall)];
+      for (const q of under) {
+        const [a0, a1] = f.wall === 'right' ? [q.x0, q.x0 + q.len] : [q.y0, q.y0 + q.len];
+        if (a1 <= f.a - f.w / 2 || a0 >= f.a + f.w / 2) continue;
+        const h = 'art' in q ? q.art.height : club.stations[q.kind].height;
+        assert.ok(h <= foot - 2, `${L.W}: a sign at ${f.a} hangs ${foot - h} over what stands under it`);
+      }
+    }
     for (const f of plan.features) {
       const end = f.wall === 'right' ? L.W : L.D;
       assert.ok(f.a - f.w / 2 >= L.T && f.a + f.w / 2 <= end, `${L.W}: ${f.kind} off its wall`);
@@ -161,6 +178,22 @@ test('club room: the shell knows the stage furniture, keeps its walls off the st
   const fs = planFor(big.W, big.D, big.H, big.T).features;
   assert.equal(fs.filter((f) => f.kind === 'mural').length, 1, 'no mural');
   assert.equal(fs.filter((f) => f.kind === 'exit').length, 1, 'no fire exit');
+  // on a wall too low to hang it under the strip, the mural goes up over
+  // it, with no light hung in front of it (nor of a sign)
+  const mid = planLayout(184, 134, 'club'); // a 100 x 30 terminal's room
+  const plan = planFor(mid.W, mid.D, mid.H, mid.T);
+  const m = plan.features.find((f) => f.kind === 'mural');
+  assert.ok(m, 'no mural in the middling room');
+  const [z0, z1] = muralSpan(mid.H);
+  assert.ok(z0 > STRIP && z1 < mid.H - TRUSS - 1 && z1 - z0 >= 8, `the mural hangs at ${z0}..${z1}`);
+  const end = m.wall === 'right' ? mid.W : mid.D;
+  assert.ok(!rig(plan, m.wall, mid.T, end).some((c) => Math.abs(c.a - 1.9 - m.a) < m.w / 2), 'a light hangs in front of the mural');
+  for (const f of [...plan.features, ...plan.over].filter((g) => g.kind === 'bay' && g.sign >= 0)) {
+    const r = f.r ?? plan.sign.r;
+    const cans = rig(plan, f.wall, mid.T, f.wall === 'right' ? mid.W : mid.D);
+    assert.ok(!cans.some((c) => Math.abs(c.a - 1.9 - f.a) < r), `a light hangs in front of the sign at ${f.a}`);
+    assert.ok(cans.some((c) => c.head), `no moving head left on the ${f.wall} wall`);
+  }
 });
 
 test('club room: the shell draws inside the canvas, the ball turns, and it all stays in budget', () => {
