@@ -23,7 +23,7 @@ import type { NavGrid } from '../src/world/path.ts';
 import type { PlacedProp, Room } from '../src/world/room.ts';
 import type { Particle } from '../src/world/types.ts';
 import { World } from '../src/world/world.ts';
-import type { PropArt, WorldDef } from '../src/worlds/types.ts';
+import type { PropArt, RoomView, WorldDef } from '../src/worlds/types.ts';
 import { toWorld } from '../src/world/room.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { blink, looped } from './desk-fakes.ts';
@@ -772,4 +772,29 @@ test("a room's floor loop (RoomArt.floor): drawn under the figures, a picture a 
   assert.deepEqual(floorOf(b).map((l) => l.pic.key), floorOf(a).map((l) => l.pic.key), 'a new picture for the same step');
   for (let k = 0; k < 3 * CYCLE; k++) at(k / AMBIENT_FPS);
   assert.ok(drawn - n <= 2 * CYCLE, `drawn ${drawn - n} times more`);
+});
+
+test("the floor loop and the overlay are measured whole, the room's left half too, whatever the art leaves out off its pen", () => {
+  // a stroke across the floor's left half (x < y: left of the back corner,
+  // where world pixels run negative), skipped, as a world's Kit.seen
+  // skips, when its box falls outside the pen it is given
+  const stroke = (color: string, z: number) => (v: RoomView) => {
+    const a = v.at(8, 36, z);
+    const b = v.at(8, 54, z);
+    if (Math.max(a[0], b[0]) < 0 || Math.min(a[0], b[0]) > v.pen.width || Math.max(a[1], b[1]) < 0 || Math.min(a[1], b[1]) > v.pen.height) return;
+    v.pen.beginPath();
+    v.pen.moveTo(a[0], a[1]);
+    v.pen.lineTo(b[0], b[1]);
+    v.pen.strokeStyle = color;
+    v.pen.lineWidth = 6;
+    v.pen.lineCap = 'butt';
+    v.pen.stroke();
+  };
+  const w: WorldDef = { ...world, room: { ...world.room, floor: stroke('#00ff00', 0), overlay: stroke('#ff00ff', 6) } };
+  const c = composite(new Scene().plate(frame(room([]), { world: w })));
+  const on = (x: number, y: number, z: number): [number, number] => [D * S + 20 + (x - y) * S, H * S + 20 + ((x + y) * S) / 2 - z * S];
+  for (const y of [38, 45, 52]) {
+    assert.deepEqual(px(c, ...on(8, y, 0)), [0, 255, 0], `the floor loop's stroke missing at y ${y}`);
+    assert.deepEqual(px(c, ...on(8, y, 6)), [255, 0, 255], `the overlay's stroke missing at y ${y}`);
+  }
 });

@@ -243,9 +243,10 @@ export type RoomView = {
 
 // `draw` paints the static shell once; `overlay`, when given, paints over
 // the finished frame every frame (rain on the windows, a flicker);
-// `floor`, when given, paints what moves on the floor itself, under
-// everyone and everything standing on it (a dance floor's tiles lighting
-// up): as a loop of two seconds (the scene's CYCLE of ambient steps), each
+// `floor`, when given, paints what moves in the shell itself (on the floor
+// or the walls' faces), under everyone and everything standing there (a
+// dance floor's tiles lighting up, light thrown on a wall): as a loop of
+// two seconds (the scene's CYCLE of ambient steps), each
 // step drawn once at t = step / AMBIENT_FPS and kept, so only its first
 // loop costs pixels; keep it to a small patch. `lights` names the light its
 // shell gives (see RoomLight), asked once a room.
