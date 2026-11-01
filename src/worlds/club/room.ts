@@ -242,8 +242,18 @@ export function danceFloor(k: Kit, d: Dance): void {
   pen.lineWidth = Math.max(0.7, 0.12 * k.s);
   pen.lineCap = 'round';
   pen.stroke();
-  // the bloom over it all
+  // the bloom over it all, and the mirror ball's light thrown down on it in
+  // a ring of flecks
   k.pool(cx, cy, size * 0.62, size * 0.62, '#ff8ad8', 0.22, zt);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + hash(i, 48) * 0.5;
+    const rr = size * (0.26 + hash(i, 49) * 0.14);
+    const e = k.ell(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, zt + 0.01, 0.3);
+    pen.beginPath();
+    pen.ellipse(e.cx, e.cy, e.rx, e.ry, e.rot, 0, Math.PI * 2);
+    pen.fillStyle = '#ffffff59';
+    pen.fill();
+  }
   k.line([[x0 - 0.7, y1 + 0.7, z], [x1 + 0.7, y1 + 0.7, z], [x1 + 0.7, y0 - 0.7, z]], C.cyan, Math.max(1, 0.16 * k.s));
 }
 
@@ -343,19 +353,19 @@ function shell(k: Kit, v: RoomView): void {
 
 // ── per frame, over everyone's heads ─────────────────────────────────────────
 
-// Where the mirror ball hangs (world units) and how big it is: high, at
-// the truss's height, so it hangs over the room rather than sitting on
-// whatever stands under it.
+// Where the mirror ball hangs (world units) and how big it is: high, its
+// top 1.5 under the walls' tops, up in the dark over the furniture, so it
+// hangs over the room rather than sitting on whatever stands behind it.
 export function ballAt(plan: Plan): { x: number; y: number; z: number; r: number } {
   const { L } = plan;
   const d = plan.dance;
   const x = d ? d.x0 + (d.n * TILE) / 2 : L.T + (L.W - L.T) * 0.55;
   const y = d ? d.y0 + (d.n * TILE) / 2 : L.T + (L.D - L.T) * 0.55;
   const r = Math.max(2.2, Math.min(4.8, L.H / 15));
-  return { x, y, z: Math.max(22, Math.min(40, L.H - TRUSS - r * 0.4)), r };
+  return { x, y, z: Math.max(22, Math.min(40, L.H - 1.5 - r)), r };
 }
 
-// The mirror ball: a chain up to the walls' tops and on into the dark, a
+// The mirror ball: a solid chain up past the walls' tops into the dark, a
 // sphere of tiny mirrors turning, each catching the light as it comes
 // round.
 function ball(k: Kit, v: RoomView, plan: Plan): void {
@@ -363,12 +373,12 @@ function ball(k: Kit, v: RoomView, plan: Plan): void {
   const { pen, s } = k;
   const [cx, cy] = k.p(b.x, b.y, b.z);
   const R = b.r * s;
-  const hook = Math.max(b.z + b.r + 3, v.H - 0.5);
+  const hook = Math.max(b.z + b.r + 3, v.H + 2);
   const [rx, ry] = k.p(b.x, b.y, hook);
-  const [tx, ty] = k.p(b.x, b.y, hook + 5);
+  const [tx, ty] = k.p(b.x, b.y, hook + 2);
   const g = pen.createLinearGradient(tx, ty, rx, ry);
-  g.addColorStop(0, '#8e8aa300');
-  g.addColorStop(1, '#8e8aa3');
+  g.addColorStop(0, '#b9b4cf00');
+  g.addColorStop(1, '#b9b4cf');
   pen.lineCap = 'round';
   pen.beginPath();
   pen.moveTo(tx, ty);
@@ -381,10 +391,10 @@ function ball(k: Kit, v: RoomView, plan: Plan): void {
   pen.moveTo(rx, ry);
   pen.lineTo(cx, cy - R);
   pen.strokeStyle = INK;
-  pen.lineWidth = Math.max(1.6, 0.34 * s);
+  pen.lineWidth = Math.max(2.4, 0.34 * s);
   pen.stroke();
-  pen.strokeStyle = '#8e8aa3';
-  pen.lineWidth = Math.max(1, 0.18 * s);
+  pen.strokeStyle = '#b9b4cf';
+  pen.lineWidth = Math.max(1.5, 0.18 * s);
   pen.stroke();
   const link = Math.max(3, 0.7 * s);
   pen.beginPath();

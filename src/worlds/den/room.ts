@@ -249,7 +249,7 @@ export const room: RoomArt = {
     const out: RoomLight[] = [];
     for (const f of planFor(v.W, v.D, v.H, v.T).features) {
       const m = (f.z0 + f.z1) / 2;
-      if (f.kind === 'rainwall') for (const du of [-1, 0, 1]) out.push({ kind: 'screen', wall: f.wall, u: f.a + (du * f.w) / 3, v: 0.8, z: m, color: C.green, r: 9, strength: 0.6, halo: 3.6 });
+      if (f.kind === 'rainwall') for (const du of [-1, 0, 1]) out.push({ kind: 'screen', wall: f.wall, u: f.a + (du * f.w) / 3, v: 0.8, z: m, color: C.green, r: 13, strength: 0.6, halo: 3.6 });
       else if (f.kind === 'screens') out.push({ kind: 'screen', wall: f.wall, u: f.a, v: 1.3, z: f.z0 + 2.5, color: C.green, r: 7, strength: 0.5, halo: 2.6 });
       else if (f.kind === 'neon') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: m, color: neonColor(f.k), r: 7, strength: 0.6, halo: 2.6 });
       else if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w, z0: f.z0, z1: f.z1, bars: 3, color: C.moon, strength: 0.25, night: '#9fb6ee', moon: 0.7 });
@@ -263,7 +263,7 @@ export const room: RoomArt = {
 // Carpet tiles laid quarter-turned (two tones in a checker, a little
 // variation within each) and the odd replacement in another dye lot: dark,
 // a step under the walls, so the screens' light is what shows on it.
-const CARPET = ['#283130', '#2b3433', '#262f2e', '#293231', '#283136', '#302e29'];
+const CARPET = ['#222a29', '#252d2c', '#202827', '#232b2a', '#222a2f', '#2a2823'];
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen } = k;
@@ -442,7 +442,7 @@ function roundRug(k: Kit, cu: number, cv: number, r: number): void {
 
 // The block's paint from the band up: dark, a little lighter at eye level,
 // falling off into the dark at the top.
-const BLOCKS: ReadonlyArray<readonly [number, Color]> = [[0, '#2c3a37'], [0.35, '#344542'], [0.8, '#2d3c39'], [1, '#1f2a28']];
+const BLOCKS: ReadonlyArray<readonly [number, Color]> = [[0, '#354541'], [0.35, '#3e504b'], [0.8, '#364743'], [1, '#26322f']];
 
 function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const { pen, s } = k;
