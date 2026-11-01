@@ -307,10 +307,11 @@ test('the light pass costs little on a base tile', () => {
   const rig = rigOf(w, r, true);
   const k = tuneOf(w);
   // a tile where the corner, both walls and the floor meet, at the café's
-  // scale at zoom 2
+  // scale at zoom 2; about 1.5 ms alone, the rest is room for a machine
+  // busy with the other test files
   const s = 19;
   budget('the shell pass and the lights on a tile', () => {
     shellLight(tile, L, [], [40, 30, 20], s, 128, 200, k);
     paintLights(tile, L, rig, s, 128, 200, k.pools);
-  }, 3, { runs: 5 });
+  }, 5, { runs: 10 });
 });
