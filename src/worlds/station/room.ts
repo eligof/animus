@@ -166,6 +166,18 @@ export function viewport(f: Feature, H: number): { a0: number; a1: number; z0: n
   return { a0, a1, z0: gz0, z1: gz1, pa: f.a + (a1 - a0) * 0.12, pz: gz0 + (gz1 - gz0) * 0.52, pr };
 }
 
+// What the planner keeps decor off: the viewport, the room's focal point,
+// and the floor its planet light falls on (the patch is thrown from the
+// upper left: along x by z/1.6 and along y by z/3.2, so it runs out
+// further from the left wall than from the right).
+export function stationReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number }> {
+  const f = planFor(L.W, L.D, L.H, L.T).features.find((g) => g.kind === 'viewport');
+  if (!f) return [];
+  const g = viewport(f, L.H);
+  const [along, out] = f.wall === 'right' ? [g.z1 / 1.6, g.z1 / 3.2] : [g.z1 / 3.2, g.z1 / 1.6];
+  return [{ wall: f.wall, a0: g.a0 - 1, a1: g.a1 + along, out: Math.min(16, out + 2), z: 0 }];
+}
+
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots, but warm by the reactor rather than round the sleep
 // pods, a look out of the viewport and a couple of the portholes.
