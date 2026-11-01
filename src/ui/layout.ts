@@ -4,7 +4,10 @@ export type Layout = { header: Rect; scene: Rect; roster: Rect | null; footer: R
 
 export const MIN_COLS = 60;
 export const MIN_ROWS = 20;
+// The crew sits down the left: it is the index you read first, the room
+// the thing it indexes (master, then detail, as in lazygit or k9s).
 const ROSTER_W = 28;
+const ROSTER_WIDE = 30;
 const ROSTER_MIN_COLS = 110;
 
 // `full`: the scene takes the whole terminal (no header, roster or footer).
@@ -20,10 +23,11 @@ export function computeLayout(cols: number, rows: number, full = false): Layout 
     };
   }
   const bodyH = Math.max(0, rows - 3);
-  const roster = cols >= ROSTER_MIN_COLS ? { x: cols - ROSTER_W, y: 1, w: ROSTER_W, h: bodyH } : null;
+  const rw = cols >= 150 ? ROSTER_WIDE : ROSTER_W;
+  const roster = cols >= ROSTER_MIN_COLS ? { x: 0, y: 1, w: rw, h: bodyH } : null;
   return {
     header: { x: 0, y: 0, w: cols, h: 1 },
-    scene: { x: 0, y: 1, w: roster ? cols - ROSTER_W : cols, h: bodyH },
+    scene: { x: roster ? rw : 0, y: 1, w: roster ? cols - rw : cols, h: bodyH },
     roster,
     footer: { x: 0, y: Math.max(0, rows - 2), w: cols, h: 2 },
     tooSmall,

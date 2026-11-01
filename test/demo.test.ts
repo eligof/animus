@@ -26,6 +26,25 @@ test('crew forms within 30 seconds', () => {
   assert.ok(sub.agentType);
 });
 
+test('a waiting demo lead says it is your turn; a question asks you; nothing else needs you', () => {
+  const src = new DemoSource(7, START);
+  const frames = simulate(src, 300);
+  let turns = 0;
+  let asks = 0;
+  for (const a of frames.flat()) {
+    if (a.role === 'lead' && a.activity === 'idle') {
+      assert.equal(a.needs, 'turn');
+      turns++;
+    } else if (a.activity === 'talk' && a.detail.endsWith('?')) {
+      assert.equal(a.needs, 'input');
+      asks++;
+    } else assert.equal(a.needs, undefined, `${a.name} ${a.activity} ${a.detail}`);
+  }
+  assert.ok(turns > 0 && asks > 0, `turns ${turns}, asks ${asks}`);
+  // The events carry it, for the log.
+  assert.ok(src.drainEvents().some((e) => e.needs === 'turn'));
+});
+
 test('same seed and clock give identical output', () => {
   const a = simulate(new DemoSource(42, START), 20);
   const b = simulate(new DemoSource(42, START), 20);

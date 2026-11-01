@@ -104,9 +104,16 @@ export type AgentInfo = {
   // Its role's level in its crew (★N, see pet/crew.ts), as the World
   // knows it; sources leave it out.
   level?: number;
+  // What it waits on you for, if anything: an answer or a permission
+  // ('input'), a plan to approve ('plan'), or, a lead whose turn ended,
+  // your next message ('turn'). Set by the sources, which know; the chrome
+  // reads it rather than matching words in `detail`.
+  needs?: Needs;
 };
 
-export type AgentEvent = { at: number; agentId: string; name: string; activity: Activity; detail: string };
+export type Needs = 'input' | 'plan' | 'turn';
+
+export type AgentEvent = { at: number; agentId: string; name: string; activity: Activity; detail: string; needs?: Needs };
 
 export interface AgentSource {
   readonly label: string;
@@ -132,8 +139,10 @@ export function diffEvents(prev: Map<string, AgentInfo>, next: AgentInfo[], at: 
   const events: AgentEvent[] = [];
   for (const a of next) {
     const p = prev.get(a.id);
-    if (!p || p.activity !== a.activity || p.detail !== a.detail) {
-      events.push({ at, agentId: a.id, name: a.name, activity: a.activity, detail: a.detail });
+    if (!p || p.activity !== a.activity || p.detail !== a.detail || p.needs !== a.needs) {
+      const e: AgentEvent = { at, agentId: a.id, name: a.name, activity: a.activity, detail: a.detail };
+      if (a.needs) e.needs = a.needs;
+      events.push(e);
     }
   }
   return events;

@@ -48,7 +48,7 @@ test('demo world renders at several sizes', () => {
     const s = new Screen(c, r);
     w.draw(s, now);
     const text = s.toText();
-    if (c >= 60 && r >= 20) assert.match(text, /ANIMUS/);
+    if (c >= 60 && r >= 20) assert.match(text, /◆ animus/);
     else assert.match(text, /60.20/);
   }
 });
@@ -141,9 +141,10 @@ test('in the scene view the crew is in the frame, the scene cells blank for the 
   const f = w.scene();
   assert.ok(f, 'no frame');
   assert.ok(f.figures.some((g) => g.id === 'demo-atlas'), 'the demo lead is not in the frame');
-  assert.deepEqual(f.camera.cells, { x: 0, y: 1, w: 92, h: 33 });
+  // The crew bar takes the first 28 columns; the room the rest.
+  assert.deepEqual(f.camera.cells, { x: 28, y: 1, w: 92, h: 33 });
   let blank = 0;
-  for (let y = 1; y < 34; y++) for (let x = 0; x < 92; x++) if (s.bg[y * 120 + x] === DEFAULT) blank++;
+  for (let y = 1; y < 34; y++) for (let x = 28; x < 120; x++) if (s.bg[y * 120 + x] === DEFAULT) blank++;
   assert.equal(blank, 92 * 33, 'scene cells not left for the image');
   assert.ok(f.labels.length > 0);
   const text = s.toText();
@@ -159,8 +160,9 @@ test('the dashboard view (no images) has no frame and fills the body with agent 
   assert.equal(w.scene(), null);
   const text = s.toText();
   assert.match(text, /lead · /);
-  // The cards repeat the roster, so it gives way to them.
-  assert.doesNotMatch(text, /CREW/);
+  // The cards repeat the crew bar, so it gives way to them: the cards
+  // start at the left edge.
+  assert.ok(text.split('\n').slice(1, 34).some((l) => /^ ?╭/.test(l)), 'the cards take the bar\'s columns');
 });
 
 test('in the dashboard tab selects the first card', () => {
@@ -219,15 +221,28 @@ test('a failing live source never breaks the world', () => {
   assert.match(s.toText(), /lead/);
 });
 
-test('without a roster the footer shows the selected agent', () => {
-  const w = demoWorld();
+test('without a crew bar the log row pins what needs you, the same as the header says', () => {
+  const w = demoWorld(true);
   w.resize(100, 30);
-  const now = advance(w, 20);
-  w.handleKey(key('\t'));
   const s = new Screen(100, 30);
+  let now = START;
+  let head = '';
+  // The demo's leads wait for you every minute or two.
+  for (let t = 0; t < 240 && !/need/.test(head); t++) {
+    now = advance(w, 1, now);
+    w.draw(s, now);
+    head = s.toText().split('\n')[0];
+  }
+  assert.match(head, /(\d+) needs? you/, head);
+  const n = Number(head.match(/(\d+) needs? you/)![1]) + Number(head.match(/(\d+) failing/)?.[1] ?? 0);
+  const row = s.toText().split('\n')[28];
+  assert.match(row, /^ {2}needs you {3}[✖▲◆] /, row);
+  const shown = row.match(/[✖▲◆] /g)!.length + Number(row.match(/\+(\d+)/)?.[1] ?? 0);
+  assert.equal(shown, n, row);
+  // Picking an agent does not take the row: it means one thing.
+  w.handleKey(key('\t'));
   w.draw(s, now);
-  const ticker = s.toText().split('\n')[28];
-  assert.match(ticker, /^ ▸ /, ticker);
+  assert.match(s.toText().split('\n')[28], /^ {2}needs you /);
 });
 
 test('picker: moving previews without committing, esc cancels, enter commits', { skip: THEMES.length < 3 && 'needs three themes' }, () => {
@@ -371,15 +386,15 @@ test('f gives the whole terminal to the scene and back', () => {
   const now = advance(w, 2);
   const s = new Screen(120, 36);
   w.draw(s, now);
-  assert.match(s.toText().split('\n')[0], /ANIMUS/);
+  assert.match(s.toText().split('\n')[0], /◆ animus/);
   w.handleKey(key('f'));
   w.draw(s, now + 50);
   const text = s.toText();
-  assert.doesNotMatch(text.split('\n')[0], /ANIMUS/);
-  assert.doesNotMatch(text, /CREW/);
+  assert.doesNotMatch(text.split('\n')[0], /◆ animus/);
+  assert.doesNotMatch(text.split('\n').at(-1)!, /pick an agent|quit/);
   w.handleKey(key('f'));
   w.draw(s, now + 100);
-  assert.match(s.toText().split('\n')[0], /ANIMUS/);
+  assert.match(s.toText().split('\n')[0], /◆ animus/);
 });
 
 test('a passing tip shows in the ticker row, then goes', () => {
@@ -623,8 +638,20 @@ test('enter grows the card into the chat; esc leaves the input, esc again goes b
   w.draw(s, now);
   text = s.toText();
   assert.match(text, /context\s+[━─]/, 'back to the card');
-  assert.match(text, /\[⏎\]talk/);
+  // Its keys are on the bottom row, not on the card twice.
+  assert.match(text.split('\n').at(-1)!, /enter talk +c cheer +tab next/);
+  assert.doesNotMatch(text, /\[⏎\]talk/);
   assert.ok(w.selectedId, 'the selection stays');
+});
+
+test('full screen has no bottom row, so the card keeps its keys', () => {
+  const { w, now } = sceneWorld();
+  w.handleKey(key('\t'));
+  w.handleKey(key('f'));
+  const s = new Screen(120, 36);
+  w.draw(s, now);
+  assert.match(s.toText(), /context\s+[━─]/);
+  assert.match(s.toText(), /\[⏎\]talk {2}\[c\]heer/);
 });
 
 test('while the input has focus every key types: q, t, digits and the rest never reach the app', () => {
@@ -938,14 +965,14 @@ test('while the chat input has focus the footer lists its keys, not the app keys
     w.draw(s, now);
     return s.toText().split('\n').at(-1)!;
   };
-  assert.match(footer(), /t +theme.*q +quit/);
+  assert.match(footer(), /tab pick an agent.*q quit/);
   w.handleKey(key('\t'));
   w.handleKey(key('\r'));
   const f = footer();
-  assert.match(f, /⏎ +send +esc +log +ctrl-c +quit/);
-  assert.doesNotMatch(f, /theme|pause|\bq +quit/);
+  assert.match(f, /enter send +esc stop typing +↑↓ scroll +ctrl-c quit/);
+  assert.doesNotMatch(f, /worlds|pause|\bq quit/);
   w.handleKey(key('\x1b')); // to the log: the app keys work again
-  assert.match(footer(), /t +theme.*q +quit/);
+  assert.match(footer(), /enter write.*esc close.*q quit/);
 });
 
 test('a send that fails puts its text back in an empty input to try again; a draft begun since stays', async () => {

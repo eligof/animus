@@ -24,6 +24,9 @@ import { activityGlyph, elapsed } from './chrome.ts';
 //   │ health  ━━━━━━━━━━   ok   mood ▲12       │
 //   │ opus 5.5 · 9m on task · 3 subagents      │
 //   ╰─ [⏎]talk  [c]heer  [tab] next  [esc] ────╯
+//
+// The keys on its bottom edge show only where no bottom row lists them
+// (full screen); elsewhere the edge is plain.
 
 export const CARD_W = 44;
 export const CARD_H = 8;
@@ -56,6 +59,9 @@ export type CardOpts = {
   color: RGB; // the agent's own colour
   palette: Palette;
   now: number;
+  // Its keys on its bottom edge (talk, cheer, next, close): for when
+  // nothing else on screen lists them (default on).
+  keys?: boolean;
 };
 
 // 'claude-opus-5-5' → 'opus 5.5' (a date suffix dropped); anything else as is.
@@ -248,7 +254,7 @@ export function drawCard(s: Screen, scene: Rect, o: CardOpts, box: Box | null, p
     const facts = [v.model ? modelName(v.model) : 'model ?', onTask, o.subs ? `${o.subs} subagent${o.subs === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     s.text(cx, y + 6, fit(facts, INNER_W), dim, bg, 0, end);
   }
-  // Bottom edge: the keys.
-  s.text(cx, y + CARD_H - 1, ' [⏎]talk  [c]heer  [tab] next  [esc] ', dim, bg, 0, end);
+  // Bottom edge: the keys, unless the bottom row already lists them.
+  if (o.keys !== false) s.text(cx, y + CARD_H - 1, ' [⏎]talk  [c]heer  [tab] next  [esc] ', dim, bg, 0, end);
   return at;
 }
