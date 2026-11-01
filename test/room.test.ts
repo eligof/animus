@@ -256,7 +256,7 @@ test('a world that plans the room to place what it keeps clear is not asked agai
   const L = square(143, 'mines');
   const room = planRoom(world, L, hashString('mines'));
   assert.equal(asked, 1);
-  assert.deepEqual(inner.map(footprint), planRoom({ ...mines }, L, hashString('mines')).props.map(footprint), 'the room planned meanwhile kept something clear');
+  assert.deepEqual(inner.map(footprint), planRoom({ ...mines, reserve: undefined }, L, hashString('mines')).props.map(footprint), 'the room planned meanwhile kept something clear');
   const keep = [{ wall: 'right' as const, a0: L.T, a1: L.W, out: 12 }];
   assert.ok(decorOf(inner).some((p) => veils(L, keep, footprint(p), p.art.height)), 'nothing stood by the right wall anyway');
   for (const p of decorOf(room.props)) assert.ok(!veils(L, keep, footprint(p), p.art.height), 'decor by the kept wall');
