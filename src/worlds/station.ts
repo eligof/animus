@@ -52,5 +52,8 @@ export const station: WorldDef = {
   costume: 'astronaut',
   critter: { kind: 'drone', body: hex('#d8dee6') }, // a maintenance drone
   finale: { colors: [[160, 230, 255], [240, 250, 255], [255, 210, 140]] }, // sparks drifting in low gravity
+  // no evening tint (the deck is lit as it is); the night is the station's
+  // sleep cycle: deep blue, the planet's light through the glass carrying it
+  light: { night: { tint: [50, 70, 140], strength: 0.42, figures: 0.3 } },
   build: { colors: [hex('#8f9bb0'), hex('#e2e8f0'), hex('#f08a3a'), hex('#7fe0ff')], shape: 'machine' }, // hull metal, white panels and orange trim, crowned by a screen
 };

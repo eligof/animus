@@ -1,6 +1,7 @@
 import { shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView } from '../types.ts';
 import type { Quad } from './bits.ts';
 import { arc3, band, bookRow, codeRows, crate, crown, fillPts, glass, hazard, hull, leaf, mug, on, ring, rivets, sprouts, stool, sub, wallRing } from './bits.ts';
@@ -41,6 +42,7 @@ const KEYS: ReadonlyArray<readonly [number, number, Color]> = (() => {
 })();
 
 const write: PropArt = {
+  light: [{ kind: 'screen', u: 5.5, v: 2.8, z: 7, color: '#8fe6ff', r: 8, halo: 0 }],
   len: 11,
   dep: 7,
   height: 12,
@@ -166,6 +168,7 @@ function chair(k: Kit, cu: number, cv: number): void {
 const SHELF_Z = [1.2, 5.6, 10.0, 14.4, 18.4];
 
 const read: PropArt = {
+  light: [{ kind: 'lamp', u: 12.4, v: 1.7, z: 7.9, color: '#ffd890', r: 9, halo: 1.4 }],
   len: 14,
   dep: 4,
   height: 21,
@@ -218,12 +221,13 @@ const read: PropArt = {
       k.disc(13.0, 1.0, 5.17, 0.45, C.steelDark, k.thin);
       k.rod([[13.0, 1.0, 5.2], [13.0, 1.0, 7.6], [12.6, 1.4, 8.4]], C.steelDark, 0.14);
     });
-    // the lamp's head, lit or not, and the tablet
+    // the lamp's head, lit while the lights are on (its light is declared),
+    // and the tablet, lit while someone reads
     const on_ = v.active;
     const [hx, hy] = k.p(12.4, 1.6, 8.2);
     k.pen.beginPath();
     k.pen.ellipse(hx, hy, 0.75 * k.s, 0.45 * k.s, -0.3, 0, Math.PI * 2);
-    k.paint(on_ ? '#fff1cf' : C.orange, k.thin);
+    k.paint(lampsOn(v) ? '#fff1cf' : C.orange, k.thin);
     k.poly([[11.1, 1.65, 5.3], [12.3, 1.65, 5.3], [12.3, 2.55, 5.3], [11.1, 2.55, 5.3]], on_ ? '#bff3ff' : C.screenDark, 0);
     if (!on_) {
       // the book lies on the table
@@ -257,6 +261,7 @@ const read: PropArt = {
 const SCOPE = { a: 3.4, z: 9.2, r: 2.5, n: 0.55 };
 
 const search: PropArt = {
+  light: [{ kind: 'screen', u: 6, v: 2.5, z: 7, color: '#8fe6ff', r: 7, halo: 0 }],
   len: 12,
   dep: 4,
   height: 13,
@@ -377,6 +382,7 @@ function loop(k: Kit, a: number, col: Color): void {
 }
 
 const run: PropArt = {
+  light: [{ kind: 'glow', u: CORE.c, v: CORE.c, z: 9, color: '#5ce8ff', r: 13, halo: 0 }],
   len: 11,
   dep: 11,
   height: 20,
@@ -516,6 +522,7 @@ const PANEL = { u0: 4.0, u1: 8.2, v: 0.3, z0: 6.0, z1: 9.6 };
 const DISH = { c: [MAST.u, MAST.v, 15.4] as P3, r: 2.4 };
 
 const web: PropArt = {
+  light: [{ kind: 'screen', u: 4.5, v: 3, z: 8, color: '#8fe6ff', r: 7, halo: 0 }],
   len: 9,
   dep: 9,
   height: 19,
@@ -629,6 +636,7 @@ const web: PropArt = {
 const HOLO = { u: 6, v: 3.5, z: 9.8, r: 2.4 };
 
 const think: PropArt = {
+  light: [{ kind: 'glow', u: 6, v: 3.5, z: 7, color: '#8ff6ff', r: 9, strength: 0.8, halo: 0 }],
   len: 12,
   dep: 7,
   height: 13,
@@ -740,6 +748,7 @@ const think: PropArt = {
 // curl up.
 
 const idle: PropArt = {
+  light: [{ kind: 'glow', u: 5.4, v: 5, z: 7, color: '#ffc77a', r: 10, strength: 0.7, halo: 0 }],
   len: 15,
   dep: 11,
   height: 11,

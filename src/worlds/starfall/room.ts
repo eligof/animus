@@ -4,7 +4,8 @@ import type { Color } from '../../art/types.ts';
 import { hub, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois, footprint } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import type { Quad } from './bits.ts';
 import { bulbPlant, coneTree, fillPts, frondPlant, hull, mapOn, mushroom, pips, puffPlant, rflat, rivets, rrect } from './bits.ts';
 import type { P3 } from './kit.ts';
@@ -239,6 +240,12 @@ export function starfallPois(L: Layout): Poi[] {
   return out.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) }));
 }
 
+// What the planner keeps decor from hiding: the terrariums on the working
+// wall (they stand on the ledge, so only what reaches over its foot).
+export function starfallReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number }> {
+  return planFor(L.W, L.D, L.H, L.T).features.filter((f) => f.kind === 'terrarium').map((f) => ({ wall: f.wall, a0: f.a - f.w / 2 - 0.5, a1: f.a + f.w / 2 + 0.5, out: 7, z: TRIM + TRIM_H + 2 }));
+}
+
 // ── drawing ────────────────────────────────────────────────────────────────
 
 const wallAt = (P: At, wall: Wall, T: number): At => frame(P, wall, wall === 'right' ? 0 : T, wall === 'right' ? T : 0);
@@ -253,6 +260,7 @@ export const room: RoomArt = {
     shell(k, v);
     v.pen.restore();
   },
+  lights: starfallLights,
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     const bays = plan.features.filter((f) => f.kind === 'glass');
@@ -267,6 +275,45 @@ export const room: RoomArt = {
     v.pen.restore();
   },
 };
+
+// The room's light (see the light guide): the planet's pink day through the
+// glass bays (cut by their frame bars), weaker through the ribbon of glass
+// over the stations, and at night the violet light of its two moons; warm
+// strip lamps (out at night), the screens' and light panels' glow, and the
+// terrariums glowing teal day and night.
+function starfallLights(v: { W: number; D: number; H: number; T: number }): RoomLight[] {
+  const plan = planFor(v.W, v.D, v.H, v.T);
+  const { z0, z1 } = bayZ(v.H);
+  const out: RoomLight[] = [];
+  for (const f of plan.features) {
+    const { wall, a } = f;
+    if (f.kind === 'glass') {
+      const ow = bayW(f);
+      out.push({ kind: 'window', wall, u: a, w: ow, z0, z1, bars: Math.max(1, Math.round(ow / 9)) - 1, rails: z1 - z0 > 24 ? 1 : 0, color: '#ff9ccc', strength: 1.05, night: '#b8a8ff', moon: 0.85 });
+    } else if (f.kind === 'lamp') {
+      const l = lampZ(v.H);
+      out.push({ kind: 'lamp', wall, u: a, v: 0.6, z: (l.z0 + l.z1) / 2, color: '#ffd59a', strength: 0.7, r: 9, halo: 1.6 });
+    } else if (f.kind === 'screen') {
+      const sz = screenZ(v.H);
+      out.push({ kind: 'screen', wall, u: a, v: 0.8, z: (sz.z0 + sz.z1) / 2, color: '#7ff6ff', r: 6, halo: 0 });
+    } else if (f.kind === 'inset') {
+      const iz = insetZ(v.H);
+      out.push({ kind: 'glow', wall, u: a, v: 0.6, z: (iz.z0 + iz.z1) / 2, color: '#5f9cff', strength: 0.45, r: 6, halo: 0 });
+    } else if (f.kind === 'terrarium') {
+      const tz = terrZ(v.H);
+      out.push({ kind: 'glow', wall, u: a, v: 1.6, z: (tz.z0 + tz.z1) / 2, color: '#7ff0d8', strength: 0.9, r: 9, halo: 2.4 });
+    }
+  }
+  // the ribbon of glass over the stations: high, so it throws its light far
+  // out; kept faint
+  const { z0: sz0, z1: sz1 } = stripZ(v.H);
+  if (sz1 - sz0 >= 3) {
+    for (const [a0, a1] of stripRuns({ T: v.T, W: v.W, D: v.D, H: v.H } as RoomView, plan.features.filter((f) => f.wall === GLASS_WALL), GLASS_WALL)) {
+      out.push({ kind: 'window', wall: GLASS_WALL, u: (a0 + a1) / 2, w: a1 - a0 - 2 * SKY.frame, z0: sz0, z1: sz1, bars: Math.max(1, Math.round((a1 - a0) / 8)) - 1, color: '#ffb0d8', strength: 0.3, night: '#b8a8ff', moon: 0.35 });
+    }
+  }
+  return out;
+}
 
 // The stretch of a wall (along) the pen can see between heights z0..z1.
 function visibleAlong(k: Kit, a0: number, a1: number, z0: number, z1: number): [number, number] {
@@ -451,27 +498,9 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const mk = new Kit(pen, frame(v.at, mess.wall, mess.x0, mess.y0), s);
     if (mk.sees(-2, -2, 0, mess.len + 2, mess.dep + 2, 0)) mat(mk, MAT.u0, MAT.v0, mess.len + MAT.du, mess.dep + MAT.dv);
   }
-  // Light: cool pools of the planet's day falling in through the glass and
-  // under the lamps, the refiner's warm glow and the holo desk's.
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (f.kind === 'glass') {
-      const ow = bayW(f);
-      if (wk.sees(f.a - ow / 2 - 6, 0, 0, f.a + ow / 2 + 6, 22, 0)) {
-        wk.pool(f.a + 1.5, 9.5, ow * 0.62 + 3, 12, '#ffb3dc', 0.62);
-        wk.pool(f.a + 1, 4, ow * 0.42 + 1.5, 4.4, '#fff0fa', 0.4);
-      }
-    } else if (f.kind === 'lamp') {
-      if (wk.sees(f.a - 6, 0, 0, f.a + 6, 6, 0)) wk.pool(f.a, 3, 5, 3.5, C.amberLight, 0.22);
-    }
-  }
-  const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
-  for (const [kind, u, w, r, a, c] of [['run', 0.5, 0.55, 13, 0.3, '#ffb35c'], ['write', 0.5, 0.75, 9, 0.2, '#8ff8ff'], ['read', 0.5, 1.5, 9, 0.16, '#ff9ad6'], ['think', 0.5, 0.4, 9, 0.18, '#8ff8ff'], ['entrance', 0.5, 1.2, 8, 0.2, '#ffc04a']] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    if (qk.sees(-r, -r, 0, q.len + r, q.dep + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
+  // (The light itself, through the glass, from the lamps, screens, light
+  // panels and terrariums and at the stations, is declared: see
+  // starfallLights and the stations' light.)
   // The light strips in the seams (none over the mat or the grating): a
   // soft glow, then the bright strip.
   const onMat = (x: number, y: number) => {
@@ -903,7 +932,7 @@ function glassBay(k: Kit, v: RoomView, f: Feature, lit: boolean, sky: Sky): void
   pen.beginPath();
   k.trace(opening(a, ow, z0, z1, -DEPTH));
   pen.clip();
-  planetView(k, f, z0, z1, sky);
+  planetView(k, f, z0, z1, sky, !lampsOn(v));
   // the frame bars between the panes: posts about every nine units, a
   // transom across a tall bay
   const n = -DEPTH + 0.05;
@@ -1006,7 +1035,7 @@ function skyStrip(k: Kit, v: RoomView, wall: Wall, a0: number, a1: number, lit: 
   k.trace(open(-DEPTH));
   pen.clip();
   const n = -DEPTH;
-  planetView(k, { wall, kind: 'glass', a, w: u1 - u0 + 3, k: Math.round(a0) * 13 + 5 }, bz.z0, bz.z1, 'none');
+  planetView(k, { wall, kind: 'glass', a, w: u1 - u0 + 3, k: Math.round(a0) * 13 + 5 }, bz.z0, bz.z1, 'none', !lampsOn(v));
   const panes = Math.max(1, Math.round((u1 - u0) / 8));
   const bars: Array<[P3, P3]> = [];
   for (let i = 1; i < panes; i++) bars.push([[u0 + (i * (u1 - u0)) / panes, n + 0.05, z0 - 1], [u0 + (i * (u1 - u0)) / panes, n + 0.05, z1 + 1]]);
@@ -1044,7 +1073,10 @@ const HAZE = mix(C.hill, C.skyLow, 0.55);
 const RANGE = '#c58ad4'; // the far range, between the sky's pink and the teal hills
 const RANGE_LIT = '#e0b0e6';
 
-function planetView(k: Kit, f: Feature, z0: number, z1: number, sky: Sky): void {
+// The planet through the glass, by day or (at night) under its two moons:
+// a violet sky thick with stars, a pink glow on the horizon, the flora's
+// bulbs glowing.
+function planetView(k: Kit, f: Feature, z0: number, z1: number, sky: Sky, night = false): void {
   const { pen } = k;
   const n = -DEPTH;
   const a = f.a;
@@ -1054,18 +1086,20 @@ function planetView(k: Kit, f: Feature, z0: number, z1: number, sky: Sky): void 
   const a1 = a + half;
   const zh = z0 + (z1 - z0) * 0.3;
   const ph = f.wall === 'right' ? 0.7 : 2.9;
-  // the sky: deep pink high up, peach at the horizon
-  k.poly([[a0, n, z0], [a1, n, z0], [a1, n, z1 + 1], [a0, n, z1 + 1]], k.vgrad(a, n, zh, z1, [[0, C.skyLow], [0.45, '#ffb0c8'], [0.8, C.skyTop], [1, '#f77cbc']]), 0);
+  // the sky: deep pink high up, peach at the horizon (at night violet
+  // over a last pink glow)
+  const skyStops: ReadonlyArray<readonly [number, Color]> = night ? [[0, '#ff9cc8'], [0.3, '#a868c0'], [0.7, '#5a3c9a'], [1, '#3a2a78']] : [[0, C.skyLow], [0.45, '#ffb0c8'], [0.8, C.skyTop], [1, '#f77cbc']];
+  k.poly([[a0, n, z0], [a1, n, z0], [a1, n, z1 + 1], [a0, n, z1 + 1]], k.vgrad(a, n, zh, z1, skyStops), 0);
   // a glow low in the sky
-  k.wash(a + 2, n, zh + 1, 9, 6, '#fff2d8', 0.45);
+  k.wash(a + 2, n, zh + 1, 9, 6, night ? '#ffb0dc' : '#fff2d8', night ? 0.35 : 0.45);
   // a few faint stars in the high pink
   const stars: P3[] = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < (night ? 18 : 5); i++) {
     const sa = a0 + 0.8 + hash(f.k, i, 31) * (a1 - a0 - 1.6);
     const sz = zh + (z1 - zh) * (0.55 + hash(f.k, i, 32) * 0.4);
     if (sz < openTop(sa - a, ow, z1) - 0.6) stars.push([sa, n, sz]);
   }
-  pips(k, stars, '#fff6fbcc', 0.1, 0.6);
+  pips(k, stars, night ? '#fffaf0' : '#fff6fbcc', night ? 0.13 : 0.1, 0.6);
   // what hangs in the sky: two moons, or a ringed planet low over the hills
   const tall = (z1 - zh) / 25; // how much sky there is, against a tall room's
   // a far range of lavender peaks behind the hills, lit on their left, a
@@ -1125,13 +1159,13 @@ function planetView(k: Kit, f: Feature, z0: number, z1: number, sky: Sky): void 
   k.poly(mid, k.vgrad(a, n, zh - 1, zh + 3, [[0, shade(C.hill, -0.08)], [1, shade(C.hill, 0.12)]]), 0);
   k.line(mid.slice(1, -1), withAlpha(INK, 0.45), Math.max(0.6, k.thin * 0.6));
   // the giant flora, standing in the grass and on the hills
-  bigFlora(k, f, a0, a1, n, zh, ph, 'back', tall);
+  bigFlora(k, f, a0, a1, n, zh, ph, 'back', tall, night ? 2.2 : 1);
   const near = line(zh - 1.6, 0.7, 0.53, 1.1, ph + 2.1, z0 - 1);
   k.poly(near, k.vgrad(a, n, z0, zh, [[0, C.grassDark], [1, C.grass]]), 0);
   k.line(near.slice(1, -1), withAlpha(INK, 0.55), Math.max(0.6, k.thin * 0.7));
   // grass tufts and pebbles on the near ground
   tufts(k, f, a0, a1, n, z0, zh, ph);
-  bigFlora(k, f, a0, a1, n, zh, ph, 'front', tall);
+  bigFlora(k, f, a0, a1, n, zh, ph, 'front', tall, night ? 2.2 : 1);
   // the glass: a sheen, and shade under the top of the frame
   k.poly([[a - 3.4, n, z0], [a - 1.8, n, z0], [a + 1.6, n, z1], [a, n, z1]], '#ffffff1c', 0);
   k.poly([[a - 0.9, n, z0], [a - 0.3, n, z0], [a + 3.1, n, z1], [a + 2.5, n, z1]], '#ffffff14', 0);
@@ -1253,8 +1287,9 @@ const CONE = '#6a4f86'; // the cone trees' bark, a dusky violet
 // of ribbed cone trees on the hills and rings of red-cap mushrooms in the
 // grass, set along the wall by a fixed spacing so they carry on bay to bay.
 // 'back' ones stand on the teal hills, 'front' ones in the near grass,
-// some of them nearly as tall as the glass; `tall` scales them to the sky.
-function bigFlora(k: Kit, f: Feature, a0: number, a1: number, n: number, zh: number, ph: number, layer: 'back' | 'front', tall: number): void {
+// some of them nearly as tall as the glass; `tall` scales them to the sky,
+// `glow` the bulbs' glow (brighter at night).
+function bigFlora(k: Kit, f: Feature, a0: number, a1: number, n: number, zh: number, ph: number, layer: 'back' | 'front', tall: number, glow = 1): void {
   const front = layer === 'front';
   const SP = front ? 3.9 : 2.9;
   const salt = (f.wall === 'right' ? 51 : 52) + (front ? 10 : 0);
@@ -1283,7 +1318,7 @@ function bigFlora(k: Kit, f: Feature, a0: number, a1: number, n: number, zh: num
       mushroom(k, u - m * 1.3, n, foot + 0.9, m * 1.0, line);
       mushroom(k, u + m * 0.5, n, foot + 0.6, m * 1.45, line);
       mushroom(k, u + m * 2.0, n, foot + 1.1, m * 0.75, line);
-    } else if (kind < 0.36) bulbPlant(k, u, n, foot, h, (hash(i, salt, 6) - 0.5) * (front ? 5 : 2), r, tint(color), line, front ? 0.3 : 0.12);
+    } else if (kind < 0.36) bulbPlant(k, u, n, foot, h, (hash(i, salt, 6) - 0.5) * (front ? 5 : 2), r, tint(color), line, (front ? 0.3 : 0.12) * glow);
     else if (kind < 0.6) frondPlant(k, u, n, foot, h, hash(i, salt, 6) < 0.5 ? -1 : 1, r * 0.95, tint(C.flora2), line);
     else puffPlant(k, u, n, foot, h, r * 1.15, tint(color === C.cyan ? C.flora3 : color), line, i);
   }
@@ -1558,15 +1593,16 @@ function vent(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
 }
 
 // ── a slim strip lamp ───────────────────────────────────────────────────────
-// A white light bar in a grey frame, warm white, its glow on the panels.
+// A white light bar in a grey frame, warm white while the lights are on
+// (its light on the panels and the floor is declared), dull at night.
 
 function lamp(k: Kit, v: RoomView, f: Feature): void {
   const { z0, z1 } = lampZ(v.H);
   const a = f.a;
-  k.wash(a, 0.05, (z0 + z1) / 2, 3.2, (z1 - z0) * 0.75, C.amberLight, 0.32);
+  const on = lampsOn(v);
   k.poly(rrect(a - 0.75, z0, a + 0.75, z1, 0.4, 0.75), k.hgrad([a - 0.75, 0.4, z0], [a + 0.75, 0.4, z0], [[0, '#eef0f3'], [1, C.metal]]), k.lw);
-  k.poly(rrect(a - 0.35, z0 + 0.5, a + 0.35, z1 - 0.5, 0.42, 0.35), k.vgrad(a, 0.42, z0, z1, [[0, '#ffe7c2'], [0.5, '#fffaf0'], [1, '#ffe7c2']]), 0);
-  k.halo(a, 0.6, (z0 + z1) / 2, 2.2, '#fff3dc', 0.4);
+  k.poly(rrect(a - 0.35, z0 + 0.5, a + 0.35, z1 - 0.5, 0.42, 0.35), on ? k.vgrad(a, 0.42, z0, z1, [[0, '#ffe7c2'], [0.5, '#fffaf0'], [1, '#ffe7c2']]) : '#b9b2a6', 0);
+  if (on) k.halo(a, 0.6, (z0 + z1) / 2, 2.2, '#fff3dc', 0.4);
 }
 
 // ── the shell's edges: wall tops, cut ends, the deck slab ────────────────────
