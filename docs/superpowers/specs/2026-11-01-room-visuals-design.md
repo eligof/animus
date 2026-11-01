@@ -98,7 +98,7 @@ its hero clear where furniture hid it. Each also got a signature:
 | --- | --- |
 | mines | tilted dark strata with angular blocks, a gold seam at every size, a rough rock rim, cart ruts; lanterns and gold carry the night |
 | lab | castle stone on the upper wall, pointed gothic windows, the generator in a recess with a plasma globe; a stormy night |
-| club | neon at every room size, the mural above the strip, gobos where the beams land; at night the rig is dark and the neon carries it |
+| club | neon at every room size, the mural above the strip, a dance floor that chases the beat and spotlights that sweep it; at night the rig is dark and the neon carries it |
 | den | dark blocks and carpet lit by the screens, glyphs spilling off the video wall (now never hidden), a night street outside, moonbeams |
 | station | each porthole a small scene, cargo nets, walkway plates, warm lamps between the portholes; planet light at night |
 | cafe | the hearth slid clear of the furniture, a chalk menu and shelves over stations, a wet street outside; firelight and string lights at night |
