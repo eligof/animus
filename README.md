@@ -544,4 +544,17 @@ MIT, see [LICENSE](LICENSE).
 
 ## Security
 
+animus reads input it does not control (transcripts, which can hold web
+content; keys and pastes; the terminal's replies; the crews file on disk)
+and turns it into cells, escapes and chat messages. All of that is fuzzed:
+`test/fuzz.test.ts` runs fast-check properties over generated input full of
+escapes, controls, bidi and zero-width marks, tag characters and broken
+UTF-16, with the rest of the tests on every pull request.
+
+Every change also passes CodeQL (any finding fails the build), a gitleaks
+scan of the full history, secret scanning with push protection, and the
+tests on Linux and macOS. Dependabot watches the npm and Actions
+dependencies, every action is pinned to a commit SHA, and OpenSSF Scorecard
+grades the repository on every push to `main` (the badge above).
+
 To report a vulnerability, see [SECURITY.md](SECURITY.md).

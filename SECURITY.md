@@ -41,7 +41,11 @@ The latest release and `main`.
   are in the Security tab, and any finding fails the build.
 - GitHub secret scanning with push protection is enabled, and a gitleaks
   scan covers the full history of every push and pull request.
-- OpenSSF Scorecard runs weekly.
+- Property-based fuzz tests (fast-check, `test/fuzz.test.ts`) run with the
+  tests: transcript text and records, keys and pastes, the terminal's
+  replies and the crews file against generated hostile input, and what
+  animus sends out (chat messages, clipboard and picture escapes).
+- OpenSSF Scorecard runs on every push to `main` and weekly.
 - Dependabot alerts and security updates are on, with weekly version
   updates for GitHub Actions and npm.
 - All actions are pinned to commit SHAs.
