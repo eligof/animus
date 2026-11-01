@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
 import { barrel, bucket, crate, dynamite, hangLantern, heap, logU, nugget, pickaxe, rock, ropeCoil, sack, shovel } from './bits.ts';
 import type { P3 } from './kit.ts';
@@ -80,21 +81,21 @@ const sacks: PropArt = {
 };
 
 // ── a lamp post ─────────────────────────────────────────────────────────────
-// A timber post with an iron arm and a hanging lantern, its light pooled on
-// the floor round its foot; a bucket or a pick against it.
+// A timber post with an iron arm and a hanging lantern (its light is the
+// scene's, and goes out with the lights); a bucket or a pick against it.
 const lamppost: PropArt = {
   len: 5,
   dep: 5,
   height: 12,
+  light: [{ kind: 'lamp', u: 2.0, v: 3.8, z: 8.4, strength: 0.8 }],
   draw(v: PropView): void {
     const k = kitOf(v);
-    k.pool(2.5, 2.6, 3.4, 3.4, C.lamp, 0.7);
     k.shadow(2.0, 2.0, 1.1, 1.0, 0.3);
     k.box(1.55, 1.55, 0, 0.9, 0.9, 11.2, C.timber, { stripe: false });
     k.box(1.3, 1.3, 0, 1.4, 1.4, 0.8, C.timberOld, { line: k.thin });
     k.rod([[2.0, 2.45, 10.4], [2.0, 3.8, 10.4], [2.0, 3.8, 10.1]], C.iron, 0.13);
     k.rod([[2.0, 2.45, 9.3], [2.0, 3.3, 10.4]], C.iron, 0.09);
-    hangLantern(k, 2.0, 3.8, 10.1, 0.5, 1);
+    hangLantern(k, 2.0, 3.8, 10.1, 0.5, lampsOn(v) ? 1 : 0);
     if (hash(v.seed, 1) < 0.5) bucket(k, 3.4, 1.4, 0, 0.6, 0.9, C.ironLight, C.coal);
     else pickaxe(k, [3.3, 1.5, 0], [2.6, 2.0, 3.4], [0.7, -0.7, 0], 0.8);
   },

@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './mines/decor.ts';
 import { INK } from './mines/kit.ts';
 import { NPCS } from './mines/npcs.ts';
-import { minesPois, room } from './mines/room.ts';
+import { minesPois, minesReserve, room } from './mines/room.ts';
 import { STATIONS } from './mines/stations.ts';
 import { WORKSTATION } from './mines/workstation.ts';
 
@@ -44,10 +44,16 @@ export const mines: WorldDef = {
   ink: INK,
   room,
   pois: minesPois,
+  reserve: minesReserve,
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
   npcs: NPCS,
+  // An evening: cool shadows the lanterns warm into gold pools; at night
+  // the lamps go out and the fires, the night lanterns and the gold carry
+  // the gallery.
+  ambient: { tint: [118, 104, 150], strength: 0.25 },
+  light: { night: { tint: [66, 72, 130], strength: 0.48 } },
   costume: 'miner',
   critter: { kind: 'rat', body: hex('#8a7462') }, // a mine rat
   finale: { colors: [[255, 211, 74]] }, // gold dust

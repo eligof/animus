@@ -3,8 +3,9 @@ import { frame, mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import { hub, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
-import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { Layout, Poi } from '../../world/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import { hangLantern, nugget, pickaxe, rails, rock, ropeCoil, shovel, sparkle } from './bits.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, wave, withAlpha } from './kit.ts';
@@ -320,7 +321,37 @@ export const room: RoomArt = {
     shell(k, v, plan);
     v.pen.restore();
   },
+  // The wall lanterns (a third of them left burning at night, as oil
+  // lamps), the lantern at each drift's portal, and the gold: the
+  // motherlode glinting at its foot, part way up and near the roof, and
+  // each vein, all still shining with the lights out.
+  lights(v): RoomLight[] {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    const out: RoomLight[] = [];
+    for (const f of plan.features) {
+      if (f.kind === 'lamp') {
+        if (burnsAtNight(plan, f)) out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 2.4, z: LAMP_Z - 1.9, color: '#ffc27a', r: 11, strength: 0.55, halo: 2.2 });
+        else out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 2.4, z: LAMP_Z - 1.9, strength: 0.6 });
+      } else if (f.kind === 'adit') {
+        const ah = f.w === ADIT ? AH : AH_S;
+        out.push({ kind: 'lamp', wall: f.wall, u: f.a + (f.w - 4) / 2 + 0.6, v: 1.7, z: ah - 1.2, strength: 0.5, r: 9 });
+      } else if (f.kind === 'lode') {
+        const pts = lodeLine(v, plan, f);
+        for (const [i, r, st] of [[2, 7, 0.9], [7, 6, 0.7], [11, 5, 0.6]] as const) {
+          if (pts[i][2] < v.H - 2) out.push({ kind: 'glow', wall: f.wall, u: pts[i][0], v: 0.6, z: pts[i][2], color: '#ffc94a', r, strength: st, halo: 3 });
+        }
+      } else if (f.kind === 'vein') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.4, z: 13, color: '#ffcf5a', r: 4, strength: 0.35, halo: 1.6 });
+    }
+    return out;
+  },
 };
+
+// What the furniture keeps clear of: the motherlode's foot beside its
+// drift (a bookcase in front of it hid the room's signature).
+export function minesReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number }> {
+  const f = planFor(L.W, L.D, L.H, L.T).features.find((g) => g.kind === 'lode');
+  return f ? [{ wall: f.wall, a0: f.a - 3.5, a1: f.a + 3.5, out: 9 }] : [];
+}
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
@@ -464,34 +495,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     nugget(rk, r.len + 0.8, r.a + 2.4, 0, 0.45, r.len);
     rock(rk, r.len + 1.2, r.a - 2.6, 0, 0.7, 0.6, C.stone, r.len + 3, rk.thin);
   }
-  // Light on the floor: round the stations' lamps and fires, under the
-  // lanterns on the walls, at the mouths of the drifts.
-  const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
-  for (const [kind, u, w, r, c, a] of POOLS) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    if (qk.vis(q.len * u, q.dep * w, 0, r * 1.5)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (f.kind === 'lamp' && wk.vis(f.a, 4, 0, 14)) wk.pool(f.a, 3.5, 12, 9, C.lamp, 0.6);
-    else if (f.kind === 'adit' && wk.vis(f.a, 3, 0, 10)) wk.pool(f.a + 4, 2.5, 7, 5, '#ffb050', 0.3);
-  }
 }
-
-// The stations' own light, in their frames: kind, where (as a share of the
-// prop's len and dep), radius, colour, strength.
-const POOLS: ReadonlyArray<readonly [Slot['kind'], number, number, number, Color, number]> = [
-  ['write', 0.4, 0.7, 13, '#ff9a48', 0.55],
-  ['idle', 0.45, 0.55, 17, '#ff9a48', 0.6],
-  ['run', 0.3, 0.5, 12, '#ffa050', 0.42],
-  ['think', 0.6, 0.5, 12, C.lamp, 0.5],
-  ['read', 0.85, 0.8, 10, C.lamp, 0.45],
-  ['search', 0.5, 1, 10, C.lamp, 0.42],
-  ['entrance', 0.1, 1, 10, C.lamp, 0.42],
-  ['web', 0.2, 0.4, 9, C.lamp, 0.4],
-];
 
 // Loose rock fallen at the foot of the wall, in its free stretches.
 function rubble(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): void {
@@ -609,8 +613,6 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const pz = plateZ(H);
   k.poly([[T, 0, pz - 4], [end, 0, pz - 4], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, pz - 4, H, [[0, '#140b0600'], [0.35, '#140b0640'], [1, '#140b06a8']]), 0);
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, 3], [T, 0, 3]], k.vgrad(T, 0, 0, 3, [[0, '#140b0650'], [1, '#140b0600']]), 0);
-  // lantern light washing the rock round each lamp
-  for (const f of plan.features) if (f.wall === wall && f.kind === 'lamp' && k.vis(f.a, 0, LAMP_Z - 3, 14)) k.halo(f.a, 0.2, LAMP_Z - 2, 14, '#ffbf6a', 0.4);
   // the motherlode, bright against the dark (it climbs to the roof, so it
   // is looked for along the whole wall)
   for (const f of plan.features) if (f.wall === wall && f.kind === 'lode' && k.vis(f.a + (f.dir ?? 1) * H * 0.5, 0, H / 2, H * 0.7)) lode(k, v, plan, f);
@@ -632,7 +634,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'board') board(k, f);
     else if (f.kind === 'ladder') ladder(k, v, f, tone);
   }
-  for (const f of mine) if (f.kind === 'lamp') lamp(k, f);
+  for (const f of mine) if (f.kind === 'lamp') lamp(k, f, lampsOn(v) || burnsAtNight(plan, f));
 }
 
 // Stones set in the rock, cracks, and glints in the coal seams; only what
@@ -859,7 +861,7 @@ function adit(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   rock(k, a0 - 1.3, 0.9, ah + 1.8, 0.7, 0.6, C.stone, f.k + 1, k.thin);
   rock(k, a + 1.5, 0.7, ah + 2.7, 0.5, 0.4, C.rockLight, f.k + 3, k.thin);
   rock(k, a1 + 1.1, 0.8, ah + 1.8, 0.55, 0.5, C.rockLight, f.k + 2, k.thin);
-  hangLantern(k, a1 + 0.6, 1.7, ah + 0.3, 0.3, 1);
+  hangLantern(k, a1 + 0.6, 1.7, ah + 0.3, 0.3, lampsOn(v) ? 1 : 0);
   void v;
   void lit;
 }
@@ -893,12 +895,18 @@ function beam(k: Kit, v: RoomView, f: Feature): void {
   }
 }
 
-// A lantern hung from an iron bracket on a post.
-function lamp(k: Kit, f: Feature): void {
+// A lantern hung from an iron bracket on a post, dark when it is out.
+function lamp(k: Kit, f: Feature, on: boolean): void {
   const z = LAMP_Z;
   k.rod([[f.a, 1.2, z], [f.a, 2.4, z], [f.a, 2.4, z - 0.3]], C.iron, 0.14);
   k.rod([[f.a, 1.2, z - 1], [f.a, 2.0, z]], C.iron, 0.1);
-  hangLantern(k, f.a, 2.4, z - 0.3, 0.4, 1);
+  hangLantern(k, f.a, 2.4, z - 0.3, 0.4, on ? 1 : 0);
+}
+
+// Every third lantern on the walls is left burning through the night (the
+// rest go out with the lights).
+function burnsAtNight(plan: Plan, f: Feature): boolean {
+  return plan.features.filter((g) => g.kind === 'lamp').indexOf(f) % 3 === 1;
 }
 
 // A line through pts, each stretch cut into n (a Catmull-Rom curve).
@@ -938,17 +946,13 @@ function ribbon(line: ReadonlyArray<P3>, w0: number, seed: number, swell = 0.9, 
   return [...l, ...r.reverse()];
 }
 
-// The motherlode: a great seam of quartz and gold coming up out of the
-// floor beside a drift (driven along it), climbing beside the portal,
-// leaning over its cap and on up across the beds to the roof, bright
-// against the dark up there. Stringers branch off it, nuggets stand out of
-// it, glints catch the lamplight, and lumps of it lie at its foot.
-function lode(k: Kit, v: RoomView, plan: Plan, f: Feature): void {
-  const { s } = k;
+// The motherlode's line up the wall: up beside the portal from the floor,
+// then leaning over the cap to the roof, short of the corner or the cut
+// end (the drawing and its light share it).
+function lodeLine(v: { W: number; D: number; H: number; T: number }, plan: Plan, f: Feature): P3[] {
   const H = v.H;
   const a = f.a;
   const dir = f.dir ?? 1;
-  const r = k.p(1, 0, 0)[0] > k.p(0, 0, 0)[0] ? 1 : -1;
   const drift = plan.features.find((g) => g.wall === f.wall && g.kind === 'adit' && Math.abs(g.a - a) < g.w);
   const rise = (drift ? (drift.w === ADIT ? AH : AH_S) : 10) + 2.4;
   // how far it leans as it climbs, short of the corner or the cut end
@@ -964,6 +968,20 @@ function lode(k: Kit, v: RoomView, plan: Plan, f: Feature): void {
     const z = rise + t * (H + 1 - rise);
     pts.push([a + dir * (0.7 + (z - rise) * (0.75 + 0.3 * t) * lean) + (hash(f.k, i, 72) - 0.5) * 0.6, 0.03, z]);
   }
+  return pts;
+}
+
+// The motherlode: a great seam of quartz and gold coming up out of the
+// floor beside a drift (driven along it), climbing beside the portal,
+// leaning over its cap and on up across the beds to the roof, bright
+// against the dark up there. Stringers branch off it, nuggets stand out of
+// it, glints catch the lamplight, and lumps of it lie at its foot.
+function lode(k: Kit, v: RoomView, plan: Plan, f: Feature): void {
+  const { s } = k;
+  const a = f.a;
+  const dir = f.dir ?? 1;
+  const r = k.p(1, 0, 0)[0] > k.p(0, 0, 0)[0] ? 1 : -1;
+  const pts = lodeLine(v, plan, f);
   // short stringers off it, curling up and away
   const stringers: P3[][] = [];
   for (const [from, side, len] of [[3, 1, 2], [7, -1, 3], [10, 1, 2]] as const) {
@@ -972,8 +990,6 @@ function lode(k: Kit, v: RoomView, plan: Plan, f: Feature): void {
     for (let i = 1; i <= len; i++) st.push([p[0] + side * dir * i * 0.9, 0.03, p[2] + i * (0.5 + i * 0.25)]);
     stringers.push(smooth(st, 3));
   }
-  k.halo(pts[9][0], 0.2, pts[9][2], 7, '#ffd36a', 0.18);
-  k.halo(pts[3][0], 0.2, pts[3][2], 5, '#ffd36a', 0.14);
   // the fracture it fills, then milky quartz swelling and pinching along
   // it, the gold in lenses down its middle with their lit edge
   const fine = smooth(pts, 3);
@@ -1024,7 +1040,7 @@ function vein(k: Kit, v: RoomView, f: Feature): void {
   }
   for (const i of [2, 5, 8]) nugget(k, pts[i][0], 0.1, pts[i][2] - 0.4, 0.4 + hash(f.k, i, 56) * 0.2, f.k + i, false);
   for (const i of [1, 5]) sparkle(k, pts[i][0] + 0.3, 0.2, pts[i][2] + 0.2, 0.5 + hash(f.k, i, 57) * 0.25, 0.85);
-  k.halo(a, 0.2, (z0 + z1) / 2, 7, '#ffd36a', 0.12);
+  void z0;
 }
 
 // A rack of tools on pegs: two picks and a pair of shovels, a coil of rope.
