@@ -131,7 +131,7 @@ const bit = (kind: Particle['kind'], x: number, y: number, z: number, color: RGB
 const blocks: Block[] = [];
 for (let z = 0; z < 3; z++) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) blocks.push({ x: 44 + x, y: 40 + y, z, c: (x + z) % 2 });
 const build = (complete: boolean): BuildFrame => ({
-  shape: 'house',
+  shape: 'tower',
   blocks: complete ? blocks : blocks.slice(0, 15),
   pending: complete ? [] : blocks.slice(15),
   colors: [[200, 120, 70], [230, 220, 190], [255, 240, 200]],
