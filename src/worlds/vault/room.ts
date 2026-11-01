@@ -1,5 +1,6 @@
 import type { At } from '../../art/iso.ts';
 import { frame, shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { Rect } from '../../world/layout.ts';
 import { hub, planLayout, wallGaps } from '../../world/layout.ts';
@@ -7,7 +8,7 @@ import { hashString } from '../../world/rng.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { barStack, cageLamp, dial, fillPts, hull, rivets, ring } from './bits.ts';
 import type { P3 } from './kit.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
@@ -232,6 +233,25 @@ export const room: RoomArt = {
     }
     v.pen.restore();
   },
+  // The light the shell gives: the caged lamps under the girder and the
+  // amber sconces (out at night), the gold niches' strip lamps (left on all
+  // night, with the acid pit and the forge they light the vault after
+  // hours), and the brass of each deposit bank throwing the lamps' light
+  // back warm at its foot (out with them).
+  lights(v): RoomLight[] {
+    const { features: fs } = planFor(v.W, v.D, v.H, v.T);
+    const out: RoomLight[] = [];
+    const z = girder(v.H).z0 - 1.6;
+    for (const wall of ['right', 'left'] as const) {
+      for (const a of lampsAlong(v.T, wall === 'right' ? v.W : v.D)) out.push({ kind: 'lamp', wall, u: a, v: 0.6, z, color: C.glow, r: 10, strength: 0.45, halo: 0 });
+    }
+    for (const f of fs) {
+      if (f.kind === 'sconce') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.3, z: SCONCE_Z + 1.3, color: C.amber, r: 9, strength: 0.7, halo: 0 });
+      else if (f.kind === 'niche') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: WAIN + 15, color: C.glow, r: 7, strength: 0.8, halo: 2.5 });
+      else if (f.kind === 'bank') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.5, z: 3.5, color: C.glow, r: Math.min(16, f.w / 2 + 3), strength: 0.5, halo: 0 });
+    }
+    return out;
+  },
 };
 
 // ── floor ──────────────────────────────────────────────────────────────────
@@ -352,20 +372,8 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   // A velvet runner in from the way in.
   const ent = plan.L.slots.find((q) => q.kind === 'entrance');
   if (ent) runner(new Kit(pen, frame(v.at, ent.wall, ent.x0, ent.y0), s), ent, plan.runner);
-  // Pools of amber light where the stations' lamps shine.
-  const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
-  for (const [kind, u, w, r, a] of [['write', 0.5, 0.75, 9, 0.2], ['read', 0.85, 0.9, 8, 0.16], ['search', 0.45, 0.9, 9, 0.16], ['run', 0.45, 0.5, 12, 0.24], ['web', 0.5, 0.6, 9, 0.16], ['think', 0.5, 0.55, 11, 0.2], ['idle', 0.5, 0.45, 14, 0.26], ['entrance', 0.5, 1.2, 10, 0.22]] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    if (qk.sees(-r, -r, 0, q.len + r, q.dep + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, C.lamp, a);
-  }
-  // and under the sconces, along the walls' feet
-  for (const f of plan.features) {
-    if (f.kind !== 'sconce' && f.kind !== 'niche') continue;
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (wk.sees(f.a - 8, 0, 0, f.a + 8, 6, 0)) wk.pool(f.a, 2.5, f.kind === 'niche' ? 6 : 7, 4, C.glow, f.kind === 'niche' ? 0.12 : 0.14);
-  }
+  // (The light on the floor is the scene's, from what the room and its
+  // stations declare.)
 }
 
 // A compass star inlaid in brass and dark stone, r units across.
@@ -572,7 +580,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'clock') clock(k, f);
     else if (f.kind === 'alarm') alarm(k, v, f);
     else if (f.kind === 'cam') camera(k, v, f);
-    else if (f.kind === 'sconce') sconce(k, f);
+    else if (f.kind === 'sconce') sconce(k, f, lampsOn(v));
     else if (f.kind === 'door') vaultDoor(k, f, lit);
   }
   // The girder along the top, the cornice, and caged lamps under it.
@@ -581,7 +589,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   if (s >= 3) for (let a = Math.max(T + 1, ax0 - 2); a < Math.min(end - 0.5, ax1 + 2); a += 1.6) gd.push([a, 1.12, g.z0 + 0.6], [a, 1.12, g.z1 - 0.6]);
   rivets(k, gd, tone('#8a94a0'), 0.13);
   k.box(T, 0, H - 1.6, end - T, 0.6, 1.6, tone('#4a525d', 0.1), { line: k.thin, stripe: false });
-  lamps(k, v, T, end, ax0, ax1);
+  lamps(k, v, T, end, ax0, ax1, covered);
 }
 
 // The stretch of the wall (along) the pen can see between heights z0..z1.
@@ -911,27 +919,56 @@ function camLed(k: Kit, v: RoomView, f: Feature): void {
   k.pen.fill();
 }
 
-// An amber cage lamp on a curled bracket, washing the wall round it.
-function sconce(k: Kit, f: Feature): void {
-  const z = WAIN + 14;
-  k.wash(f.a, 0.05, z - 1, 6, 7, C.glow, 0.2);
+// An amber cage lamp on a curled bracket (the scene washes the wall round
+// it); out at night.
+const SCONCE_Z = WAIN + 14;
+
+function sconce(k: Kit, f: Feature, on: boolean): void {
+  const z = SCONCE_Z;
   k.poly([[f.a - 0.45, 0.02, z - 1.8], [f.a + 0.45, 0.02, z - 1.8], [f.a + 0.45, 0.02, z + 0.4], [f.a - 0.45, 0.02, z + 0.4]], C.brass, k.thin, 0.3);
   k.rod([[f.a, 0.05, z - 0.9], [f.a, 0.8, z - 1.0], [f.a, 1.3, z - 0.4], [f.a, 1.3, z + 0.5]], C.brass, 0.16);
-  cageLamp(k, f.a, 1.3, z + 1.3, 0.62, true, 0.42);
+  cageLamp(k, f.a, 1.3, z + 1.3, 0.62, on, 0.42);
 }
 
-// Caged lamps hanging under the girder all along a wall.
-function lamps(k: Kit, v: RoomView, a0: number, a1: number, ax0: number, ax1: number): void {
+// Where the caged lamps hang along a wall from a0 to a1.
+function lampsAlong(a0: number, a1: number): number[] {
+  const list: number[] = [];
+  for (let a = a0 + 6; a < a1 - 3; a += 13) list.push(a);
+  return list;
+}
+
+// Caged lamps hanging under the girder all along a wall, each throwing a
+// cone of amber down the plate (where no bank or niche hangs); out at
+// night.
+function lamps(k: Kit, v: RoomView, a0: number, a1: number, ax0: number, ax1: number, covered: (a: number, z: number) => boolean): void {
   const g = girder(v.H);
   const z = g.z0 - 1.6;
-  const pitch = 13;
-  const list: number[] = [];
-  for (let a = a0 + 6; a < a1 - 3; a += pitch) if (a > ax0 - 10 && a < ax1 + 10) list.push(a);
+  const list = lampsAlong(a0, a1).filter((a) => a > ax0 - 10 && a < ax1 + 10);
   if (!list.length) return;
-  for (const a of list) k.wash(a, 0.05, z - 6, 7, 9, C.glow, 0.16);
+  const on = lampsOn(v);
+  if (on) {
+    const pen = k.pen;
+    pen.save();
+    pen.globalCompositeOperation = 'screen';
+    for (const a of list) {
+      if (covered(a, z - 5)) continue;
+      const top = z - 0.6;
+      const foot = Math.max(WAIN + RAIL + 1, z - 11);
+      const p = (u: number, zz: number) => k.p(u, 0.03, zz);
+      pen.beginPath();
+      pen.moveTo(...p(a - 0.9, top));
+      pen.quadraticCurveTo(...p(a - 2.6, (top + foot) / 2), ...p(a - 5, foot));
+      pen.quadraticCurveTo(...p(a, foot - 1.6), ...p(a + 5, foot));
+      pen.quadraticCurveTo(...p(a + 2.6, (top + foot) / 2), ...p(a + 0.9, top));
+      pen.closePath();
+      pen.fillStyle = k.vgrad(a, 0.03, foot, top, [[0, withAlpha(C.glow, 0)], [0.55, withAlpha(C.glow, 0.12)], [1, withAlpha(C.glow, 0.32)]]);
+      pen.fill();
+    }
+    pen.restore();
+  }
   for (const a of list) {
     k.rod([[a, 0.6, g.z0], [a, 0.6, z + 0.9]], INK, 0.08);
-    cageLamp(k, a, 0.6, z, 0.5, true, 0.32);
+    cageLamp(k, a, 0.6, z, 0.5, on, 0.32);
   }
 }
 

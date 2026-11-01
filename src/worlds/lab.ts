@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './lab/decor.ts';
 import { INK } from './lab/kit.ts';
 import { NPCS } from './lab/npcs.ts';
-import { labPois, room } from './lab/room.ts';
+import { labPois, labReserve, room } from './lab/room.ts';
 import { STATIONS } from './lab/stations.ts';
 import { WORKSTATION } from './lab/workstation.ts';
 
@@ -44,10 +44,17 @@ export const lab: WorldDef = {
   ink: INK,
   room,
   pois: labPois,
+  reserve: labReserve, // the generator's bay
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
   npcs: NPCS,
+  // A storm outside even with the lights on: a faint cool evening, so the
+  // glowing glass and the lamps warm the room round them. With the lights
+  // off a stormy night, the generator's globe, the vats and the moon through
+  // the lancets carrying the room.
+  ambient: { tint: [120, 140, 190], strength: 0.12, figures: 0.4 },
+  light: { falloff: 1.3, night: { tint: [46, 74, 140], strength: 0.55, figures: 0.3 } },
   costume: 'scientist',
   critter: { kind: 'rat', body: hex('#eeeae4') }, // a lab rat
   finale: { colors: [[214, 255, 240], [150, 240, 214], [200, 230, 255]] }, // foam

@@ -147,10 +147,11 @@ const vat: PropArt = {
   len: 5,
   dep: 5,
   height: 14,
+  // the fluid glows (the scene draws its pool and its halo)
+  light: [{ kind: 'glow', u: 2.5, v: 2.5, z: 6.5, color: '#b6ff8a', r: 6, strength: 0.7, halo: 3 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 2.5;
-    k.pool(c, c, 3.6, 3.6, C.greenGlow, 0.3);
     k.shadow(c, c, 2.2, 2.2, 0.3);
     k.cyl(c, c, 0, 1.9, 1.0, C.steelDark);
     k.cyl(c, c, 1.0, 1.75, 0.7, C.iron);
@@ -158,7 +159,6 @@ const vat: PropArt = {
     const z0 = 1.7;
     const z1 = 11.6;
     k.glass(c, c, [[z0, 1.5], [z1, 1.5]], '#8fe85a', 0.88);
-    k.halo(c, c + 0.5, 6.5, 4.2, C.greenGlow, 0.35);
     creature(k, c, c, 6.4, v.seed);
     bubbles(k, c, c + 0.8, z0 + 0.4, z1 - 1.5, 2.0, 0.37 + hash(v.seed, 1) * 3, 10, v.seed, '#ffffffb0', 1);
     k.cyl(c, c, z1, 1.65, 0.8, C.steelDark);

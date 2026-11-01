@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle } from '../../world/types.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
@@ -97,6 +98,8 @@ const pit: PropArt = {
   len: 10,
   dep: 10,
   height: 4.5,
+  // the acid glows all night
+  light: [{ kind: 'glow', u: 5, v: 5, z: 1.5, color: '#9cff57', r: 10, strength: 0.8, halo: 2 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -320,10 +323,11 @@ const lamp: PropArt = {
   len: 5,
   dep: 5,
   height: 16,
+  // its lamp (the scene lays the pool; out at night)
+  light: [{ kind: 'lamp', u: 2.5, v: 2.5, z: 13.3, color: C.glow, r: 10, strength: 0.7, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 2.5;
-    k.pool(c, c, 2.5, 2.5, '#ffd890', 0.5);
     k.shadow(c, c, 1.2, 1.2, 0.3);
     k.cyl(c, c, 0, 0.95, 0.35, C.iron);
     k.cyl(c, c, 0.35, 0.55, 0.6, C.gunmetal);
@@ -332,7 +336,7 @@ const lamp: PropArt = {
     // a bracket out to the lamp
     k.rod([[c, c, 13.4], [c, c, 14.4], [c + 0.4, c + 0.4, 14.6]], C.iron, 0.14);
     k.cyl(c, c, 14.2, 0.75, 0.3, C.gunmetal);
-    cageLamp(k, c, c, 13.3, 0.7, true, 0.55);
+    cageLamp(k, c, c, 13.3, 0.7, lampsOn(v), 0.55);
   },
 };
 
