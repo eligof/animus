@@ -230,7 +230,7 @@ export const room: RoomArt = {
         out.push({ kind: 'lava', wall: f.wall, u: f.a, v: 3 * m, z: 2 * m, r: 16, strength: 1.3, halo: 6 });
         out.push({ kind: 'lava', wall: f.wall, u: f.a, v: 1.6 * m, z: 26.4 * m, r: 5, strength: 0.35, halo: 4 * m });
       } else if (f.kind === 'torch') out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 1.2, z: TORCH_Z + 1.5, r: 9, strength: 0.8, halo: 3 });
-      else if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2, z0, z1, bars: 3, rails: 1, color: '#ff8a4a', strength: 0.45, night: '#ff6a2a', moon: 0.45 });
+      else if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2, z0, z1, bars: 3, rails: 1, color: '#ff8a4a', strength: 0.6, night: '#ff6a2a', moon: 0.45 });
     }
     for (const wall of ['right', 'left'] as const) {
       const end = wall === 'right' ? v.W : v.D;
@@ -330,9 +330,12 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   g.addColorStop(0, '#12040650');
   g.addColorStop(0.3, '#12040618');
   g.addColorStop(0.7, '#12040600');
-  g.addColorStop(1, '#12040628');
   k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], g, 0);
   const h = hub(plan.L);
+  // The walkway lifted a step, so black hoods and capes keep an edge on
+  // it: a broad warm lift over the hub and out toward the front, the
+  // walls' feet left in the dark basalt.
+  k.pool(h.x + (W - h.x) * 0.3, h.y + (D - h.y) * 0.3, (W - T) * 0.6, (D - T) * 0.6, '#5a3a36', 0.35, 0, 'source-over');
   k.pool(h.x, h.y, (W - T) * 0.55, (D - T) * 0.55, '#ff7a3a', 0.14);
   for (const wall of ['right', 'left'] as const) {
     const wk = new Kit(pen, wallAt(v.at, wall, T), s);
@@ -596,7 +599,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   pen.globalCompositeOperation = 'screen';
   k.poly([[T, 0.03, 0], [end, 0.03, 0], [end, 0.03, 20], [T, 0.03, 20]], k.vgrad(T, 0.03, 0, 20, [[0, '#ff6a2a60'], [0.3, '#ff6a2a28'], [1, '#ff6a2a00']]), 0);
   pen.restore();
-  frieze(k, v, end, lit);
+  frieze(k, v, end, lit, plan.features.filter((f) => f.wall === wall && f.kind === 'maw').map((f) => [f.a - f.w / 2 - 4, f.a + f.w / 2 + 4] as const));
   for (const f of plan.features) {
     if (f.wall !== wall) continue;
     const hgt = f.kind === 'banner' ? H - FRIEZE : f.kind === 'maw' ? 46 : f.kind === 'cage' ? 38 : windowZ(H).z1 + 3;
@@ -741,10 +744,11 @@ function glowCracks(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): v
 }
 
 // Under the cornice: a band of dark stone carved in a slow rhythm, a skull
-// in a recessed niche every 8.4 units (every third one horned, its sockets
-// smouldering) and crossed bones between, in old bone a step darker than
-// the Maw's so the border sits behind it; the cornice over it.
-function frieze(k: Kit, v: RoomView, end: number, lit: boolean): void {
+// in a recessed niche every 8.4 units (12.6 in a low room; every third one
+// horned, its sockets smouldering), in old bone a step darker than the
+// Maw's and none over the Maw itself (`clear`), so the border sits behind
+// the hero; the cornice over it.
+function frieze(k: Kit, v: RoomView, end: number, lit: boolean, clear: ReadonlyArray<readonly [number, number]>): void {
   const { s } = k;
   const { T, H } = v;
   const z0 = H - FRIEZE;
@@ -754,10 +758,10 @@ function frieze(k: Kit, v: RoomView, end: number, lit: boolean): void {
   k.box(T, 0, z0 - 0.8, end - T, 0.7, 0.8, tone('#3a2630'), { line: k.thin, stripe: false });
   k.poly([[T, 0, z0], [end, 0, z0], [end, 0, z1], [T, 0, z1]], tone('#22141c'), 0);
   const old = tone('#b59c78');
-  const step = 8.4;
+  const step = H < 30 ? 12.6 : 8.4;
   const zc = (z0 + z1) / 2;
   for (let a = T + step / 2 + 0.5, i = 0; a < end - 1.6; a += step, i++) {
-    if (seen(k, [[a - 2, 0, z0], [a + 2, 0, z1]])) {
+    if (!clear.some(([c0, c1]) => a > c0 && a < c1) && seen(k, [[a - 2, 0, z0], [a + 2, 0, z1]])) {
       k.poly([[a - 1.25, 0.02, zc - 1.65], [a + 1.25, 0.02, zc - 1.65], [a + 1.25, 0.02, zc + 1.65], [a - 1.25, 0.02, zc + 1.65]], tone('#12060a'), k.thin, 0.5);
       const horned = i % 3 === 1;
       if (horned) {
@@ -767,11 +771,6 @@ function frieze(k: Kit, v: RoomView, end: number, lit: boolean): void {
         }
       }
       skull(k, a, 0.3, zc - 1.2, 0.98, { base: old, line: k.thin, eyes: horned ? '#ff7a1f' : undefined });
-    }
-    const b = a + step / 2;
-    if (b < end - 2 && seen(k, [[b - 2, 0, z0], [b + 2, 0, z1]])) {
-      bone(k, [b - 1.2, 0.2, zc - 0.8], [b + 1.2, 0.2, zc + 0.8], 0.28, tone('#8f7a5a'));
-      bone(k, [b - 1.2, 0.2, zc + 0.8], [b + 1.2, 0.2, zc - 0.8], 0.28, tone('#8f7a5a'));
     }
   }
   k.box(T, 0, z1, end - T, 1.0, CORNICE, tone('#342630'), { line: k.thin, stripe: false });
