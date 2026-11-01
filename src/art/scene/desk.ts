@@ -42,8 +42,12 @@ const stepOf = (grow: number) => Math.max(0, Math.min(POP_STEPS, Math.round(grow
 // Still growing out of the floor (or shrinking into it): all in one picture.
 export const popping = (grow: number) => stepOf(grow) < POP_STEPS;
 
-// Room round the box for its shadow and its ink, in units.
-const PAD = 2;
+// Room round the box for its shadow, its ink and its screen's light on
+// the floor, in units.
+const PAD = 3.5;
+// At night a lit screen throws a small pool of its light on the floor in
+// front of it (where its agent stands): radius (units), colour, strength.
+const GLOW = { r: 2.6, color: [168, 212, 255] as const, a: 0.3 };
 // Pictures kept, least recently used out first past either bound. (In
 // tinted worlds the scene also keeps a tinted copy of each picture.)
 const MAX = 1024;
@@ -157,6 +161,7 @@ export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | '
     return picture(art, d.wall, g, s, (pen, at) => {
       if (!step) return;
       const v = viewOf(art, pen, at, s * g, d.wall, on, d.seed, lit);
+      if (!pop && on && !lit) screenGlow(pen, at, art, s);
       pen.save();
       art.draw(v);
       pen.restore();
@@ -174,6 +179,23 @@ export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | '
       drawScreen(pen, at, art.screen, d.screen, ink);
     });
   });
+}
+
+// A lit screen's light on the floor at night, under the desk: a soft round
+// pool in front of the screen's middle, toward where its agent stands.
+function screenGlow(pen: Canvas, at: At, art: WorkstationArt, s: number): void {
+  const u = art.screen.reduce((m, q) => m + q[0], 0) / art.screen.length;
+  const [cx, cy] = at(u, art.dep + 0.6, 0);
+  const rx = Math.SQRT2 * GLOW.r * s;
+  pen.save();
+  pen.translate(cx, cy);
+  pen.scale(1, 0.5);
+  const g = pen.createRadialGradient(0, 0, 0, 0, 0, rx);
+  const [r, gg, b] = GLOW.color;
+  for (const [t, k] of [[0, 1], [0.4, 0.75], [0.75, 0.3], [1, 0]] as const) g.addColorStop(t, `rgba(${r}, ${gg}, ${b}, ${(GLOW.a * k).toFixed(3)})`);
+  pen.fillStyle = g;
+  pen.fillRect(-rx, -rx, 2 * rx, 2 * rx);
+  pen.restore();
 }
 
 // The screen of a workstation of `world` grown to its size: what its agent

@@ -82,11 +82,17 @@ const TOP = 0.2;
 const TURN = 0.12;
 const BACKS = 0.24;
 
+// The left wall's turn as it comes: deeper than the rest's share of 1, so
+// that with the walls' own art and the lights' washes on them most rooms
+// land near the rule's 0.82 (left over right); a world that sets its own
+// keeps it.
+const TURN_SHARE = 2;
+
 type Tune = Required<Omit<WorldLight, 'night'>>;
 export function tuneOf(w: WorldDef): Tune {
   const l = w.light ?? {};
-  const k = (v: number | undefined) => clamp(v ?? 1, 0, 2);
-  return { ao: k(l.ao), falloff: k(l.falloff), top: k(l.top), turn: k(l.turn), backs: k(l.backs), pools: k(l.pools) };
+  const k = (v: number | undefined, d = 1) => clamp(v ?? d, 0, 2);
+  return { ao: k(l.ao), falloff: k(l.falloff), top: k(l.top), turn: k(l.turn, TURN_SHARE), backs: k(l.backs), pools: k(l.pools) };
 }
 
 // The shell pass over a room just drawn into `c` (its world origin at
@@ -333,11 +339,15 @@ export function paintLights(c: Canvas, L: Box, rig: Rig, s: number, ox: number, 
   clipTo(map, 'floor', L);
   for (const p of rig.panes) spill(map, p, k);
   for (const g of rig.glows) {
-    // a light on or by a wall throws its pool out into the room
-    const out = 0.3 * g.z;
+    // a light on or by a wall throws its pool out into the room, no
+    // further than its reach; one that reaches far less than it hangs high
+    // (a string light's bulb, a candle up on a mantel) lights the floor
+    // little, and close under it
+    const out = Math.min(0.3 * g.z, 0.6 * g.r);
     const x = g.x + out * near(g.x - T);
     const y = g.y + out * near(g.y - T);
-    blob(map, x, y, g.r, 1, g.color, POOL * g.k * k);
+    const low = Math.min(1, g.r / Math.max(1e-6, 0.5 * g.z));
+    blob(map, x, y, g.r, 1, g.color, POOL * g.k * k * low);
   }
   map.restore();
   for (const side of ['right', 'left'] as const) {
@@ -368,7 +378,10 @@ export function lightUp(px: Uint8ClampedArray, map: Uint8ClampedArray): void {
 
 // A window's patch on the floor (the pen's plane, clipped): the opening
 // thrown along the light onto the floor, a parallelogram, brightest by the
-// wall, its glazing bars cut out of it, its edges a little soft.
+// wall and fading to nothing at its far end, its glazing bars cut out of
+// it, its edges soft (rims of the whole opening, each a little wider and
+// fainter, under the panes), so that where a prop or the floor's edge
+// cuts it no hard sliver is left.
 function spill(c: Canvas, p: Pane, k: number): void {
   const dz = p.z1 - p.z0;
   const da = p.a1 - p.a0;
@@ -383,31 +396,53 @@ function spill(c: Canvas, p: Pane, k: number): void {
   const bv = Math.min(0.3, bar / dz);
   const cols = p.bars + 1;
   const rows = p.rails + 1;
+  const a = SPILL * p.k * k;
+  // along the throw: full by the wall, fading out to nothing at the far
+  // end (rims past it stay clear)
+  const fade = () => {
+    const g = c.createLinearGradient(0, 0, 0, 1);
+    for (const [t, f] of SPILL_FADE) g.addColorStop(t, rgba(p.color, a * f));
+    return g;
+  };
   c.save();
   c.transform(A, B, C, Dd, E, F);
-  // a soft rim a little wider, then the panes
-  for (const [a, grow] of [
-    [0.3, 0.18],
-    [0.7, 0],
-  ] as const) {
-    const g = c.createLinearGradient(0, 0, 0, 1);
-    g.addColorStop(0, rgba(p.color, SPILL * a * p.k * k));
-    g.addColorStop(1, rgba(p.color, SPILL * a * p.k * k * 0.35));
-    c.fillStyle = g;
+  const rect = (u0: number, v0: number, u1: number, v1: number, grow: number, share: number) => {
     const gu = grow / da;
     const gv = grow / dz;
+    c.globalAlpha = share;
+    c.fillRect(u0 - gu, v0 - gv, u1 - u0 + 2 * gu, v1 - v0 + 2 * gv);
+  };
+  c.fillStyle = fade();
+  for (const [grow, share] of SPILL_RIMS) rect(0, 0, 1, 1, grow, share);
+  for (const [grow, share] of SPILL_PANES) {
     for (let i = 0; i < cols; i++) {
       for (let j = 0; j < rows; j++) {
         const u0 = i ? i / cols + bu / 2 : 0;
         const u1 = i < cols - 1 ? (i + 1) / cols - bu / 2 : 1;
         const v0 = j ? j / rows + bv / 2 : 0;
         const v1 = j < rows - 1 ? (j + 1) / rows - bv / 2 : 1;
-        c.fillRect(u0 - gu, v0 - gv, u1 - u0 + 2 * gu, v1 - v0 + 2 * gv);
+        rect(u0, v0, u1, v1, grow, share);
       }
     }
   }
   c.restore();
 }
+// A window patch's light along its throw (stop, share), its soft rims of
+// the whole opening (grown by units, share), and its panes.
+const SPILL_FADE: ReadonlyArray<[number, number]> = [
+  [0, 1],
+  [0.55, 0.62],
+  [1, 0],
+];
+const SPILL_RIMS: ReadonlyArray<[number, number]> = [
+  [0.9, 0.12],
+  [0.6, 0.12],
+  [0.3, 0.14],
+];
+const SPILL_PANES: ReadonlyArray<[number, number]> = [
+  [0.12, 0.27],
+  [0, 0.35],
+];
 
 // What a light that shines lights round itself keeps its own colour under
 // the grade (a fire stays bright in an evening room, a sconce's glass at
@@ -457,8 +492,9 @@ export type Grade = { rgb: RGB; key: string };
 export type Tone = 'room' | 'emit' | 'fig';
 export type Grades = Record<Tone, Grade | null> & { key: string };
 
-// The night as it comes: cool and dim, the crew dimmed a little of it.
-const NIGHT: { tint: RGB; strength: number; figures: number } = { tint: [62, 82, 150], strength: 0.5, figures: 0.3 };
+// The night as it comes: cool and dim, the crew dimmed a little under half
+// of it (any less and they look pasted on the dark room).
+const NIGHT: { tint: RGB; strength: number; figures: number } = { tint: [62, 82, 150], strength: 0.5, figures: 0.45 };
 // The crew takes this share of the evening tint as it comes; what glows
 // half of either.
 const AMBIENT_FIGURES = 0.5;
@@ -487,7 +523,10 @@ export function gradesOf(w: WorldDef, lit: boolean): Grades {
   const a = w.ambient && w.ambient.strength > 0 ? w.ambient : null;
   const n = w.light?.night;
   const night: readonly [RGB, number] = [n?.tint ?? NIGHT.tint, lit ? 0 : clamp(n?.strength ?? NIGHT.strength, 0, 1)];
-  const amb: readonly [RGB, number] = a ? [a.tint, a.strength] : [[255, 255, 255], 0];
+  // At night the night takes over from the evening: the evening's tint
+  // gives way as much as the night is strong (multiplied whole under it,
+  // the two flatten a room into one grey).
+  const amb: readonly [RGB, number] = a ? [a.tint, a.strength * (1 - night[1])] : [[255, 255, 255], 0];
   const fa = clamp(a?.figures ?? AMBIENT_FIGURES, 0, 1);
   const fn = clamp(n?.figures ?? NIGHT.figures, 0, 1);
   const room = gradeOf([amb, night]);
