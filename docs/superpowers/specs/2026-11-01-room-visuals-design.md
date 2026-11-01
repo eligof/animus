@@ -84,6 +84,10 @@ station); the engine's share 6.4. What every critique found:
   the room) or floor patches the planner keeps decor out of. A room
   planned while a world is being asked for its reserve is planned without
   it, so a world that plans its own furniture to answer can't recurse.
+- **Floor loop** (`RoomArt.floor`): two seconds of pictures (the scene's
+  `CYCLE`) drawn just above the base and under everyone on the floor, cut
+  into 64 px tiles and kept, so after the first loop only placements
+  change. The club's dance floor and sweeping spotlights use it.
 - **`scripts/art-lint.ts`**: the art rules' numbers per world (left/right
   wall ratio, floor back/front, how much `l` changes, figure contrast,
   decor per room size).
