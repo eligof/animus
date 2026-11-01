@@ -133,8 +133,10 @@ const OVER_TOP = 24;
 // leftmost beam cut off as it swept.
 type Measured = { marks: Mark[]; light: boolean; x0: number; y0: number; x1: number; y1: number };
 function measure(L: { W: number; D: number; H: number }, s: number, draw: (pen: Pen, at: Project) => void): Measured {
-  const ox = (L.D + 8) * s;
-  const oy = (L.H + OVER_TOP) * s;
+  // whole pixels: the pen rounds its marks out to whole pixels, and they
+  // must stay where a pen at the world's origin puts them
+  const ox = Math.ceil((L.D + 8) * s);
+  const oy = Math.ceil((L.H + OVER_TOP) * s);
   const B = new Bounds(Math.ceil((L.W + L.D + 16) * s), Math.ceil(((L.W + L.D) / 2 + L.H + OVER_TOP + 8) * s));
   B.save();
   draw(B, (x, y, z) => [(x - y) * s + ox, ((x + y) * s) / 2 - z * s + oy]);
