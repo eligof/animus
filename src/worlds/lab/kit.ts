@@ -77,7 +77,7 @@ export const C = {
   leafDark: '#3d7440',
   leafLight: '#8cc06a',
   terracotta: '#c66a42',
-  sofa: '#d9733b',
+  sofa: '#8e3b46', // oxblood: the generator, not the sofa, owns the eye
   bone: '#efe8d6',
 } as const;
 

@@ -234,10 +234,10 @@ export const room: RoomArt = {
     v.pen.restore();
   },
   // The light the shell gives: the caged lamps under the girder and the
-  // amber sconces (out at night), the gold niches' strip lamps (left on all
-  // night, with the acid pit and the forge they light the vault after
-  // hours), and the brass of each deposit bank throwing the lamps' light
-  // back warm at its foot (out with them).
+  // amber sconces (out at night); and the security lighting left on all
+  // night: the gold niches' strip lamps, the brass of each deposit bank lit
+  // warm at its foot, the alarm bells' red (with the acid pit and the forge
+  // they light the vault after hours).
   lights(v): RoomLight[] {
     const { features: fs } = planFor(v.W, v.D, v.H, v.T);
     const out: RoomLight[] = [];
@@ -248,7 +248,8 @@ export const room: RoomArt = {
     for (const f of fs) {
       if (f.kind === 'sconce') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.3, z: SCONCE_Z + 1.3, color: C.amber, r: 9, strength: 0.7, halo: 0 });
       else if (f.kind === 'niche') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: WAIN + 15, color: C.glow, r: 7, strength: 0.8, halo: 2.5 });
-      else if (f.kind === 'bank') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.5, z: 3.5, color: C.glow, r: Math.min(16, f.w / 2 + 3), strength: 0.5, halo: 0 });
+      else if (f.kind === 'bank') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 1.5, z: 3.5, color: C.glow, r: Math.min(16, f.w / 2 + 3), strength: 0.35, halo: 0 });
+      else if (f.kind === 'alarm') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.9, z: ALARM_Z + 0.7, color: '#ff5a4a', r: 4, strength: 0.5, halo: 1 });
     }
     return out;
   },
@@ -849,8 +850,10 @@ function clock(k: Kit, f: Feature): void {
 }
 
 // A red alarm bell on a box, its conduit running up to the girder.
+const ALARM_Z = WAIN + 12;
+
 function alarm(k: Kit, v: RoomView, f: Feature): void {
-  const z = WAIN + 12;
+  const z = ALARM_Z;
   const top = girder(v.H).z0;
   k.rod([[f.a + 0.5, 0.35, z + 1.2], [f.a + 0.5, 0.35, Math.min(top, z + 7)]], C.steelDark, 0.2);
   k.box(f.a, 0, Math.min(top, z + 7) - 0.2, 1.0, 0.5, 1.0, C.gunmetal, { line: k.thin, stripe: false });
