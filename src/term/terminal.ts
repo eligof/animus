@@ -43,10 +43,12 @@ export function parseKeys(data: string): Key[] {
         continue;
       }
       if (data[i + 1] === '[' || data[i + 1] === 'O') {
-        // Unknown CSI/SS3 sequence: skip to its final byte.
+        // Unknown CSI/SS3 sequence: skip to its final byte. An ESC cuts it
+        // short and starts a sequence of its own (ECMA-48), as KeyDecoder
+        // takes it when a read ends between them.
         let j = i + 2;
-        while (j < data.length && !CSI_FINAL.test(data[j])) j++;
-        i = j + 1;
+        while (j < data.length && data[j] !== '\x1b' && !CSI_FINAL.test(data[j])) j++;
+        i = data[j] === '\x1b' ? j : j + 1;
         continue;
       }
       // ESC and a printable key (or DEL) together: the key with Alt.
@@ -81,10 +83,11 @@ export function parseKeys(data: string): Key[] {
 export const PASTE_QUIET_MS = 2500;
 
 // True when `tail` (starting at ESC) could still grow into a longer sequence.
+// SS3 as CSI: parseKeys reads both to a final byte (xterm's Shift+F1 is
+// ESC O 2 P).
 function incompleteEscape(tail: string): boolean {
   if (tail === '\x1b') return true;
-  if (tail.startsWith('\x1b[')) return !CSI_FINAL.test(tail.slice(2));
-  if (tail.startsWith('\x1bO')) return tail.length < 3;
+  if (tail.startsWith('\x1b[') || tail.startsWith('\x1bO')) return !CSI_FINAL.test(tail.slice(2));
   return false;
 }
 

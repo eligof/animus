@@ -27,6 +27,8 @@ jobs:
         with:
           node-version: 26
           package-manager-cache: false
+      - name: Install dev dependencies (fast-check for the property tests)
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Tests
         run: node --test "test/**/*.test.ts"
       - name: Tag matches package.json

@@ -41,11 +41,16 @@ export const INVISIBLE = /[\p{Cf}\p{M}\u1160-\u11ff\ud7b0-\ud7ff\u{e0000}-\u{e0f
 // C0 and C1 controls, DEL among them.
 export const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
+// Half a surrogate pair on its own: no character at all. Passed through, two
+// such halves left side by side once what was between them is dropped
+// would join into one (a wide emoji).
+const HALF = /^[\ud800-\udfff]$/;
+
 // The one rule for putting untrusted text into cells: tab becomes a space,
 // control and zero-width characters are dropped ('' ), anything two cells
-// wide becomes '?', everything else passes through.
+// wide (or half a character) becomes '?', everything else passes through.
 export function cellSafe(ch: string): string {
   if (ch === '\t') return ' ';
   if (CONTROL.test(ch) || INVISIBLE.test(ch)) return '';
-  return isWide(ch) ? '?' : ch;
+  return isWide(ch) || HALF.test(ch) ? '?' : ch;
 }

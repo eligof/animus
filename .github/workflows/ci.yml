@@ -32,6 +32,8 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
+      - name: Install dev dependencies (fast-check for the property tests)
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Unit and integration tests
         run: node --test "test/**/*.test.ts"
       - name: Snapshot every preset

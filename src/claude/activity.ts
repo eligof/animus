@@ -28,14 +28,17 @@ export function sanitize(s: string): string {
   return out;
 }
 
+// The first line of `s` in at most `n` cells, cut at a space where it can.
+// Counted in characters, not UTF-16 units, so a cut never halves one.
 export function clip(s: string, n: number): string {
   if (n <= 0) return '';
   const line = sanitize((String(s).split('\n').find((l) => l.trim() !== '') ?? '')).trim();
-  if (line.length <= n) return line;
-  let cut = line.slice(0, n - 1);
+  const cs = [...line];
+  if (cs.length <= n) return line;
+  let cut = cs.slice(0, n - 1);
   const space = cut.lastIndexOf(' ');
   if (space >= n * 0.6) cut = cut.slice(0, space);
-  return cut.trimEnd() + '…';
+  return cut.join('').trimEnd() + '…';
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
