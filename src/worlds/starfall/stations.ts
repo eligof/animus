@@ -53,6 +53,7 @@ const SIDE: Quad = [[8.8, 2.3, 7.6], [10.3, 3.6, 7.6], [10.3, 3.35, 11.2], [8.8,
 const LENSES: P3[] = [[3.2, 1.72, 6.32], [4.6, 1.72, 6.32], [6.0, 1.72, 6.32], [7.4, 1.72, 6.32], [8.6, 1.72, 6.32]];
 
 const write: PropArt = {
+  light: [{ kind: 'screen', u: 5.5, v: 2.0, z: 9.8, color: '#8ff8ff', r: 8, halo: 0 }],
   len: 11,
   dep: 7,
   height: 14,
@@ -192,6 +193,7 @@ function cube(k: Kit, q: Cube, bright = false): void {
 }
 
 const read: PropArt = {
+  light: [{ kind: 'glow', u: 7, v: 3, z: 8, color: '#ff9ad6', strength: 0.55, r: 8, halo: 0 }],
   len: 14,
   dep: 4,
   height: 16,
@@ -409,6 +411,7 @@ const portPts = (rr: number, out = 0.06): P3[] => {
 };
 
 const run: PropArt = {
+  light: [{ kind: 'fire', u: 6.55, v: 8.3, z: 3.4, color: '#ffb35c', r: 12, halo: 0 }],
   len: 11,
   dep: 11,
   height: 15,
@@ -643,6 +646,7 @@ export const CHAIR = { u: 5.6, v: 4.4, seat: 3.5, back: 5.25, top: 8.2 };
 const consoleBack = (u: number) => 0.5 + 1.3 * ((u - 6) / 5.4) ** 2;
 
 const think: PropArt = {
+  light: [{ kind: 'screen', u: 6, v: 3.5, z: 4.5, color: '#8ff8ff', r: 8, halo: 0 }],
   len: 12,
   dep: 7,
   height: 12,
@@ -834,6 +838,7 @@ const DOOR = { u0: 3.5, u1: 9.5, top: 16.2, rTop: 2.4, face: 1.3, back: -1.8, ri
 const doorOpening = (n: number) => rrect(DOOR.u0, 0, DOOR.u1, DOOR.top, n, DOOR.rTop, 0, 6);
 
 const entrance: PropArt = {
+  light: [{ kind: 'glow', u: 6.5, v: 0.8, z: 18.7, color: '#ffc04a', strength: 0.55, r: 8, halo: 0 }],
   len: 15,
   dep: 4,
   height: 20,

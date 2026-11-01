@@ -4,7 +4,8 @@ import type { Color } from '../../art/types.ts';
 import { hub, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import type { Quad } from './bits.ts';
 import { crown, fillPts, leaf, on, rivets, sprouts, wallRing } from './bits.ts';
 import type { P3 } from './kit.ts';
@@ -215,7 +216,31 @@ export const room: RoomArt = {
     planet(k, v, f);
     v.pen.restore();
   },
+  lights: stationLights,
 };
+
+// The room's light (see the light guide): the planet's blue light through
+// the viewport and the portholes, by day and brighter at night; the warm
+// wall lamps between the portholes and on the ribs, out at night.
+function stationLights(v: { W: number; D: number; H: number; T: number }): RoomLight[] {
+  const plan = planFor(v.W, v.D, v.H, v.T);
+  const pz = portZ(v.H);
+  const out: RoomLight[] = [];
+  for (const f of plan.features) {
+    if (f.kind === 'viewport') {
+      const g = viewport(f, v.H);
+      out.push({ kind: 'window', wall: f.wall, u: f.a, w: g.a1 - g.a0, z0: g.z0, z1: g.z1, color: '#bcd4ff', strength: 0.6, night: '#8fb4ff', moon: 1.4 });
+    } else if (f.kind === 'porthole') {
+      out.push({ kind: 'window', wall: f.wall, u: f.a, w: 6.4, z0: pz - 3.2, z1: pz + 3.2, color: '#bcd4ff', strength: 0.35, night: '#8fb4ff', moon: 0.6 });
+    } else if (f.kind === 'lamp') {
+      out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 0.9, z: pz + 0.5, color: '#ffcf8a', strength: 0.9, r: 11, halo: 2.2 });
+    }
+  }
+  for (const wall of ['right', 'left'] as const) {
+    for (const r of plan.ribs[wall]) out.push({ kind: 'lamp', wall, u: r, v: 1.3, z: pz + 0.5, color: '#ffcf8a', strength: 0.8, r: 10, halo: 2 });
+  }
+  return out;
+}
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
@@ -368,9 +393,9 @@ function grating(k: Kit, T: number, end: number): void {
   k.line([[T, e, 0], [end, e, 0]], '#d8fbff', Math.max(0.8, 0.16 * s));
 }
 
-// Paint and light on the deck: the hub emblem, a rug by the sleep pods,
-// hazard rings round the reactor, the holo-table's glow ring, a keep-clear
-// box at the airlock, pools of light at the stations and the viewport.
+// Paint on the deck: the hub emblem, a rug by the sleep pods, hazard rings
+// round the reactor, the holo-table's glow ring, a keep-clear box at the
+// airlock.
 function marks(k: Kit, v: RoomView, plan: Plan): void {
   const { pen, s } = k;
   const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
@@ -398,7 +423,6 @@ function marks(k: Kit, v: RoomView, plan: Plan): void {
   if (run) {
     const rk = frameOf(run);
     if (rk.vis(-3, -3, 0, run.len + 3, run.dep + 3, 0, 8)) {
-      rk.pool(run.len / 2, run.dep / 2, 12, 12, '#5ce8ff', 0.22);
       // (broken where the riser stands at the plinth's end: the engineer
       // works it from the gap, see npcs.ts)
       hazardRing(rk, run.len / 2, run.dep / 2, 6.6, [-0.45, 1.05]);
@@ -408,7 +432,6 @@ function marks(k: Kit, v: RoomView, plan: Plan): void {
   if (think) {
     const tk = frameOf(think);
     if (tk.vis(-4, -4, 0, think.len + 4, think.dep + 4, 0, 8)) {
-      tk.pool(think.len / 2, think.dep / 2, 9, 7, '#8ff6ff', 0.2);
       const e = tk.ell(think.len / 2, think.dep / 2 + 0.3, 0.02, 7.2);
       pen.beginPath();
       pen.ellipse(e.cx, e.cy, e.rx, e.ry * (think.dep / think.len) * 1.6, e.rot, 0, Math.PI * 2);
@@ -447,23 +470,8 @@ function marks(k: Kit, v: RoomView, plan: Plan): void {
       dk.pool(6.9, 3, 7, 5, '#ff8a6a', 0.12);
     }
   }
-  // Pools of light where people work: warm at the desks, cool at screens.
-  for (const [kind, u, w, r, a, c] of [['write', 0.5, 0.75, 9, 0.2, C.lamp], ['read', 0.8, 0.9, 9, 0.2, C.lamp], ['search', 0.35, 1.1, 8, 0.16, '#8fe6ff'], ['web', 0.5, 0.6, 8, 0.16, '#8fe6ff'], ['idle', 0.4, 0.4, 12, 0.22, C.lamp]] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = frameOf(q);
-    if (qk.vis(q.len * u - r, q.dep * w - r, 0, q.len * u + r, q.dep * w + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, v.T), s);
-    if (f.kind === 'viewport' && wk.vis(f.a - 16, 0, 0, f.a + 16, 14, 0, 8)) {
-      wk.pool(f.a, 4, f.w * 0.55, 9, '#8fb8ff', 0.16);
-    } else if (f.kind === 'porthole' && wk.vis(f.a - 6, 0, 0, f.a + 6, 6, 0, 8)) {
-      wk.pool(f.a, 2.5, 4.5, 3, '#8fb8ff', 0.08);
-    } else if (f.kind === 'lamp' && wk.vis(f.a - 7, 0, 0, f.a + 7, 6, 0, 8)) {
-      wk.pool(f.a, 2.5, 6, 4, C.lamp, 0.14);
-    }
-  }
+  // (The light itself, at the stations, the viewport, the portholes and
+  // the lamps, is declared: see stationLights and the stations' light.)
 }
 
 // A cosy rug in a frame: rounded, a border, stripes across.
@@ -648,6 +656,8 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     k.box(r - 0.75, 0, 0, 1.5, 0.7, zt, C.hull, { line: k.thin, stripe: false });
     k.line([[r - 0.45, 0.71, KICK + 0.6], [r - 0.45, 0.71, zt - 0.6]], '#6a7ba0', Math.max(0.7, 0.12 * s));
     rivets(k, [[r, 0.71, RAIL + 0.6], [r, 0.71, zt - 1.6], [r, 0.71, (RAIL + zt) / 2]], '#c5cfdd', 0.12);
+    // a warm lamp on each rib (its light is declared: see stationLights)
+    lamp(k, r, portZ(H), lampsOn(v), 0.7);
   }
   // A duct along the upper hull where there is room for it.
   if (zt - zu > 10) {
@@ -673,7 +683,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'planter') planterArt(k, f, pz);
     else if (f.kind === 'patch') patch(k, f, pz);
     else if (f.kind === 'vent') vent(k, f, lit);
-    else if (f.kind === 'lamp') lamp(k, f, pz);
+    else if (f.kind === 'lamp') lamp(k, f.a, pz, lampsOn(v));
   }
 }
 
@@ -751,12 +761,17 @@ function midTrim(k: Kit, v: RoomView, end: number, tone: (c: Color, d?: number) 
   const { pen, s } = k;
   const { T, H } = v;
   const zm = midZ(H);
-  pen.save();
-  pen.globalCompositeOperation = 'screen';
-  k.poly([[T, 0.05, zm - 7], [end, 0.05, zm - 7], [end, 0.05, zm], [T, 0.05, zm]], k.vgrad(T, 0.05, zm - 7, zm, [[0, '#ffd89a00'], [0.7, '#ffd89a18'], [1, '#ffd89a3a']]), 0);
-  pen.restore();
+  // (at night the warm strip and its wash are out: only the cyan running
+  // lights stay on)
+  const on = lampsOn(v);
+  if (on) {
+    pen.save();
+    pen.globalCompositeOperation = 'screen';
+    k.poly([[T, 0.05, zm - 7], [end, 0.05, zm - 7], [end, 0.05, zm], [T, 0.05, zm]], k.vgrad(T, 0.05, zm - 7, zm, [[0, '#ffd89a00'], [0.7, '#ffd89a18'], [1, '#ffd89a3a']]), 0);
+    pen.restore();
+  }
   k.box(T, 0, zm, end - T, 0.9, TRIM, tone(C.navy, 0.1), { line: k.thin, stripe: false });
-  k.line([[T + 0.2, 0.92, zm + 0.25], [end - 0.2, 0.92, zm + 0.25]], '#ffe6b0', Math.max(1, 0.24 * s));
+  k.line([[T + 0.2, 0.92, zm + 0.25], [end - 0.2, 0.92, zm + 0.25]], on ? '#ffe6b0' : '#7d7466', Math.max(1, 0.24 * s));
   // running lights along the ledge, mostly warm, a cyan one now and then
   const warm: P3[] = [];
   const cool: P3[] = [];
@@ -766,7 +781,8 @@ function midTrim(k: Kit, v: RoomView, end: number, tone: (c: Color, d?: number) 
   }
   for (const [list, c] of [[warm, '#ffcf7a'], [cool, '#8ff6ff']] as const) {
     if (!list.length) continue;
-    for (const [a, n, z] of list) k.halo(a, n, z, 1.6, c, 0.35);
+    const warmOff = !on && c === '#ffcf7a';
+    if (!warmOff) for (const [a, n, z] of list) k.halo(a, n, z, on ? 1.6 : 2.2, c, on ? 0.35 : 0.55);
     pen.beginPath();
     const r = Math.max(0.9, 0.2 * s);
     for (const [a, n, z] of list) {
@@ -774,7 +790,7 @@ function midTrim(k: Kit, v: RoomView, end: number, tone: (c: Color, d?: number) 
       pen.moveTo(x + r, y);
       pen.arc(x, y, r, 0, Math.PI * 2);
     }
-    pen.fillStyle = c === '#ffcf7a' ? '#fff0c8' : '#d8fdff';
+    pen.fillStyle = warmOff ? '#8a7a5c' : c === '#ffcf7a' ? '#fff0c8' : '#d8fdff';
     pen.fill();
   }
 }
@@ -787,14 +803,17 @@ function topBand(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, tone:
   const zt = topZ(H);
   k.poly([[T, 0, zt], [end, 0, zt], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, zt, H, [[0, tone('#2c3854')], [1, tone('#202a42')]]), 0);
   k.line([[T, 0, zt], [end, 0, zt]], INK, k.thin);
-  // the warm wash of the light bar on the plating under it
-  pen.save();
-  pen.globalCompositeOperation = 'screen';
-  k.poly([[T, 0.05, zt - 8], [end, 0.05, zt - 8], [end, 0.05, zt], [T, 0.05, zt]], k.vgrad(T, 0.05, zt - 8, zt, [[0, '#ffd89a00'], [0.75, '#ffd89a1c'], [1, '#ffd89a40']]), 0);
-  pen.restore();
+  // the warm wash of the light bar on the plating under it (out at night)
+  const on = lampsOn(v);
+  if (on) {
+    pen.save();
+    pen.globalCompositeOperation = 'screen';
+    k.poly([[T, 0.05, zt - 8], [end, 0.05, zt - 8], [end, 0.05, zt], [T, 0.05, zt]], k.vgrad(T, 0.05, zt - 8, zt, [[0, '#ffd89a00'], [0.75, '#ffd89a1c'], [1, '#ffd89a40']]), 0);
+    pen.restore();
+  }
   // the light bar: a housing with a glowing lens
   k.box(T, 0, zt - 0.9, end - T, 0.7, 0.9, C.steelDark, { line: k.thin, stripe: false });
-  k.line([[T + 0.3, 0.72, zt - 0.62], [end - 0.3, 0.72, zt - 0.62]], '#fff1d0', Math.max(1, 0.3 * s));
+  k.line([[T + 0.3, 0.72, zt - 0.62], [end - 0.3, 0.72, zt - 0.62]], on ? '#fff1d0' : '#6f6a62', Math.max(1, 0.3 * s));
   // pipes along the band (orange, steel, blue-grey), clamps at the ribs
   const pipes: Array<[number, number, Color]> = [[zt + 1.6, 0.35, C.orange], [zt + 3.0, 0.3, C.steel], [zt + 4.3, 0.42, '#7d8aa3']];
   for (const [z, r, c] of pipes) k.rod([[T, 0.5, z], [end, 0.5, z]], tone(c, 0.1), r);
@@ -1271,15 +1290,15 @@ function vent(k: Kit, f: Feature, lit: boolean): void {
   rivets(k, [[a0 + 0.35, 0.42, z0 + 0.35], [a0 + f.w - 0.35, 0.42, z0 + 0.35], [a0 + 0.35, 0.42, z1 - 0.35], [a0 + f.w - 0.35, 0.42, z1 - 0.35]]);
 }
 
-// A warm wall lamp: a capsule of frosted glass in a steel cage.
-function lamp(k: Kit, f: Feature, pz: number): void {
-  const a = f.a;
+// A warm wall lamp: a capsule of frosted glass in a steel cage, at `a`
+// along the wall and `n` out from it; its glass glows while the lights are
+// on (the light it throws is declared: see stationLights), dull at night.
+function lamp(k: Kit, a: number, pz: number, on: boolean, n = 0): void {
   const z = pz + 0.5;
-  k.halo(a, 0.4, z, 8, C.warm, 0.3);
-  k.halo(a, 0.4, z, 3.2, '#ffe2a8', 0.32);
-  k.box(a - 0.55, 0, z - 1.8, 1.1, 0.4, 3.6, C.steelDark, { line: k.thin, stripe: false, round: 0.3 });
-  k.poly(rrect(a - 0.42, z - 1.4, a + 0.42, z + 1.4, 0.42, 0.75), '#fff1cf', k.thin);
-  k.line([[a - 0.42, 0.78, z], [a + 0.42, 0.78, z]], C.steelDark, Math.max(0.7, 0.12 * k.s));
+  if (on) k.halo(a, n + 0.4, z, 3.2, '#ffe2a8', 0.32);
+  k.box(a - 0.55, n, z - 1.8, 1.1, 0.4, 3.6, C.steelDark, { line: k.thin, stripe: false, round: 0.3 });
+  k.poly(rrect(a - 0.42, z - 1.4, a + 0.42, z + 1.4, 0.42, n + 0.75), on ? '#fff1cf' : '#a9a493', k.thin);
+  k.line([[a - 0.42, n + 0.78, z], [a + 0.42, n + 0.78, z]], C.steelDark, Math.max(0.7, 0.12 * k.s));
 }
 
 // ── the shell's edges: wall tops, cut ends, the deck slab ─────────────────
