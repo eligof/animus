@@ -4,32 +4,36 @@ import type { Color } from '../../art/types.ts';
 import { hub, keepClear, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { crystal, heap, icicles, lantern, rock } from './bits.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, SPOT, hash, softDot, sparkle, wave, withAlpha } from './kit.ts';
 
-// Snowy Depths' shell: a cavern in a glacier. Packed snow underfoot, rippled
-// by the draught and trodden into trails, a pond frozen over round the
-// fishing hole and bare rock melted clear round the fire; walls of blue
-// glacier ice over a footing of rock, banded and scalloped, hung with
-// frozen flows and a fringe of icicles under a cornice of snow; snow
-// drifted deep along their feet. Between the stations the walls hold
-// frozen waterfalls, ice windows with a fish caught in them, crystals,
-// skis, a stretched pelt, shelves and warm iron lanterns. Every piece sits
-// in the free stretches of wall between the stations, worked out from the
-// same plan the stage uses, so nothing hangs behind a bookcase or the gate.
+// Snowy Depths' shell: a cavern in a glacier. Packed snow underfoot, white
+// with blue shadows, rippled by the draught and trodden into trails, a pond
+// frozen over round the fishing hole and bare rock melted clear round the
+// fire; walls of blue glacier ice over a footing of rock, fluted, cracked
+// and glossy, hung with frozen flows and clusters of icicles under a roll
+// of snow; snow drifted deep along their feet; high in one wall a woolly
+// mammoth caught in the ice. Between the stations the walls hold frozen
+// waterfalls, ice windows with a fish caught in them, crystals, skis, a
+// stretched pelt, shelves and warm iron lanterns. Every piece sits in the
+// free stretches of wall between the stations, worked out from the same
+// plan the stage uses, so nothing hangs behind a bookcase or the gate.
 
 type Wall = 'left' | 'right';
 type Kind = 'falls' | 'window' | 'crystals' | 'skis' | 'pelt' | 'shelf' | 'lantern';
 export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number };
-export type Plan = { L: Layout; features: Feature[]; scatter: Bit[] };
+export type Plan = { L: Layout; features: Feature[]; scatter: Bit[]; frozen: Frozen | null };
+// What is caught deep in the glacier: on which wall, where along it, the
+// height of its feet and its size (1 is 14 x 9 units).
+export type Frozen = { wall: Wall; a: number; z: number; m: number };
 // A low thing lying out on the open floor: rocks under snow, or shards of
 // ice pushed up through it.
 type Bit = { x: number; y: number; r: number; kind: 'rocks' | 'shards'; k: number };
 
 const SLAB = 4; // the floor's thickness, shown along the front cut
-const FLOOR = '#b3c3d8'; // the packed snow
+const FLOOR = '#d3deeb'; // the packed snow: the lightest thing in the cave, its shadows blue
 const GLACIER: ReadonlyArray<readonly [number, Color]> = [[0, '#7cc2e8'], [0.22, '#5ea5d8'], [0.6, '#3f78b6'], [1, '#233f70']];
 
 // ── the plan ───────────────────────────────────────────────────────────────
@@ -46,7 +50,7 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   let L = planLayout(2 * W + 12, W + H + 12, 'snowy');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
   const fs = features(L);
-  const plan = { L, features: fs, scatter: scatter(L, fs) };
+  const plan = { L, features: fs, scatter: scatter(L, fs), frozen: frozen(L, fs) };
   PLANS.set(key, plan);
   return plan;
 }
@@ -130,6 +134,37 @@ function features(L: Layout): Feature[] {
   return out;
 }
 
+// The mammoth in the ice: above everything hung on the walls (their pieces
+// stop at about 18 units up) and under the icicles, as big as that band
+// allows, in the middle of the widest stretch of wall clear of the falls
+// (the wall without falls wins a tie). None in a room too low for it.
+const MAMMOTH = 14;
+function frozen(L: Layout, fs: Feature[]): Frozen | null {
+  const z = Math.max(19.5, L.H * 0.42);
+  const m = Math.min(1.4, (L.H - 7.5 - z) / 9);
+  if (m < 0.7) return null;
+  let best: Frozen | null = null;
+  let room = 0;
+  for (const wall of ['right', 'left'] as const) {
+    const end = wall === 'right' ? L.W : L.D;
+    const falls = fs.filter((f) => f.wall === wall && f.kind === 'falls').map((f) => [f.a - f.w / 2 - 3, f.a + f.w / 2 + 3] as const);
+    let a0 = L.T + 3;
+    const free: Array<[number, number]> = [];
+    for (const [c0, c1] of [...falls].sort((p, q) => p[0] - q[0])) {
+      if (c0 > a0) free.push([a0, c0]);
+      a0 = Math.max(a0, c1);
+    }
+    if (end - 3 > a0) free.push([a0, end - 3]);
+    for (const [s0, s1] of free) {
+      const len = s1 - s0 + (falls.length ? 0 : 0.5);
+      if (len < MAMMOTH * m + 2 || len <= room) continue;
+      room = len;
+      best = { wall, a: (s0 + s1) / 2, z, m };
+    }
+  }
+  return best;
+}
+
 // Rocks and shards of ice out on the floor, off the walkways and the
 // plazas (see keepClear), clear of the stations, the pond and the falls'
 // pools, each kept apart from the others.
@@ -156,6 +191,11 @@ function scatter(L: Layout, fs: Feature[]): Bit[] {
   }
   return out.sort((p, q) => p.x + p.y - (q.x + q.y));
 }
+
+// What the snow cave keeps decor away from: the foot of each frozen falls
+// (its frozen pool and splash), so nothing stands in front of the hero.
+export const snowyReserve: NonNullable<WorldDef['reserve']> = (L) =>
+  planFor(L.W, L.D, L.H, L.T).features.filter((f) => f.kind === 'falls').map((f) => ({ wall: f.wall, a0: f.a - f.w / 2 - 1, a1: f.a + f.w / 2 + 1, out: 9 }));
 
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots (warm by the fire pit, a seat by it, a drink by the
@@ -191,6 +231,17 @@ export const room: RoomArt = {
     shell(k, v);
     v.pen.restore();
   },
+  // The warm lanterns on the walls (oil: they burn all night), the falls'
+  // cold glow on the snow at their foot, the crystals' faint one.
+  lights(v): RoomLight[] {
+    const out: RoomLight[] = [];
+    for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+      if (f.kind === 'lantern') out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 1.3, z: 10.4, color: '#ffb862', r: 9, strength: 0.7, halo: 2.4 });
+      else if (f.kind === 'falls') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 4, z: 3, color: '#9fdcff', r: 12, strength: 0.5, halo: 0 });
+      else if (f.kind === 'crystals') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 1.5, z: 3, color: '#8ed2ff', r: 6, strength: 0.5, halo: 0 });
+    }
+    return out;
+  },
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     v.pen.save();
@@ -209,20 +260,20 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   const corner = k.p(T, T, 0);
   const far = k.p(W, D, 0);
   const g = pen.createRadialGradient(corner[0], corner[1], 0, corner[0], corner[1], Math.hypot(far[0] - corner[0], far[1] - corner[1]));
-  g.addColorStop(0, '#22386a55');
-  g.addColorStop(0.3, '#22386a1c');
-  g.addColorStop(0.65, '#22386a00');
-  g.addColorStop(1, '#22386a14');
+  g.addColorStop(0, '#3a5a8a55');
+  g.addColorStop(0.3, '#3a5a8a1c');
+  g.addColorStop(0.65, '#3a5a8a00');
+  g.addColorStop(1, '#3a5a8a14');
   k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], g, 0);
-  // Broad dunes: a pale crest toward the light, a blue hollow behind.
+  // Broad dunes: a white crest toward the light, a blue hollow behind.
   for (let i = 0; i < Math.round(((W - T) * (D - T)) / 700); i++) {
     const cx = T + hash(i, 21) * (W - T);
     const cy = T + hash(i, 22) * (D - T);
     const r = 6 + hash(i, 23) * 12;
     const e = 0.55 + hash(i, 24) * 0.3;
     if (!k.seen([[cx - r * 1.2, cy - r * 1.2, 0], [cx + r * 1.6, cy + r * 1.6, 0], [cx - r * 1.2, cy + r * 1.6, 0], [cx + r * 1.6, cy - r * 1.2, 0]])) continue;
-    k.pool(cx + r * 0.35, cy + r * 0.35, r * 1.1, r * e, '#6f86aa', 0.2, 0, 'source-over');
-    k.pool(cx - r * 0.15, cy - r * 0.15, r, r * e * 0.9, '#f4f8fd', 0.3, 0, 'source-over');
+    k.pool(cx + r * 0.35, cy + r * 0.35, r * 1.1, r * e, '#9fb6d6', 0.25, 0, 'source-over');
+    k.pool(cx - r * 0.15, cy - r * 0.15, r, r * e * 0.9, '#f4f8fd', 0.45, 0, 'source-over');
   }
   // Ripples the draught has blown into the snow: long soft crests, a blue
   // shadow under each, all in two paths.
@@ -253,7 +304,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     pen.lineJoin = 'round';
     pen.stroke();
   };
-  strokes(0.3, '#8ea3c04d', Math.max(1, 0.3 * s));
+  strokes(0.3, '#8ea3c060', Math.max(1, 0.3 * s));
   strokes(0, '#f4f8fd90', Math.max(0.8, 0.14 * s));
   const rects = plan.L.slots.map(slotRect);
   const clear = (x: number, y: number, r: number) => x - r > T + 3 && y - r > T + 3 && x + r < W - 2 && y + r < D - 2 && !rects.some((q) => x + r > q.x0 - 3 && x - r < q.x1 + 3 && y + r > q.y0 - 3 && y - r < q.y1 + 3);
@@ -307,7 +358,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   if (idle) trail.push([h, idle.spot, 2]);
   pen.beginPath();
   for (const [a, b, sd] of trail) footprints(k, a.x, a.y, b.x, b.y, sd);
-  pen.fillStyle = '#8297b6a0';
+  pen.fillStyle = '#7f97bcb0';
   pen.fill();
   // The ground round the stations: the pond under the fishing hole, rock
   // melted bare round the fire.
@@ -320,25 +371,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const ik = new Kit(pen, slotAt(v.at, idle), s);
     hearthGround(ik, SPOT.fire[0], SPOT.fire[1]);
   }
-  // The light the stations lay on the snow.
-  const lights: ReadonlyArray<readonly [Slot['kind'], number, number, number, number, Color, number]> = [
-    ['idle', SPOT.fire[0], SPOT.fire[1], 16, 13, '#ff8a3a', 0.42],
-    ['run', SPOT.stove[0], SPOT.stove[1] + 3, 11, 9, '#ff8a3a', 0.34],
-    ['write', 9.2, 4.5, 7, 5.5, '#ffb44a', 0.26],
-    ['read', 11.4, 3, 6.5, 5, '#ffb44a', 0.24],
-    ['search', 11, 3, 6, 5, '#ffb44a', 0.26],
-    ['search', 5, 4, 8, 4, '#e6f8ff', 0.3],
-    ['web', 4.5, 6, 6, 5, '#c8ffe0', 0.22],
-    ['think', 1.2, 5.6, 6, 5, '#ffb44a', 0.26],
-    ['think', 11.8, 2.2, 5, 4, '#ffb44a', 0.22],
-    ['entrance', 7, 3, 9, 6, '#e6f0ff', 0.32],
-    ['entrance', 2.5, 2.6, 6, 5, '#ffb44a', 0.26],
-  ];
-  for (const [kind, u, w, ru, rv, color, a] of lights) {
-    const q = slot(kind);
-    if (!q) continue;
-    new Kit(pen, slotAt(v.at, q), s).pool(u, w, ru, rv, color, a, 0, 'source-over');
-  }
+  // (the stations' light on the snow is their own, declared with them)
   for (const b of plan.scatter) if (k.seen([[b.x - b.r - 1, b.y - b.r - 1, 0], [b.x + b.r + 1, b.y + b.r + 1, 0], [b.x - b.r, b.y + b.r, 2.5]])) bit(k, b);
 }
 
@@ -490,7 +523,14 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     k.poly([[a - w / 2, 0, 0], [a + w / 2, 0, 0], [a + w / 2 + w * 0.3, 0, z1], [a - w / 2 + w * 0.3, 0, z1]], k.hgrad([a - w / 2, 0, 0], [a + w / 2, 0, 0], [[0, '#9fdcff00'], [0.5, '#9fdcff26'], [1, '#9fdcff00']]), 0);
   }
   pen.restore();
-  facets(k, v, end, seed);
+  // What hangs on this wall: the falls (the frozen flows and the snow roll
+  // keep clear of them), every piece (the cracks and the shine keep clear
+  // of those) and the mammoth in the ice.
+  const busy = fs.filter((f) => f.kind === 'falls').map((f) => [f.a - f.w / 2 - 3, f.a + f.w / 2 + 3] as const);
+  const ice = plan.frozen?.wall === wall ? plan.frozen : null;
+  const beast = ice ? [[ice.a - 9 * ice.m, ice.a + 9 * ice.m] as const] : [];
+  iceFace(k, v, end, seed, [...fs.map((f) => [f.a - f.w / 2 - 1.5, f.a + f.w / 2 + 1.5] as const), ...beast]);
+  if (ice && k.seen([[ice.a - 9 * ice.m, 0, ice.z - 1], [ice.a + 9 * ice.m, 0, ice.z + 11 * ice.m]])) mammoth(k, ice);
   // A footing of rock along the bottom.
   const top: P3[] = [];
   for (let a = end; a >= T - 0.01; a -= 1.5) top.push([Math.max(T, a), 0, 2.4 + wave(a * 0.33, seed * 5) * 4.8]);
@@ -506,12 +546,11 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   pen.stroke();
   k.line(top.map(([a, n, z]) => [a, n, z - 0.4] as P3), tone(C.rockHi), Math.max(0.8, 0.16 * s));
   k.line(top, INK, k.thin);
-  // Frozen flows hanging from the top, clear of the falls.
-  const busy = fs.filter((f) => f.kind === 'falls').map((f) => [f.a - f.w / 2 - 3, f.a + f.w / 2 + 3] as const);
+  // Frozen flows hanging from the top, clear of the falls and the mammoth.
   let a = T + 3 + hash(seed, 21) * 6;
   for (let i = 0; a < end - 4; i++) {
     const w = 3 + hash(i, seed, 22) * 4;
-    if (!busy.some(([a0, a1]) => a + w / 2 > a0 && a - w / 2 < a1) && k.seen([[a - w, 0, H], [a + w, 0, H * 0.5]])) drape(k, a, w, H - 0.6, H * (0.12 + hash(i, seed, 23) * 0.3), seed * 100 + i, tone);
+    if (![...busy, ...beast].some(([a0, a1]) => a + w / 2 > a0 && a - w / 2 < a1) && k.seen([[a - w, 0, H], [a + w, 0, H * 0.5]])) drape(k, a, w, H - 0.6, H * (0.12 + hash(i, seed, 23) * 0.3), seed * 100 + i, tone);
     a += w + 7 + hash(i, seed, 24) * 14;
   }
   for (const f of fs) {
@@ -530,46 +569,103 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   }
 }
 
-// The glacier's face in big flat facets, as ice breaks: each a shade
-// lighter or darker than the ice round it, frost along its edges.
-function facets(k: Kit, v: RoomView, end: number, seed: number): void {
+// The glacier's face, drawn as ice: broad flutes running down it, each a
+// shade lighter or darker than the ice round it and ending in a rounded
+// tongue, the light ones catching the light down their left edge; a few
+// long cracks, white over a dark twin; the shine of glass in pairs of
+// slanted strokes; and a couple of bands of old snow caught in it, low
+// down. The cracks and the shine keep clear of what hangs on the wall
+// (`hung`: stretches along it).
+function iceFace(k: Kit, v: RoomView, end: number, seed: number, hung: ReadonlyArray<readonly [number, number]>): void {
   const { pen, s } = k;
   const { T, H } = v;
-  const cw = 11;
-  const ch = 9;
-  const cols = Math.ceil((end - T) / cw);
-  const rows = Math.ceil(H / ch);
-  const node = (i: number, j: number): P3 => {
-    const a = T + i * cw + (i > 0 && i < cols ? (hash(i, j, seed * 5) - 0.5) * cw * 0.7 : 0);
-    const z = j * ch + (j > 0 && j < rows ? (hash(i, j, seed * 5 + 1) - 0.5) * ch * 0.6 : 0);
-    return [Math.min(end, a), 0, Math.min(H, z)];
-  };
-  const tints: Array<[Color, P3[][]]> = [['#ffffff14', []], ['#ffffff09', []], ['#0a1a4012', []], ['#0a1a4020', []]];
+  const flutes: Array<[Color, P3[][]]> = [['#ffffff12', []], ['#0a1a401c', []]];
   const edges: P3[][] = [];
-  for (let j = 0; j < rows; j++) {
-    for (let i = 0; i < cols; i++) {
-      const [p, q, r, t] = [node(i, j), node(i + 1, j), node(i + 1, j + 1), node(i, j + 1)];
-      if (!k.seen([p, q, r, t])) continue;
-      const flip = hash(i, j, seed * 5 + 2) < 0.5;
-      const tris = flip ? [[p, q, r], [p, r, t]] : [[p, q, t], [q, r, t]];
-      tris.forEach((tri, n) => {
-        const h = hash(i, j * 2 + n, seed * 5 + 3);
-        if (h < 0.6) tints[Math.floor(h / 0.15)][1].push(tri);
-      });
-      edges.push(flip ? [p, r] : [q, t], [t, p], [p, q]);
+  let a = T + hash(seed, 41) * 1.5;
+  for (let i = 0; a < end - 1.5; i++) {
+    const w = Math.min(end - a, 4 + hash(i, seed, 42) * 5);
+    const zt = 6 + hash(i, seed, 43) * 8 + Math.min(w * 0.55, 2.6);
+    if (k.seen([[a - 0.5, 0, zt - 3], [a + w + 0.5, 0, H]])) {
+      const sway = (z: number, d: number) => Math.sin(z * 0.3 + i * 1.9 + d) * 0.35;
+      const left: P3[] = [];
+      const right: P3[] = [];
+      for (let z = H; z > zt; z -= 1.6) {
+        left.push([a + sway(z, 0), 0, z]);
+        right.push([a + w + sway(z, 2.1), 0, z]);
+      }
+      const l0 = a + sway(zt, 0);
+      const r0 = a + w + sway(zt, 2.1);
+      const tongue: P3[] = [];
+      for (let j = 0; j <= 8; j++) {
+        const th = Math.PI * (j / 8);
+        tongue.push([(l0 + r0) / 2 - (Math.cos(th) * (r0 - l0)) / 2, 0, zt - Math.sin(th) * Math.min(w * 0.55, 2.6)]);
+      }
+      flutes[i & 1][1].push([...left, ...tongue, ...right.reverse()]);
+      if (!(i & 1)) edges.push([...left, ...tongue.slice(0, 4)].map(([u, n, z]) => [u + 0.4, n, z + 0.15] as P3));
     }
+    a += w + 0.6 + hash(i, seed, 44) * 1.6;
   }
-  for (const [c, list] of tints) {
+  for (const [c, list] of flutes) {
     pen.beginPath();
-    for (const tri of list) k.trace(tri);
+    for (const pts of list) k.trace(pts);
     pen.fillStyle = c;
     pen.fill();
   }
   pen.beginPath();
-  for (const e of edges) k.run(e);
-  pen.strokeStyle = '#d6f2ff30';
+  for (const pts of edges) k.run(pts);
+  pen.strokeStyle = '#ffffff24';
+  pen.lineWidth = Math.max(0.8, 0.22 * s);
+  pen.lineJoin = 'round';
+  pen.lineCap = 'round';
+  pen.stroke();
+  const clear = (a0: number, a1: number) => a0 > T + 1 && a1 < end - 1 && !hung.some(([h0, h1]) => a1 > h0 && a0 < h1);
+  // Cracks: long jagged runs slanting up the wall, a short branch off the
+  // middle.
+  const cracks: P3[][] = [];
+  const want = Math.max(2, Math.round((end - T) / 30));
+  for (let i = 0, made = 0; i < 30 && made < want; i++) {
+    const dir = hash(i, seed, 60) < 0.5 ? 1 : -1;
+    let u = T + 4 + hash(i, seed, 61) * (end - T - 8);
+    let z = 7 + hash(i, seed, 62) * Math.max(3, H - 24);
+    const pts: P3[] = [[u, 0.02, z]];
+    const segs = 5 + Math.floor(hash(i, seed, 63) * 3);
+    for (let j = 0; j < segs; j++) {
+      const kink = j & 1 ? 0.45 : 1;
+      u += dir * (0.9 + hash(i, j, seed * 7 + 64) * 1.1) * kink;
+      z += (0.9 + hash(i, j, seed * 7 + 65) * 0.9) / kink;
+      pts.push([u, 0.02, z]);
+    }
+    if (!clear(Math.min(pts[0][0], u) - 1, Math.max(pts[0][0], u) + 1) || !k.seen(pts, 2 * s)) continue;
+    made++;
+    cracks.push(pts);
+    const [bu, , bz] = pts[Math.floor(segs / 2)];
+    cracks.push([[bu, 0.02, bz], [bu + dir * 1.2, 0.02, bz - 0.5], [bu + dir * 2.0, 0.02, bz - 0.4]]);
+  }
+  pen.beginPath();
+  for (const pts of cracks) k.run(pts.map(([u, n, z]) => [u, n, z - 0.16] as P3));
+  pen.strokeStyle = '#17325e66';
+  pen.lineWidth = Math.max(0.9, 0.16 * s);
+  pen.stroke();
+  pen.beginPath();
+  for (const pts of cracks) k.run(pts);
+  pen.strokeStyle = '#eaf8ffc0';
   pen.lineWidth = Math.max(0.7, 0.1 * s);
   pen.stroke();
+  // The shine: a long stroke and a short one beside it, slanting up to the
+  // screen's right on either wall.
+  const right = k.p(1, 0, 0)[0] > k.p(0, 0, 0)[0] ? 1 : -1;
+  const shine: Array<[P3[], Color, number]> = [];
+  for (let i = 0, made = 0; i < 30 && made < Math.max(2, Math.round((end - T) / 28)); i++) {
+    const u = T + 5 + hash(i, seed, 71) * (end - T - 12);
+    const z = 10 + hash(i, seed, 72) * Math.max(2, Math.min(16, H - 26));
+    const len = 6 + hash(i, seed, 73) * 6;
+    const [du, dz] = [right * len * 0.5, len * 0.87];
+    if (!clear(Math.min(u, u + du) - 1.5, Math.max(u, u + du) + 2.5)) continue;
+    made++;
+    shine.push([[[u, 0.02, z], [u + du, 0.02, z + dz]], '#ffffff4a', Math.max(1, 0.3 * s)]);
+    shine.push([[[u + right * 1.1 + du * 0.15, 0.02, z + dz * 0.15], [u + right * 1.1 + du * 0.65, 0.02, z + dz * 0.65]], '#ffffff26', Math.max(0.8, 0.15 * s)]);
+  }
+  for (const [pts, c, w] of shine) k.line(pts, c, w);
   // a couple of bands of old snow caught in the ice, low down
   for (const [z0, c] of [[13 + (seed & 1) * 3, '#c4ecfa40'], [24 + (seed & 1) * 2, '#17325e40']] as const) {
     if (z0 > H - 6) continue;
@@ -577,6 +673,49 @@ function facets(k: Kit, v: RoomView, end: number, seed: number): void {
     for (let a = T; a <= end; a += 4) pts.push([a, 0, z0 + (wave(a * 0.3, seed + z0) - 0.5) * 1.4]);
     k.line(pts, c, Math.max(0.9, 0.3 * s));
   }
+}
+
+// A woolly mammoth caught deep in the glacier, facing the corner: a soft
+// dark shape seen through the ice (no ink), its tusk paler, a veil of
+// clearer ice over its back with a shine across it, and air bubbles
+// trapped round it. Its outline in units, feet at 0, nose toward -u.
+const BODY: ReadonlyArray<readonly [number, number]> = [
+  [6.3, 3.0], [6.8, 4.6], [6.4, 6.0], [5.0, 7.0], [2.6, 7.7], [0.0, 8.5], [-1.6, 8.1], [-2.8, 9.0], [-4.2, 8.8], [-5.2, 7.6], [-5.7, 5.9],
+  [-6.0, 3.9], [-6.3, 2.2], [-6.9, 1.3], [-6.6, 0.6], [-5.8, 1.0], [-5.3, 2.6], [-4.9, 4.2], [-4.2, 4.4], [-3.6, 3.4], [-3.7, 0], [-2.0, 0],
+  [-1.9, 2.6], [-1.3, 2.1], [-0.7, 2.7], [-0.1, 2.1], [0.5, 2.7], [1.1, 2.1], [1.7, 2.7], [2.3, 2.1], [2.9, 2.7], [3.4, 2.4], [3.6, 0], [5.3, 0], [5.6, 2.3],
+];
+const TUSK: ReadonlyArray<readonly [number, number]> = [[-4.3, 4.7], [-5.0, 3.2], [-6.3, 2.3], [-7.6, 2.6], [-8.3, 3.9], [-7.7, 3.4], [-6.5, 3.0], [-5.4, 3.7], [-4.8, 4.9]];
+const EAR: ReadonlyArray<readonly [number, number]> = [[-3.1, 7.7], [-2.2, 7.3], [-2.0, 5.9], [-2.8, 5.2], [-3.7, 6.1]];
+const BUBBLES: ReadonlyArray<readonly [number, number, number]> = [
+  [-7.6, 6.6, 0.3], [-6.9, 8.4, 0.18], [-8.6, 1.4, 0.22], [7.6, 6.9, 0.26], [8.3, 4.6, 0.16], [7.5, 8.8, 0.34], [-1.0, 10.2, 0.2], [2.1, 9.8, 0.28], [4.2, 9.1, 0.16],
+];
+
+function mammoth(k: Kit, f: Frozen): void {
+  const { pen, s } = k;
+  const P = ([du, dz]: readonly [number, number]): P3 => [f.a + du * f.m, 0.02, f.z + dz * f.m];
+  const body = BODY.map(P);
+  k.poly(body, '#11264c98', 0, 0.5 * f.m);
+  k.poly(EAR.map(P), '#0a1a3a50', 0, 0.3 * f.m);
+  k.poly(TUSK.map(P), '#e6f7fda0', 0, 0.2 * f.m);
+  // the veil over its back, and a shine across it
+  pen.save();
+  pen.beginPath();
+  k.trace(body, 0.5 * f.m);
+  pen.clip();
+  k.poly([P([-9, 5.2]), P([8, 4.4]), P([8, 10]), P([-9, 10])], '#c4ecfa2e', 0);
+  pen.restore();
+  k.line([P([-2.6, 1.0]), P([0.4, 10.0])], '#ffffff38', Math.max(1, 0.34 * s * f.m));
+  k.line([P([-1.2, 2.4]), P([0.6, 7.6])], '#ffffff1c', Math.max(0.8, 0.16 * s * f.m));
+  pen.beginPath();
+  for (const [du, dz, r] of BUBBLES) {
+    const [x, y] = k.p(...P([du, dz]));
+    const R = Math.max(0.8, r * s * f.m);
+    pen.moveTo(x + R, y);
+    pen.arc(x, y, R, 0, Math.PI * 2);
+  }
+  pen.strokeStyle = '#e6f7fdb0';
+  pen.lineWidth = Math.max(0.6, 0.07 * s);
+  pen.stroke();
 }
 
 // True if a wall piece (or what it lays on the floor before it) touches
@@ -609,8 +748,10 @@ function drape(k: Kit, a: number, w: number, ztop: number, len: number, seed: nu
   k.line([[a - w * 0.25, n, ztop - 0.5], [a - w * 0.22, n, ztop - len * 0.55]], '#ffffff70', Math.max(0.8, 0.16 * k.s));
 }
 
-// Snow lying along the top of the wall, its lumpy edge over the face, and
-// icicles under it (the falls pour over in a gap).
+// Snow lying along the top of the wall, rolled over its edge in soft
+// overlapping lumps, icicles hanging in threes from under them (a long one
+// between two short) with bare stretches between (the falls pour over in a
+// gap).
 function cornice(k: Kit, v: RoomView, end: number, seed: number, gaps: ReadonlyArray<readonly [number, number]>, tone: (c: Color, d?: number) => Color): void {
   const { T, H } = v;
   const runs: Array<[number, number]> = [];
@@ -620,13 +761,83 @@ function cornice(k: Kit, v: RoomView, end: number, seed: number, gaps: ReadonlyA
     a0 = Math.max(a0, g1 - 3);
   }
   if (end > a0) runs.push([a0, end]);
-  const lip = (a: number) => H - 1.0 - 0.9 * wave(a * 0.7, seed * 3);
+  const n = 0.45;
   for (const [r0, r1] of runs) {
-    icicles(k, r0 + 0.4, r1 - 0.4, 0.4, H - 1.3, 4.8, seed * 31 + Math.round(r0), 1.0);
-    const pts: P3[] = [[r0, 0.45, H + 0.05], [r1, 0.45, H + 0.05]];
-    for (let a = r1; a >= r0 - 0.01; a -= 0.8) pts.push([Math.max(r0, a), 0.45, lip(a)]);
-    k.poly(pts, k.vgrad(r0, 0.45, H - 2, H, [[0, tone(C.snowMid)], [1, tone(C.snowHi, 0.08)]]), k.thin);
+    const salt = seed * 31 + Math.round(r0);
+    const lumps: Array<{ a: number; r: number; d: number }> = [];
+    for (let a = r0 + 0.5, i = 0; a < r1 - 0.3; i++) {
+      const big = hash(salt, i, 50) < 0.3;
+      const r = big ? 2 + hash(salt, i, 51) * 1.2 : 0.9 + hash(salt, i, 51) * 0.8;
+      lumps.push({ a, r, d: r * (0.55 + hash(salt, i, 52) * 0.45) });
+      a += r * (0.9 + hash(salt, i, 53) * 0.6);
+    }
+    if (!k.seen([[r0, n, H], [r1, n, H - 8]])) continue;
+    // the icicles, in threes under the deepest lumps
+    let next = r0 + 1 + hash(salt, 54) * 3;
+    for (const [i, l] of lumps.entries()) {
+      if (l.a < next || l.a > r1 - 1.2 || l.d < 1) continue;
+      icicleThree(k, l.a, n - 0.05, H - 0.3 - l.d * 0.85, salt + i);
+      next = l.a + 3 + hash(salt, i, 55) * 3;
+    }
+    // the roll as one mass of snow: its foot the lowest lump at each point
+    const foot = (a: number) => {
+      let d = 0.25;
+      for (const l of lumps) {
+        const t = (a - l.a) / l.r;
+        if (t > -1 && t < 1) d = Math.max(d, l.d * Math.sqrt(1 - t * t));
+      }
+      return H - 0.3 - d;
+    };
+    const edge: P3[] = [];
+    for (let a = r0; a <= r1 + 0.01; a += 0.25) edge.push([Math.min(a, r1), n, foot(Math.min(a, r1))]);
+    k.poly([[r0, n, H + 0.05], ...edge, [r1, n, H + 0.05]], k.vgrad(r0, n, H - 3, H, [[0, tone(C.snowMid)], [0.5, tone(C.snow)], [1, tone(C.snowHi, 0.08)]]), 0);
+    // a soft blue crease up from where two lumps meet, a bright rim on each
+    const creases: P3[][] = [];
+    const rims: P3[][] = [];
+    for (const l of lumps) {
+      if (l.a - l.r > r0 && l.a - l.r < r1) creases.push([[l.a - l.r * 0.92, n + 0.01, foot(l.a - l.r * 0.92) + 0.1], [l.a - l.r * 0.7, n + 0.01, H - 0.35]]);
+      if (l.d > 0.8) {
+        const arc: P3[] = [];
+        for (let j = 2; j <= 6; j++) {
+          const th = Math.PI * (j / 10);
+          arc.push([l.a - Math.cos(th) * l.r * 0.8, n + 0.01, H - 0.3 - Math.sin(th) * l.d * 0.75]);
+        }
+        rims.push(arc);
+      }
+    }
+    k.pen.beginPath();
+    for (const c of creases) k.run(c);
+    k.pen.strokeStyle = withAlpha(tone(C.snowLow), 0.7);
+    k.pen.lineWidth = Math.max(0.7, 0.12 * k.s);
+    k.pen.stroke();
+    k.pen.beginPath();
+    for (const c of rims) k.run(c);
+    k.pen.strokeStyle = '#ffffffa0';
+    k.pen.lineWidth = Math.max(0.7, 0.14 * k.s);
+    k.pen.stroke();
+    k.line(edge, INK, k.thin);
   }
+}
+
+// Three icicles hanging from z at a: a long one between two short ones.
+function icicleThree(k: Kit, a: number, n: number, z: number, seed: number): void {
+  const pen = k.pen;
+  pen.beginPath();
+  for (let i = -1; i <= 1; i++) {
+    const long = i === 0;
+    const u = a + i * (0.55 + hash(seed, i + 1, 2) * 0.2);
+    const w = long ? 0.36 + hash(seed, 3) * 0.12 : 0.22 + hash(seed, i + 1, 4) * 0.1;
+    const l = long ? 3 + hash(seed, 5) * 3 : 1.5 + hash(seed, i + 1, 6) * 1.5;
+    const lean = (hash(seed, i + 1, 7) - 0.5) * 0.15;
+    k.trace([[u - w, n, z + 0.3], [u + w, n, z + 0.3], [u + w * 0.35 + lean, n, z - l * 0.6], [u + lean * 2, n, z - l], [u - w * 0.35 + lean, n, z - l * 0.6]]);
+  }
+  pen.fillStyle = C.iceHi;
+  pen.fill();
+  pen.strokeStyle = INK;
+  pen.lineWidth = Math.max(0.8, k.thin * 0.75);
+  pen.lineJoin = 'round';
+  pen.stroke();
+  k.line([[a - 0.12, n + 0.01, z], [a - 0.08, n + 0.01, z - 1.6]], '#ffffffa0', Math.max(0.7, 0.1 * k.s));
 }
 
 // ── wall pieces ────────────────────────────────────────────────────────────
@@ -898,17 +1109,9 @@ function skis(k: Kit, f: Feature): void {
 // under them, the falls and crystals a cold glow.
 function glows(k: Kit, f: Feature): void {
   if (!k.seen([[f.a - f.w - 8, 0, 0], [f.a + f.w + 8, 12, 0], [f.a - f.w - 8, 0, 20], [f.a + f.w + 8, 0, 20]])) return;
-  if (f.kind === 'lantern') {
-    k.halo(f.a, 1.3, 10.4, 8, '#ffb862', 0.3);
-    k.halo(f.a, 1.3, 10.4, 2.6, '#ffe0a0', 0.45);
-    k.pool(f.a, 4, 7.5, 5.5, '#ffb44a', 0.24, 0, 'source-over');
-  } else if (f.kind === 'falls') {
-    k.halo(f.a, 1.5, 7, f.w * 0.7, '#9fdcff', 0.2);
-    k.pool(f.a, 6, f.w * 0.7, 6, '#e6f8ff', 0.3, 0, 'source-over');
-  } else if (f.kind === 'crystals') {
-    k.halo(f.a, 1.5, 3.5, 6, '#8fe0ff', 0.28);
-    k.pool(f.a, 3, 6, 4, '#c8f2ff', 0.3, 0, 'source-over');
-  }
+  // (their light on the snow and the wall is declared: room.lights)
+  if (f.kind === 'falls') k.halo(f.a, 1.5, 7, f.w * 0.7, '#9fdcff', 0.2);
+  else if (f.kind === 'crystals') k.halo(f.a, 1.5, 3.5, 6, '#8fe0ff', 0.28);
 }
 
 // ── drifts ─────────────────────────────────────────────────────────────────

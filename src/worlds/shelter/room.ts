@@ -5,7 +5,8 @@ import { hub, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { hashString } from '../../world/rng.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { fillPts, hazard, hull, mote, rivets, wheel } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
@@ -13,42 +14,45 @@ import { C, INK, Kit, hash, softDot, withAlpha } from './kit.ts';
 import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
-// The shelter's shell, deep under the wasteland, in 1950s paint: an ochre
-// resin deck poured in big panels, ribbed rubber mats at the wall stations,
-// a riveted steel border along the foot of the walls with a teal line
-// painted beside it; walls of cream-painted steel panels between raised
-// frames over a mint band with a teal stripe (pink with a pale aqua band
-// behind the kitchen: the diner's corner), a teal frieze along the top
-// under a bundle of pipes (teal, copper and grey) on brackets, with orange
-// valve wheels that let off steam. In the free stretches between the
-// stations: capsule lights (their cool light pooled on the floor), pipe
-// runs down the wall with a hand-wheel valve and a gauge, rounded-corner
-// windows on a dim room beyond, a chalkboard, framed landscapes, a
-// starburst clock, a fuse box, an amber radiation sign and louvred vents.
-// Every piece sits where the stage's plan leaves the wall free and hangs
-// over the tallest furniture that can be backed against a wall, so nothing
-// hides behind a station or a locker. The overlay makes one capsule light
-// flicker (the others hum), sends dust drifting down through their light
-// and puffs steam off the valves.
+// The shelter's shell, deep under the wasteland, in 1950s paint: a deck of
+// ochre tiles laid in a checker inside a cream and teal border, ribbed
+// rubber mats at the wall stations, a braided rug and a hazard-edged pad
+// under the island stations, a riveted steel border along the foot of the
+// walls; walls of cream-painted steel panels with an orange pinstripe,
+// raised frames and heavy bulkhead ribs over a mint band with a teal
+// stripe (pink with a pale aqua band behind the kitchen: the diner's
+// corner), a teal frieze along the top under a bundle of pipes (teal,
+// copper and grey) on brackets, with orange valve wheels that let off
+// steam. Where the room is cut away it shows the earth it is dug into:
+// bands of soil and stones round a concrete shell. In the free stretches
+// between the stations: a mural of the world up top, capsule lights (their
+// cool light pooled on the floor), pipe runs down the wall with a
+// hand-wheel valve and a gauge, rounded-corner windows onto the
+// hydroponics bay, a chalkboard, framed landscapes, a starburst clock, a
+// fuse box, an amber radiation sign and louvred vents. Every piece sits
+// where the stage's plan leaves the wall free and hangs over the tallest
+// furniture that can be backed against a wall, so nothing hides behind a
+// station or a locker. The overlay makes one capsule light flicker (the
+// others hum), sends dust drifting down through their light and puffs
+// steam off the valves.
 
 type Wall = 'left' | 'right';
-type Kind = 'tube' | 'pipes' | 'window' | 'board' | 'picture' | 'clock' | 'fuse' | 'sign' | 'vent';
+type Kind = 'tube' | 'pipes' | 'window' | 'board' | 'picture' | 'clock' | 'fuse' | 'sign' | 'vent' | 'mural';
 export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number };
 // The diner's stretch of wall (behind the kitchen): pink under a pale aqua
 // band instead of the mint and teal.
 export type Zone = { wall: Wall; a0: number; a1: number };
 export type Plan = { L: Layout; features: Feature[]; diner: Zone | null };
 
-const SLAB = 2.5; // the floor's thickness, shown along the front cut
+const SLAB = 4; // the floor's thickness (concrete over the earth), shown along the front cut
 const SKIRT = 0.9;
 const DADO = 9; // the pastel band's top (its stripe the last unit of it)
 const RAIL = 0.6; // the cap rail on the band
 const AQUA = 2.6; // the diner's pale aqua band over its pink
 const BAY = 8; // the raised frames between the wall's panels
 const COURSE = 12; // the panels' seams across
-const PANEL = 16; // the deck's poured panels
+const PANEL = 16; // the spacing of the deck's worn patches
 const EDGE = 2.4; // the steel border along the walls' feet
-const LINE = 0.55; // the teal line painted beside it
 
 // Heights on a wall H tall: the middle of the band the wall pieces hang in
 // (all of it over the tallest furniture backed against a wall), the
@@ -77,13 +81,13 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   return plan;
 }
 
-const WIDTH: Record<Kind, number> = { tube: 4, pipes: 10, window: 12, board: 10, picture: 7, clock: 6, fuse: 5, sign: 4, vent: 4 };
+const WIDTH: Record<Kind, number> = { tube: 4, pipes: 10, window: 12, board: 10, picture: 7, clock: 6, fuse: 5, sign: 4, vent: 4, mural: 18 };
 // How many of each a room has, over both walls (the vents fill in): these
 // up to the size of a 150-column terminal's, more of all but the board,
-// the clock, the fuse box and the sign in a bigger one, so its long walls
-// are not left bare.
-export const CAP: Record<Kind, number> = { tube: 6, pipes: 2, window: 3, board: 1, picture: 2, clock: 1, fuse: 1, sign: 1, vent: 3 };
-const ONE: ReadonlySet<Kind> = new Set(['board', 'clock', 'fuse', 'sign']);
+// the clock, the fuse box, the sign and the mural in a bigger one, so its
+// long walls are not left bare.
+export const CAP: Record<Kind, number> = { tube: 6, pipes: 2, window: 3, board: 1, picture: 2, clock: 1, fuse: 1, sign: 1, vent: 3, mural: 1 };
+const ONE: ReadonlySet<Kind> = new Set(['board', 'clock', 'fuse', 'sign', 'mural']);
 export function capsFor(L: Layout): Record<Kind, number> {
   const f = Math.max(1, (L.W + L.D - 2 * L.T) / 280);
   const out = { ...CAP };
@@ -94,7 +98,7 @@ const ORDER: Kind[] = ['tube', 'window', 'pipes', 'board', 'tube', 'picture', 'f
 const GAP = 4;
 
 // The room's pieces dealt out over the free stretches of both walls one at
-// a time, the walls taking turns, so the caps, counted over the room, leave
+// a time (the mural placed first), the walls taking turns, so the caps, counted over the room, leave
 // neither wall bare: a capsule light first on each wall, then the next in
 // ORDER (a place in it kept for each wall, cycled) that fits and is not at
 // its cap, each wall held to half of each cap until neither can take more.
@@ -114,13 +118,22 @@ function features(L: Layout): Feature[] {
   // right's second, ...
   const spans: Span[] = [];
   for (let i = 0; i < Math.max(walls.right.length, walls.left.length); i++) spans.push(...[walls.right[i], walls.left[i]].filter((s) => s));
-  const zero = (): Record<Kind, number> => ({ tube: 0, pipes: 0, window: 0, board: 0, picture: 0, clock: 0, fuse: 0, sign: 0, vent: 0 });
+  const zero = (): Record<Kind, number> => ({ tube: 0, pipes: 0, window: 0, board: 0, picture: 0, clock: 0, fuse: 0, sign: 0, vent: 0, mural: 0 });
   const cap = capsFor(L);
   const count = zero();
   const mine = { right: zero(), left: zero() };
   const cursor = { right: 0, left: 5 };
   const fits = (s: Span, k: Kind, half: boolean) => count[k] < cap[k] && (!half || mine[s.wall][k] < Math.ceil(cap[k] / 2)) && s.used + WIDTH[k] + (s.got.length ? GAP : 0) <= s.a1 - s.a0;
   let n = 0;
+  // the mural before the rest: in the stretch nearest the back corner
+  // with room for it, the right wall's before the left's
+  const wall = spans.filter((s) => s.a1 - s.a0 >= WIDTH.mural).sort((p, q) => (p.wall === q.wall ? p.a0 - q.a0 : p.wall === 'right' ? -1 : 1))[0];
+  if (wall) {
+    wall.used = WIDTH.mural;
+    wall.got.push({ kind: 'mural', n: n++ });
+    count.mural++;
+    mine[wall.wall].mural++;
+  }
   for (const half of [true, false]) {
     for (let dealt = true; dealt; ) {
       dealt = false;
@@ -204,11 +217,27 @@ export const room: RoomArt = {
     const wild = plan.features.find((f) => f.kind === 'tube');
     v.pen.save();
     for (const f of plan.features) {
-      if (f.kind !== 'tube') continue;
+      if (f.kind !== 'tube' || !lampsOn(v)) continue;
       flicker(new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s), v, f, f === wild);
     }
     for (const wall of ['right', 'left'] as const) steam(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, wall);
     v.pen.restore();
+  },
+  // The light the shell gives (the scene lays its pools, washes and
+  // glows): the capsule lights, out on the night shift; the amber
+  // emergency lamps on the frieze, always on, carrying the room at night;
+  // and the windows, the hydroponics bay's grow light coming through them
+  // (turned low at night).
+  lights(v): RoomLight[] {
+    const out: RoomLight[] = [];
+    for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+      if (f.kind === 'tube') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 0.9, z: capZ(v.H), color: '#fff1cf', r: 13, halo: 2.2, strength: 0.85 });
+      if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2.8, z0: midZ(v.H) - 3.2, z1: midZ(v.H) + 3.2, color: '#f2f0c4', strength: 0.4, night: '#d8f0a0', moon: 0.25 });
+    }
+    for (const wall of ['right', 'left'] as const) {
+      for (const a of emergencyOf(v.T, wall === 'right' ? v.W : v.D)) out.push({ kind: 'glow', wall, u: a, v: 0.9, z: topPipe(v.H) - 2.2, color: '#ffb347', r: 10, halo: 1.5, strength: 0.45 });
+    }
+    return out;
   },
 };
 
@@ -244,39 +273,82 @@ function rrect(a: number, n: number, z: number, hw: number, hh: number, r: numbe
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
-const DECK = ['#b08445', '#a97e41', '#b78a4b', '#a37a40'] as const;
-const SEAM = '#6e4f26';
+// The deck: square tiles laid in a checker of two ochres with pale grout,
+// in a border (a cream band, a teal one inside it, orange blocks at its
+// corners) round the field, just off the steel at the walls' feet and a
+// few units in from the front cuts; plain ochre outside it.
+const TILE = 4;
+const CHECK = ['#b8894a', '#a67a3e'] as const;
+const MARGIN = '#a0763c';
+const GROUT = '#e8d8b0';
+const RIM = { wall: EDGE + 0.35, cut: 3, cream: 1.2, teal: 0.5 }; // the border: in from the walls, in from the cuts, its bands
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen, s } = k;
   const { W, D, T } = v;
   if (!k.sees(T, T, -SLAB, W, D, 0, 8)) return;
-  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], DECK[0], 0);
+  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], MARGIN, 0);
   // The visible stretch of the floor: x - y and x + y ranges on the pen.
   const [ox, oy] = k.p(0, 0, 0);
-  const pad = 2 * PANEL;
+  const pad = 2 * TILE;
   const dlo = -ox / s - pad;
   const dhi = (pen.width - ox) / s + pad;
   const slo = (2 * -oy) / s - pad;
   const shi = (2 * (pen.height - oy)) / s + pad;
   const seen = (x: number, y: number) => x - y >= dlo && x - y <= dhi && x + y >= slo && x + y <= shi;
-  const cols = Math.ceil((W - T) / PANEL);
-  const rows = Math.ceil((D - T) / PANEL);
-  // Panels of resin poured in a few tones of ochre, a scuff here and there.
-  const tones: P3[][][] = DECK.map(() => []);
-  const scuffs: P3[][] = [];
+  // The border's outside, and the field inside it.
+  const [bx0, by0, bx1, by1] = [T + RIM.wall, T + RIM.wall, W - RIM.cut, D - RIM.cut];
+  const band = RIM.cream + RIM.teal;
+  const [fx0, fy0, fx1, fy1] = [bx0 + band, by0 + band, bx1 - band, by1 - band];
+  const rect = (x0: number, y0: number, x1: number, y1: number, z = 0.005): P3[] => [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]];
+  // the tiles: the field in the light ochre, every other tile darker
+  k.poly(rect(fx0, fy0, fx1, fy1), CHECK[0], 0);
+  const cols = Math.ceil((fx1 - fx0) / TILE);
+  const rows = Math.ceil((fy1 - fy0) / TILE);
+  pen.beginPath();
   for (let j = 0; j < rows; j++) {
+    const y0 = fy0 + j * TILE;
+    const y1 = Math.min(fy1, y0 + TILE);
+    for (let i = (j & 1) ^ 1; i < cols; i += 2) {
+      const x0 = fx0 + i * TILE;
+      const x1 = Math.min(fx1, x0 + TILE);
+      if (seen((x0 + x1) / 2, (y0 + y1) / 2)) k.trace(rect(x0, y0, x1, y1, 0.01));
+    }
+  }
+  pen.fillStyle = CHECK[1];
+  pen.fill();
+  const grout: Array<[P3, P3]> = [];
+  for (let i = 1; i < cols; i++) grout.push([[fx0 + i * TILE, fy0, 0.02], [fx0 + i * TILE, fy1, 0.02]]);
+  for (let j = 1; j < rows; j++) grout.push([[fx0, fy0 + j * TILE, 0.02], [fx1, fy0 + j * TILE, 0.02]]);
+  k.segs(grout, withAlpha(GROUT, 0.35), Math.max(0.6, 0.06 * s));
+  // the border round them: cream, teal inside it, an ink line each side,
+  // an orange block at each corner
+  const ring = (d0: number, d1: number) => {
+    pen.beginPath();
+    k.trace(rect(bx0 + d0, by0 + d0, bx1 - d0, by1 - d0, 0.02));
+    k.trace(rect(bx0 + d1, by0 + d1, bx1 - d1, by1 - d1, 0.02).reverse());
+  };
+  ring(0, RIM.cream);
+  pen.fillStyle = C.cream;
+  pen.fill();
+  ring(RIM.cream, band);
+  pen.fillStyle = C.teal;
+  pen.fill();
+  for (const [x, y] of [[bx0, by0], [bx1 - band, by0], [bx0, by1 - band], [bx1 - band, by1 - band]]) k.poly(rect(x, y, x + band, y + band, 0.03), C.orange, k.thin * 0.7);
+  const edges: P3[][] = [rect(bx0, by0, bx1, by1, 0.03), rect(fx0, fy0, fx1, fy1, 0.03)];
+  for (const e of edges) k.line([...e, e[0]], withAlpha(INK, 0.45), Math.max(0.6, 0.08 * s));
+  // A scuff here and there.
+  const scuffs: P3[][] = [];
+  for (let j = 0; j < Math.ceil((D - T) / PANEL); j++) {
     const y0 = T + j * PANEL;
     const y1 = Math.min(D, y0 + PANEL);
-    for (let i = 0; i < cols; i++) {
+    for (let i = 0; i < Math.ceil((W - T) / PANEL); i++) {
       const x0 = T + i * PANEL;
       const x1 = Math.min(W, x0 + PANEL);
       if (!seen((x0 + x1) / 2, (y0 + y1) / 2)) continue;
-      const t = Math.floor(hash(i, j, 3) * DECK.length);
-      if (t) tones[t].push([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]]);
       for (let q = 0; q < 2; q++) {
         if (hash(i, j, 40 + q) > 0.14) continue;
-        // a worn smudge: a low blob of darker resin
+        // a worn smudge: a low blob of grime
         const cx = x0 + 2 + hash(i, j, 50 + q) * (x1 - x0 - 4);
         const cy = y0 + 2 + hash(i, j, 60 + q) * (y1 - y0 - 4);
         const r = 0.8 + hash(i, j, 70 + q) * 1.6;
@@ -290,32 +362,12 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
       }
     }
   }
-  tones.forEach((list, ti) => {
-    if (!list.length) return;
-    pen.beginPath();
-    for (const q of list) k.trace(q);
-    pen.fillStyle = DECK[ti];
-    pen.fill();
-  });
   pen.beginPath();
   for (const q of scuffs) k.trace(q, 0.6);
   pen.fillStyle = withAlpha('#5e4220', 0.09);
   pen.fill();
-  // seams between the panels, a lit lip along each
-  const seg: Array<[P3, P3]> = [];
-  const lip: Array<[P3, P3]> = [];
-  for (let j = 1; j < rows; j++) {
-    const y = T + j * PANEL;
-    seg.push([[T, y, 0], [W, y, 0]]);
-    lip.push([[T, y + 0.16, 0], [W, y + 0.16, 0]]);
-  }
-  for (let i = 1; i < cols; i++) {
-    const x = T + i * PANEL;
-    seg.push([[x, T, 0], [x, D, 0]]);
-    lip.push([[x + 0.16, T, 0], [x + 0.16, D, 0]]);
-  }
-  k.segs(seg, withAlpha(SEAM, 0.8), Math.max(0.8, 0.12 * s));
-  k.segs(lip, withAlpha('#f0d9a8', 0.22), Math.max(0.6, 0.07 * s));
+  // A big room's walkway painted round the middle of the floor.
+  if (W - T > 120) lanes(k, hub(plan.L), Math.round(0.17 * (W - T)));
   // Shade: darker toward the walls' feet and the far corner.
   const corner = k.p(T, T, 0);
   const far = k.p(W, D, 0);
@@ -330,15 +382,25 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     if (q.island || q.kind === 'entrance') continue;
     mat(new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s), q.len, q.dep);
   }
+  // Something under the island stations, so each stands on its own patch
+  // of floor: a braided rug under the armchair and the radio, a teal pad
+  // edged with hazard stripes under the terminal.
+  for (const q of plan.L.slots) {
+    if (!q.island || (q.kind !== 'think' && q.kind !== 'web')) continue;
+    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
+    if (!qk.sees(-2, -2, 0, q.len + 2, q.dep + 2, 0)) continue;
+    if (q.kind === 'think') braided(qk, q.len / 2, q.dep / 2 + 0.3, q.len / 2 + 1.5, q.dep / 2 + 1.6);
+    else paintedPad(qk, q.len, q.dep);
+  }
   // A drain at the middle of the floor in a painted ring.
   const h = hub(plan.L);
   const rects = plan.L.slots.map(slotRect);
   if (!rects.some((q) => q.x0 < h.x + 6 && h.x - 6 < q.x1 && q.y0 < h.y + 6 && h.y - 6 < q.y1) && k.sees(h.x - 5, h.y - 5, 0, h.x + 5, h.y + 5, 0)) drain(k, h.x, h.y);
-  // The steel border along the foot of each wall, its teal line beside it.
+  // The steel border along the foot of each wall.
   for (const wall of ['right', 'left'] as const) {
     const wk = new Kit(pen, wallAt(v.at, wall, T), s);
     const end = wall === 'right' ? W : D;
-    const [a0, a1] = visibleAlong(wk, T, end, 0, 0, EDGE + LINE + 1);
+    const [a0, a1] = visibleAlong(wk, T, end, 0, 0, EDGE + 1);
     if (a1 <= a0) continue;
     const lo = Math.max(T, a0);
     const hi = Math.min(end, a1);
@@ -355,22 +417,24 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
       wk.segs(tread, withAlpha('#b4c0bc', 0.5), Math.max(0.6, 0.1 * s), 'round');
     }
     wk.line([[lo, EDGE, 0.03], [hi, EDGE, 0.03]], withAlpha(INK, 0.55), Math.max(0.7, 0.1 * s));
-    wk.poly([[lo, EDGE + 0.35, 0.03], [hi, EDGE + 0.35, 0.03], [hi, EDGE + 0.35 + LINE, 0.03], [lo, EDGE + 0.35 + LINE, 0.03]], C.teal, 0);
     // the contact shade along the wall's foot
     wk.poly([[lo, 0, 0.04], [hi, 0, 0.04], [hi, 3.5, 0.04], [lo, 3.5, 0.04]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#140d0470'], [0.35, '#140d0424'], [1, '#140d0400']]), 0);
   }
-  // Cool pools under the capsule lights.
-  for (const f of plan.features) {
-    if (f.kind !== 'tube') continue;
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (wk.sees(f.a - 14, 0, 0, f.a + 14, 14, 0)) {
-      wk.pool(f.a, 5, 12, 9, '#d6fff0', 0.14);
-      wk.pool(f.a, 2.5, 6, 3.5, '#e8fff4', 0.12);
+  // A gloss streak on the tiles under each capsule light while it is on
+  // (the scene lays the lights' pools).
+  if (lampsOn(v)) {
+    for (const f of plan.features) {
+      if (f.kind !== 'tube') continue;
+      const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
+      if (!wk.sees(f.a - 3, 0, 0, f.a + 3, 14, 0)) continue;
+      wk.pool(f.a, 7, 1.5, 6.5, '#fff8e6', 0.16);
+      wk.pool(f.a, 5.5, 0.7, 3.5, '#ffffff', 0.12);
     }
   }
-  // Lamp light where the stations have lamps or glow.
+  // Lamp light where the desk lamp and the radio's dial glow (the
+  // jukebox and the screens declare theirs).
   const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
-  for (const [kind, u, w, r, a, c] of [['write', 0.8, 0.5, 8, 0.14, '#ffd890'], ['think', 0.75, 0.6, 9, 0.16, '#ffb860'], ['idle', 0.85, 0.5, 11, 0.14, '#ffc8e8'], ['web', 0.5, 0.7, 7, 0.12, '#9dffb0'], ['search', 0.5, 1.2, 7, 0.1, '#9dffb0']] as const) {
+  for (const [kind, u, w, r, a, c] of [['write', 0.8, 0.5, 8, 0.14, '#ffd890'], ['think', 0.75, 0.6, 9, 0.16, '#ffb860']] as const) {
     const q = slot(kind);
     if (!q) continue;
     const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
@@ -391,6 +455,105 @@ function mat(k: Kit, len: number, dep: number): void {
   const ribs: Array<[P3, P3]> = [];
   for (let w2 = v0 + 0.45; w2 < v1 - 0.3; w2 += 0.42) ribs.push([[u0 + 0.35, w2, 0.05], [u0 + w - 0.35, w2, 0.05]]);
   k.segs(ribs, withAlpha('#6a716d', 0.7), Math.max(0.6, 0.09 * k.s));
+}
+
+// A walkway painted round the square of floor r either side of (h.x,
+// h.y): a lane 3 wide between cream lines with teal edges, teal chevrons
+// along it pointing the way round, and a few oil stains by it.
+function lanes(k: Kit, h: { x: number; y: number }, r: number): void {
+  const { pen, s } = k;
+  if (!k.sees(h.x - r - 6, h.y - r - 6, 0, h.x + r + 6, h.y + r + 6, 0)) return;
+  const sq = (d: number, z: number): P3[] => [[h.x - d, h.y - d, z], [h.x + d, h.y - d, z], [h.x + d, h.y + d, z], [h.x - d, h.y + d, z]];
+  const band = (d0: number, d1: number, c: Color) => {
+    pen.beginPath();
+    k.trace(sq(d0, 0.02));
+    k.trace(sq(d1, 0.02).reverse());
+    pen.fillStyle = c;
+    pen.fill();
+  };
+  band(r + 1.9, r + 1.5, C.teal);
+  band(r + 1.5, r + 0.9, C.cream);
+  band(r - 0.9, r - 1.5, C.cream);
+  band(r - 1.5, r - 1.9, C.teal);
+  // the chevrons, clockwise round the square (seen from above)
+  const sides: Array<[number, number, number, number]> = [[h.x - r, h.y - r, 1, 0], [h.x + r, h.y - r, 0, 1], [h.x + r, h.y + r, -1, 0], [h.x - r, h.y + r, 0, -1]];
+  const marks: Array<[P3, P3]> = [];
+  for (const [x0, y0, dx, dy] of sides) {
+    for (let t = 4; t < 2 * r - 3; t += 6) {
+      const [cx, cy] = [x0 + dx * t, y0 + dy * t];
+      const tip: P3 = [cx + dx * 0.5, cy + dy * 0.5, 0.03];
+      marks.push([[cx - dx * 0.4 - dy * 0.75, cy - dy * 0.4 + dx * 0.75, 0.03], tip], [[cx - dx * 0.4 + dy * 0.75, cy - dy * 0.4 - dx * 0.75, 0.03], tip]);
+    }
+  }
+  k.segs(marks, withAlpha(C.teal, 0.85), Math.max(0.8, 0.28 * s), 'round');
+  // oil stains by it
+  pen.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const side = sides[Math.floor(hash(i, 91) * 4)];
+    const t = 3 + hash(i, 92) * (2 * r - 6);
+    const out = (hash(i, 93) < 0.5 ? -1 : 1) * (2.6 + hash(i, 94) * 1.5);
+    const cx = side[0] + side[2] * t - side[3] * out;
+    const cy = side[1] + side[3] * t + side[2] * out;
+    const blob: P3[] = [];
+    for (let m = 0; m < 8; m++) {
+      const th = (m / 8) * Math.PI * 2;
+      const rr = (1.0 + hash(i, m, 95) * 0.7) * (0.8 + hash(i, 96) * 0.6);
+      blob.push([cx + Math.cos(th) * rr * 1.3, cy + Math.sin(th) * rr, 0.03]);
+    }
+    k.trace(blob, 0.6);
+  }
+  pen.fillStyle = withAlpha('#3a2a1a', 0.15);
+  pen.fill();
+}
+
+// An oval braided rug centred on (cu, cv), ru x rv: rings of mustard,
+// teal, cream and orange, the braid's twist across each when zoomed in
+// (after the colony's).
+function braided(k: Kit, cu: number, cv: number, ru: number, rv: number): void {
+  const z = 0.04;
+  k.shadow(cu, cv, ru * 1.02, rv * 1.05, 0.12);
+  const rings: Color[] = [C.orange, C.cream, C.tealDark, C.mustard, C.cream, C.teal, C.orange];
+  const oval = (r: number) => {
+    const pts: P3[] = [];
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      pts.push([cu + Math.cos(a) * (ru - (1 - r) * Math.min(ru, rv)), cv + Math.sin(a) * (rv - (1 - r) * Math.min(ru, rv)), z]);
+    }
+    return pts;
+  };
+  rings.forEach((c, i) => k.poly(oval(1 - i / rings.length), c, i === 0 ? k.thin : 0));
+  if (k.s < 3) return;
+  const pen = k.pen;
+  pen.beginPath();
+  for (let i = 0; i < rings.length; i++) {
+    for (const [u, v, w] of oval(1 - (i + 0.5) / rings.length)) {
+      const [x, y] = k.p(u, v, w);
+      pen.moveTo(x - 0.12 * k.s, y - 0.08 * k.s);
+      pen.lineTo(x + 0.12 * k.s, y + 0.08 * k.s);
+    }
+  }
+  pen.strokeStyle = withAlpha(INK, 0.22);
+  pen.lineWidth = Math.max(0.6, 0.08 * k.s);
+  pen.stroke();
+}
+
+// A pad painted teal on the deck round a station len x dep (its frame),
+// hazard stripes round its edge.
+function paintedPad(k: Kit, len: number, dep: number): void {
+  const [u0, v0, u1, v1] = [-1, -1, len + 1, dep + 1.2];
+  const e = 0.8;
+  k.poly([[u0, v0, 0.03], [u1, v0, 0.03], [u1, v1, 0.03], [u0, v1, 0.03]], withAlpha('#5fb0a2', 0.55), 0);
+  // the stripes lie on the floor: a kit whose `out` is the floor's v and
+  // whose `up` is height
+  const fk = new Kit(k.pen, (u, v, z) => k.at(u, z, v), k.s);
+  const pitch = 0.9;
+  hazard(fk, u0, v0, u1, v0 + e, 0.04, 0, true, pitch);
+  hazard(fk, u0, v1 - e, u1, v1, 0.04, 0, true, pitch);
+  const side = new Kit(k.pen, (u, v, z) => k.at(z, u, v), k.s);
+  hazard(side, v0 + e, u0, v1 - e, u0 + e, 0.04, 0, true, pitch);
+  hazard(side, v0 + e, u1 - e, v1 - e, u1, 0.04, 0, true, pitch);
+  k.line([[u0, v0, 0.05], [u1, v0, 0.05], [u1, v1, 0.05], [u0, v1, 0.05], [u0, v0, 0.05]], INK, k.thin);
+  k.line([[u0 + e, v0 + e, 0.05], [u1 - e, v0 + e, 0.05], [u1 - e, v1 - e, 0.05], [u0 + e, v1 - e, 0.05], [u0 + e, v0 + e, 0.05]], withAlpha(INK, 0.5), k.thin * 0.7);
 }
 
 // A round drain grate at the middle of the floor, a cream ring painted
@@ -439,9 +602,10 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   if (hi <= lo) return;
   plates(k, v, lo, hi, end, mine, tone);
   band(k, lo, hi, plan.diner?.wall === wall ? plan.diner : null, tone);
+  bulkheads(k, v, framing(T, end, mine).ribs, plan.diner?.wall === wall ? plan.diner : null, tone);
   // What hangs on the wall.
   for (const f of mine) {
-    if (f.kind === 'tube') capsuleArt(k, v, f, tone);
+    if (f.kind === 'tube') capsuleArt(k, v, f, tone, lampsOn(v));
     else if (f.kind === 'pipes') pipesArt(k, v, f);
     else if (f.kind === 'window') windowArt(k, v, f, tone);
     else if (f.kind === 'board') boardArt(k, v, f);
@@ -450,16 +614,34 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'fuse') fuseArt(k, v, f);
     else if (f.kind === 'sign') signArt(k, v, f);
     else if (f.kind === 'vent') ventArt(k, v, f);
+    else if (f.kind === 'mural') muralArt(k, v, f);
   }
-  // The pipe bundle along the top.
+  // The pipe bundle along the top, and the emergency lamps on the frieze.
   pipeRun(k, v, lo, hi, end);
+  for (const a of emergencyOf(T, end)) if (a > lo - 2 && a < hi + 2) emergency(k, a, topPipe(H) - 2.2, lampsOn(v));
+}
+
+// Where a wall's raised frames stand (every other panel) and its heavy
+// bulkhead ribs (every fourth frame's place, and one in the back corner):
+// no rib where anything hangs, no frame behind a piece on the wall but a
+// capsule light or a pipe run (which mount over them).
+function framing(T: number, end: number, mine: Feature[]): { frames: number[]; ribs: number[] } {
+  const clear = (a: number, m: number, all: boolean) => !mine.some((f) => (all || (f.kind !== 'tube' && f.kind !== 'pipes')) && Math.abs(a - f.a) < f.w / 2 + m);
+  const frames: number[] = [];
+  const ribs: number[] = clear(T + 1.2, 1.8, true) ? [T + 1.2] : [];
+  for (let i = 2; T + i * BAY < end - 3; i += 2) {
+    const a = T + i * BAY;
+    if (i % 8 === 0 && clear(a, 2.8, true)) ribs.push(a);
+    else if (clear(a, 0.8, false)) frames.push(a);
+  }
+  return { frames, ribs };
 }
 
 // Riveted steel panels from the band to the top: lit low by the lights,
-// deeper going up; raised frames every BAY units (none behind a piece on
-// the wall but a capsule light or a pipe run, which mount over them),
-// seams across every COURSE with a row of rivets under each, a panel a
-// shade off here and there, a rust streak now and then.
+// deeper going up; an orange pinstripe along them; raised frames every
+// other panel (framing()), seams across every COURSE with a row of rivets
+// under each, a panel a shade off here and there, a rust streak now and
+// then.
 function plates(k: Kit, v: RoomView, lo: number, hi: number, end: number, mine: Feature[], tone: (c: Color, d?: number) => Color): void {
   const { pen, s } = k;
   const { T, H } = v;
@@ -500,13 +682,16 @@ function plates(k: Kit, v: RoomView, lo: number, hi: number, end: number, mine: 
   k.segs(streaks, withAlpha('#8a5424', 0.3), Math.max(0.8, 0.22 * s), 'round');
   // the far corner in shadow
   k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#0a0d0a50'], [1, '#0a0d0a00']]), 0);
+  // an orange pinstripe along the wall at eye height, chrome either side
+  // (what hangs on the wall hangs over it)
+  const zs = DADO + 11;
+  k.rect(lo, zs, hi, zs + 0.5, 0.005, tone(C.orange, 0.14), 0);
+  k.segs([[[lo, 0.01, zs - 0.06], [hi, 0.01, zs - 0.06]], [[lo, 0.01, zs + 0.56], [hi, 0.01, zs + 0.56]]], tone(C.chrome, 0.2), Math.max(0.6, 0.12 * s));
   // the raised frames, riveted down both edges
-  const blocks = mine.filter((f) => f.kind !== 'tube' && f.kind !== 'pipes');
   const zf0 = z0 + RAIL;
   const zf1 = topPipe(H) - 0.3;
-  for (let a = T + BAY; a < end - 2; a += BAY) {
+  for (const a of framing(T, end, mine).frames) {
     if (a < lo - 1 || a > hi + 1) continue;
-    if (blocks.some((f) => Math.abs(a - f.a) < f.w / 2 + 0.8)) continue;
     k.box(a - 0.45, 0, zf0, 0.9, 0.24, zf1 - zf0, tone(FRAME, 0.2), { line: k.thin, stripe: false });
     if (s >= 3) for (let z = zf0 + 0.9; z < zf1 - 0.4; z += 1.6) dots.push([a - 0.22, 0.25, z], [a + 0.22, 0.25, z]);
   }
@@ -516,6 +701,34 @@ function plates(k: Kit, v: RoomView, lo: number, hi: number, end: number, mine: 
   const f1 = topPipe(H) - 1.0;
   k.poly([[lo, 0, f0], [hi, 0, f0], [hi, 0, f1], [lo, 0, f1]], k.vgrad(lo, 0, f0, f1, [[0, tone(shade(C.teal, -0.08), 0.12)], [1, tone(C.teal, 0.12)]]), 0);
   k.segs([[[lo, 0.01, f0], [hi, 0.01, f0]], [[lo, 0.01, f1], [hi, 0.01, f1]]], tone(C.chrome, 0.2), Math.max(0.8, 0.18 * s));
+}
+
+// Heavy bulkhead ribs up the wall at `ribs` from the band to the frieze:
+// a steel post standing out of the panels with rivets down its face, a
+// curved bracket either side of its head where it meets the frieze and a
+// chrome shoe over the band (the one in the back corner in its shade).
+const RIB = '#7f8c89';
+function bulkheads(k: Kit, v: RoomView, ribs: number[], diner: Zone | null, tone: (c: Color, d?: number) => Color): void {
+  const f0 = topPipe(v.H) - 3.4;
+  const r = 1.5;
+  const dots: P3[] = [];
+  for (const a of ribs) {
+    if (!k.sees(a - 1 - r, 0, 0, a + 1 + r, 1.2, f0)) continue;
+    const zb = (diner && a > diner.a0 - 1.5 && a < diner.a1 + 1.5 ? DADO + AQUA : DADO) + RAIL;
+    const c = tone(a < v.T + 2 ? shade(RIB, -0.14) : RIB, 0.2);
+    for (const d of [-1, 1]) {
+      const pts: P3[] = [[a + d, 0.4, f0], [a + d * (1 + r), 0.4, f0]];
+      for (let i = 0; i <= 8; i++) {
+        const t = (i / 8) * (Math.PI / 2);
+        pts.push([a + d * (1 + r) - d * r * Math.sin(t), 0.4, f0 - r + r * Math.cos(t)]);
+      }
+      k.poly(pts, shade(c, -0.06), k.thin);
+    }
+    k.box(a - 1, 0, zb, 2, 0.8, f0 - zb, c, { line: k.lw, stripe: false });
+    k.box(a - 1.25, 0, zb - 1.6, 2.5, 1.0, 1.6, tone(C.chrome, 0.2), { line: k.thin, stripe: false });
+    if (k.s >= 3) for (let z = zb + 0.9; z < f0 - 0.5; z += 1.2) dots.push([a - 0.55, 0.81, z], [a + 0.55, 0.81, z]);
+  }
+  rivets(k, dots, tone('#c6cfcb'), 0.11);
 }
 
 // The pastel band along the foot of the wall: mint, with a teal stripe for
@@ -629,12 +842,12 @@ function pipeRun(k: Kit, v: RoomView, lo: number, hi: number, end: number): void
 // A capsule light: a steel mounting plate, a rounded chrome housing standing
 // out of it round a tall ribbed lens lit from inside, its light washed over
 // the plates round it (the overlay makes it hum or flicker).
-function capsuleArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => Color): void {
+function capsuleArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => Color, on: boolean): void {
   const z = capZ(v.H);
   const a = f.a;
   const hh = CAP_H / 2;
   if (!k.sees(a - 6, 0, z - hh - 6, a + 6, 1.5, z + hh + 3)) return;
-  k.wash(a, 0.02, z - 0.8, 6, 10, '#e6fff4', 0.18);
+  if (on) k.wash(a, 0.02, z - 0.8, 6, 10, '#e6fff4', 0.18);
   k.shadow(a + 0.3, 0.05, 1.4, 0.5, 0.18, z - hh - 0.6);
   // the plate
   k.poly(rrect(a, 0.02, z, 1.6, hh + 0.6, 1.4), tone(FRAME, 0.12), k.thin);
@@ -643,8 +856,26 @@ function capsuleArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number
   const front = rrect(a, 0.8, z, 1.05, hh, 1.05).map(([u, n, zz]) => k.p(u, n, zz));
   fillPts(k, hull([...back, ...front]), shade(C.chrome, -0.3), k.lw);
   k.poly(rrect(a, 0.8, z, 1.05, hh, 1.05), C.chrome, k.thin);
-  lens(k, a, z, '#f4fff9', '#bfe8d8');
-  k.halo(a, 1.1, z, 3.0, '#e8fff4', 0.22);
+  if (on) lens(k, a, z, '#f4fff9', '#bfe8d8');
+  else lens(k, a, z, '#8a9a92', '#5f6d66');
+}
+
+// The amber emergency lamps along the frieze: one every 24 units from 12
+// in, each wall.
+function emergencyOf(T: number, end: number): number[] {
+  const out: number[] = [];
+  for (let a = T + 12; a < end - 4; a += 24) out.push(a);
+  return out;
+}
+
+// An emergency lamp on the frieze at `a`, its lens's middle at `z`: a
+// steel housing, a caged amber lens (bright on the night shift, steady
+// and low by day).
+function emergency(k: Kit, a: number, z: number, on: boolean): void {
+  if (!k.sees(a - 1.2, 0, z - 1.4, a + 1.2, 1.2, z + 1.4)) return;
+  k.box(a - 0.85, 0, z - 1.1, 1.7, 0.45, 2.2, C.steelDark, { line: k.thin, stripe: false });
+  k.poly(rrect(a, 0.85, z, 0.55, 0.8, 0.5), on ? '#e89a48' : '#ffd27a', k.thin);
+  if (k.s >= 3) k.segs([[[a - 0.55, 0.9, z], [a + 0.55, 0.9, z]], [[a, 0.9, z - 0.8], [a, 0.9, z + 0.8]]], C.steelDark, Math.max(0.6, 0.08 * k.s));
 }
 
 // A capsule's ribbed lens, light at its middle, `dark` at its ends.
@@ -756,9 +987,9 @@ function pressureGauge(k: Kit, a: number, n: number, z: number, r: number, needl
   if (k.fine) k.line(arc(0.62, 0.62, 0.9), withAlpha('#ffffff', 0.5), Math.max(0.6, 0.08 * k.s));
 }
 
-// A window with rounded corners in a thick riveted steel frame, on a dim
-// room beyond: its far wall and floor, a light glowing back there, two
-// glints across the glass.
+// A window with rounded corners in a thick riveted steel frame onto the
+// hydroponics bay beyond: two tiers of planters full of leaves and
+// tomatoes under a warm grow light, two glints across the glass.
 function windowArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => Color): void {
   const { pen } = k;
   const zc = midZ(v.H);
@@ -769,26 +1000,40 @@ function windowArt(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number)
   const iw = hw - 1.0;
   const ih = hh - 1.0;
   k.shadow(a + 0.3, 0.1, hw, 0.6, 0.2, zc - hh - 0.2);
-  // the glass: the room beyond, clipped to the opening
+  // the frame's depth, under the view (which shows through its opening)
+  const outer0 = rrect(a, 0.0, zc, hw, hh, 2.0);
+  const outer = rrect(a, 0.55, zc, hw, hh, 2.0);
+  const inner = rrect(a, 0.55, zc, iw, ih, 1.2);
+  fillPts(k, hull([...outer0, ...outer].map(([u, n, z]) => k.p(u, n, z))), tone(C.steelDark, 0.12), k.lw);
+  // the glass: the hydroponics bay beyond, clipped to the opening
   const hole = rrect(a, 0.08, zc, iw, ih, 1.2);
   pen.save();
   pen.beginPath();
   k.trace(hole);
   pen.clip();
-  k.poly(hole, k.vgrad(a, 0.08, zc - ih, zc + ih, [[0, '#2f4a44'], [0.32, '#244440'], [0.36, '#1c3a3a'], [1, '#14282c']]), 0);
-  // the far floor and a lit doorway back there
-  k.poly([[a - iw, 0.09, zc - ih], [a + iw, 0.09, zc - ih], [a + iw, 0.09, zc - ih * 0.36], [a - iw, 0.09, zc - ih * 0.36]], withAlpha('#7a6034', 0.55), 0);
-  k.poly([[a + iw * 0.25, 0.09, zc - ih * 0.36], [a + iw * 0.62, 0.09, zc - ih * 0.36], [a + iw * 0.62, 0.09, zc + ih * 0.4], [a + iw * 0.25, 0.09, zc + ih * 0.4]], withAlpha('#c8e8d8', 0.22), 0);
-  k.halo(a - iw * 0.45, 0.1, zc + ih * 0.55, 2.4, '#d6fff0', 0.3);
-  k.line([[a - iw, 0.1, zc + ih * 0.78], [a + iw, 0.1, zc + ih * 0.78]], withAlpha('#5fa7b8', 0.5), Math.max(0.8, 0.3 * k.s));
+  k.poly(hole, k.vgrad(a, 0.08, zc - ih, zc + ih, [[0, '#2a4a40'], [0.55, '#3a6052'], [1, '#5a8468']]), 0);
+  // the warm floor back there
+  k.poly([[a - iw, 0.09, zc - ih], [a + iw, 0.09, zc - ih], [a + iw, 0.09, zc - ih * 0.8], [a - iw, 0.09, zc - ih * 0.8]], '#7a6034', 0);
+  // the grow light along the top, its glow on the plants under it
+  const zl = zc + ih * 0.62;
+  k.halo(a, 0.1, zl - 0.8, iw * 0.9, '#fff3c4', 0.6);
+  k.rect(a - iw, zl, a + iw, zl + 0.8, 0.1, '#fff3c4', 0);
+  k.line([[a - iw, 0.1, zl], [a + iw, 0.1, zl]], C.steelDark, Math.max(0.8, 0.12 * k.s));
+  // two tiers of planters, leafy rows in them, a few tomatoes
+  for (const [zt, row] of [[zc - ih * 0.7, 0], [zc - ih * 0.12, 1]] as const) {
+    const leaves: Array<[number, number, number, Color]> = [];
+    for (let u = a - iw + 0.7, i = 0; u < a + iw - 0.3; u += 0.95, i++) {
+      leaves.push([u, zt + 0.95 + hash(f.k, row * 31 + i, 77) * 0.35, 0.55 + hash(f.k, row * 31 + i, 78) * 0.25, (i + row) % 3 ? C.leaf : C.leafOdd]);
+    }
+    for (const [u, z, r, c] of leaves) k.face(u, 0.1, z, r, c, k.thin * 0.7, 12);
+    for (const [i, [u, z, r]] of leaves.entries()) if (hash(f.k, row * 31 + i, 79) < 0.35) k.face(u + r * 0.3, 0.11, z - r * 0.2, 0.22, '#e05040', 0, 10);
+    k.rect(a - iw + 0.2, zt, a + iw - 0.2, zt + 0.9, 0.12, C.steelDark, k.thin);
+    k.line([[a - iw + 0.2, 0.13, zt + 0.75], [a + iw - 0.2, 0.13, zt + 0.75]], C.steelLight, Math.max(0.6, 0.1 * k.s));
+  }
   // glints
   k.segs([[[a - iw * 0.7, 0.11, zc - ih * 0.2], [a - iw * 0.2, 0.11, zc + ih * 0.9]], [[a - iw * 0.45, 0.11, zc - ih * 0.5], [a - iw * 0.05, 0.11, zc + ih * 0.35]]], withAlpha('#ffffff', 0.22), Math.max(0.8, 0.35 * k.s), 'round');
   pen.restore();
-  // the frame: its depth, then its face round the opening
-  const outer0 = rrect(a, 0.0, zc, hw, hh, 2.0);
-  const outer = rrect(a, 0.55, zc, hw, hh, 2.0);
-  const inner = rrect(a, 0.55, zc, iw, ih, 1.2);
-  fillPts(k, hull([...outer0, ...outer].map(([u, n, z]) => k.p(u, n, z))), tone(C.steelDark, 0.12), k.lw);
+  // the frame's face round the opening
   pen.beginPath();
   k.trace(outer);
   k.trace([...inner].reverse());
@@ -890,6 +1135,91 @@ function pictureArt(k: Kit, v: RoomView, f: Feature): void {
   pen.beginPath();
   k.trace(pic);
   k.paint(null, k.thin);
+}
+
+// A mural of the world up top as it was, painted like a travel poster in a
+// chrome frame with rounded corners: a big orange sun rising with cream
+// rays behind stepped red mesas, a teal river winding out of them across a
+// sandy valley, two round clouds in a pale sky; no words on it.
+function muralArt(k: Kit, v: RoomView, f: Feature): void {
+  const { pen, s } = k;
+  const zc = midZ(v.H) + 0.5;
+  const a = f.a;
+  const hw = f.w / 2 - 0.3;
+  const hh = 4.5;
+  if (!k.sees(a - hw - 1, 0, zc - hh - 2, a + hw + 1, 1, zc + hh + 1)) return;
+  k.shadow(a + 0.3, 0.1, hw, 0.6, 0.2, zc - hh - 0.2);
+  const n = 0.35;
+  const outer = rrect(a, n, zc, hw, hh, 1.4);
+  fillPts(k, hull([...rrect(a, 0, zc, hw, hh, 1.4), ...outer].map(([u, w, z]) => k.p(u, w, z))), shade(C.chrome, -0.32), k.lw);
+  k.poly(outer, C.chrome, k.lw);
+  const iw = hw - 0.55;
+  const ih = hh - 0.55;
+  const m = n + 0.01;
+  const pic = rrect(a, m, zc, iw, ih, 0.9);
+  const U = (f: number) => a + f * iw; // across, -1..1
+  const zh = zc - ih * 0.12; // the horizon
+  const zb = zc - ih - 0.1;
+  pen.save();
+  pen.beginPath();
+  k.trace(pic);
+  pen.clip();
+  // the sky, and the sun's rays fanning up from behind the mesas
+  k.poly(pic, k.vgrad(a, m, zh, zc + ih, [[0, '#f6e6c4'], [0.45, '#bfe6dc'], [1, '#7fd0d0']]), 0);
+  const su = U(0.22);
+  const sz = zh + 1.1;
+  pen.beginPath();
+  for (let i = 0; i < 9; i++) {
+    const t0 = Math.PI * (i / 9) + 0.04;
+    const t1 = t0 + Math.PI / 18;
+    k.trace([[su, m, sz], [su + Math.cos(t0) * 14, m, sz + Math.sin(t0) * 14], [su + Math.cos(t1) * 14, m, sz + Math.sin(t1) * 14]]);
+  }
+  pen.fillStyle = withAlpha('#fff6dc', 0.55);
+  pen.fill();
+  // round clouds
+  for (const [cu, cz] of [[U(-0.62), zc + ih * 0.6], [U(0.7), zc + ih * 0.42]]) {
+    for (const [du, dz, r] of [[-0.7, 0, 0.55], [0, 0.3, 0.75], [0.75, 0, 0.5]] as const) k.face(cu + du, m + 0.01, cz + dz, r, '#fbf6e8', 0, 16);
+    k.line([[cu - 1.2, m + 0.02, cz - 0.42], [cu + 1.2, m + 0.02, cz - 0.42]], withAlpha('#9ccfc8', 0.8), Math.max(0.6, 0.08 * s));
+  }
+  // the sun
+  k.face(su, m + 0.02, sz, 2.0, C.orange, k.thin, 24);
+  k.face(su - 0.35, m + 0.03, sz + 0.35, 1.2, '#f6a25a', 0, 18);
+  // the valley floor, then the far mesas, low in the middle so the sun
+  // shows between them
+  k.poly([[U(-1.1), m + 0.03, zh], [U(1.1), m + 0.03, zh], [U(1.1), m + 0.03, zb], [U(-1.1), m + 0.03, zb]], k.vgrad(a, m, zb, zh, [[0, '#c99a58'], [1, '#e6c48a']]), 0);
+  const far: Array<[number, number]> = [[-1.1, 0.9], [-0.8, 0.9], [-0.76, 1.7], [-0.5, 1.7], [-0.46, 0.7], [-0.08, 0.7], [-0.04, 0.3], [0.5, 0.3], [0.54, 1.2], [0.64, 1.2], [0.68, 2.1], [0.9, 2.1], [0.94, 1.0], [1.1, 1.0]];
+  k.poly([[U(1.1), m + 0.04, zh - 0.05], [U(-1.1), m + 0.04, zh - 0.05], ...far.map(([u, z]): P3 => [U(u), m + 0.04, zh + z])], '#c8794a', k.thin);
+  // the river from the sun's foot, widening toward us
+  const left: P3[] = [];
+  const right: P3[] = [];
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10;
+    const cu = su - t * iw * 0.35 + Math.sin(t * 5) * 0.9 * t;
+    const w = 0.12 + t * 1.5;
+    const z = zh - t * (zh - zb);
+    left.push([cu - w, m + 0.05, z]);
+    right.push([cu + w, m + 0.05, z]);
+  }
+  k.poly([...left, ...right.reverse()], C.teal, k.thin);
+  k.line(left.slice(3).map(([u, w, z]): P3 => [u + 0.45, w + 0.01, z]), withAlpha('#bfe6dc', 0.8), Math.max(0.6, 0.1 * s));
+  // the near mesas at the sides, darker
+  k.poly([[U(-1.1), m + 0.06, zb], [U(-1.1), m + 0.06, zh + 2.6], [U(-0.84), m + 0.06, zh + 2.6], [U(-0.8), m + 0.06, zh + 1.3], [U(-0.64), m + 0.06, zh + 1.3], [U(-0.6), m + 0.06, zh - 0.5], [U(-0.42), m + 0.06, zh - 0.7], [U(-0.34), m + 0.06, zb]], '#a85a34', k.thin);
+  k.poly([[U(1.1), m + 0.06, zb], [U(1.1), m + 0.06, zh + 0.9], [U(0.8), m + 0.06, zh + 0.9], [U(0.76), m + 0.06, zh - 0.3], [U(0.56), m + 0.06, zh - 0.55], [U(0.48), m + 0.06, zb]], '#a85a34', k.thin);
+  k.segs([[[U(-1.1), m + 0.07, zh + 2.45], [U(-0.84), m + 0.07, zh + 2.45]], [[U(-0.8), m + 0.07, zh + 1.15], [U(-0.64), m + 0.07, zh + 1.15]], [[U(0.8), m + 0.07, zh + 0.75], [U(1.1), m + 0.07, zh + 0.75]]], withAlpha('#e6a070', 0.8), Math.max(0.6, 0.14 * s));
+  pen.restore();
+  pen.beginPath();
+  k.trace(pic);
+  k.paint(null, k.thin);
+  k.line(rrect(a, n + 0.02, zc, hw - 0.2, hh - 0.2, 1.2).slice(5, 13), withAlpha('#ffffff', 0.6), Math.max(0.6, 0.1 * s));
+  // a chrome picture lamp over it on two arms, its light down the
+  // painting while the lights are on
+  const zl = zc + hh + 0.9;
+  for (const du of [-hw * 0.45, hw * 0.45]) k.rod([[a + du, 0.05, zl + 0.6], [a + du, 1.3, zl + 0.2]], C.steelDark, 0.14);
+  k.box(a - hw * 0.62, 0.9, zl - 0.25, hw * 1.24, 0.9, 0.55, C.chrome, { line: k.thin, round: 0.25 });
+  if (lampsOn(v)) {
+    k.wash(a, n + 0.05, zc + hh * 0.35, hw * 0.95, hh * 1.1, '#fff3d8', 0.28);
+    k.line([[a - hw * 0.55, 1.35, zl - 0.3], [a + hw * 0.55, 1.35, zl - 0.3]], '#fff8e0', Math.max(0.8, 0.14 * s));
+  }
 }
 
 // A starburst wall clock: brass spikes round a cream face, balls on the
@@ -1006,53 +1336,164 @@ function signArt(k: Kit, v: RoomView, f: Feature): void {
   k.face(a, n + 0.02, z, R * 0.18, C.black, 0, 12);
 }
 
-// ── the shell's edges: wall tops, cut ends, the floor slab ───────────────────
+// ── the shell's edges: the earth round the shelter ───────────────────────────
+
+// The ground the shelter is dug into, seen where the room is cut away:
+// bands of soil, ochre and red clay a few units deep with wavy feet (the same
+// bands at every cut, so they meet at the front corners), stones bedded in
+// them and a root near the top. The shelter is a concrete shell in it: the
+// walls' last CRETE units, faced inside with the steel plate, and the slab
+// under the deck; the wall tops show the soil over the concrete.
+const STRATA = ['#5b4a3a', '#8a6c4a', '#463a2e', '#9a7a52', '#3e3329', '#6e5c48', '#7a5038'];
+const SOIL = '#6b5440';
+const STONE = '#8a8478';
+const CONCRETE = '#8f918a';
+const CRETE = 2; // the walls' concrete, thick
+const SLAB_C = 1.2; // the slab's concrete under the deck
+
+// The bands from the top of the cut down: each one's top and colour (the
+// next one's top its foot), no colour twice running.
+function strata(H: number): Array<{ z: number; c: Color }> {
+  const out: Array<{ z: number; c: Color }> = [];
+  let last = -1;
+  for (let i = 0, z = H; z > -SLAB; i++) {
+    const c = (last + 1 + Math.floor(hash(i, 43) * (STRATA.length - 1))) % STRATA.length;
+    out.push({ z, c: STRATA[c] });
+    last = c;
+    z -= 2 + hash(i, 41) * 2;
+  }
+  return out;
+}
+
+// A band's top at `a` along a cut: wavy, but the cut's top is level.
+const topOf = (b: { z: number }, i: number, a: number) => (i === 0 ? b.z : b.z + 0.4 * Math.sin(a * 0.7 + i * 1.9));
 
 function shell(k: Kit, v: RoomView): void {
-  const { pen } = k;
   const { W, D, H, T } = v;
-  const cap = '#6e7672';
-  const cut = '#5c625f';
-  // the floor's cut edges: concrete under a lip of the ochre deck
-  k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side(C.concreteDark, 0, 1), k.lw);
-  k.poly([[W, T, 0], [W, D, 0], [W, D, -SLAB], [W, T, -SLAB]], k.side(C.concreteDark, 1, 0), k.lw);
-  k.line([[T, D, -0.25], [W, D, -0.25], [W, T, -0.25]], C.deckDark, Math.max(1, 0.3 * k.s));
-  // the walls' cut ends: thick concrete faced with the steel plate
-  k.poly([[0, D, -SLAB], [T, D, -SLAB], [T, D, H], [0, D, H]], k.side(cut, 0, 1), k.lw);
-  k.poly([[W, 0, -SLAB], [W, T, -SLAB], [W, T, H], [W, 0, H]], k.side(cut, 1, 0), k.lw);
-  for (const [p, q] of [[[0, D], [T, D]], [[W, 0], [W, T]]] as const) {
-    const at = (f: number, z: number) => k.p(p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, z);
-    pen.beginPath();
-    for (let z = 4; z < H - 1; z += 6) {
-      const [x0, y0] = at(0.06, z);
-      const [x1, y1] = at(0.88, z);
-      pen.moveTo(x0, y0);
-      pen.lineTo(x1, y1);
+  cut(k, v, 'y');
+  cut(k, v, 'x');
+  // the wall tops: soil over the concrete, pebbles in it, a lit lip on the
+  // outer edge
+  if (k.sees(0, 0, H, W, D, H, 6)) {
+    k.poly([[0, 0, H], [W, 0, H], [W, T, H], [T, T, H], [T, D, H], [0, D, H]], SOIL, k.lw);
+    const pebbles: P3[] = [];
+    for (const right of [true, false]) {
+      const end = right ? W : D;
+      for (let i = 0; 1 + i * 1.9 < end - 1; i++) {
+        const a = 1 + i * 1.9 + hash(i, right ? 1 : 2, 97) * 1.2;
+        const b = 0.6 + hash(i, right ? 1 : 2, 98) * (T - CRETE - 1.2);
+        pebbles.push(right ? [a, b, H] : [b, a, H]);
+      }
     }
-    pen.strokeStyle = withAlpha('#2c302a', 0.4);
-    pen.lineWidth = Math.max(0.6, 0.08 * k.s);
-    pen.stroke();
-    // the steel facing on the room side, mint at the foot
-    const quad = (z0: number, z1: number, c: Color) => {
-      const [a0, a1] = [at(0.9, z0), at(1, z0)];
-      const [b0, b1] = [at(0.9, z1), at(1, z1)];
-      pen.beginPath();
-      pen.moveTo(a0[0], a0[1]);
-      pen.lineTo(a1[0], a1[1]);
-      pen.lineTo(b1[0], b1[1]);
-      pen.lineTo(b0[0], b0[1]);
-      pen.closePath();
-      pen.fillStyle = c;
-      pen.fill();
-    };
-    quad(-SLAB + 0.2, H, mix(C.steel, cut, 0.3));
-    quad(-SLAB + 0.2, DADO, shade(C.mint, -0.25));
+    const { pen } = k;
+    pen.beginPath();
+    for (const [x, y, z] of pebbles) {
+      const [px, py] = k.p(x, y, z);
+      const r = Math.max(0.7, 0.16 * k.s);
+      pen.moveTo(px + r * 1.4, py);
+      pen.ellipse(px, py, r * 1.4, r * 0.8, 0, 0, Math.PI * 2);
+    }
+    pen.fillStyle = shade(STONE, -0.1);
+    pen.fill();
+    k.line([[0.35, D, H], [0.35, 0.35, H], [W, 0.35, H]], '#8a7056', Math.max(1, 0.2 * k.s));
+    k.poly([[T - CRETE, T - CRETE, H], [W, T - CRETE, H], [W, T, H], [T, T, H], [T, D, H], [T - CRETE, D, H]], CONCRETE, k.thin);
+    k.poly([[T - 0.6, T - 0.6, H], [W, T - 0.6, H], [W, T, H], [T, T, H], [T, D, H], [T - 0.6, D, H]], C.steelLight, k.thin);
   }
-  k.poly([[0, 0, H], [W, 0, H], [W, T, H], [T, T, H], [T, D, H], [0, D, H]], cap, k.lw);
-  k.line([[0.35, D, H], [0.35, 0.35, H], [W, 0.35, H]], shade(cap, 0.3), Math.max(1, 0.2 * k.s));
   // inner edges: wall to floor, and the corner
   k.line([[T, D, 0], [T, T, 0], [W, T, 0]], withAlpha(INK, 0.7), k.thin);
   k.line([[T, T, 0], [T, T, H]], withAlpha(INK, 0.5), k.thin);
+}
+
+// One side's cut through the earth: the plane y = D (the left wall's end
+// and the floor's front edge, `a` along x) or x = W (the right wall's end
+// and the floor's right edge, `a` along y); the wall's end 0..T stands to
+// the top, the floor's T..end reaches down to -SLAB.
+function cut(k: Kit, v: RoomView, plane: 'x' | 'y'): void {
+  const { pen, s } = k;
+  const { W, D, H, T } = v;
+  const end = plane === 'y' ? W : D;
+  const P = (a: number, z: number): P3 => (plane === 'y' ? [a, D, z] : [W, a, z]);
+  const tone = (c: Color) => (plane === 'y' ? k.side(c, 0, 1, 0.16) : k.side(c, 1, 0, 0.16));
+  const face: P3[] = [P(0, -SLAB), P(end, -SLAB), P(end, 0), P(T, 0), P(T, H), P(0, H)];
+  const [x0, y0, x1, y1] = plane === 'y' ? [0, D, end, D] : [W, 0, W, end];
+  if (!k.sees(x0, y0, -SLAB, x1, y1, H, 6)) return;
+  pen.save();
+  pen.beginPath();
+  k.trace(face);
+  pen.clip();
+  // the bands (those above the floor only across the wall's end), a dark
+  // line along each one's top
+  const bands = strata(H);
+  const tops: P3[][] = [];
+  for (const [i, b] of bands.entries()) {
+    const foot = bands[i + 1];
+    const a1 = foot && foot.z > 0.5 ? T : end;
+    const top: P3[] = [];
+    for (let a = 0; a < a1 + 1; a++) top.push(P(Math.min(a, a1), topOf(b, i, Math.min(a, a1))));
+    const bottom: P3[] = [];
+    for (let a = a1 + 1; a > -1; a--) bottom.push(P(Math.max(0, Math.min(a, a1)), foot ? topOf(foot, i + 1, Math.max(0, Math.min(a, a1))) : -SLAB - 1));
+    k.poly([...top, ...bottom], tone(b.c), 0);
+    if (i) tops.push(top);
+  }
+  for (const t of tops) k.line(t, withAlpha(INK, 0.3), Math.max(0.6, 0.08 * s));
+  // stones bedded in the earth (the concrete is laid over any it meets),
+  // a lit top on each
+  const n = Math.round(((T - CRETE) * (H + SLAB) + (end - T) * (SLAB - SLAB_C)) / 10);
+  const salt = plane === 'y' ? 3 : 4;
+  const stones: P3[][] = [];
+  const lips: P3[][] = [];
+  for (let i = 0; i < n; i++) {
+    const wall = hash(i, 45, salt) < ((T - CRETE) * (H + SLAB)) / ((T - CRETE) * (H + SLAB) + (end - T) * (SLAB - SLAB_C));
+    const a = wall ? 0.3 + hash(i, 46, salt) * (T - CRETE - 0.6) : T + 1 + hash(i, 46, salt) * (end - T - 2);
+    const z = wall ? -SLAB + 0.4 + hash(i, 47, salt) * (H + SLAB - 1.4) : -SLAB + 0.5 + hash(i, 47, salt) * (SLAB - SLAB_C - 1);
+    const ra = wall ? 0.6 + hash(i, 48, salt) * 0.8 : 0.5 + hash(i, 48, salt) * 0.7;
+    const rz = ra * (0.5 + hash(i, 49, salt) * 0.25);
+    const ring: P3[] = [];
+    for (let j = 0; j < 12; j++) {
+      const t = (j / 12) * Math.PI * 2;
+      const w = 1 + (hash(i, j, 50 + salt) - 0.5) * 0.25;
+      ring.push(P(a + Math.cos(t) * ra * w, z + Math.sin(t) * rz * w));
+    }
+    stones.push(ring);
+    const lip: P3[] = [];
+    for (let j = 0; j <= 6; j++) {
+      const t = Math.PI * (0.15 + (j / 6) * 0.7);
+      lip.push(P(a + Math.cos(t) * ra * 0.75, z + Math.sin(t) * rz * 0.7));
+    }
+    lips.push(lip);
+  }
+  pen.beginPath();
+  for (const q of stones) k.trace(q, 0.3);
+  pen.fillStyle = tone(STONE);
+  pen.fill();
+  pen.strokeStyle = INK;
+  pen.lineWidth = k.thin;
+  pen.lineJoin = 'round';
+  pen.stroke();
+  if (s >= 3) for (const q of lips) k.line(q, tone('#a8a296'), Math.max(0.6, 0.1 * s));
+  // a root down from the top
+  if (s >= 3) {
+    const ra = 0.8 + hash(salt, 51) * (T - CRETE - 1.8);
+    const root: P3[] = [];
+    for (let j = 0; j <= 10; j++) root.push(P(ra + Math.sin(j * 1.3 + salt) * 0.35, H - 0.2 - j * 0.4));
+    k.line(root, tone('#8a6a44'), Math.max(0.7, 0.12 * s));
+    k.line([root[4], P(ra + 0.9, H - 2.6), P(ra + 1.1, H - 3.4)], tone('#8a6a44'), Math.max(0.6, 0.07 * s));
+  }
+  // the concrete shell: the wall's inner CRETE units and the slab under
+  // the deck, lines where its forms were tied
+  k.poly([P(T - CRETE, -SLAB_C), P(end, -SLAB_C), P(end, 0), P(T, 0), P(T, H), P(T - CRETE, H)], tone(CONCRETE), k.thin);
+  const ties: Array<[P3, P3]> = [];
+  for (let z = 4; z < H - 1; z += 6) ties.push([P(T - CRETE + 0.2, z), P(T - 0.8, z)]);
+  k.segs(ties, withAlpha('#2c302a', 0.35), Math.max(0.6, 0.08 * s));
+  // the steel facing on the room side, mint at the foot, and the deck's
+  // tiles on the slab
+  k.poly([P(T - 0.6, 0), P(T, 0), P(T, H), P(T - 0.6, H)], tone(mix(C.steel, CONCRETE, 0.3)), 0);
+  k.poly([P(T - 0.6, 0), P(T, 0), P(T, DADO), P(T - 0.6, DADO)], tone(shade(C.mint, -0.2)), 0);
+  k.poly([P(T - 0.6, 0), P(end, 0), P(end, -0.35), P(T - 0.6, -0.35)], tone(C.deckDark), 0);
+  pen.restore();
+  pen.beginPath();
+  k.trace(face);
+  k.paint(null, k.lw);
 }
 
 // ── per frame ────────────────────────────────────────────────────────────────

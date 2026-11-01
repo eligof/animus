@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
+import { hashString } from '../src/world/rng.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import { cafe } from '../src/worlds/cafe.ts';
 import { DECOR_ART } from '../src/worlds/cafe/decor.ts';
@@ -16,7 +17,7 @@ import { budget } from './helpers.ts';
 // island at the fitted scale and zoomed in, inside its footprint and
 // height; animated pieces move and still ones never look at the clock;
 // the shell stays within its time budget and keeps its wall pieces off the
-// stations.
+// stations, those it hangs over them clear of what stands on them.
 
 const ARTS: Array<[string, PropArt]> = [...(Object.entries(cafe.stations) as Array<[SlotKind, PropArt]>), ...Object.entries(DECOR_ART)];
 const VIEWS: Array<{ wall: 'left' | 'right'; island: boolean }> = [
@@ -122,6 +123,42 @@ test('café room: the walls keep their windows, hearth and pictures off the stat
     // and the hearth's warm spots are on open floor
     const warm = cafe.pois!(L).filter((p) => p.kind === 'warm');
     assert.ok(warm.length >= 2, 'warm spots by the hearth');
+  }
+});
+
+test('café room: the menu, the shelves and the clock hang over their stations, clear of what stands on them and of the wall\'s other pieces', () => {
+  for (const [w, h] of [[375, 220], [300, 165], [200, 120], [160, 110]]) {
+    const L = planLayout(w, h, 'cafe');
+    const plan = planFor(L.W, L.D, L.H, L.T);
+    assert.ok(plan.over.some((f) => f.kind === 'menu'), `${L.W}: no menu over the pastry case`);
+    for (const f of plan.over) {
+      const tag = `${L.W}: the ${f.kind} at ${f.a}`;
+      const s = slotsOn(L, f.wall).find((q) => {
+        const r = slotRect(q);
+        const [a0, a1] = f.wall === 'right' ? [r.x0, r.x1] : [r.y0, r.y1];
+        return f.a > a0 && f.a < a1;
+      });
+      assert.ok(s, `${tag}: over no station`);
+      assert.ok(f.z! >= cafe.stations[s.kind].height + 0.5, `${tag}: from z ${f.z}, in among the ${s.kind}'s things`);
+      assert.ok(f.z! < L.H - 9, `${tag}: up by the picture rail`);
+      for (const g of plan.features) {
+        if (g.wall !== f.wall) continue;
+        assert.ok(f.a + f.w / 2 <= g.a - g.w / 2 || g.a + g.w / 2 <= f.a - f.w / 2, `${tag}: over the ${g.kind} at ${g.a}`);
+      }
+    }
+    // one menu in the room, two shelves at most, over the stations or not
+    const all = [...plan.features, ...plan.over];
+    assert.ok(all.filter((f) => f.kind === 'menu').length <= 1, `${L.W}: two menus`);
+    assert.ok(all.filter((f) => f.kind === 'shelf').length <= 2, `${L.W}: over two shelves`);
+  }
+});
+
+test('café room: no furniture stands before the hearth, its irons and its basket, in any room', () => {
+  for (const [w, h] of [[375, 220], [300, 165], [200, 120], [160, 110], [500, 300]]) {
+    const L = planLayout(w, h, 'cafe');
+    const keep = cafe.reserve!(L);
+    assert.equal(keep.length, 1, `${L.W}: no hearth kept clear`);
+    for (const p of planRoom(cafe, L, hashString('cafe')).props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: a ${p.art.len}x${p.art.dep} piece before the hearth`);
   }
 });
 

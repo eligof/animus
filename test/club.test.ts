@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { footprint, planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
 import { hashString } from '../src/world/rng.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { club } from '../src/worlds/club.ts';
 import { DECOR_ART } from '../src/worlds/club/decor.ts';
-import { TILE, planFor } from '../src/worlds/club/plan.ts';
+import { STRIP, TILE, TRUSS, muralSpan, planFor } from '../src/worlds/club/plan.ts';
+import { rig } from '../src/worlds/club/walls.ts';
+import { tileGlow } from '../src/worlds/club/room.ts';
 import type { PropArt } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
@@ -125,7 +127,7 @@ test('club stations: worked ones give off notes and sparkle; the fog machine bre
   assert.ok(fog.length >= 3 && fog.every((p) => p.kind === 'smoke'), 'the fog machine puffs smoke');
 });
 
-test('club room: the shell knows the stage furniture, keeps its walls off the stations and lays a clear dance floor', () => {
+test('club room: the shell knows the stage furniture, keeps its walls off the stations, hangs its signs clear and lays a clear dance floor', () => {
   for (const [w, h] of [[375, 220], [300, 165], [200, 120], [160, 110], [600, 400]]) {
     const L = planLayout(w, h, 'club');
     const plan = planFor(L.W, L.D, L.H, L.T);
@@ -133,7 +135,26 @@ test('club room: the shell knows the stage furniture, keeps its walls off the st
     // the furniture where the stage puts it
     const room = planRoom(club, L, hashString(club.id));
     assert.deepEqual(plan.decor.map(footprint), room.props.filter((p) => !p.slot).map(footprint), `${L.W}: the shell's furniture is not the stage's`);
+    // nothing stands before the mural or on the dance floor
+    const keep = club.reserve!(L);
+    for (const p of room.props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: furniture at ${p.x0}, ${p.y0} in what the club keeps clear`);
     assert.ok(plan.features.some((f) => f.kind === 'bay' && f.sign >= 0), `${L.W}: no neon signs`);
+    const signs = [...plan.features, ...plan.over].filter((f) => f.kind === 'bay' && f.sign >= 0);
+    assert.ok(signs.length >= 4 && signs.length <= 8, `${L.W}: ${signs.length} neon signs`);
+    assert.equal(new Set(signs.map((f) => f.sign)).size, signs.length, `${L.W}: a sign twice`);
+    // a sign over a station or furniture hangs clear of its top, on its wall
+    for (const f of plan.over) {
+      const end = f.wall === 'right' ? L.W : L.D;
+      assert.ok(f.a - f.w / 2 >= L.T && f.a + f.w / 2 <= end, `${L.W}: a sign over something off its wall`);
+      const foot = plan.sign.z - (f.r ?? plan.sign.r);
+      const under = [...slotsOn(L, f.wall), ...room.props.filter((p) => !p.slot && !p.island && p.wall === f.wall)];
+      for (const q of under) {
+        const [a0, a1] = f.wall === 'right' ? [q.x0, q.x0 + q.len] : [q.y0, q.y0 + q.len];
+        if (a1 <= f.a - f.w / 2 || a0 >= f.a + f.w / 2) continue;
+        const h = 'art' in q ? q.art.height : club.stations[q.kind].height;
+        assert.ok(h <= foot - 2, `${L.W}: a sign at ${f.a} hangs ${foot - h} over what stands under it`);
+      }
+    }
     for (const f of plan.features) {
       const end = f.wall === 'right' ? L.W : L.D;
       assert.ok(f.a - f.w / 2 >= L.T && f.a + f.w / 2 <= end, `${L.W}: ${f.kind} off its wall`);
@@ -161,6 +182,22 @@ test('club room: the shell knows the stage furniture, keeps its walls off the st
   const fs = planFor(big.W, big.D, big.H, big.T).features;
   assert.equal(fs.filter((f) => f.kind === 'mural').length, 1, 'no mural');
   assert.equal(fs.filter((f) => f.kind === 'exit').length, 1, 'no fire exit');
+  // on a wall too low to hang it under the strip, the mural goes up over
+  // it, with no light hung in front of it (nor of a sign)
+  const mid = planLayout(184, 134, 'club'); // a 100 x 30 terminal's room
+  const plan = planFor(mid.W, mid.D, mid.H, mid.T);
+  const m = plan.features.find((f) => f.kind === 'mural');
+  assert.ok(m, 'no mural in the middling room');
+  const [z0, z1] = muralSpan(mid.H);
+  assert.ok(z0 > STRIP && z1 < mid.H - TRUSS - 1 && z1 - z0 >= 8, `the mural hangs at ${z0}..${z1}`);
+  const end = m.wall === 'right' ? mid.W : mid.D;
+  assert.ok(!rig(plan, m.wall, mid.T, end).some((c) => Math.abs(c.a - 1.9 - m.a) < m.w / 2), 'a light hangs in front of the mural');
+  for (const f of [...plan.features, ...plan.over].filter((g) => g.kind === 'bay' && g.sign >= 0)) {
+    const r = f.r ?? plan.sign.r;
+    const cans = rig(plan, f.wall, mid.T, f.wall === 'right' ? mid.W : mid.D);
+    assert.ok(!cans.some((c) => Math.abs(c.a - 1.9 - f.a) < r), `a light hangs in front of the sign at ${f.a}`);
+    assert.ok(cans.some((c) => c.head), `no moving head left on the ${f.wall} wall`);
+  }
 });
 
 test('club room: the shell draws inside the canvas, the ball turns, and it all stays in budget', () => {
@@ -244,4 +281,21 @@ test("the club's locals on a sheet: a row each, and each at its station", () => 
 test('Underground Club: three locals at work, each where its job puts it', () => {
   assert.deepEqual(club.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['dj', 'write', 'behind'], ['bartender', 'run', 'behind'], ['coatCheck', 'search', 'behind']]);
   assert.ok(club.npcs!.some((n) => n.show), 'no show');
+});
+
+test('club floor loop: the dance floor lights up on the beat round two seconds, the beams sweep it with the lights on', () => {
+  const L = planLayout(375, 220, 'club');
+  const s = 4;
+  const P = project(L.D * s + 30, L.H * s + 20, s);
+  const shot = (t: number, lit: boolean) => {
+    const c = new Canvas(1500, 920);
+    club.room.floor!({ pen: c, s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t, seed: 1, lit });
+    return c;
+  };
+  for (const lit of [true, false]) assert.ok(!same(shot(0, lit), shot(0.5, lit)), `it stands still${lit ? '' : ' at night'}`);
+  assert.ok(!same(shot(0.2, true), shot(0.2, false)), 'the beams stay on at night');
+  // every tile comes round to how it was two seconds on
+  const n = planFor(L.W, L.D, L.H, L.T).dance!.n;
+  for (let k = 0; k < 30; k++) for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) assert.ok(Math.abs(tileGlow(i, j, n, k / 15) - tileGlow(i, j, n, k / 15 + 2)) < 1e-9, `tile ${i}, ${j} at ${k / 15} s`);
+  budget('the floor loop a step', (i) => club.room.floor!({ pen: new Canvas(1500, 920), s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t: i / 15, seed: 1, lit: true }), 8, { calls: 10 });
 });

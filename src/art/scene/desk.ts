@@ -42,8 +42,12 @@ const stepOf = (grow: number) => Math.max(0, Math.min(POP_STEPS, Math.round(grow
 // Still growing out of the floor (or shrinking into it): all in one picture.
 export const popping = (grow: number) => stepOf(grow) < POP_STEPS;
 
-// Room round the box for its shadow and its ink, in units.
-const PAD = 2;
+// Room round the box for its shadow, its ink and its screen's light on
+// the floor, in units.
+const PAD = 3.5;
+// At night a lit screen throws a small pool of its light on the floor in
+// front of it (where its agent stands): radius (units), colour, strength.
+const GLOW = { r: 2.6, color: [168, 212, 255] as const, a: 0.3 };
 // Pictures kept, least recently used out first past either bound. (In
 // tinted worlds the scene also keeps a tinted copy of each picture.)
 const MAX = 1024;
@@ -141,22 +145,23 @@ function pickedAt(world: WorldDef, art: WorkstationArt, place: number): Picked {
   return p;
 }
 
-const viewOf = (art: WorkstationArt, pen: Canvas, at: At, s: number, wall: 'left' | 'right', active: boolean, seed: number): PropView => ({ pen, s, at, len: art.len, dep: art.dep, wall, island: true, t: 0, active, seed });
+const viewOf = (art: WorkstationArt, pen: Canvas, at: At, s: number, wall: 'left' | 'right', active: boolean, seed: number, lit: boolean): PropView => ({ pen, s, at, len: art.len, dep: art.dep, wall, island: true, t: 0, active, seed, lit });
 
 // The body of workstation d of `world` at scale s in ink `ink` (popping,
-// all of it).
-export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | 'screen' | 'grow' | 'seed'>, s: number, ink: string): DeskSprite {
+// all of it), with the lights on or off (`lit`: a desk lamp may go out).
+export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | 'screen' | 'grow' | 'seed'>, s: number, ink: string, lit = true): DeskSprite {
   const art = workstationOf(world);
   const step = stepOf(d.grow);
   const pop = step < POP_STEPS;
   const on = d.screen !== 'off';
   const { pick, key: pk } = pop ? NONE : pickedAt(world, art, d.id);
-  const key = `b|${artKey(art)}|${ink}|${d.wall}|${d.seed}|${pop ? d.screen : on ? 'on' : 'off'}|${pk}|${step}|${s}`;
+  const key = `b|${artKey(art)}|${ink}|${d.wall}|${d.seed}|${pop ? d.screen : on ? 'on' : 'off'}|${pk}|${step}|${s}|${lit ? 1 : 0}`;
   return kept(key, () => {
     const g = growth(d.grow);
     return picture(art, d.wall, g, s, (pen, at) => {
       if (!step) return;
-      const v = viewOf(art, pen, at, s * g, d.wall, on, d.seed);
+      const v = viewOf(art, pen, at, s * g, d.wall, on, d.seed, lit);
+      if (!pop && on && !lit) screenGlow(pen, at, art, s);
       pen.save();
       art.draw(v);
       pen.restore();
@@ -176,6 +181,23 @@ export function deskSprite(world: WorldDef, d: Pick<DeskFrame, 'id' | 'wall' | '
   });
 }
 
+// A lit screen's light on the floor at night, under the desk: a soft round
+// pool in front of the screen's middle, toward where its agent stands.
+function screenGlow(pen: Canvas, at: At, art: WorkstationArt, s: number): void {
+  const u = art.screen.reduce((m, q) => m + q[0], 0) / art.screen.length;
+  const [cx, cy] = at(u, art.dep + 0.6, 0);
+  const rx = Math.SQRT2 * GLOW.r * s;
+  pen.save();
+  pen.translate(cx, cy);
+  pen.scale(1, 0.5);
+  const g = pen.createRadialGradient(0, 0, 0, 0, 0, rx);
+  const [r, gg, b] = GLOW.color;
+  for (const [t, k] of [[0, 1], [0.4, 0.75], [0.75, 0.3], [1, 0]] as const) g.addColorStop(t, `rgba(${r}, ${gg}, ${b}, ${(GLOW.a * k).toFixed(3)})`);
+  pen.fillStyle = g;
+  pen.fillRect(-rx, -rx, 2 * rx, 2 * rx);
+  pen.restore();
+}
+
 // The screen of a workstation of `world` grown to its size: what its agent
 // is doing.
 export function screenSprite(world: WorldDef, d: Pick<DeskFrame, 'wall' | 'screen'>, s: number, ink: string): DeskSprite {
@@ -183,16 +205,16 @@ export function screenSprite(world: WorldDef, d: Pick<DeskFrame, 'wall' | 'scree
   return kept(`s|${artKey(art)}|${ink}|${d.wall}|${d.screen}|${s}`, () => picture(art, d.wall, 1, s, (pen, at) => drawScreen(pen, at, art.screen, d.screen, ink)));
 }
 
-// Frame i of loop k of the workstation of `world`, lit or not, grown to
-// its size.
-export function loopSprite(world: WorldDef, k: number, i: number, on: boolean, wall: 'left' | 'right', s: number, ink: string): DeskSprite {
+// Frame i of loop k of the workstation of `world`, its screen on or not,
+// grown to its size, with the lights on or off.
+export function loopSprite(world: WorldDef, k: number, i: number, on: boolean, wall: 'left' | 'right', s: number, ink: string, lit = true): DeskSprite {
   const art = workstationOf(world);
-  return kept(`l|${artKey(art)}|${ink}|${wall}|${k}|${i}|${on ? 1 : 0}|${s}`, () =>
+  return kept(`l|${artKey(art)}|${ink}|${wall}|${k}|${i}|${on ? 1 : 0}|${s}|${lit ? 1 : 0}`, () =>
     picture(art, wall, 1, s, (pen, at) => {
       const lp = art.loops?.[k];
       if (!lp) return;
       pen.save();
-      lp.draw(viewOf(art, pen, at, s, wall, on, 0), i / framesFor(lp.secs));
+      lp.draw(viewOf(art, pen, at, s, wall, on, 0, lit), i / framesFor(lp.secs));
       pen.restore();
     }),
   );
@@ -215,17 +237,17 @@ export function loopFrame(lp: DeskLoop, k: number, id: number, on: boolean, t: n
 // picture is sorted by the body's box and picture. Each with its
 // layer's id and whether it was drawn just now.
 export type DeskPicture = { id: string; sp: DeskSprite; fresh: boolean; at?: P3; sortAs?: 'body' };
-export function deskPictures(world: WorldDef, d: DeskFrame, t: number, s: number, ink: string): DeskPicture[] {
+export function deskPictures(world: WorldDef, d: DeskFrame, t: number, s: number, ink: string, lit = true): DeskPicture[] {
   const out: DeskPicture[] = [];
   const add = (id: string, make: () => DeskSprite, at?: P3, sortAs?: 'body') => {
     const m = deskStats.misses;
     const sp = make();
     out.push({ id, sp, fresh: deskStats.misses > m, at, sortAs });
   };
-  add(`desk:${d.id}`, () => deskSprite(world, d, s, ink));
+  add(`desk:${d.id}`, () => deskSprite(world, d, s, ink, lit));
   if (popping(d.grow)) return out;
   const on = d.screen !== 'off';
   add(`screen:${d.id}`, () => screenSprite(world, d, s, ink), undefined, 'body');
-  (workstationOf(world).loops ?? []).forEach((lp, k) => add(`loop:${d.id}:${k}`, () => loopSprite(world, k, loopFrame(lp, k, d.id, on, t), on, d.wall, s, ink), lp.at));
+  (workstationOf(world).loops ?? []).forEach((lp, k) => add(`loop:${d.id}:${k}`, () => loopSprite(world, k, loopFrame(lp, k, d.id, on, t), on, d.wall, s, ink, lit), lp.at));
   return out;
 }

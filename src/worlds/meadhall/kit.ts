@@ -26,7 +26,7 @@ export const C = {
   timberDark: '#553a22',
   carving: '#a9814f',
   log: '#8c5e3a',
-  plaster: '#b89e72',
+  plaster: '#c8ad80', // pale daub, so the timber frame reads against it
   stone: '#82827a',
   stoneLight: '#9c9b92',
   stoneDark: '#686860',

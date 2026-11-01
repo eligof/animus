@@ -24,7 +24,7 @@ export const C = {
   brickDark: '#552c44',
   mortar: '#3a2236',
   paint: '#2a2131',
-  concrete: '#3e3648',
+  concrete: '#463d52', // a step lighter than the black band and the gear, so they read on it
   cap: '#4a4152',
   // materials
   black: '#2b2633',

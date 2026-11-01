@@ -27,7 +27,7 @@ export const C = {
   concrete: '#59615e',
   steel: '#8a9692',
   steelDark: '#4d5754',
-  galv: '#a9b3af',
+  galv: '#4f5955', // the duct: dull, so the top edge reads as the LEDs' green line
   // furniture
   black: '#2a2f33',
   charcoal: '#3a4045',

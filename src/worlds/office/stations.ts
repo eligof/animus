@@ -69,6 +69,8 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 15,
+  // the monitors' cool light on the desk and the floor before it
+  light: [{ kind: 'screen', u: 5.5, v: 3.25, z: 11, color: '#a8d4ff', r: 7, strength: 0.6, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 15, (k) => {
@@ -467,6 +469,8 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 16,
+  // the dashboards' glow on the concrete round the stand
+  light: [{ kind: 'screen', u: 4.5, v: 5.4, z: 12.5, r: 6, strength: 0.6, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, z0, z1 } = TV;

@@ -79,7 +79,9 @@ a second by default (`--fps`); what moves in place (an agent breathing, a
 local at work, steam off a cup) is drawn 15 times a second, each picture
 held for two frames. The room is fitted to the window; selecting
 an agent zooms in on it and follows it, `+` / `-` step the zoom and `z`
-hands it back. `l` turns the lamp light and glows off and on.
+hands it back. `l` turns the lights off for the night: the room goes dark
+and cool, the lamps go out, and fires, screens and moonlit windows carry
+the light.
 
 ## Worlds
 
@@ -291,8 +293,8 @@ off too).
 
 The room's own props for each kind of work stay as its scenery, and idle
 agents and office life still use the room round them. Idle and finished
-agents fetch blocks and raise a build on the room's plazas: a hologram of the goal (a tower, house, pyramid, statue or machine,
-by world) fills in block by block, and the crew cheers every quarter.
+agents fetch blocks and raise a build on the room's plazas: the goal (a tower, house, pyramid, statue or machine,
+by world) rises course by course out of its see-through ghost, with scaffolding while it's built, and the crew cheers every quarter.
 
 Each world dresses its crew for its setting: overalls in the mines, lab
 coats in the lab, party clothes in the club, hoodies in the den, space
@@ -381,7 +383,7 @@ off and on, and is remembered.
 | `+` / `-`, `z` | zoom in / out, automatic zoom |
 | `f` | fullscreen scene (hide the header, roster and footer) |
 | `r` | scene / dashboard (remembered) |
-| `l` | lighting on / off (remembered) |
+| `l` | lights on / off: evening or night (remembered) |
 | `o` | office life on / off (remembered) |
 | `n` | locals on / off (remembered) |
 | `d` | demo crew on / off (mixes with live agents) |
@@ -530,7 +532,14 @@ Layout:
 3. Draw with the `Pen` (`src/art/types.ts`) and the helpers in
    `src/art/iso.ts`, following the art direction in
    `docs/superpowers/specs/2026-10-24-illustrated-design.md`: one ink colour,
-   light from the upper left, no text in the picture.
+   light from the upper left, no text in the picture. Declare where its
+   light comes from (`room.lights` and a prop's `light`: lamps, fires,
+   glows, screens, windows) rather than painting pools, draw lamps unlit
+   when `lampsOn(v)` is false, and give it an evening tint (`ambient`) and
+   a night (`light.night`) that suit it; `reserve` keeps decor from
+   hiding a hero piece. See
+   `docs/superpowers/specs/2026-11-01-room-visuals-design.md`, and
+   `node scripts/art-lint.ts <id>` for the art rules' numbers.
 4. Check it against the contract with
    `ANIMUS_THEME_FILE=src/worlds/<id>.ts node --test test/themes.test.ts`.
 5. Register it in `WORLDS` in `src/worlds/index.ts` (the order is the

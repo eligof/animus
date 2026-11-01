@@ -243,6 +243,7 @@ const read: PropArt = {
   len: 14,
   dep: 4,
   height: 21,
+  light: [{ kind: 'fire', u: LECTERN.u + 1.25, v: LECTERN.v - 0.6, z: LECTERN.z + 2, color: '#ffb060', r: 5, strength: 0.45, halo: 1.4 }],
   animated: true,
   draw(v: PropView): void {
     const L = LECTERN;
@@ -377,6 +378,7 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 11,
+  light: [{ kind: 'fire', u: 4.0, v: 3.1, z: 8.1, color: '#ffc060', r: 7, strength: 0.6, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const on = v.active;
@@ -468,6 +470,7 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 15,
+  light: [{ kind: 'fire', u: COALS.u, v: COALS.v, z: COALS.z + 0.8, r: 10, strength: 0.9, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'run', 15, (k) => {
@@ -625,13 +628,13 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 15,
+  light: [{ kind: 'glow', u: POT.u, v: POT.v, z: POT.z1 + 1.2, color: '#5fe0b0', r: 8, strength: 0.7, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u, v: w, z0, z1, r, rim } = POT;
     const k = still(v, 'web', 15, (k) => {
       k.shadow(u, w, 4.2, 4.0, 0.32);
       // the fire bed of charred logs and bones
-      k.pool(u, w, 4.5, 4.5, '#5fe0b0', 0.25);
       for (const [a, b] of [[[1.6, 3.2, 0.3], [6.8, 5.6, 0.3]], [[2.4, 6.6, 0.3], [6.6, 2.4, 0.3]]] as Array<[P3, P3]>) k.rod([a, b], '#3a2220', 0.55);
       coals(k, u, w, 0.35, 1.8, 11, 0.4);
       // the pot: legs, the bulging body, its rim
@@ -764,6 +767,7 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 16,
+  light: BRAZIERS.map(([u, v]) => ({ kind: 'fire' as const, u, v, z: 6.0, r: 7, strength: 0.6, halo: 0 })),
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'think', 16, (k) => {
@@ -859,6 +863,7 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 9,
+  light: [{ kind: 'fire', u: PIT.u, v: PIT.v, z: 1.6, r: 13, strength: 1, halo: 5 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(7.4, 5.4, 7.6, 5.4, 0.28);
@@ -884,7 +889,6 @@ const idle: PropArt = {
     goblet(k, 12.6, 3.6, 1.35);
     // the pit: a ring of stones, coals, the fire
     const { u, v: w, r } = PIT;
-    k.pool(u, w, 6.5, 5.5, '#ff8a3a', 0.35);
     k.disc(u, w, 0.02, r + 0.3, '#1a0a0a', 0);
     coals(k, u, w, 0.15, r * 0.85, 13, 0.6);
     const stones: Array<{ d: number; f: () => void }> = [];
@@ -899,7 +903,6 @@ const idle: PropArt = {
     const front = stones.filter((s) => s.d >= u + w);
     for (const s of back) s.f();
     fire(k, u, w, 0.3, r * 0.8, 3.8, 0, 7, ['#ff7a1f', '#ffc23a', '#fff1b0']);
-    k.halo(u, w, 2.2, 5, '#ff9a3a', 0.45);
     for (const s of front) s.f();
     // the skewers propped on the ring, marshmallows toasting
     for (const [su, sv, eu, ev] of [[4.0, 8.4, 6.4, 6.6], [10.6, 8.8, 8.6, 6.8]] as const) {
@@ -939,6 +942,7 @@ const entrance: PropArt = {
   len: 15,
   dep: 4,
   height: 21,
+  light: [{ kind: 'lava', u: 7, v: -0.4, z: 2.5, color: '#ff7a3a', r: 9, strength: 0.8, halo: 0 }, ...[1.1, 13.9].map((u) => ({ kind: 'fire' as const, u, v: 2.4, z: 5.0, r: 6, strength: 0.5, halo: 0 }))],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, h } = GATE;

@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './den/decor.ts';
 import { INK } from './den/kit.ts';
 import { NPCS } from './den/npcs.ts';
-import { denPois, room } from './den/room.ts';
+import { denPois, denReserve, room } from './den/room.ts';
 import { STATIONS } from './den/stations.ts';
 import { WORKSTATION } from './den/workstation.ts';
 
@@ -41,6 +41,12 @@ export const den: WorldDef = {
   ink: INK,
   room,
   pois: denPois,
+  reserve: denReserve,
+  // The screens light the den: their pools strong enough to make islands
+  // of light round the stations on the dark carpet, dark between them;
+  // lights off, the room dims well down and the screens carry it. The
+  // floor's edge shade eased (it reads as dirt on the dark carpet).
+  light: { ao: 0.6, pools: 1.8, night: { strength: 0.5 } },
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,
@@ -48,5 +54,5 @@ export const den: WorldDef = {
   costume: 'hacker',
   critter: { kind: 'cat', body: hex('#2b2b33') }, // a black cat
   finale: { colors: [[90, 255, 130], [40, 200, 90], [200, 255, 210]] }, // green bits
-  build: { colors: [hex('#6a736f'), hex('#8f8a72'), hex('#7fe0ff')], shape: 'tower' }, // gunmetal and beige plastic, crowned by a screen
+  build: { colors: [hex('#8d9893'), hex('#b8b092'), hex('#7fe0ff')], shape: 'tower' }, // brushed steel and beige plastic (light enough to read on the dark carpet), crowned by a screen
 };

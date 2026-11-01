@@ -47,12 +47,13 @@ export const C = {
   glass: '#9fd4cf',
   inkPot: '#2b2a3a',
   clay: '#c66a42',
-  // outside: haze over the dunes
-  sky: '#efd3a8',
-  skyHigh: '#e9c290',
-  dune: '#e6b872',
-  duneShade: '#c9925a',
-  duneFar: '#efc995',
+  // outside: a hard turquoise sky over orange dunes, the complement of
+  // the warm room, so a window reads from across it
+  sky: '#bfe3dc',
+  skyHigh: '#6fbfcf',
+  dune: '#eaa75a',
+  duneShade: '#c47a42',
+  duneFar: '#f2c88c',
   // light, plants and bone
   lamp: '#ffd08a',
   flame: '#ffc04a',
@@ -61,9 +62,9 @@ export const C = {
   bone: '#efe6d2',
   boneDark: '#cbbd9e',
   // poured adobe, bleached planks, plate steel and pipe
-  adobe: '#b29270',
-  adobeLight: '#c4a682',
-  adobeDark: '#8e7052',
+  adobe: '#c4946a',
+  adobeLight: '#d6aa80',
+  adobeDark: '#9e7450',
   plank: '#c2a57a',
   plankLight: '#d8bf94',
   plankDark: '#9a7c55',
@@ -407,9 +408,10 @@ const SPRITES = new Map<string, Sprite>();
 const MAX_SPRITES = 48;
 const q = (n: number, k = 1000) => Math.round(n * k) / k;
 
-// Paints `still` (in the prop's frame) through the cache, then returns a Kit
-// on the real pen, snapped like the sprite, for the moving bits. `height`
-// bounds the sprite (units).
+// Paints `still` (in the prop's frame) through the cache (one sprite with
+// the lights on, one with them off), then returns a Kit on the real pen,
+// snapped like the sprite, for the moving bits. `height` bounds the sprite
+// (units).
 export function still(v: PropView, id: string, height: number, paint: (k: Kit) => void): Kit {
   const o = v.at(0, 0, 0);
   const ix = Math.round(o[0]);
@@ -425,7 +427,7 @@ export function still(v: PropView, id: string, height: number, paint: (k: Kit) =
   const eu = a(1, 0, 0);
   const ev = a(0, 1, 0);
   const ez = a(0, 0, 1);
-  const key = [id, v.len, v.dep, v.seed, q(eu[0]), q(eu[1]), q(ev[0]), q(ev[1]), q(ez[0]), q(ez[1])].join('|');
+  const key = [id, v.len, v.dep, v.seed, v.lit === false ? 'dark' : 'lit', q(eu[0]), q(eu[1]), q(ev[0]), q(ev[1]), q(ez[0]), q(ez[1])].join('|');
   let sp = SPRITES.get(key);
   if (sp) SPRITES.delete(key);
   else {

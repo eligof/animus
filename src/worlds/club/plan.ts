@@ -16,27 +16,47 @@ import { STATIONS } from './stations.ts';
 // and the club's locals, which it goes round),
 // the light-up dance floor on the open floor round the hub, and what goes
 // on the free stretches of wall: a mural, a fire exit, and bays of a neon
-// sign over posters, a tag or a fuse box.
+// sign over posters, a tag or a fuse box. A stretch too short for a full
+// bay still gets a smaller sign, and signs hang over whatever stands low
+// against the walls too (the DJ's booth, the coat check), so the club
+// glows at every size.
 
 export type Wall = 'left' | 'right';
 export type Low = 'posters' | 'tag' | 'fuse' | 'none';
-export type Feature = { wall: Wall; kind: 'mural' | 'exit' | 'bay'; a: number; w: number; k: number; sign: number; low: Low; flaky: boolean };
+// `r`: a sign smaller than the room's (plan.sign.r) where the wall is short.
+export type Feature = { wall: Wall; kind: 'mural' | 'exit' | 'bay'; a: number; w: number; k: number; sign: number; low: Low; flaky: boolean; r?: number };
 // The dance floor: n x n tiles of TILE units from (x0, y0).
 export type Dance = { x0: number; y0: number; n: number };
-export type Plan = { L: Layout; features: Feature[]; dance: Dance | null; decor: PlacedProp[]; sign: { r: number; z: number } };
+// `over`: signs hung over stations and furniture against the walls (the
+// features keep off those).
+export type Plan = { L: Layout; features: Feature[]; over: Feature[]; dance: Dance | null; decor: PlacedProp[]; sign: { r: number; z: number } };
 
 export const TILE = 4; // a dance-floor tile, units
 export const STRIP = 17.5; // the neon strip along the walls, just over the heads
 export const PAINT = 6.5; // the black band along the walls' feet
 export const TRUSS = 6; // the lighting truss hangs this far under the wall top
+export const EXIT_SIGN = 13.45; // the middle of the green sign over the fire exit
 // The mural's top on a wall H tall.
 export const muralTop = (H: number) => Math.max(STRIP - 1.6, Math.min(28, H * 0.42));
+// Where the mural hangs (bottom, top): on a tall wall down on the brick, the
+// strip broken round it; on a wall too low for that, up over the strip like
+// a banner over the crowd, out of reach of the furniture, its top just
+// under the truss.
+export function muralSpan(H: number): [number, number] {
+  return muralTop(H) >= STRIP + 1 ? [2.2, muralTop(H)] : [STRIP + 1.2, H - TRUSS - 2.4];
+}
 
+const LOOSE = new Map<string, Plan>();
 const PLANS = new Map<string, Plan>();
 
-export function planFor(W: number, D: number, H: number, T: number): Plan {
+// The plan from the furniture as it would stand with nothing kept clear
+// (the stage's planRoom without the club's reserve): where the dance floor
+// goes, round that furniture, and what hangs on the walls. What the club
+// keeps clear (clubReserve) comes from this one only, so it never depends
+// on a plan made with it.
+function looseOf(W: number, D: number, H: number, T: number): Plan {
   const key = `${W}x${D}x${H}x${T}`;
-  const hit = PLANS.get(key);
+  const hit = LOOSE.get(key);
   if (hit) return hit;
   let L = planLayout(2 * W + 12, W + H + 12, 'club');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
@@ -44,9 +64,39 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   const decor = L.slots.length ? planRoom({ id: 'club', stations: STATIONS, decor: DECOR, npcs: NPCS } as WorldDef, L, hashString('club')).props.filter((p) => !p.slot) : [];
   const r = Math.max(3, Math.min(6, 3 + (H - 34) * 0.08));
   const sign = { r, z: STRIP + 3 + r + Math.min(6, Math.max(0, (H - 34) * 0.25)) };
-  const plan: Plan = { L, features: [], dance: null, decor, sign };
+  const plan: Plan = { L, features: [], over: [], dance: null, decor, sign };
   plan.dance = danceFloor(L, decor);
   plan.features = features(plan);
+  LOOSE.set(key, plan);
+  return plan;
+}
+
+// What the room planner keeps clear (see WorldDef.reserve): the floor
+// before the mural, 10 units out (so the high tables and speakers that
+// crowded it gather elsewhere and nothing hides it), and the dance floor
+// with a unit round it (so the furniture moved off the mural does not
+// land on it).
+export function clubReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number } | { x0: number; y0: number; x1: number; y1: number }> {
+  const p = looseOf(L.W, L.D, L.H, L.T);
+  const out: Array<{ wall: Wall; a0: number; a1: number; out: number; z: number } | { x0: number; y0: number; x1: number; y1: number }> = [];
+  for (const f of p.features) if (f.kind === 'mural') out.push({ wall: f.wall, a0: f.a - f.w / 2 - 1, a1: f.a + f.w / 2 + 1, out: 10, z: 0 });
+  const d = p.dance;
+  if (d) out.push({ x0: d.x0 - 1, y0: d.y0 - 1, x1: d.x0 + d.n * TILE + 1, y1: d.y0 + d.n * TILE + 1 });
+  return out;
+}
+
+// The plan the shell draws: the loose plan's dance floor and walls, with
+// the furniture where the stage has it (planned with the reserve) and the
+// signs hung over what stands against the walls.
+export function planFor(W: number, D: number, H: number, T: number): Plan {
+  const key = `${W}x${D}x${H}x${T}`;
+  const hit = PLANS.get(key);
+  if (hit) return hit;
+  const loose = looseOf(W, D, H, T);
+  const { L } = loose;
+  const decor = L.slots.length ? planRoom({ id: 'club', stations: STATIONS, decor: DECOR, npcs: NPCS, reserve: clubReserve } as unknown as WorldDef, L, hashString('club')).props.filter((p) => !p.slot) : [];
+  const plan: Plan = { ...loose, decor, over: [] };
+  plan.over = overSigns(plan);
   PLANS.set(key, plan);
   return plan;
 }
@@ -64,7 +114,10 @@ function danceFloor(L: Layout, decor: readonly PlacedProp[]): Dance | null {
     ...decor.map((p) => [footprint(p), 1.5] as [Rect, number]),
     ...buildSites(L).map((b) => [{ x0: b.x - b.r, y0: b.y - b.r, x1: b.x + b.r, y1: b.y + b.r }, 1] as [Rect, number]),
   ];
-  for (let n = Math.max(3, Math.min(13, Math.floor((side * 0.24) / TILE))); n >= 3; n--) {
+  // A quarter of the floor's side in a big room; a third in a small one
+  // (up to 26 units), so the namesake is never smaller than the lounge rug.
+  const want = Math.max(side * 0.24, Math.min(side * 0.32, 26));
+  for (let n = Math.max(3, Math.min(13, Math.floor(want / TILE))); n >= 3; n--) {
     const size = n * TILE;
     let best: Dance | null = null;
     let cost = Infinity;
@@ -134,7 +187,12 @@ function features(plan: Plan): Feature[] {
     const len = s.a1 - s.a0;
     const count = Math.floor((len + gap) / (bay + gap));
     if (count < 1) {
-      if (len >= 6) out.push({ wall: s.wall, kind: 'bay', a: (s.a0 + s.a1) / 2, w: Math.min(len, 8), k: 50 + n, sign: -1, low: 'posters', flaky: false });
+      // too short for a full bay: a smaller sign over a pair of posters
+      if (len >= 6) {
+        const r = Math.max(2, Math.min(plan.sign.r, (len - 2) / 2));
+        out.push({ wall: s.wall, kind: 'bay', a: (s.a0 + s.a1) / 2, w: Math.min(len, 2 * r + 3), k: 10 + n, sign: (n * 5 + 3) % 12, low: 'posters', flaky: n === 2, r });
+        n++;
+      }
       continue;
     }
     const step = len / count;
@@ -142,6 +200,34 @@ function features(plan: Plan): Feature[] {
       const a = s.a0 + step * (i + 0.5);
       out.push({ wall: s.wall, kind: 'bay', a, w: bay, k: 10 + n, sign: (n * 5 + 3) % 12, low: LOWS[n % LOWS.length], flaky: n === 2 });
     }
+  }
+  return out;
+}
+
+// Signs over what stands low against the walls, the way a club hangs one
+// over the decks and the bar: over each station or piece of furniture
+// whose top stays 2 units under a sign's foot, long enough to frame one
+// and clear of the wall's other pieces, until the room has eight (a big
+// room's bays already give it about that many). Numbered on from the bays,
+// so no shape repeats.
+function overSigns(plan: Plan): Feature[] {
+  const { L } = plan;
+  const foot = plan.sign.z - plan.sign.r - 2;
+  const along = (q: { wall: Wall; x0: number; y0: number }) => (q.wall === 'right' ? q.x0 : q.y0);
+  const low = [
+    ...L.slots.filter((q) => !q.island).map((q) => ({ wall: q.wall, a0: along(q), len: q.len, h: STATIONS[q.kind].height })),
+    ...plan.decor.filter((p) => !p.island).map((p) => ({ wall: p.wall, a0: along(p), len: p.len, h: p.art.height })),
+  ].sort((p, q) => (p.wall === q.wall ? p.a0 - q.a0 : p.wall === 'right' ? -1 : 1));
+  const out: Feature[] = [];
+  let n = plan.features.filter((f) => f.kind === 'bay' && f.sign >= 0).length;
+  for (const q of low) {
+    if (n >= 8) break;
+    if (q.h > foot || q.len < 7) continue;
+    const a = q.a0 + q.len / 2;
+    const r = Math.min(plan.sign.r, (q.len - 1) / 2);
+    if ([...plan.features, ...out].some((f) => f.wall === q.wall && Math.abs(f.a - a) < f.w / 2 + r + 2)) continue;
+    out.push({ wall: q.wall, kind: 'bay', a, w: 2 * r + 3, k: 80 + n, sign: (n * 5 + 3) % 12, low: 'none', flaky: false, r });
+    n++;
   }
   return out;
 }

@@ -11,7 +11,7 @@ import type { PropArt } from '../src/worlds/types.ts';
 import { colony } from '../src/worlds/colony.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { DECOR_ART } from '../src/worlds/colony/decor.ts';
-import { planFor, zonesFor } from '../src/worlds/colony/room.ts';
+import { LOW, planFor, zonesFor } from '../src/worlds/colony/room.ts';
 import { budget } from './helpers.ts';
 
 // The Frontier Colony's art: every piece draws in both wall frames and as
@@ -23,7 +23,7 @@ import { budget } from './helpers.ts';
 // a stockpile round the stores and each stack) and the room is well
 // furnished; warm round the campfire, a seat on a log, a look at the hills;
 // the shell, its firelight and fireflies and every prop stay within their
-// time budgets; the room's two stacks are one of logs and one of steel; the
+// time budgets; the room's stacks are logs and steel, both kinds; the
 // overlay, drawn a piece at a time as the scene draws it, skips what is off
 // the piece and nothing on it.
 
@@ -128,7 +128,7 @@ test('Frontier Colony stations: animated ones hold still while nobody works them
   }
 });
 
-test('Frontier Colony room: the walls keep their windows off the stations and apart', () => {
+test('Frontier Colony room: the walls keep their windows off the stations (what hangs between them clear over a low one) and apart', () => {
   for (const [w, h] of SIZES) {
     const L = planLayout(w, h, 'colony');
     const plan = planFor(L.W, L.D, L.H, L.T);
@@ -140,7 +140,10 @@ test('Frontier Colony room: the walls keep their windows off the stations and ap
       for (const s of slotsOn(L, f.wall)) {
         const r = slotRect(s);
         const [a0, a1] = f.wall === 'right' ? [r.x0, r.x1] : [r.y0, r.y1];
-        assert.ok(f.a + f.w / 2 <= a0 - 1 || f.a - f.w / 2 >= a1 + 1, `${L.W}: ${f.kind} at ${f.a} behind ${s.kind}`);
+        // what hangs between the windows may hang over a low station,
+        // well clear of its top
+        const over = f.kind !== 'window' && colony.stations[s.kind].height <= LOW;
+        assert.ok(f.a + f.w / 2 <= a0 - 1 || f.a - f.w / 2 >= a1 + 1 || over, `${L.W}: ${f.kind} at ${f.a} behind ${s.kind}`);
       }
       // and clear of each other along the wall
       for (const g of plan.features) {
@@ -194,10 +197,11 @@ test('Frontier Colony decor: every piece is in DECOR_ART, and each finds floor i
   for (const [name, art] of Object.entries(DECOR_ART)) assert.ok(room.props.some((p) => p.art === art), `${name} found no floor`);
 });
 
-test('Frontier Colony decor: of the two stacks in the room one is logs and one steel bars, each inside its footprint', () => {
+test('Frontier Colony decor: the stacks in the room are logs and steel bars, both kinds, each inside its footprint', () => {
   const room = planRoom(colony, planLayout(375, 220, 'colony'), hashString('colony'));
   const stacks = room.props.filter((p) => p.art === DECOR_ART.stack);
-  assert.equal(stacks.length, 2, `${stacks.length} stacks placed`);
+  // a big room grows its decor (see moreDecor in world/room.ts): two at least
+  assert.ok(stacks.length >= 2, `${stacks.length} stacks placed`);
   const kinds = stacks.map((p) => {
     for (const s of [4, 16]) {
       for (const { wall, island } of VIEWS) {
@@ -218,7 +222,7 @@ test('Frontier Colony decor: of the two stacks in the room one is logs and one s
     }
     return cool > warm ? 'steel' : 'logs';
   });
-  assert.deepEqual([...kinds].sort(), ['logs', 'steel']);
+  assert.deepEqual([...new Set(kinds)].sort(), ['logs', 'steel']);
 });
 
 test('Frontier Colony overlay: measured it marks every window; drawn onto one window it paints just what the whole frame paints there', () => {

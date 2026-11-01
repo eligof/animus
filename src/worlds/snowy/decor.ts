@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Particle } from '../../world/types.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
 import { ball, barrel, blaze, crate, crystal, heap, icicles, lantern, log, rock, sack } from './bits.ts';
@@ -118,6 +119,7 @@ const crystals: PropArt = {
   len: 5,
   dep: 5,
   height: 9,
+  light: [{ kind: 'glow', u: 2.5, v: 2.5, z: 3.4, color: '#9fe6ff', r: 5, strength: 0.4, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(2.5, 2.5, 2.4, 2.4, 0.22);
@@ -220,10 +222,10 @@ const brazier: PropArt = {
   len: 5,
   dep: 5,
   height: 7,
+  light: [{ kind: 'fire', u: 2.5, v: 2.5, z: 4.4, r: 8, strength: 0.8, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 2.5;
-    k.pool(c, c, 2.4, 2.4, '#ff9a48', 0.32, 0, 'source-over');
     k.shadow(c, c, 1.4, 1.4, 0.3);
     for (const a of [0.7, 2.8, 4.9]) k.rod([[c + Math.cos(a) * 1.15, c + Math.sin(a) * 1.15, 0], [c + Math.cos(a) * 0.7, c + Math.sin(a) * 0.7, 2.6]], C.iron, 0.18);
     const e0 = k.ell(c, c, 2.4, 0.7);
@@ -276,9 +278,12 @@ const skylight: PropArt = {
   len: 6,
   dep: 6,
   height: SHAFT + 1,
+  light: [{ kind: 'glow', u: 3, v: 3, z: 2, color: '#cfe6ff', r: 6, strength: 0.5, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 3;
+    // by night the sky through the crack is alight with the aurora
+    const sky = lampsOn(v) ? '#cfe6ff' : '#8fffd0';
     // the shaft: a soft column of light, fading out up in the dark
     const [bx, by] = k.p(c, c, 0.5);
     const [, ty] = k.p(c, c, SHAFT);
@@ -286,20 +291,22 @@ const skylight: PropArt = {
     const pen = k.pen;
     pen.save();
     pen.globalCompositeOperation = 'screen';
-    const g = pen.createLinearGradient(0, ty, 0, by);
-    g.addColorStop(0, '#cfe6ff00');
-    g.addColorStop(0.55, '#cfe6ff26');
-    g.addColorStop(1, '#cfe6ff55');
-    pen.beginPath();
-    pen.moveTo(bx - w * 0.7, ty);
-    pen.lineTo(bx + w * 0.7, ty);
-    pen.lineTo(bx + w, by);
-    pen.lineTo(bx - w, by);
-    pen.closePath();
-    pen.fillStyle = g;
-    pen.fill();
+    // (three nested columns, the outer ones fainter, so its sides are soft)
+    for (const f of [1, 0.7, 0.4]) {
+      const g = pen.createLinearGradient(0, ty, 0, by);
+      g.addColorStop(0, withAlpha(sky, 0));
+      g.addColorStop(0.55, withAlpha(sky, 0.05));
+      g.addColorStop(1, withAlpha(sky, lampsOn(v) ? 0.11 : 0.15));
+      pen.beginPath();
+      pen.moveTo(bx - w * 0.7 * f, ty);
+      pen.lineTo(bx + w * 0.7 * f, ty);
+      pen.lineTo(bx + w * f, by);
+      pen.lineTo(bx - w * f, by);
+      pen.closePath();
+      pen.fillStyle = g;
+      pen.fill();
+    }
     pen.restore();
-    k.pool(c, c, 2.8, 2.6, '#e6f2ff', 0.35);
     // the heap
     k.shadow(c, c, 2.8, 2.6, 0.18);
     heap(k, c + 1.2, c - 1.1, 0, 1.3, 1.1, v.seed + 1);

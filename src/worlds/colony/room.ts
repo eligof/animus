@@ -3,22 +3,26 @@ import type { At } from '../../art/iso.ts';
 import { frame, mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Rect } from '../../world/layout.ts';
-import { planLayout, wallGaps } from '../../world/layout.ts';
+import { planLayout, slotsOn, wallGaps } from '../../world/layout.ts';
 import { hashString } from '../../world/rng.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { PropArt, RoomArt, RoomView, WorldDef } from '../types.ts';
-import { dusk } from './bits.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { PropArt, RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
+import { ball, dusk } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
-import { C, INK, Kit, hash, withAlpha } from './kit.ts';
+import { C, INK, Kit, circle, hash, withAlpha } from './kit.ts';
 import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The colony's shell at dusk, after the frontier colony games: the walls
-// are plain thick blocks of cut stone in offset courses, bare but for
-// four-pane windows onto green hills under a big evening sky. The floor is
+// are warm dressed fieldstone under a timber wall plate (the joists' ends
+// out under it; in a tall room a girt over the windows, the harvest
+// hanging from it to dry), four-pane windows onto green hills under a big
+// evening sky, and between them what the colonists hung up: a shelf of
+// preserves, a board of tools, a hide on a hoop. The floor is
 // zoned the way a colony zones it: warm planks for living and eating,
 // white tile under the research bench and the sick bay's bed, smooth stone
 // slabs under the smithy and the tailoring bench, and a dashed yellow
@@ -30,7 +34,7 @@ import { STATIONS } from './stations.ts';
 // under the decor from the same furnishing the stage makes.
 
 type Wall = 'left' | 'right';
-type Kind = 'window';
+type Kind = 'window' | 'shelf' | 'rack' | 'pelt';
 export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number };
 export type Plan = { L: Layout; features: Feature[] };
 
@@ -59,24 +63,62 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
 }
 
 // Windows along each free stretch, spread evenly with a good stretch of
-// bare stone between them (the walls are plain; the floor and the
-// furniture say what each corner is for).
+// stone between them; in the stone between (and in a stretch too short
+// for a window) now and then something the colonists hung up: a shelf of
+// preserves, a board of tools, a hide on a hoop, a couple of each to a
+// wall (more on a long one), each in the middle of its stretch, clear of
+// the windows. Over a station that stands low (the stockpile), the wall
+// above it gets one too, hung well clear of its top.
 const WINDOW = 10;
-const BETWEEN = 9;
+const BETWEEN = 14;
+const PIECE: Record<Exclude<Kind, 'window'>, number> = { shelf: 7, rack: 8, pelt: 5.5 };
+const PIECES = ['shelf', 'pelt', 'rack'] as const;
+export const LOW = 6; // a station no taller than this has a piece hung over it
+const CLEAR = 1.5; // from a window
 
 function features(L: Layout): Feature[] {
   const out: Feature[] = [];
+  let hung = 0;
   let n = 0;
   for (const wall of ['right', 'left'] as const) {
     const end = wall === 'right' ? L.W : L.D;
+    const hungOf: Partial<Record<Kind, number>> = {};
+    const cap = Math.max(2, Math.round(end / 50));
     for (const [g0, g1] of wallGaps(L, wall)) {
       const a0 = g0 + (g0 <= L.T ? 2 : 2.5);
       const a1 = Math.min(g1, end - 2) - (g1 >= end ? 0 : 2.5);
       const len = a1 - a0;
-      if (len < WINDOW) continue;
-      const count = Math.max(1, Math.floor((len + BETWEEN) / (WINDOW + BETWEEN)));
+      if (len < 3) continue;
+      const count = len < WINDOW ? 0 : Math.max(1, Math.floor((len + BETWEEN) / (WINDOW + BETWEEN)));
       const gap = (len - count * WINDOW) / (count + 1);
-      for (let i = 0; i < count; i++) out.push({ wall, kind: 'window', a: a0 + gap + i * (WINDOW + gap) + WINDOW / 2, w: WINDOW, k: n++ * 7 + i });
+      const at: number[] = [];
+      for (let i = 0; i < count; i++) {
+        at.push(a0 + gap + i * (WINDOW + gap) + WINDOW / 2);
+        out.push({ wall, kind: 'window', a: at[i], w: WINDOW, k: n++ * 7 + i });
+      }
+      // the stone either side of each window (the whole stretch when it
+      // has none), the windows' clearance taken off
+      const free: Array<[number, number]> = [];
+      let from = a0;
+      for (const a of at) {
+        free.push([from, a - WINDOW / 2 - CLEAR]);
+        from = a + WINDOW / 2 + CLEAR;
+      }
+      free.push([from, a1]);
+      for (const [f0, f1] of free) {
+        const kind = PIECES.map((_, i) => PIECES[(hung + i) % PIECES.length]).find((p) => (hungOf[p] ?? 0) < cap && PIECE[p] <= f1 - f0);
+        if (!kind) continue;
+        out.push({ wall, kind, a: (f0 + f1) / 2, w: PIECE[kind], k: n++ * 7 + 3 });
+        hungOf[kind] = (hungOf[kind] ?? 0) + 1;
+        hung++;
+      }
+    }
+    // a board of tools (or a shelf) over the low stations
+    for (const q of slotsOn(L, wall)) {
+      if (STATIONS[q.kind].height > LOW) continue;
+      const a0 = (wall === 'right' ? q.x0 : q.y0) + 1;
+      const kind = (['rack', 'shelf'] as const).find((p) => PIECE[p] <= q.len - 2);
+      if (kind) out.push({ wall, kind, a: a0 + (q.len - 2) / 2, w: PIECE[kind], k: n++ * 7 + 5 });
     }
   }
   return out;
@@ -93,11 +135,11 @@ function windowZ(H: number): { z0: number; z1: number } {
 // where: white tile under the research bench and the sick bay (one stretch
 // of it when they stand near each other on a wall), stone slabs under the
 // smithy and the tailoring bench, a stockpile outline round the stores and
-// each stack; and where the standing lamps stand, for their light.
+// each stack.
 
 export type ZoneKind = 'tile' | 'stone' | 'carpet' | 'stock';
 export type Zone = Rect & { kind: ZoneKind };
-type Furnished = { zones: Zone[]; lamps: Array<{ x: number; y: number }> };
+type Furnished = { zones: Zone[] };
 
 const FURNISHED = new Map<string, Furnished>();
 
@@ -112,7 +154,7 @@ function furnished(v: { W: number; D: number; H: number; T: number }): Furnished
   const hit = FURNISHED.get(key);
   if (hit) return hit;
   const { L } = planFor(v.W, v.D, v.H, v.T);
-  const out: Furnished = { zones: [], lamps: [] };
+  const out: Furnished = { zones: [] };
   FURNISHED.set(key, out);
   if (!L.slots.length) return out;
   const world = { id: 'colony', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef;
@@ -144,10 +186,6 @@ function furnished(v: { W: number; D: number; H: number; T: number }): Furnished
   const stores = slot('search');
   if (stores) add('stock', stores.island ? grown(stores, 1) : backed(stores, 1, 1.5));
   for (const p of decor('stack')) add('stock', grown(p, 1));
-  for (const p of decor('lamp')) {
-    const r = footprint(p);
-    out.lamps.push({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
-  }
   return out;
 }
 
@@ -201,6 +239,13 @@ export const room: RoomArt = {
     shell(k, v);
     v.pen.restore();
   },
+  // The light the shell gives: the golden evening through each window, its
+  // cross of glazing bars cut out of the patch on the floor; moonlight at
+  // night. (The fire, the forge and the lamps give theirs as props.)
+  lights(v): RoomLight[] {
+    const { z0, z1 } = windowZ(v.H);
+    return planFor(v.W, v.D, v.H, v.T).features.filter((f) => f.kind === 'window').map((f) => ({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2.4, z0, z1, bars: 1, rails: 1, color: '#ffd29a', strength: 1.35, night: '#9fb6ee', moon: 0.6 }));
+  },
   // The scene draws the overlay once through a pen that only measures
   // (to find its pieces: everything must be drawn then, so any pen not a
   // canvas gets it all), then once for each piece onto a canvas just that
@@ -214,6 +259,7 @@ export const room: RoomArt = {
     v.pen.save();
     firelight(v, plan, clip);
     for (const f of plan.features) {
+      if (f.kind !== 'window') continue;
       const k = walls[f.wall];
       if (clip && !k.sees(f.a - f.w / 2, -1, z0, f.a + f.w / 2, 0, z1)) continue;
       fireflies(k, v, f);
@@ -225,6 +271,7 @@ export const room: RoomArt = {
 // ── floor ──────────────────────────────────────────────────────────────────
 
 const BOARDS = [C.board, '#aa6a40', '#9a5a36', '#a66640', '#965834'];
+const RED = '#8e5030'; // a board now and then from another tree
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen } = k;
@@ -232,9 +279,10 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   if (!k.sees(T, T, 0, W, D, 0, 8)) return;
   // Wide boards along x, butt joints staggered row by row; one path a tone.
   const rows = Math.ceil((D - T) / BOARD);
-  const runs: Array<Array<[number, number, number, number]>> = BOARDS.map(() => []);
+  const runs: Array<Array<[number, number, number, number]>> = [...BOARDS, RED].map(() => []);
   const seams: Array<[P3, P3]> = [];
   const knots: Array<[number, number, number]> = [];
+  const nails: Array<[number, number]> = [];
   for (let r = 0; r < rows; r++) {
     const y0 = T + r * BOARD;
     const y1 = Math.min(D, y0 + BOARD);
@@ -247,9 +295,13 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
       const x0 = Math.max(T, x);
       const x1 = Math.min(W, x + len);
       if (x1 > x0 && k.sees(x0, y0, 0, x1, y1, 0, 4)) {
-        runs[Math.floor(hash(r, i, 9) * BOARDS.length)].push([x0, y0, x1, y1]);
+        runs[hash(r, i, 10) < 0.08 ? BOARDS.length : Math.floor(hash(r, i, 9) * BOARDS.length)].push([x0, y0, x1, y1]);
         if (hash(r, i, 11) < 0.35) knots.push([x0 + (x1 - x0) * (0.2 + hash(r, i, 12) * 0.6), y0 + BOARD * (0.3 + hash(r, i, 13) * 0.4), hash(r, i, 14)]);
-        if (x + len < W) seams.push([[x + len, y0, 0], [x + len, y1, 0]]);
+        if (x + len < W) {
+          seams.push([[x + len, y0, 0], [x + len, y1, 0]]);
+          // a pair of nails either side of the butt joint
+          if (s >= 4) for (const dx of [-0.45, 0.45]) nails.push([x + len + dx, y0 + 0.75], [x + len + dx, y1 - 0.75]);
+        }
       }
       x += len;
       i++;
@@ -259,7 +311,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     if (!list.length) return;
     pen.beginPath();
     for (const [x0, y0, x1, y1] of list) k.trace([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]]);
-    pen.fillStyle = BOARDS[ti];
+    pen.fillStyle = BOARDS[ti] ?? RED;
     pen.fill();
   });
   // the grain: a long line down each board, then the seams and the knots
@@ -284,6 +336,17 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
   pen.fillStyle = withAlpha('#6a3a1e', 0.55);
   pen.fill();
+  if (nails.length) {
+    pen.beginPath();
+    for (const [x, y] of nails) {
+      const [cx, cy] = k.p(x, y, 0);
+      const r = 0.11 * s;
+      pen.moveTo(cx + r, cy);
+      pen.ellipse(cx, cy, r, r * 0.6, 0, 0, Math.PI * 2);
+    }
+    pen.fillStyle = withAlpha('#3a2414', 0.6);
+    pen.fill();
+  }
   // a few specks of dirt trodden in
   pen.beginPath();
   for (let i = 0; i < Math.round(((W - T) * (D - T)) / 900); i++) {
@@ -306,7 +369,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
   // The zones laid over the planks: tile, then stone, then the stockpiles'
   // outlines.
-  const { zones, lamps } = furnished(v);
+  const { zones } = furnished(v);
   for (const z of zones) if (z.kind === 'tile') tiles(k, z);
   for (const z of zones) if (z.kind === 'stone') slabs(k, z);
   for (const z of zones) if (z.kind === 'carpet') carpet(k, z);
@@ -332,32 +395,9 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const tk = new Kit(pen, frame(v.at, think.wall, think.x0, think.y0), s);
     if (tk.sees(-3, -3, 0, think.len + 3, think.dep + 3, 0)) braided(tk, think.len / 2, think.dep / 2, 7.2, 4.8);
   }
-  // Warm light only round the fire, the forge, the lamps and the door's sun
-  // lamp; the dusk's rosy light under each window.
-  const fire = slot('idle');
-  if (fire) {
-    const fk = new Kit(pen, frame(v.at, fire.wall, fire.x0, fire.y0), s);
-    if (fk.sees(-14, -14, 0, fire.len + 14, fire.dep + 14, 0)) {
-      fk.pool(fire.len / 2, fire.dep * 0.45, 24, 20, '#ff8a3a', 0.42);
-      fk.pool(fire.len / 2, fire.dep * 0.45, 13, 11, '#ffb060', 0.28);
-    }
-  }
-  for (const [kind, u, w, r, a] of [['run', 0.3, 0.6, 12, 0.26], ['entrance', 0.82, 1.4, 10, 0.3]] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    const c = kind === 'entrance' ? C.sun : '#ff9a50';
-    if (qk.sees(-r, -r, 0, q.len + r, q.dep + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
-  for (const p of lamps) {
-    if (!k.sees(p.x - 9, p.y - 9, 0, p.x + 9, p.y + 9, 0)) continue;
-    k.pool(p.x, p.y, 9, 9, '#ffd27a', 0.3);
-    k.pool(p.x, p.y, 4.5, 4.5, '#fff0b0', 0.22);
-  }
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (wk.sees(f.a - 8, 0, 0, f.a + 8, 7, 0)) wk.pool(f.a + 1, 3.5, 6, 4.5, '#f8b890', 0.12);
-  }
+  // The light round the fire, the forge, the lamps, the door's sun lamp and
+  // under each window is the scene's (see room.lights and the props'
+  // `light`).
 }
 
 // The zone's corners on the floor, a hair over the planks.
@@ -501,11 +541,27 @@ function braided(k: Kit, cu: number, cv: number, ru: number, rv: number): void {
 
 // ── walls ──────────────────────────────────────────────────────────────────
 
-const BLOCKS = [C.block, '#928370', '#8a7b66', '#968773', '#8b7c69'];
-const FOOTING = '#776a57'; // the bottom course, a shade darker
+// Warm fieldstone, dressed square: five close tones, the bottom course a
+// shade darker; the mortar between soft, so the wall steps back and the
+// windows and the figures step forward.
+const BLOCKS = ['#a08c70', '#968268', '#a99478', '#8f7c63', '#9c8a6e'];
+const FOOTING = '#7e6c56';
+const LENGTHS = [4.5, 6, 7.5]; // a block's length, by its hash
+const PLATE = 2.4; // the timber wall plate along the top
+const JOIST = 10; // the joist ends under it, about this far apart
+const GIRT = 1.6; // a tall wall's girt over the window heads
+// The girt's foot for a wall H tall (over the window heads), or null when
+// the wall is not tall enough to want one.
+const girtZ = (H: number): number | null => {
+  const z = windowZ(H).z1 + 3.2;
+  return H - PLATE - (z + GIRT) >= 8 ? z : null;
+};
 
-// Plain thick blocks of cut stone in offset courses, each with a bold dark
-// joint round it and a lighter top edge; the windows let into them.
+// Blocks of dressed fieldstone in courses, each block its own length
+// (never a joint over the joint below), a soft mortar joint round it and
+// a lit top edge; now and then one standing a little proud (lit along its
+// top, a shadow under it and down its far end) or chipped at a corner. Over the stone a squared timber wall plate with the joists'
+// ends under it; the windows and what hangs between them let into it.
 function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const { pen, s } = k;
   const { T, H } = v;
@@ -515,27 +571,57 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const tone = (c: Color, d = 0.14) => (lit ? c : shade(c, -d));
   const [ax0, ax1] = visibleAlong(k, T, end, 0, H);
   const seed = wall === 'right' ? 41 : 43;
+  const mine = plan.features.filter((f) => f.wall === wall);
+  const { z1: wz1 } = windowZ(H);
+  const covered = (a0: number, a1: number, z0: number, z1: number) => mine.some((f) => a1 > f.a - f.w / 2 - 1 && a0 < f.a + f.w / 2 + 1 && z1 > SILL - 1.5 && z0 < (f.kind === 'window' ? wz1 + 1.5 : SILL + 10));
   const byTone: P3[][][] = BLOCKS.map(() => []);
   const footing: P3[][] = [];
   const joints: Array<[P3, P3]> = [];
   const tops: Array<[P3, P3]> = [];
   const feet: Array<[P3, P3]> = [];
-  const lo = Math.max(T, ax0 - BLOCK_L);
-  const hi = Math.min(end, ax1 + BLOCK_L);
-  for (let r = 0, z0 = 0; z0 < H - 0.01; r++, z0 += BLOCK_H) {
-    const z1 = Math.min(H, z0 + BLOCK_H);
-    if (!k.sees(lo, 0, z0, hi, 0.2, z1, 4)) continue;
-    if (r) joints.push([[lo, 0, z0], [hi, 0, z0]]);
-    const off = r & 1 ? BLOCK_L / 2 : 0;
-    for (let a = T - off, i = 0; a < end; a += BLOCK_L, i++) {
+  const proud: Array<[number, number, number, number]> = [];
+  const chips: P3[][] = [];
+  const lo = Math.max(T, ax0 - 8);
+  const hi = Math.min(end, ax1 + 8);
+  const zs = H - PLATE; // the stone stops under the plate
+  // Every course is laid from the corner (whatever the pen sees), so each
+  // tile of the shell finds the same blocks.
+  let below: number[] = [];
+  for (let r = 0, z0 = 0; z0 < zs - 0.01; r++, z0 += BLOCK_H) {
+    const z1 = Math.min(zs, z0 + BLOCK_H);
+    const show = k.sees(lo, 0, z0, hi, 0.2, z1, 4);
+    if (show && r) joints.push([[lo, 0, z0], [hi, 0, z0]]);
+    const here: number[] = [];
+    let a = T - hash(r, seed, 1) * 4;
+    for (let i = 0; a < end; i++) {
+      let len = LENGTHS[Math.floor(hash(r, i, seed) * LENGTHS.length)];
+      for (let t = 0; t < 3 && below.some((b) => Math.abs(b - (a + len)) < 1.2); t++) len = LENGTHS[(LENGTHS.indexOf(len) + 1) % LENGTHS.length];
       const a0 = Math.max(T, a);
-      const a1 = Math.min(end, a + BLOCK_L);
-      if (a1 < lo || a0 > hi || a1 - a0 < 0.2) continue;
-      (r ? byTone[Math.floor(hash(r, i, seed) * BLOCKS.length)] : footing).push([[a0, 0, z0], [a1, 0, z0], [a1, 0, z1], [a0, 0, z1]]);
-      if (a > T) joints.push([[a, 0, z0], [a, 0, z1]]);
-      tops.push([[a0 + 0.3, 0, z1 - 0.32], [a1 - 0.3, 0, z1 - 0.32]]);
-      feet.push([[a0 + 0.3, 0, z0 + 0.25], [a1 - 0.3, 0, z0 + 0.25]]);
+      const a1 = Math.min(end, a + len);
+      if (a + len < end) here.push(a + len);
+      if (show && a1 >= lo && a0 <= hi && a1 - a0 >= 0.2) {
+        const q: P3[] = [[a0, 0, z0], [a1, 0, z0], [a1, 0, z1], [a0, 0, z1]];
+        const t = Math.floor(hash(r, i, seed + 2) * BLOCKS.length);
+        (r ? byTone[t] : footing).push(q);
+        if (a > T) joints.push([[a, 0, z0], [a, 0, z1]]);
+        tops.push([[a0 + 0.3, 0, z1 - 0.32], [a1 - 0.3, 0, z1 - 0.32]]);
+        feet.push([[a0 + 0.3, 0, z0 + 0.25], [a1 - 0.3, 0, z0 + 0.25]]);
+        const h = hash(r, i, seed + 3);
+        if (r && z1 < zs - 0.5 && a0 > T + 1 && a1 < end - 1 && !covered(a0, a1, z0, z1)) {
+          if (h < 0.08) proud.push([a0, a1, z0, z1]);
+          else if (h > 0.9) {
+            // a corner knocked off: which of the block's corners by its hash
+            const cu = hash(r, i, seed + 4) < 0.5 ? a0 : a1;
+            const cz = hash(r, i, seed + 5) < 0.5 ? z0 : z1;
+            const du = cu === a0 ? 1 : -1;
+            const dz = cz === z0 ? 1 : -1;
+            chips.push([[cu, 0.01, cz], [cu + du * 0.9, 0.01, cz], [cu + du * 0.25, 0.01, cz + dz * 0.25], [cu, 0.01, cz + dz * 0.7]]);
+          }
+        }
+      }
+      a += len;
     }
+    below = here;
   }
   [...byTone, footing].forEach((qs, ti) => {
     if (!qs.length) return;
@@ -544,16 +630,90 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     pen.fillStyle = tone(BLOCKS[ti] ?? FOOTING);
     pen.fill();
   });
-  k.segs(tops, withAlpha(C.blockTop, lit ? 0.6 : 0.4), Math.max(0.8, 0.2 * s));
-  k.segs(feet, withAlpha('#3a3228', 0.18), Math.max(0.6, 0.14 * s));
-  k.segs(joints, withAlpha(INK, 0.7), Math.max(1, 0.16 * s));
+  k.segs(tops, withAlpha(C.blockTop, 0.4), Math.max(0.8, 0.2 * s));
+  k.segs(feet, withAlpha('#3a3228', 0.14), Math.max(0.6, 0.14 * s));
+  k.segs(joints, withAlpha(INK, 0.4), Math.max(0.8, 0.11 * s));
+  if (chips.length) {
+    pen.beginPath();
+    for (const q of chips) k.trace(q);
+    pen.fillStyle = tone('#7a6a55');
+    pen.fill();
+  }
+  // the proud ones: a block standing out a little, its face a shade
+  // lighter, its top catching the light and a shadow under it and down
+  // its far end
+  if (proud.length) {
+    pen.beginPath();
+    for (const [a0, a1, z0, z1] of proud) k.trace([[a0 + 0.1, 0.01, z0 + 0.1], [a1 - 0.1, 0.01, z0 + 0.1], [a1 - 0.1, 0.01, z1 - 0.1], [a0 + 0.1, 0.01, z1 - 0.1]]);
+    pen.fillStyle = withAlpha('#fff2dc', 0.1);
+    pen.fill();
+    const tops2: Array<[P3, P3]> = [];
+    const under: P3[][] = [];
+    for (const [a0, a1, z0, z1] of proud) {
+      tops2.push([[a0 + 0.15, 0.02, z1 - 0.15], [a1 - 0.15, 0.02, z1 - 0.15]]);
+      under.push([[a0 + 0.1, 0.02, z0 + 0.1], [a1 - 0.1, 0.02, z0 + 0.1], [a1 - 0.1, 0.02, z1 - 0.1]]);
+    }
+    k.segs(tops2, withAlpha('#f4e6c8', 0.75), Math.max(0.9, 0.18 * s), 'round');
+    pen.beginPath();
+    for (const q of under) q.forEach(([u, w, z], j) => {
+      const [x, y] = k.p(u, w, z);
+      if (j) pen.lineTo(x, y);
+      else pen.moveTo(x, y);
+    });
+    pen.strokeStyle = withAlpha('#2a1e10', 0.4);
+    pen.lineWidth = Math.max(1, 0.2 * s);
+    pen.lineJoin = 'round';
+    pen.stroke();
+  }
   // the blocks darken up toward the top, out of the lamps' reach, and in
   // the far corner
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, 0, H, [[0, '#1a100600'], [0.5, '#1a100608'], [1, '#1a100638']]), 0);
   if (k.sees(T, 0, 0, T + 10, 0.5, H)) k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#1a100650'], [1, '#1a100600']]), 0);
-  for (const f of plan.features) {
-    if (f.wall !== wall || !k.sees(f.a - f.w / 2 - 1, 0, SILL - 3, f.a + f.w / 2 + 1, 2.5, windowZ(H).z1 + 2)) continue;
-    windowArt(k, v, f, lit);
+  wallPlate(k, T, end, H, lo, hi, seed, tone);
+  if (girtZ(H) === null) pegRail(k, T, end, H, lo, hi, seed, tone, mine);
+  else girt(k, T, end, H, lo, hi, seed, tone, mine);
+  for (const f of mine) {
+    if (f.kind === 'window') {
+      if (k.sees(f.a - f.w / 2 - 1, 0, SILL - 3, f.a + f.w / 2 + 1, 2.5, wz1 + 2)) windowArt(k, v, f, lit);
+    } else if (k.sees(f.a - f.w / 2 - 1, 0, SILL - 1, f.a + f.w / 2 + 1, 3, SILL + 11)) {
+      if (f.kind === 'shelf') shelfArt(k, f, tone);
+      else if (f.kind === 'rack') rackArt(k, f, tone);
+      else peltArt(k, f, tone);
+    }
+  }
+}
+
+// The wall plate: a squared timber laid along the top of the stone, butt
+// joints along it and its grain, its top edge lit; under it the joists'
+// ends stand out of the wall, their end grain toward the room.
+function wallPlate(k: Kit, T: number, end: number, H: number, lo: number, hi: number, seed: number, tone: Tone): void {
+  const z0 = H - PLATE;
+  if (!k.sees(lo, 0, z0 - 2, hi, 1.5, H)) return;
+  k.box(T, 0, z0, end - T, 0.35, PLATE, tone(C.log), { line: k.lw, stripe: false });
+  const n = 0.36;
+  const butts: Array<[P3, P3]> = [];
+  for (let a = T + 9 + hash(seed, 51) * 6; a < end - 2; a += 12) if (a > lo - 1 && a < hi + 1) butts.push([[a, n, z0 + 0.05], [a, n, H - 0.05]]);
+  k.segs(butts, withAlpha(INK, 0.6), Math.max(0.8, k.thin * 0.8));
+  if (k.s >= 3) {
+    const grain: Array<[P3, P3]> = [];
+    for (const [f, d] of [[0.35, 0.1], [0.62, 0.35]] as const) grain.push([[Math.max(T, lo) + d, n, z0 + PLATE * f], [Math.min(end, hi) - d, n, z0 + PLATE * f]]);
+    k.segs(grain, withAlpha(C.bark, 0.35), Math.max(0.6, 0.07 * k.s));
+  }
+  k.line([[T, n, H - 0.18], [end, n, H - 0.18]], withAlpha(C.plankLight, 0.5), Math.max(0.7, 0.12 * k.s));
+  // the joists' ends, every JOIST along, clear of the corner
+  const ends: P3[] = [];
+  for (let a = T + 4 + hash(seed, 52) * 2; a < end - 2; a += JOIST) {
+    if (a < lo - 2 || a > hi + 2) continue;
+    k.box(a - 0.6, 0, z0 - 1.3, 1.2, 1.2, 1.3, tone(C.plankDark), { line: k.thin, stripe: false });
+    ends.push([a, 1.21, z0 - 0.65]);
+  }
+  for (const [u, w, z] of ends) {
+    k.face(u, w, z, 0.42, tone(C.plankLight), Math.max(0.6, k.thin * 0.6), 14);
+    if (k.s < 4) continue;
+    // a growth ring
+    k.pen.beginPath();
+    k.trace(circle(u, w + 0.01, z, 0.2, 10));
+    k.paint(null, Math.max(0.6, 0.06 * k.s), withAlpha(C.bark, 0.8));
   }
 }
 
@@ -581,6 +741,9 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const w = f.w - 2.4; // the opening, inside the casing
   const depth = 0.9;
   const tone = (c: Color, d = 0.14) => (lit ? c : shade(c, -d));
+  // the low sun warm on the stone round the opening, down toward the
+  // floor (in the evening; not at night)
+  if (lampsOn(v)) k.wash(a, 0.03, z0 + (z1 - z0) * 0.25, w * 0.95, (z1 - z0) * 0.9, '#ffcf9a', 0.16);
   // the casing: plank jambs
   k.box(a - w / 2 - 1.2, 0, z0 - 0.2, 1.2, 0.5, z1 - z0 + 0.6, C.plankLight, { line: k.lw, stripe: false });
   k.box(a + w / 2, 0, z0 - 0.2, 1.2, 0.5, z1 - z0 + 0.6, C.plankLight, { line: k.lw, stripe: false });
@@ -591,7 +754,7 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   pen.beginPath();
   k.trace(open);
   pen.clip();
-  dusk(k, a - w / 2 - 0.5, a + w / 2 + 0.5, z0, z1, -depth, f.k);
+  dusk(k, a - w / 2 - 0.5, a + w / 2 + 0.5, z0, z1, -depth, f.k, !lampsOn(v));
   // the reveal: the stone's inner face (seen past the -u side), the sill's
   // inside at the foot, and a shadow under the head
   k.poly([[a - w / 2, 0.02, z0], [a - w / 2, -depth, z0], [a - w / 2, -depth, z1], [a - w / 2, 0.02, z1]], k.side('#a49a88', 1, 0, 0.2), 0);
@@ -613,6 +776,8 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   // the head over it (a plank lintel), and a stone sill with a pot on it
   k.box(a - w / 2 - 1.6, 0, z1 + 0.4, w + 3.2, 0.8, 0.9, C.plank, { line: k.lw });
   k.box(a - w / 2 - 1.5, 0, z0 - 1.0, w + 3.0, 1.3, 0.8, '#b0a692', { line: k.lw });
+  // the dusk catching the sill's front edge
+  k.line([[a - w / 2 - 1.3, 1.31, z0 - 0.32], [a + w / 2 + 1.3, 1.31, z0 - 0.32]], withAlpha('#ffd8a8', 0.55), Math.max(0.7, 0.12 * s));
   if (hash(f.k, 31) < 0.6) {
     const pu = a + (hash(f.k, 32) < 0.5 ? -1 : 1) * (w / 2 - 0.9);
     k.cyl(pu, 0.7, z0 - 0.2, 0.55, 1.0, '#b8643a');
@@ -628,12 +793,257 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   }
 }
 
+// In a tall room a second timber, a girt, runs along the wall over the
+// window heads, and the harvest hangs from it to dry between the windows:
+// strings of onions, bunches of herbs, corn cobs with their husks pulled
+// back.
+function girt(k: Kit, T: number, end: number, H: number, lo: number, hi: number, seed: number, tone: Tone, mine: Feature[]): void {
+  const z0 = girtZ(H);
+  if (z0 === null || !k.sees(lo, 0, z0 - 5, hi, 1.5, z0 + GIRT)) return;
+  k.box(T, 0, z0, end - T, 0.35, GIRT, tone(C.log), { line: k.lw, stripe: false });
+  const n = 0.36;
+  const butts: Array<[P3, P3]> = [];
+  for (let a = T + 5 + hash(seed, 53) * 8; a < end - 2; a += 14) if (a > lo - 1 && a < hi + 1) butts.push([[a, n, z0 + 0.05], [a, n, z0 + GIRT - 0.05]]);
+  k.segs(butts, withAlpha(INK, 0.6), Math.max(0.8, k.thin * 0.8));
+  k.line([[T, n, z0 + GIRT - 0.15], [end, n, z0 + GIRT - 0.15]], withAlpha(C.plankLight, 0.5), Math.max(0.7, 0.12 * k.s));
+  // the harvest, every few units along, clear of the window heads
+  for (let a = T + 4 + hash(seed, 54) * 3, i = 0; a < end - 3; a += 4 + hash(seed, i, 55) * 2.5, i++) {
+    if (a < lo - 2 || a > hi + 2 || hash(seed, i, 56) < 0.15) continue;
+    if (mine.some((f) => f.kind === 'window' && Math.abs(a - f.a) < f.w / 2 + 1.2)) continue;
+    const kind = Math.floor(hash(seed, i, 57) * 3);
+    k.face(a, n + 0.05, z0 + 0.5, 0.18, C.bark, k.thin, 8);
+    if (kind === 0) onions(k, a, n + 0.3, z0 + 0.5, i, tone);
+    else if (kind === 1) herbs(k, a, n + 0.3, z0 + 0.5, i, tone);
+    else corn(k, a, n + 0.3, z0 + 0.5, tone);
+  }
+}
+
+// In a room too low for a girt, a peg rail runs along the stone under the
+// window heads instead, across each stretch of 7 units or more between the
+// windows, the harvest hung from its pegs (none over what hangs below).
+function pegRail(k: Kit, T: number, end: number, H: number, lo: number, hi: number, seed: number, tone: Tone, mine: Feature[]): void {
+  const z = windowZ(H).z1 - 2;
+  if (!k.sees(lo, 0, z - 4.5, hi, 1.5, z + 1)) return;
+  const wins = mine.filter((f) => f.kind === 'window').map((f) => [f.a - f.w / 2 - 0.8, f.a + f.w / 2 + 0.8] as const).sort((p, q) => p[0] - q[0]);
+  const gaps: Array<[number, number]> = [];
+  let from = T + 1.5;
+  for (const [w0, w1] of wins) {
+    gaps.push([from, w0]);
+    from = w1;
+  }
+  gaps.push([from, end - 1.5]);
+  const pieces = mine.filter((f) => f.kind !== 'window');
+  for (const [g0, g1] of gaps) {
+    if (g1 - g0 < 7 || g1 < lo - 2 || g0 > hi + 2) continue;
+    k.box(g0, 0, z - 0.4, g1 - g0, 0.3, 0.8, tone(C.plankDark), { line: k.thin, stripe: false });
+    k.line([[g0 + 0.1, 0.31, z + 0.3], [g1 - 0.1, 0.31, z + 0.3]], withAlpha(C.plankLight, 0.5), Math.max(0.6, 0.1 * k.s));
+    const n = Math.max(1, Math.floor((g1 - g0 - 1) / 3));
+    const step = (g1 - g0) / (n + 1);
+    for (let i = 1; i <= n; i++) {
+      const a = g0 + i * step;
+      const j = Math.round(a * 7) + seed;
+      k.rod([[a, 0.3, z], [a, 0.8, z + 0.1]], tone(C.iron), 0.12);
+      if (hash(j, 58) < 0.2 || pieces.some((f) => Math.abs(a - f.a) < f.w / 2 + 0.8)) continue;
+      const kind = Math.floor(hash(j, 59) * 3);
+      if (kind === 0) onions(k, a, 0.66, z, j, tone);
+      else if (kind === 1) herbs(k, a, 0.66, z, j, tone);
+      else corn(k, a, 0.66, z, tone);
+    }
+  }
+}
+
+// A string of onions hung from a peg at (a, n, z).
+function onions(k: Kit, a: number, n: number, z: number, seed: number, tone: Tone): void {
+  const len = 2.8 + hash(seed, 61) * 0.8;
+  k.line([[a, n - 0.25, z], [a, n, z - len]], '#6a5434', Math.max(0.7, 0.08 * k.s));
+  for (let i = 0; i < 6; i++) {
+    const t = 0.18 + (i / 6) * 0.8;
+    const side = i % 2 ? 1 : -1;
+    const zz = z - len * t;
+    ball(k, a + side * 0.28, n + 0.05, zz, 0.36 - i * 0.015, tone(i % 3 === 1 ? '#b8603a' : '#c88a4a'), k.thin);
+  }
+}
+
+// A bunch of herbs, tied and hung head down.
+function herbs(k: Kit, a: number, n: number, z: number, seed: number, tone: Tone): void {
+  k.line([[a, n - 0.2, z], [a, n, z - 0.8]], '#d9c9a0', Math.max(0.6, 0.07 * k.s));
+  const stalks: Array<[P3, P3]> = [];
+  for (let i = 0; i < 7; i++) {
+    const t = (i - 3) / 3;
+    stalks.push([[a, n, z - 0.8], [a + t * 0.8, n, z - 3.0 + Math.abs(t) * 0.4]]);
+  }
+  const green = hash(seed, 62) < 0.5 ? '#8a9a52' : '#a0985a';
+  k.segs(stalks, INK, Math.max(1.5, 0.2 * k.s + k.thin), 'round');
+  k.segs(stalks, tone(green), Math.max(0.9, 0.2 * k.s), 'round');
+  k.rod([[a - 0.3, n, z - 0.95], [a + 0.3, n, z - 0.95]], C.cloth, 0.12);
+}
+
+// Three corn cobs, their husks pulled back and tied over the peg.
+function corn(k: Kit, a: number, n: number, z: number, tone: Tone): void {
+  for (const [du, dz] of [[-0.55, -0.3], [0.55, -0.4], [0, -0.1]] as const) {
+    const cu = a + du;
+    const top = z - 0.6 + dz;
+    // the husks, back up over the tie
+    k.poly([[cu, n, top], [cu - 0.55, n, top + 0.8], [cu - 0.2, n, top + 0.2]], tone('#e2d2a2'), k.thin);
+    k.poly([[cu, n, top], [cu + 0.5, n, top + 0.9], [cu + 0.15, n, top + 0.15]], tone('#d6c48e'), k.thin);
+    // the cob
+    const pts: P3[] = [];
+    for (let i = 0; i < 16; i++) {
+      const th = (i / 16) * Math.PI * 2;
+      pts.push([cu + Math.cos(th) * 0.36, n + 0.02, top - 1.15 + Math.sin(th) * 1.15]);
+    }
+    k.poly(pts, tone(du === 0 ? '#d8862e' : '#e8b840'), k.thin);
+    if (k.s >= 4) k.segs([[[cu - 0.12, n + 0.03, top - 0.3], [cu - 0.12, n + 0.03, top - 2.0]], [[cu + 0.12, n + 0.03, top - 0.3], [cu + 0.12, n + 0.03, top - 2.0]]], withAlpha('#8a5a20', 0.5), Math.max(0.6, 0.05 * k.s));
+  }
+}
+
+// ── what hangs between the windows ─────────────────────────────────────────
+
+type Tone = (c: Color, d?: number) => Color;
+
+// A piece's soft shadow on the stone behind it, down and to the right.
+function cast(k: Kit, a0: number, a1: number, z0: number, z1: number, alpha = 0.22): void {
+  k.poly([[a0 + 0.35, 0.02, z0 - 0.4], [a1 + 0.35, 0.02, z0 - 0.4], [a1 + 0.35, 0.02, z1 - 0.4], [a0 + 0.35, 0.02, z1 - 0.4]], withAlpha('#1a1006', alpha), 0, 0.4);
+}
+
+// A plank shelf on two iron brackets: a clay crock, a jar of apricot
+// preserves under a cloth cap, a tall jar of gherkins and a tin; a bunch
+// of herbs hung under it to dry.
+function shelfArt(k: Kit, f: Feature, tone: Tone): void {
+  const a = f.a;
+  const w = f.w;
+  const z = SILL + 5.5;
+  const d = 1.5;
+  cast(k, a - w / 2, a + w / 2, z - 0.6, z + 2.0, 0.18);
+  for (const u of [a - w / 2 + 0.8, a + w / 2 - 0.8]) k.rod([[u, 0.05, z - 1.4], [u, d - 0.3, z - 0.05]], tone(C.iron), 0.15);
+  // the herbs, under the front edge
+  const hu = a - 0.6;
+  k.line([[hu, d - 0.3, z], [hu, d - 0.3, z - 0.7]], withAlpha('#d9c9a0', 0.9), Math.max(0.6, 0.06 * k.s));
+  const stalks: Array<[P3, P3]> = [];
+  for (let i = 0; i < 6; i++) {
+    const t = (i - 2.5) / 2.5;
+    stalks.push([[hu, d - 0.3, z - 0.7], [hu + t * 0.7, d - 0.3 - Math.abs(t) * 0.2, z - 2.4 + Math.abs(t) * 0.3]]);
+  }
+  k.segs(stalks, INK, Math.max(1.4, 0.16 * k.s + k.thin), 'round');
+  k.segs(stalks, tone('#8a9a52'), Math.max(0.8, 0.16 * k.s), 'round');
+  k.rod([[hu - 0.25, d - 0.3, z - 0.85], [hu + 0.25, d - 0.3, z - 0.85]], C.cloth, 0.12);
+  // the plank
+  k.box(a - w / 2, 0, z, w, d, 0.4, C.plankLight, { line: k.lw });
+  const zt = z + 0.4;
+  // the crock, the preserves, the gherkins and a tin
+  const crock = a - w / 2 + 1.05;
+  k.cyl(crock, 0.75, zt, 0.6, 1.4, '#c8794a');
+  k.disc(crock, 0.75, zt + 1.4, 0.45, '#7a3e22', 0);
+  k.line([[crock - 0.6, 1.35, zt + 1.0], [crock + 0.55, 1.2, zt + 1.0]], withAlpha('#f0d0a0', 0.6), Math.max(0.6, 0.08 * k.s));
+  const jam = a + 0.2;
+  k.cyl(jam, 0.8, zt, 0.46, 1.1, '#e8a050');
+  k.cyl(jam, 0.8, zt + 1.1, 0.54, 0.25, C.cloth, { line: k.thin });
+  const pickles = a + 1.35;
+  k.cyl(pickles, 0.8, zt, 0.42, 1.55, '#9ab868');
+  if (k.s >= 4) {
+    for (const [dz, du] of [[0.35, -0.12], [0.75, 0.1], [1.15, -0.05]] as const) k.disc(pickles + du, 1.15, zt + dz, 0.16, C.leaf, 0);
+  }
+  k.cyl(pickles, 0.8, zt + 1.55, 0.44, 0.2, C.steelDark, { line: k.thin });
+  k.cyl(a + w / 2 - 0.75, 0.75, zt, 0.38, 0.8, C.steel, { line: k.thin });
+  // a glint down the glass
+  k.segs([[[jam - 0.25, 1.2, zt + 0.25], [jam - 0.25, 1.2, zt + 0.85]], [[pickles - 0.22, 1.18, zt + 0.25], [pickles - 0.22, 1.18, zt + 1.25]]], withAlpha('#fff8e0', 0.65), Math.max(0.6, 0.1 * k.s), 'round');
+}
+
+// A board of tools by the work: a saw, a hammer, a pair of tongs and a
+// coil of rope, each hung on its pegs.
+function rackArt(k: Kit, f: Feature, tone: Tone): void {
+  const a = f.a;
+  const w = f.w;
+  const z0 = SILL + 1.6;
+  const z1 = z0 + 6.4;
+  cast(k, a - w / 2, a + w / 2, z0, z1);
+  k.box(a - w / 2, 0, z0, w, 0.3, z1 - z0, C.plankLight, { line: k.lw, stripe: false });
+  const n = 0.32;
+  k.segs([[[a - w / 6, n, z0 + 0.1], [a - w / 6, n, z1 - 0.1]], [[a + w / 6, n, z0 + 0.1], [a + w / 6, n, z1 - 0.1]]], withAlpha(INK, 0.35), Math.max(0.6, k.thin * 0.7));
+  // the saw, handle up
+  const su = a - 2.7;
+  k.poly([[su - 0.6, n, z1 - 1.3], [su + 0.65, n, z1 - 1.3], [su + 0.3, n, z0 + 0.8], [su - 0.35, n, z0 + 0.8]], k.side(C.steel, 0, 1), k.thin);
+  k.poly([[su - 0.75, n + 0.02, z1 - 1.35], [su + 0.8, n + 0.02, z1 - 1.35], [su + 0.7, n + 0.02, z1 - 0.35], [su - 0.65, n + 0.02, z1 - 0.35]], C.log, k.thin, 0.2);
+  if (k.s >= 4) {
+    const teeth: Array<[P3, P3]> = [];
+    for (let z = z0 + 0.95; z < z1 - 1.4; z += 0.38) {
+      const e = su - 0.35 - ((z - z0 - 0.8) / (z1 - z0 - 2.1)) * 0.25;
+      teeth.push([[e, n + 0.01, z], [e - 0.18, n + 0.01, z + 0.18]]);
+    }
+    k.segs(teeth, withAlpha(INK, 0.6), Math.max(0.6, 0.06 * k.s));
+  }
+  // the hammer, head up
+  const hm = a - 0.4;
+  k.rod([[hm, n + 0.08, z0 + 1.2], [hm, n + 0.08, z1 - 1.5]], C.log, 0.22);
+  k.box(hm - 0.85, n, z1 - 1.6, 1.5, 0.3, 0.6, tone(C.iron), { line: k.thin, stripe: false });
+  // the tongs, crossed
+  const tg = a + 1.25;
+  k.rod([[tg - 0.45, n + 0.08, z0 + 0.8], [tg + 0.35, n + 0.08, z1 - 2.6], [tg + 0.1, n + 0.08, z1 - 1.5]], tone(C.iron), 0.13);
+  k.rod([[tg + 0.45, n + 0.08, z0 + 0.8], [tg - 0.35, n + 0.08, z1 - 2.6], [tg - 0.1, n + 0.08, z1 - 1.5]], tone(C.iron), 0.13);
+  // the rope, coiled on its peg
+  const ru = a + w / 2 - 1.35;
+  const rz = z0 + 3.3;
+  k.face(ru, n + 0.1, rz, 1.05, '#c8a870', k.thin, 20);
+  k.face(ru, n + 0.12, rz, 0.45, tone(C.plankLight), k.thin, 14);
+  k.pen.beginPath();
+  k.trace(circle(ru, n + 0.13, rz, 0.75, 18));
+  k.paint(null, Math.max(0.6, 0.07 * k.s), withAlpha('#8a6a40', 0.8));
+  // the pegs
+  const pegs: P3[] = [[su, n + 0.1, z1 - 0.15], [hm, n + 0.1, z1 - 0.85], [tg, n + 0.1, z1 - 1.25], [ru, n + 0.1, rz + 0.95]];
+  for (const [u, w2, z] of pegs) k.face(u, w2 + 0.05, z, 0.16, C.bark, 0, 8);
+}
+
+// A hide stretched to dry on a willow hoop, laced to it all round, hung
+// from a peg on a cord.
+function peltArt(k: Kit, f: Feature, tone: Tone): void {
+  const a = f.a;
+  const zc = SILL + 5;
+  const r = 2.25;
+  const n = 0.4;
+  cast(k, a - r, a + r, zc - r, zc + r, 0.16);
+  // the cord up to its peg
+  k.line([[a - 1.0, n, zc + r * 0.86], [a, 0.15, zc + r + 1.0], [a + 1.0, n, zc + r * 0.86]], '#4a3a26', Math.max(0.7, 0.08 * k.s));
+  k.face(a, 0.2, zc + r + 1.0, 0.2, C.bark, k.thin, 8);
+  // the hide: four legs, a neck and a tail, the hair side lighter at the
+  // middle
+  const pts: P3[] = [];
+  const R = (th: number) => r * 0.66 * (1 + 0.2 * Math.cos(4 * (th - Math.PI / 4)) + 0.06 * Math.sin(th * 3 + 1));
+  for (let i = 0; i < 32; i++) {
+    const th = (i / 32) * Math.PI * 2;
+    pts.push([a + Math.cos(th) * R(th) * 0.92, n + 0.02, zc + Math.sin(th) * R(th)]);
+  }
+  const g = k.pen.createRadialGradient(...k.p(a - 0.3, n, zc + 0.4), 0, ...k.p(a, n, zc), r * 0.8 * k.s);
+  g.addColorStop(0, tone('#e2c08e'));
+  g.addColorStop(1, tone('#b08458'));
+  k.poly(pts, g, k.thin, 0.3);
+  k.line([[a, n + 0.03, zc + R(Math.PI / 2) * 0.85], [a + 0.1, n + 0.03, zc], [a, n + 0.03, zc - R(-Math.PI / 2) * 0.85]], withAlpha('#8a5a32', 0.6), Math.max(0.6, 0.1 * k.s));
+  // the lacing, edge to hoop
+  if (k.s >= 3) {
+    const lace: Array<[P3, P3]> = [];
+    for (let i = 0; i < 14; i++) {
+      const th = (i / 14) * Math.PI * 2 + 0.2;
+      lace.push([[a + Math.cos(th) * R(th) * 0.92, n + 0.03, zc + Math.sin(th) * R(th)], [a + Math.cos(th) * r * 0.97, n + 0.03, zc + Math.sin(th) * r * 0.97]]);
+    }
+    k.segs(lace, withAlpha('#5a4630', 0.8), Math.max(0.6, 0.07 * k.s));
+  }
+  // the hoop of bent willow
+  const hoop = circle(a, n + 0.04, zc, r, 32);
+  hoop.push(hoop[0]);
+  k.line(hoop, INK, Math.max(1.4, 0.24 * k.s + k.lw * 1.2));
+  k.line(hoop, tone(C.log), Math.max(0.9, 0.24 * k.s));
+  if (k.s >= 3) {
+    const tie: P3 = [a + r * 0.71, n + 0.05, zc + r * 0.71];
+    k.face(tie[0], tie[1], tie[2], 0.18, '#d9c9a0', k.thin, 8);
+  }
+}
+
 // ── the shell's edges: wall tops, cut ends, the floor slab ───────────────────
 
 function shell(k: Kit, v: RoomView): void {
   const { pen } = k;
   const { W, D, H, T } = v;
-  const cap = '#a89e8c';
+  // the wall tops: dark weathered stone, so the room's frame stays quiet
+  const cap = '#7a6a56';
   // the floor's cut edges
   if (k.sees(T, D - 1, -SLAB, W, D, 0) || k.sees(W - 1, T, -SLAB, W, D, 0)) {
     k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side(C.floorDark, 0, 1), k.lw);
@@ -644,16 +1054,21 @@ function shell(k: Kit, v: RoomView): void {
   for (const [p, q, nu, nv] of [[[0, D], [T, D], 0, 1], [[W, 0], [W, T], 1, 0]] as const) {
     if (!k.sees(Math.min(p[0], q[0]), Math.min(p[1], q[1]), -SLAB, Math.max(p[0], q[0]), Math.max(p[1], q[1]), H)) continue;
     const pt = (f: number, z: number): P3 => [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, z];
-    k.poly([pt(0, -SLAB), pt(1, -SLAB), pt(1, H), pt(0, H)], k.side(mix(C.block, '#5e5a53', 0.35), nu, nv), k.lw);
+    k.poly([pt(0, -SLAB), pt(1, -SLAB), pt(1, H), pt(0, H)], k.side(mix(BLOCKS[0], '#5e5a53', 0.35), nu, nv), k.lw);
+    // the wall plate's end (and the girt's), toward the cut
+    k.poly([pt(0, H - PLATE), pt(1, H - PLATE), pt(1, H), pt(0, H)], k.side(C.log, nu, nv), k.thin);
+    const gz = girtZ(H);
+    if (gz !== null) k.poly([pt(0, gz), pt(1, gz), pt(1, gz + GIRT), pt(0, gz + GIRT)], k.side(C.log, nu, nv), k.thin);
     pen.beginPath();
-    for (let z = BLOCK_H, r = 1; z < H - 0.4; z += BLOCK_H, r++) {
+    for (let z = BLOCK_H, r = 1; z < H - PLATE - 0.4; z += BLOCK_H, r++) {
+      if (gz !== null && z > gz - 0.2 && z < gz + GIRT + 0.2) continue;
       const [x0, y0] = k.p(...pt(0, z));
       const [x1, y1] = k.p(...pt(1, z));
       pen.moveTo(x0, y0);
       pen.lineTo(x1, y1);
       const f = r & 1 ? 0.35 : 0.7;
       const [x2, y2] = k.p(...pt(f, z));
-      const [x3, y3] = k.p(...pt(f, Math.min(H, z + BLOCK_H)));
+      const [x3, y3] = k.p(...pt(f, Math.min(H - PLATE, z + BLOCK_H)));
       pen.moveTo(x2, y2);
       pen.lineTo(x3, y3);
     }
@@ -664,7 +1079,7 @@ function shell(k: Kit, v: RoomView): void {
   if (k.sees(0, 0, H - 1, W, D, H + 1)) {
     k.poly([[0, 0, H], [W, 0, H], [W, T, H], [T, T, H], [T, D, H], [0, D, H]], cap, k.lw);
     k.line([[0.35, D, H], [0.35, 0.35, H], [W, 0.35, H]], shade(cap, 0.3), Math.max(1, 0.2 * k.s));
-    k.line([[T - 0.3, D, H], [T - 0.3, T - 0.3, H], [W, T - 0.3, H]], shade(cap, 0.18), Math.max(1, 0.16 * k.s));
+    k.line([[T - 0.3, D, H], [T - 0.3, T - 0.3, H], [W, T - 0.3, H]], '#8f7e68', Math.max(1, 0.16 * k.s));
   }
   // inner edges: wall to floor, and the corner
   k.line([[T, D, 0], [T, T, 0], [W, T, 0]], withAlpha(INK, 0.7), k.thin);
@@ -687,7 +1102,7 @@ function firelight(v: RoomView, plan: Plan, clip: boolean): void {
   const cv = fire.dep * 0.47;
   const [ru, rv] = [10, 8.5];
   if (clip && !k.sees(cu - ru, cv - rv, 0, cu + ru, cv + rv, 0)) return;
-  k.pool(cu, cv, ru, rv, C.fire, 0.1 + 0.2 * n);
+  k.pool(cu, cv, ru, rv, C.fire, 0.05 + 0.15 * n);
 }
 
 // Fireflies drifting and blinking over the hills outside a window (in the

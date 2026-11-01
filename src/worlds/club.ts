@@ -3,7 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import type { WorldDef } from './types.ts';
 import { DECOR } from './club/decor.ts';
 import { INK } from './club/kit.ts';
-import { clubPois } from './club/plan.ts';
+import { clubPois, clubReserve } from './club/plan.ts';
 import { room } from './club/room.ts';
 import { STATIONS } from './club/stations.ts';
 import { NPCS } from './club/npcs.ts';
@@ -44,6 +44,11 @@ export const club: WorldDef = {
   ink: INK,
   room,
   pois: clubPois,
+  reserve: clubReserve,
+  // Lights off, the house lights and the rig go dark and the neon, the
+  // dance floor and the decks carry the club: a light night grade; the
+  // floor's edge shade eased on the dark concrete.
+  light: { ao: 0.7, night: { strength: 0.35 } },
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,

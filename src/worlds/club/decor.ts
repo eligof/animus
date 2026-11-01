@@ -120,6 +120,7 @@ const totem: PropArt = {
   len: 3,
   dep: 3,
   height: 11,
+  light: [{ kind: 'glow', u: 1.5, v: 1.5, z: 2, color: C.violet, r: 6, strength: 0.35, halo: 0 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -186,11 +187,11 @@ const jukebox: PropArt = {
   len: 5,
   dep: 4,
   height: 12,
+  light: [{ kind: 'glow', u: 2.5, v: 4.6, z: 2, color: C.amber, r: 7, strength: 0.45, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const [u0, u1, v0, v1] = [0.5, 4.5, 0.8, 3.4];
     const cu = (u0 + u1) / 2;
-    k.pool(cu, v1 + 0.6, 2.8, 1.8, C.amber, 0.3);
     k.shadow(cu, 2.1, 2.4, 1.6, 0.32);
     k.box(u0, v0, 0, u1 - u0, v1 - v0, 7.6, '#6a2a3a', { round: 0.2 });
     // the arch on the front, its tubes of light

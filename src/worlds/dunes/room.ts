@@ -4,17 +4,21 @@ import type { Color } from '../../art/types.ts';
 import { planLayout, slotRect, slotsOn, wallGaps } from '../../world/layout.ts';
 import { defaultPois, footprint } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
-import { bottle, claypot, dunesView, fillPts, gear, hull, jar, lantern, pipe, ring, rivets, ropeCoil, tubeLamp } from './bits.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
+import { bottle, claypot, dunesView, fillPts, gear, hull, jar, lantern, pipe, ring, rivets, ropeCoil, stars, tube, tubeLamp } from './bits.ts';
 import type { P3, Pt } from './kit.ts';
 import { C, INK, Kit, hash, withAlpha } from './kit.ts';
 
 // The outpost's shell, a squat drum of poured adobe under a ribbed steel
-// dome: a deck of sun-bleached planks with sand blown in along the walls'
-// feet; walls of adobe poured in courses (a seam every few units), patched
+// dome: a deck of sun-bleached planks in the cool of the shade, sand
+// blown in along the walls' feet and through the door, a deck plate under
+// the workbench and a kilim before the bar; walls of terracotta adobe
+// poured in courses (soft slumped seams, patches plastered over), patched
 // with riveted scrap plates rusting at their edges, an exposed pipe run
-// along them at shoulder height; a steel ring beam on top, then the dome's
-// plates between rusty ribs and lattice braces. In the free stretches
+// along them at shoulder height; a steel ring beam on top, then the dome:
+// rusty ribs with sails of hide and striped canvas lashed between them,
+// backlit, a scallop of turquoise sky under each. In the free stretches
 // between the stations: small windows with slatted shutters (hard white
 // daylight through the slats, in shafts down to the floor, a wind turbine
 // turning far off), plank shelves on pipe brackets, a bounty board of
@@ -49,6 +53,14 @@ const bandZ = (H: number) => (H < 48 ? H - 7 : Math.round(H * 0.66));
 // Sun through a window falls this far along and out per unit down.
 const SUN_U = 0.2;
 const SUN_V = 0.45;
+// How the scene throws a window's light (art/scene/light.ts: from the upper
+// left, x by z / 1.6 and y by z / 3.2 a unit down), in a wall's frame:
+// along it and out from it, per unit down.
+const throwOf = (wall: Wall): [number, number] => (wall === 'right' ? [1 / 1.6, 0.5 / 1.6] : [0.5 / 1.6, 1 / 1.6]);
+// The sun's colour through the openings, and the moon's.
+const SUN = '#ffe0a8';
+const MOON = '#a8c0ff';
+const LANTERN_Z = 16.5; // the wall lantern's flame
 
 // ── the plan ───────────────────────────────────────────────────────────────
 
@@ -123,6 +135,25 @@ function features(L: Layout): Feature[] {
   return out;
 }
 
+// ── what the planner keeps clear ───────────────────────────────────────────
+// The floor where the sun through each window lands (the patch the scene
+// throws, see room.lights), so the room's brightest light is never under a
+// crate: the hard sun on the deck is the room's focal point.
+export function dunesReserve(L: Layout): Array<{ x0: number; y0: number; x1: number; y1: number }> {
+  const out: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
+  for (const f of planFor(L.W, L.D, L.H, L.T).features) {
+    if (f.kind !== 'window') continue;
+    const [su, sv] = throwOf(f.wall);
+    const a0 = f.a - OPEN / 2 + su * SILL;
+    const a1 = f.a + OPEN / 2 + su * WTOP;
+    const n0 = L.T + sv * SILL;
+    const n1 = L.T + sv * WTOP;
+    const r = f.wall === 'right' ? { x0: a0, y0: n0, x1: a1, y1: n1 } : { x0: n0, y0: a0, x1: n1, y1: a1 };
+    out.push({ x0: Math.max(L.T, r.x0), y0: Math.max(L.T, r.y0), x1: Math.min(L.W, r.x1), y1: Math.min(L.D, r.y1) });
+  }
+  return out;
+}
+
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots, but the two by the bar for a drink rather than to warm
 // up, tea for two on the rug by the teapot, and a look out of the windows.
@@ -151,18 +182,35 @@ export const room: RoomArt = {
     const plan = planFor(v.W, v.D, v.H, v.T);
     const k = new Kit(v.pen, v.at, v.s);
     v.pen.save();
-    floor(k, v);
+    floor(k, v, plan);
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
     for (const wall of ['right', 'left'] as const) drift(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, wall);
-    light(v, plan);
+    doorSand(v, plan.L);
+    if (lampsOn(v)) light(v, plan);
     shell(k, v);
     v.pen.restore();
+  },
+  // The light the shell gives (the scene lays it on): the sun through each
+  // window (the open top bright, the louvres below striping it), the moon
+  // at night; the lantern's flame, burning day and night; the cold tubes,
+  // switched off at night.
+  lights(v): RoomLight[] {
+    const out: RoomLight[] = [];
+    for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+      if (f.kind === 'window') {
+        const w = OPEN - 0.6;
+        out.push({ kind: 'window', wall: f.wall, u: f.a, w, z0: LOUVRE, z1: WTOP, color: SUN, strength: 1.4, night: MOON, moon: 1.1 });
+        out.push({ kind: 'window', wall: f.wall, u: f.a, w, z0: SILL, z1: LOUVRE, rails: 4, color: SUN, strength: 0.9, night: MOON, moon: 0.7 });
+      } else if (f.kind === 'lantern') out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 1.35, z: LANTERN_Z, color: '#ffc070', r: 14, strength: 1.0, halo: 3 });
+      else if (f.kind === 'tube') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 0.8, z: TUBE_Z + TUBE_H / 2, color: '#cfeee8', r: 9, strength: 0.6, halo: 1.6 });
+    }
+    return out;
   },
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     v.pen.save();
     for (const f of plan.features) {
-      if (f.kind !== 'window' && f.kind !== 'tube') continue;
+      if (f.kind !== 'window' && (f.kind !== 'tube' || !lampsOn(v))) continue;
       const k = new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s);
       if (f.kind === 'window') gusts(k, v, f);
       else flicker(k, v, f);
@@ -180,7 +228,7 @@ export const FLOOR = '#e6d3ae';
 export const BOARDS = ['#ead8b4', '#e2cda5', '#eedfbf', '#e4d0aa'] as const;
 const BOARD_W = 2.4; // a board's width
 
-function floor(k: Kit, v: RoomView): void {
+function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen, s } = k;
   const { W, D, T } = v;
   if (!k.sees(T, T, -SLAB, W, D, 0, 8)) return;
@@ -237,6 +285,24 @@ function floor(k: Kit, v: RoomView): void {
   k.segs(rows, withAlpha('#8a6a44', 0.4), Math.max(0.7, 0.1 * s));
   k.segs(ends, withAlpha('#8a6a44', 0.45), Math.max(0.7, 0.1 * s));
   if (nails.length) rivets(k, nails, withAlpha('#7a6650', 0.7), 0.09);
+  // The room is in the shade of its walls and its sails, the sun only
+  // where it comes through the windows: a cool lavender cast over the
+  // deck (to about L 170), which keeps the bleached boards' step over a
+  // coat but sets them a clear step under the sun's striped patches and
+  // apart from the warm adobe.
+  pen.save();
+  pen.globalCompositeOperation = 'multiply';
+  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], withAlpha('#cfc6d8', 0.85), 0);
+  pen.restore();
+  // What the islands stand on: the workbench on a deck plate, a kilim
+  // runner before the bar.
+  for (const q of plan.L.slots) {
+    if (!q.island || (q.kind !== 'run' && q.kind !== 'idle')) continue;
+    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
+    if (!qk.sees(-2, -2, 0, q.len + 2, q.dep + 2, 0)) continue;
+    if (q.kind === 'run') deckPlate(qk, -1.2, -1.2, q.len + 1.2, q.dep + 1.4, q.x0 + q.y0);
+    else kilim(qk, -0.6, 4.2, q.len + 0.6, q.dep + 1.4);
+  }
   // Shade: darker toward the walls' feet and the far corner, sunlit middle.
   const corner = k.p(T, T, 0);
   const far = k.p(W, D, 0);
@@ -270,7 +336,7 @@ function drift(k: Kit, v: RoomView, wall: Wall): void {
     toe.push([aa, r, 0]);
   }
   const lit = k.lit(0, 1);
-  k.poly([...crest, ...toe.slice().reverse()], k.lgrad([T, 0, 0], [T, 4, 0], [1, 0, 0], [[0, lit ? '#f4dcae' : '#e8cc98'], [0.55, '#ebcf9c'], [1, withAlpha(FLOOR, 0.9)]]), 0);
+  k.poly([...crest, ...toe.slice().reverse()], k.lgrad([T, 0, 0], [T, 4, 0], [1, 0, 0], [[0, lit ? '#f4dcae' : '#e8cc98'], [0.55, '#ebcf9c'], [1, '#dcb680']]), 0);
   k.line(toe, withAlpha('#b88a54', 0.45), Math.max(0.7, 0.12 * k.s));
   if (k.fine) {
     // wind ripples along the drift
@@ -284,27 +350,153 @@ function drift(k: Kit, v: RoomView, wall: Wall): void {
   }
 }
 
+// What the workbench stands on: a deck plate of riveted scrap, a seam
+// across it, rust in at its corners and edges, an old oil stain (u0..u1,
+// v0..v1 in the island's frame).
+function deckPlate(k: Kit, u0: number, v0: number, u1: number, v1: number, seed: number): void {
+  const q: P3[] = [[u0, v0, 0.02], [u1, v0, 0.02], [u1, v1, 0.02], [u0, v1, 0.02]];
+  k.shadow((u0 + u1) / 2, (v0 + v1) / 2, (u1 - u0) * 0.55, (v1 - v0) * 0.55, 0.12);
+  k.poly(q, '#a8a498', k.thin);
+  const um = u0 + (u1 - u0) * (0.45 + hash(seed, 3) * 0.1);
+  // rust at the corners and in from the edges
+  for (const [cu, cv] of [[u0, v0], [u1, v0], [u1, v1], [u0, v1]] as const) {
+    const du = cu === u0 ? 1 : -1;
+    const dv = cv === v0 ? 1 : -1;
+    const r = 1.1 + hash(seed, cu, cv) * 0.8;
+    k.poly([[cu + du * 0.08, cv + dv * 0.08, 0.03], [cu + du * r, cv + dv * 0.08, 0.03], [cu + du * r * 0.5, cv + dv * r * 0.45, 0.03], [cu + du * 0.08, cv + dv * r, 0.03]], withAlpha(C.rust, 0.4), 0, 0.3);
+  }
+  // an oil stain
+  k.shadow(u0 + (u1 - u0) * 0.7, v0 + (v1 - v0) * 0.7, 1.6, 1.1, 0.16, 0.03);
+  // the seam, its lit lip, and the rivets round both plates
+  k.line([[um, v0, 0.03], [um, v1, 0.03]], withAlpha(INK, 0.6), Math.max(0.7, k.thin * 0.8));
+  k.line([[um + 0.15, v0 + 0.1, 0.03], [um + 0.15, v1 - 0.1, 0.03]], withAlpha('#eef0ea', 0.5), Math.max(0.6, 0.07 * k.s));
+  k.line([[u0 + 0.15, v0 + 0.15, 0.03], [u1 - 0.15, v0 + 0.15, 0.03]], withAlpha('#eef0ea', 0.45), Math.max(0.6, 0.07 * k.s));
+  if (k.s >= 3) {
+    const dots: P3[] = [];
+    for (const [a, b] of [[u0, um], [um, u1]] as const) {
+      const nu = Math.max(2, Math.round((b - a) / 1.6));
+      for (let i = 0; i <= nu; i++) dots.push([a + 0.45 + (i * (b - a - 0.9)) / nu, v0 + 0.45, 0.03], [a + 0.45 + (i * (b - a - 0.9)) / nu, v1 - 0.45, 0.03]);
+      const nv = Math.max(2, Math.round((v1 - v0) / 1.6));
+      for (let i = 1; i < nv; i++) dots.push([a + 0.45, v0 + 0.45 + (i * (v1 - v0 - 0.9)) / nv, 0.03], [b - 0.45, v0 + 0.45 + (i * (v1 - v0 - 0.9)) / nv, 0.03]);
+    }
+    rivets(k, dots, '#6f6b62', 0.11);
+  }
+}
+
+// A kilim runner before the bar (u0..u1, v0..v1 in the island's frame):
+// a cream ground in a rust border, a row of stepped turquoise and rust
+// lozenges down it, a fringe at either end.
+function kilim(k: Kit, u0: number, v0: number, u1: number, v1: number): void {
+  const z = 0.03;
+  const q = (a0: number, b0: number, a1: number, b1: number, h = z): P3[] => [[a0, b0, h], [a1, b0, h], [a1, b1, h], [a0, b1, h]];
+  k.shadow((u0 + u1) / 2, (v0 + v1) / 2, (u1 - u0) * 0.52, (v1 - v0) * 0.6, 0.1);
+  k.poly(q(u0, v0, u1, v1), C.cloth, k.thin);
+  const b = 0.7;
+  k.poly(q(u0 + b, v0 + b, u1 - b, v1 - b, z + 0.01), '#efe0c2', 0);
+  k.pen.beginPath();
+  k.trace(q(u0 + b + 0.3, v0 + b + 0.3, u1 - b - 0.3, v1 - b - 0.3, z + 0.02));
+  k.paint(null, Math.max(0.7, 0.12 * k.s), withAlpha('#6a3a22', 0.7));
+  // the lozenges, stepped, alternately turquoise and rust
+  const vm = (v0 + v1) / 2;
+  const rv = Math.min(1.6, (v1 - v0) / 2 - b - 0.7);
+  const ru = rv * 0.9;
+  const n = Math.max(1, Math.floor((u1 - u0 - 2 * b - 1) / (ru * 2 + 0.6)));
+  const gap = (u1 - u0 - n * ru * 2) / (n + 1);
+  for (let i = 0; i < n; i++) {
+    const cu = u0 + gap * (i + 1) + ru * (2 * i + 1);
+    const c = i % 2 ? C.cloth : C.turquoise;
+    k.poly([[cu - ru, vm, z + 0.02], [cu, vm - rv, z + 0.02], [cu + ru, vm, z + 0.02], [cu, vm + rv, z + 0.02]], c, 0);
+    k.poly([[cu - ru * 0.45, vm, z + 0.03], [cu, vm - rv * 0.45, z + 0.03], [cu + ru * 0.45, vm, z + 0.03], [cu, vm + rv * 0.45, z + 0.03]], i % 2 ? '#efe0c2' : '#6a3a22', 0);
+  }
+  // the fringe at the ends
+  if (k.s >= 3) {
+    const fr: Array<[P3, P3]> = [];
+    for (let w = v0 + 0.3; w < v1 - 0.2; w += 0.45) fr.push([[u0, w, z], [u0 - 0.5, w, z]], [[u1, w, z], [u1 + 0.5, w, z]]);
+    k.segs(fr, '#e8d6b2', Math.max(0.6, 0.09 * k.s), 'round');
+  }
+}
+
+// Sand blown in at the door: a lobed fan spilling from under the
+// threshold into the room, its lit crest and its ripples, and a trail of
+// footprints through it toward the bar.
+function doorSand(v: RoomView, L: Layout): void {
+  const q = L.slots.find((p) => p.kind === 'entrance');
+  if (!q) return;
+  const k = new Kit(v.pen, frame(v.at, q.wall, q.x0, q.y0), v.s);
+  const cu = 6.5; // the doorway's middle (stations.ts DOOR)
+  const cv = 1.0;
+  if (!k.sees(cu - 7, 0, 0, cu + 7, 9, 0.5)) return;
+  const ph = hash(q.x0, q.y0, 7) * 6.3;
+  const lobe = (th: number) => 1 + 0.13 * Math.sin(th * 3 + ph) + 0.07 * Math.sin(th * 7 + ph * 2);
+  const fan = (ru: number, rv: number, z: number): P3[] => {
+    const out: P3[] = [];
+    for (let i = 0; i <= 24; i++) {
+      const th = (i / 24) * Math.PI;
+      const r = lobe(th);
+      out.push([cu + Math.cos(th) * ru * r, cv + Math.sin(th) * rv * r, z]);
+    }
+    return out;
+  };
+  const outer = fan(5.2, 6.4, 0.02);
+  k.poly(outer, withAlpha('#e3c48e', 0.92), 0);
+  k.line(outer, withAlpha('#b88a54', 0.4), Math.max(0.7, 0.1 * k.s));
+  k.poly(fan(3.2, 3.9, 0.04), withAlpha('#f3dcae', 0.85), 0);
+  if (k.s >= 3) {
+    // ripples across it, curving round the doorway
+    const rip: Array<[P3, P3]> = [];
+    for (const f of [0.55, 0.78]) {
+      for (let i = 2; i < 22; i += 3) {
+        const a = (i / 24) * Math.PI;
+        const b = ((i + 1.6) / 24) * Math.PI;
+        rip.push([[cu + Math.cos(a) * 5.2 * f * lobe(a), cv + Math.sin(a) * 6.4 * f * lobe(a), 0.05], [cu + Math.cos(b) * 5.2 * f * lobe(b), cv + Math.sin(b) * 6.4 * f * lobe(b), 0.05]]);
+      }
+    }
+    k.segs(rip, withAlpha('#c99a62', 0.45), Math.max(0.6, 0.08 * k.s), 'round');
+  }
+  // footprints, from the doorway toward the bar (or out into the room)
+  const bar = L.slots.find((p) => p.kind === 'idle');
+  const [sx, sy] = [q.wall === 'right' ? q.x0 + cu : q.x0 + 2.5, q.wall === 'right' ? q.y0 + 2.5 : q.y0 + cu];
+  let [dx, dy] = bar ? [bar.x0 + (bar.wall === 'right' ? bar.len : bar.dep) / 2 - sx, bar.y0 + (bar.wall === 'right' ? bar.dep : bar.len) / 2 - sy] : q.wall === 'right' ? [0, 1] : [1, 0];
+  const l = Math.hypot(dx, dy) || 1;
+  [dx, dy] = [dx / l, dy / l];
+  const wk = new Kit(v.pen, v.at, v.s);
+  const pen = v.pen;
+  pen.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const side = i % 2 ? 1 : -1;
+    const x = sx + dx * (0.9 + i * 0.85) - dy * side * 0.32;
+    const y = sy + dy * (0.9 + i * 0.85) + dx * side * 0.32;
+    const pts: P3[] = [];
+    for (let j = 0; j < 10; j++) {
+      const t = (j / 10) * Math.PI * 2;
+      pts.push([x + dx * Math.cos(t) * 0.32 - dy * Math.sin(t) * 0.17, y + dy * Math.cos(t) * 0.32 + dx * Math.sin(t) * 0.17, 0.06]);
+    }
+    wk.trace(pts);
+  }
+  pen.fillStyle = withAlpha('#b8905a', 0.45);
+  pen.fill();
+}
+
 // ── light ──────────────────────────────────────────────────────────────────
 
-// Hard white daylight through the windows: a shaft from each down to the
-// floor, striped where it came through the louvres, solid through the open
-// shutters; the tube lamps' cold pools under them, the lantern's warm one.
+// Hard white daylight through the windows, by day: a shaft in the air from
+// each down to the floor, where the scene lays its patch of sun (see
+// room.lights; the lamps' and the lantern's light is the scene's too).
 function light(v: RoomView, plan: Plan): void {
   for (const f of plan.features) {
-    if (f.kind !== 'window' && f.kind !== 'lantern' && f.kind !== 'tube') continue;
+    if (f.kind !== 'window') continue;
     const k = new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s);
     const end = f.wall === 'right' ? v.W : v.D;
-    if (!k.sees(f.a - 9, 0, 0, f.a + 14, 14, WTOP)) continue;
-    if (f.kind === 'window') shaft(k, f, end);
-    else if (f.kind === 'tube') k.pool(f.a, 3.2, 4.5, 3.2, C.tubeGlow, 0.16);
-    else k.pool(f.a, 2.5, 5, 3.5, C.lamp, 0.18);
+    if (!k.sees(f.a - 9, 0, 0, f.a + 16, 16, WTOP)) continue;
+    shaft(k, f, end);
   }
 }
 
 function shaft(k: Kit, f: Feature, end: number): void {
   const u0 = f.a - OPEN / 2 + 0.3;
   const u1 = f.a + OPEN / 2 - 0.3;
-  const fl = (u: number, z: number): P3 => [Math.min(end - 0.5, u + SUN_U * z), SUN_V * z, 0];
+  const [su, sv] = throwOf(f.wall);
+  const fl = (u: number, z: number): P3 => [Math.min(end - 0.5, u + su * z), sv * z, 0];
   const pen = k.pen;
   pen.save();
   pen.globalCompositeOperation = 'screen';
@@ -322,20 +514,16 @@ function shaft(k: Kit, f: Feature, end: number): void {
   pen.closePath();
   pen.fillStyle = g;
   pen.fill();
-  // on the floor: solid from the open shutters, slats from the louvres
-  pen.beginPath();
-  k.trace([fl(u0, LOUVRE + 0.3), fl(u1, LOUVRE + 0.3), fl(u1, WTOP), fl(u0, WTOP)], 0.4);
-  for (let z = SILL + 0.5; z < LOUVRE - 0.3; z += 0.85) k.trace([fl(u0, z), fl(u1, z), fl(u1, z + 0.45), fl(u0, z + 0.45)]);
-  pen.fillStyle = withAlpha('#fff3d8', 0.55);
-  pen.fill();
   pen.restore();
 }
 
 // ── walls ──────────────────────────────────────────────────────────────────
 
-// The adobe's pours, a batch a course, a step darker than a drifter's
-// coat (the test checks the step); the plates patched onto it.
-export const ADOBE: readonly Color[] = ['#b29270', '#a98a66', '#b59874', '#a2825e'];
+// The adobe's pours, a batch a course: warm terracotta earth, a clear
+// step lighter than a drifter's coat (the test checks the step) and
+// warmer than the bleached deck, so wall and floor part by hue as well as
+// value; the plates patched onto it.
+export const ADOBE: readonly Color[] = ['#c4946a', '#b8895f', '#c99d72', '#b08259'];
 export const PLATES: readonly Color[] = [C.plate, '#8a857a', '#5f9a92', '#93664a'];
 const DOME: readonly Color[] = ['#7d7972', '#76726b'];
 const RIBC = '#8a6446';
@@ -363,6 +551,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const end = wall === 'right' ? v.W : v.D;
   if (!k.sees(T, 0, -0.5, end, 4.5, H + 1, 8)) return;
   const lit = k.lit(0, 1);
+  const day = lampsOn(v);
   const tone: Tone = (c, d = 0.15) => (lit ? c : shade(c, -d));
   const mine = plan.features.filter((f) => f.wall === wall);
   // the stretches the stations stand in front of
@@ -377,19 +566,27 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   if (k.sees(T, 0, 0, end, 1, zb, 8)) {
     adobe(k, T, end, zb, ax0, ax1, salt, tone, mine);
     plates(k, T, end, zb, ax0, ax1, salt, tone, mine, busy);
-    if (zb - 7.5 >= 25) vents(k, T, end, zb, ax0, ax1, salt, tone, mine);
+    if (zb - 7.5 >= 25) vents(k, T, end, zb, ax0, ax1, salt, tone, mine, day);
     pipeRun(k, T, end, ax0, ax1, salt, tone, mine, busy);
+    // by day the sun through the sails glows warm down the top of the adobe
+    if (day) {
+      const pen = k.pen;
+      pen.save();
+      pen.globalCompositeOperation = 'screen';
+      k.rect(T, zb - 9, end, zb, 0, k.vgrad(T, 0, zb - 9, zb, [[0, '#ffd09000'], [0.6, '#ffd0901a'], [1, '#ffd09040']]));
+      pen.restore();
+    }
   }
-  dome(k, T, end, zb, H, ax0, ax1, salt, tone);
+  dome(k, T, end, zb, H, ax0, ax1, salt, tone, day);
   // What hangs on the wall.
   for (const f of mine) {
     if (!k.sees(f.a - f.w / 2, 0, 11, f.a + f.w / 2, 4, zb)) continue;
-    if (f.kind === 'window') windowArt(k, f, lit);
+    if (f.kind === 'window') windowArt(k, f, lit, day);
     else if (f.kind === 'skull') skull(k, f);
     else if (f.kind === 'shelf') shelf(k, f);
     else if (f.kind === 'board') board(k, f);
     else if (f.kind === 'rack') rack(k, f);
-    else if (f.kind === 'tube') tubeArt(k, f, zb);
+    else if (f.kind === 'tube') tubeArt(k, f, zb, day);
     else lanternArt(k, f);
   }
 }
@@ -399,15 +596,17 @@ const under = (mine: Feature[], a0: number, a1: number, z0: number, z1: number) 
 const behind = (busy: Span[], a0: number, a1: number) => busy.some(([b0, b1]) => a1 > b0 - 0.5 && a0 < b1 + 0.5);
 
 // Poured adobe: courses POUR deep, each of its own batch (a tone), the
-// seams between them a little wavy where the pour slumped, a lit lip over
-// each; a few hairline cracks; darker at the foot and up under the dome.
+// seams between them wavy where the pour slumped (soft, so they read as
+// earth and not as boards), a faint lit lip over each; patches where it
+// was plastered over again, a few hairline cracks; darker at the foot and
+// up under the dome.
 function adobe(k: Kit, a0: number, a1: number, z1: number, ax0: number, ax1: number, salt: number, tone: Tone, mine: Feature[]): void {
   const lo = Math.max(a0, ax0 - 4);
   const hi = Math.min(a1, ax1 + 4);
   if (hi <= lo) return;
   k.rect(a0, 0, a1, z1, 0, tone(ADOBE[0]));
   const n = Math.ceil(z1 / POUR);
-  const seam = (i: number, a: number) => (i <= 0 ? 0 : i >= n ? z1 : Math.min(z1, i * POUR + 0.22 * Math.sin(a * 0.11 + i * 1.7 + salt) + 0.12 * Math.sin(a * 0.37 + i * 2.9)));
+  const seam = (i: number, a: number) => (i <= 0 ? 0 : i >= n ? z1 : Math.min(z1, i * POUR + 0.55 * Math.sin(a * 0.11 + i * 1.7 + salt) + 0.3 * Math.sin(a * 0.37 + i * 2.9)));
   const xs: number[] = [];
   for (let a = lo; a < hi; a += 2) xs.push(a);
   xs.push(hi);
@@ -444,8 +643,35 @@ function adobe(k: Kit, a0: number, a1: number, z1: number, ax0: number, ax1: num
     pen.lineJoin = 'round';
     pen.stroke();
   };
-  lines(dark, withAlpha('#4a2e18', 0.42), Math.max(0.7, 0.14 * k.s));
-  lines(lip, withAlpha('#f6dfbc', 0.32), Math.max(0.6, 0.1 * k.s));
+  lines(dark, withAlpha('#4a2e18', 0.2), Math.max(0.6, 0.1 * k.s));
+  lines(lip, withAlpha('#f6dfbc', 0.12), Math.max(0.6, 0.1 * k.s));
+  // patches plastered over again: soft rounded blots a shade lighter or
+  // darker than the wall, here and there (whole units, so a tile finds
+  // the same ones)
+  const blots: P3[][][] = [[], []];
+  for (let a = Math.floor(lo / 3) * 3; a < hi; a += 3) {
+    const h = hash(a, salt, 16);
+    if (h > 0.42) continue;
+    const cu = a + hash(a, salt, 17) * 3;
+    const cz = 1.5 + hash(a, salt, 18) * (z1 - 3);
+    const ru = 1.0 + hash(a, salt, 19) * 1.2;
+    const rz = ru * (0.45 + hash(a, salt, 20) * 0.25);
+    if (under(mine, cu - ru, cu + ru, cz - rz, cz + rz)) continue;
+    const pts: P3[] = [];
+    for (let j = 0; j < 14; j++) {
+      const th = (j / 14) * Math.PI * 2;
+      const r = 1 + 0.18 * Math.sin(th * 3 + a);
+      pts.push([cu + Math.cos(th) * ru * r, 0.01, cz + Math.sin(th) * rz * r]);
+    }
+    blots[h < 0.24 ? 0 : 1].push(pts);
+  }
+  blots.forEach((list, i) => {
+    if (!list.length) return;
+    pen.beginPath();
+    for (const q of list) k.trace(q);
+    pen.fillStyle = withAlpha(tone(i ? '#9e7650' : '#e0b88e'), i ? 0.12 : 0.16);
+    pen.fill();
+  });
   // hairline cracks down from a seam here and there
   const cracks: P3[][] = [];
   for (let a = a0 + 7 + hash(salt, 11) * 6; a < a1 - 3; a += 9 + hash(Math.floor(a), salt, 12) * 10) {
@@ -511,7 +737,7 @@ function plate(k: Kit, a: number, z: number, w: number, h: number, tone: Tone, p
 
 // Little square vents up high, as on a drum tower, the haze bright in
 // them, a lintel over each.
-function vents(k: Kit, a0: number, a1: number, zb: number, ax0: number, ax1: number, salt: number, tone: Tone, mine: Feature[]): void {
+function vents(k: Kit, a0: number, a1: number, zb: number, ax0: number, ax1: number, salt: number, tone: Tone, mine: Feature[], day: boolean): void {
   const z0 = zb - 7.5;
   const z1 = z0 + 3;
   for (let a = a0 + 9 + hash(salt, 41) * 5, i = 0; a < a1 - 5; a += 15 + hash(i, salt, 42) * 4, i++) {
@@ -520,7 +746,7 @@ function vents(k: Kit, a0: number, a1: number, zb: number, ax0: number, ax1: num
     const u0 = a;
     const u1 = a + 3;
     k.poly([[u0, 0, z0], [u1, 0, z0], [u1, 0, z1], [u0, 0, z1]], tone('#4a3424'), 0);
-    k.poly([[u0 + 0.7, 0, z0 + 0.25], [u1 - 0.1, 0, z0 + 0.25], [u1 - 0.1, 0, z1 - 0.75], [u0 + 0.7, 0, z1 - 0.75]], k.vgrad(u0, 0, z0, z1, [[0, '#f6e6c4'], [1, C.sky]]), 0);
+    k.poly([[u0 + 0.7, 0, z0 + 0.25], [u1 - 0.1, 0, z0 + 0.25], [u1 - 0.1, 0, z1 - 0.75], [u0 + 0.7, 0, z1 - 0.75]], k.vgrad(u0, 0, z0, z1, day ? [[0, '#f6e6c4'], [1, C.sky]] : [[0, '#3a3c7a'], [1, '#1c2456']]), 0);
     k.segs([[[u0 + 1.4, 0.02, z0], [u0 + 1.4, 0.02, z1]], [[u0 + 2.2, 0.02, z0], [u0 + 2.2, 0.02, z1]]], tone(C.steelDark), Math.max(0.8, 0.18 * k.s));
     k.poly([[u0, 0, z0], [u1, 0, z0], [u1, 0.5, z0 - 0.1], [u0, 0.5, z0 - 0.1]], tone(C.adobeLight), 0);
     k.pen.beginPath();
@@ -576,10 +802,13 @@ function pipeRun(k: Kit, a0: number, a1: number, ax0: number, ax1: number, salt:
   k.face(drop, n + 0.02, vz, 0.22, C.steelDark, k.thin, 10);
 }
 
-// The steel ring beam on the adobe, then the dome: plates between rusty
-// ribs, lattice braces across each bay, darker toward the top; a cable
-// swagged along under the beam; the rim at the top.
-function dome(k: Kit, a0: number, a1: number, zb: number, H: number, ax0: number, ax1: number, salt: number, tone: Tone): void {
+// The steel ring beam on the adobe, then the dome: rusty ribs with the
+// sky between them, and across each bay a sail lashed against the sun,
+// hide or striped canvas by turns, glowing where the sun comes through
+// it, its lattice brace only a shadow behind; each sags at its foot, so a
+// scallop of sky shows under it. A cable swagged along under the beam;
+// the rim at the top.
+function dome(k: Kit, a0: number, a1: number, zb: number, H: number, ax0: number, ax1: number, salt: number, tone: Tone, day: boolean): void {
   const z0 = zb + BAND;
   const z1 = H - RIM;
   const lo = Math.max(a0, ax0 - RIB);
@@ -588,28 +817,14 @@ function dome(k: Kit, a0: number, a1: number, zb: number, H: number, ax0: number
   for (let a = a0 + 7 + hash(salt, 61) * 4; a < a1 - 4; a += RIB) ribs.push(a);
   ribs.push(a1);
   if (z1 > z0 + 0.5 && k.sees(a0, 0, z0, a1, 1, z1, 8)) {
-    const bays: Array<[number, number]> = [];
-    for (let i = 0; i + 1 < ribs.length; i++) if (ribs[i + 1] > lo && ribs[i] < hi) bays.push([ribs[i], ribs[i + 1]]);
-    bays.forEach(([b0, b1], i) => k.rect(b0, z0, b1, z1, 0, tone(DOME[(i + Math.round(b0)) % 2]), 0));
-    // the plates' seams across
-    const seams: Array<[P3, P3]> = [];
-    const lits: Array<[P3, P3]> = [];
-    for (let z = z0 + 4.5; z < z1 - 1; z += 4.5) {
-      seams.push([[lo, 0.01, z], [hi, 0.01, z]]);
-      lits.push([[lo, 0.01, z - 0.15], [hi, 0.01, z - 0.15]]);
-    }
-    k.segs(lits, withAlpha('#eef2f4', 0.25), Math.max(0.6, 0.08 * k.s));
-    k.segs(seams, withAlpha(INK, 0.4), Math.max(0.6, 0.1 * k.s));
-    // lattice braces across each bay
-    const braces: Array<[P3, P3]> = [];
-    for (const [b0, b1] of bays) {
-      if (b1 - b0 < 5 || z1 - z0 < 4) continue;
-      braces.push([[b0 + 0.8, 0.25, z0 + 0.5], [b1 - 0.8, 0.25, z1 - 0.5]], [[b1 - 0.8, 0.25, z0 + 0.5], [b0 + 0.8, 0.25, z1 - 0.5]]);
-    }
-    k.segs(braces, withAlpha(INK, 0.55), Math.max(1.2, 0.2 * k.s + k.lw), 'round');
-    k.segs(braces, tone('#66625c'), Math.max(0.8, 0.2 * k.s), 'round');
-    // up under the roof it is dim
-    k.rect(lo, z0, hi, z1, 0, k.vgrad(lo, 0, z0, z1, [[0, '#14100c10'], [0.5, '#14100c30'], [1, '#14100c70']]));
+    // the sky behind, deepening up the dome
+    k.rect(lo, z0, hi, z1, 0, k.vgrad(lo, 0, z0, z1, day ? [[0, mix(C.sky, '#ffe9bf', 0.35)], [0.5, C.sky], [1, C.skyHigh]] : [[0, '#323a7a'], [1, '#141c48']]), 0);
+    if (!day) stars(k, lo, hi, z0 + 0.3, z1 - 0.3, -0.01, salt);
+    // the sails, each bay by its number along the whole wall (so every
+    // tile of the shell finds the same one)
+    for (let i = 0; i + 1 < ribs.length; i++) if (ribs[i + 1] > lo && ribs[i] < hi) sail(k, ribs[i], ribs[i + 1], z0, z1, i + salt * 5, tone, day);
+    // under the rim it is dimmer
+    k.rect(lo, z0, hi, z1, 0, k.vgrad(lo, 0, z0, z1, [[0, '#2a140a00'], [0.6, '#2a140a0c'], [1, '#2a140a38']]));
     // the ribs, riveted
     const dots: P3[] = [];
     for (const a of ribs) {
@@ -651,6 +866,104 @@ function dome(k: Kit, a0: number, a1: number, zb: number, H: number, ax0: number
   k.box(a0, 0, H - RIM, a1 - a0, 0.9, RIM, tone(C.steelDark), { line: k.lw, stripe: false });
 }
 
+// The sails' cloths: tanned hide, and pale canvas striped in rust (now
+// and then turquoise), each backlit, brighter up where the sun is.
+const HIDE: readonly [Color, Color] = ['#c08e55', '#efc892'];
+const CANVAS: readonly [Color, Color] = ['#e2cfa8', '#f8ecd2'];
+
+// One sail across the bay b0..b1 of the dome (z0..z1), number j: lashed
+// at its four corners to the ribs, its top a little slack, its foot
+// sagging to a scallop over the ring beam; folds running from the corners
+// down into the sag, the lattice brace behind it a soft shadow through
+// it, and the lashings. One bay in five has its sail rolled up and tied
+// under the rim, the sky open behind the brace.
+function sail(k: Kit, b0: number, b1: number, z0: number, z1: number, j: number, tone: Tone, day: boolean): void {
+  const u0 = b0 + 0.75;
+  const u1 = b1 - 0.75;
+  const w = u1 - u0;
+  const h = z1 - z0;
+  if (w < 2 || h < 1.5) return;
+  const n = 0.3;
+  if (j % 5 === 3) {
+    if (h >= 3 && w >= 4) {
+      const br: Array<[P3, P3]> = [[[b0 + 0.8, 0.25, z0 + 0.5], [b1 - 0.8, 0.25, z1 - 0.5]], [[b1 - 0.8, 0.25, z0 + 0.5], [b0 + 0.8, 0.25, z1 - 0.5]]];
+      k.segs(br, INK, Math.max(1.2, 0.2 * k.s + k.lw), 'round');
+      k.segs(br, tone('#6e5a48'), Math.max(0.8, 0.2 * k.s), 'round');
+    }
+    const r = Math.min(0.55, h * 0.13);
+    const zr = z1 - r - 0.15;
+    tube(k, [u0, n + 0.2, zr], [u1, n + 0.2, zr], r, r, tone(j % 2 ? CANVAS[0] : HIDE[1]), tone(j % 2 ? CANVAS[1] : HIDE[0]), k.thin);
+    const rope = tone('#8a6a44');
+    for (const f of [0.22, 0.78]) {
+      const u = u0 + w * f;
+      k.rod([[u, n + 0.2 + r + 0.05, zr - r * 0.2], [u, n + 0.2 + r * 0.6, zr - r * 0.95], [u + 0.1, n + 0.2, zr - r - 0.05]], rope, 0.1);
+    }
+    return;
+  }
+  // its corners: the foot lashed well up the ribs, sagging to near the
+  // beam in the middle; every other one set lower than the rim, so the
+  // sky shows over it too
+  const lift = Math.max(1.8, Math.min(4.5, h * 0.3));
+  const top = z1 - (j % 2 ? Math.min(0.6, h * 0.12) : 0.12);
+  const foot = (f: number) => z0 + lift - (lift - 0.4) * 4 * f * (1 - f);
+  const head = (f: number) => top - Math.min(0.35, h * 0.05) * 4 * f * (1 - f);
+  const m = 12;
+  const edge = (zf: (f: number) => number, f0 = 0, f1 = 1): P3[] => {
+    const out: P3[] = [];
+    for (let i = 0; i <= m; i++) {
+      const f = f0 + ((f1 - f0) * i) / m;
+      out.push([u0 + w * f, n, zf(f)]);
+    }
+    return out;
+  };
+  const shape = [...edge(foot), ...edge(head).reverse()];
+  const hide = j % 2 === 0;
+  // by day backlit, brighter up where the sun is; at night the cloth in
+  // shadow, only the lamps below on it
+  const [dim, bright] = hide ? HIDE : CANVAS;
+  k.poly(shape, k.vgrad(u0, n, z0, z1, day ? [[0, tone(dim)], [1, tone(bright)]] : [[0, tone(mix(dim, bright, 0.3))], [1, tone(shade(dim, -0.12))]]), 0);
+  // the strips of a canvas sail: rust, a turquoise one every third
+  if (!hide) {
+    const stripe = j % 3 === 1 ? C.turquoise : C.cloth;
+    const sw = Math.min(0.7, w * 0.08);
+    const pen = k.pen;
+    pen.beginPath();
+    for (const fc of [0.3, 0.7]) {
+      const f0 = fc - sw / w / 2;
+      const f1 = fc + sw / w / 2;
+      k.trace([...edge(foot, f0, f1), ...edge(head, f0, f1).reverse()]);
+    }
+    pen.fillStyle = withAlpha(tone(stripe), 0.85);
+    pen.fill();
+  } else if (k.s >= 3) {
+    // a hide is pieced: a stitched seam across it
+    const zs = z0 + lift + (top - z0 - lift) * 0.45;
+    if (zs < head(0.5) - 0.6) k.line([[u0 + 0.2, n, zs + 0.15], [u0 + w * 0.5, n, zs - 0.2], [u1 - 0.2, n, zs + 0.1]], withAlpha('#7a5430', 0.55), Math.max(0.6, 0.07 * k.s));
+  }
+  // backlit: the sun brightest across the middle, the cloth dimmer toward
+  // the ribs it is lashed to
+  k.poly(shape, k.hgrad([u0, n, z0], [u1, n, z0], [[0, '#4a2a1030'], [0.22, '#4a2a1000'], [0.78, '#4a2a1000'], [1, '#4a2a1030']]), 0);
+  // the brace behind, seen through it as a shadow
+  if (h >= 4 && w >= 4) {
+    k.segs([[[u0 + 0.1, n - 0.1, z0 + 0.5], [u1 - 0.1, n - 0.1, z1 - 0.5]], [[u1 - 0.1, n - 0.1, z0 + 0.5], [u0 + 0.1, n - 0.1, z1 - 0.5]]], withAlpha('#4a2a10', 0.16), Math.max(1, 0.24 * k.s));
+  }
+  // folds from the foot's corners down into the sag
+  if (h >= 3 && k.s >= 3) {
+    const folds: Array<[P3, P3]> = [];
+    const zl = foot(0);
+    folds.push([[u0 + 0.3, n, zl + 0.2], [u0 + w * 0.32, n, foot(0.32) + Math.min(1.2, h * 0.12)]], [[u1 - 0.3, n, zl + 0.2], [u0 + w * 0.68, n, foot(0.68) + Math.min(1.2, h * 0.12)]]);
+    k.segs(folds, withAlpha(INK, 0.22), Math.max(0.6, 0.07 * k.s), 'round');
+  }
+  // its edge, and the lashings to the ribs at its corners
+  k.pen.beginPath();
+  k.trace(shape);
+  k.paint(null, k.thin);
+  const rope = tone('#8a6a44');
+  for (const [u, du] of [[u0, -1], [u1, 1]] as const) {
+    for (const z of [foot(0), head(0)]) k.rod([[u, n, z], [u + du * 0.75, n - 0.1, z + 0.15]], rope, 0.12);
+  }
+}
+
 // ── wall pieces ──────────────────────────────────────────────────────────────
 
 // Some windows have a wind turbine far off over the dunes; its blades turn
@@ -662,13 +975,13 @@ const hub = (f: Feature): P3 => [f.a - 1.2, BACK + 0.02, 20.1];
 // dunes set back in the wall's thickness, a plank frame and sill, fixed
 // louvres across its lower half, and two louvred shutters swung open into
 // the room from its upper half.
-function windowArt(k: Kit, f: Feature, lit: boolean): void {
+function windowArt(k: Kit, f: Feature, lit: boolean, day: boolean): void {
   const a = f.a;
   const u0 = a - OPEN / 2;
   const u1 = a + OPEN / 2;
   const z0 = SILL;
   const z1 = WTOP;
-  dunesView(k, u0, u1, z0, z1, BACK, HZ, f.k);
+  dunesView(k, u0, u1, z0, z1, BACK, HZ, f.k, true, !day);
   if (turbine(f)) {
     const [u, n, z] = hub(f);
     const far = withAlpha('#7a6a5c', 0.8);
@@ -972,24 +1285,23 @@ function rack(k: Kit, f: Feature): void {
   rivets(k, [[a - 3.2, n + 0.3, 21.0], [a + 2.2, n + 0.3, 20.75], [hu, n + 0.3, 20.75]], C.woodDark, 0.12);
 }
 
-// The one warm light: a tin lantern on a hook; its glow on the wall.
+// The one warm light: a tin lantern on a hook, burning day and night (its
+// light on the wall and the floor is the scene's: see room.lights).
 function lanternArt(k: Kit, f: Feature): void {
   const z = 18;
-  k.wash(f.a, 0.05, z - 2, 6, 7, C.lamp, 0.26);
   k.poly([[f.a - 0.35, 0.02, z + 0.4], [f.a + 0.35, 0.02, z + 0.4], [f.a + 0.35, 0.02, z + 1.9], [f.a - 0.35, 0.02, z + 1.9]], C.scrapDark, k.thin);
   k.rod([[f.a, 0.05, z + 1.4], [f.a, 1.2, z + 1.4], [f.a, 1.35, z + 0.9]], C.scrapDark, 0.14);
-  lantern(k, f.a, 1.35, z + 0.9, true, 0.45, 1.45);
+  lantern(k, f.a, 1.35, z + 0.9, true, 0.25, 1.45);
 }
 
 // A cold tube lamp on two arms, its cable run up to the ring beam.
-function tubeArt(k: Kit, f: Feature, zb: number): void {
+function tubeArt(k: Kit, f: Feature, zb: number, on: boolean): void {
   const a = f.a;
   const top = TUBE_Z + TUBE_H;
-  k.wash(a, 0.05, TUBE_Z + TUBE_H / 2, 3, 4.5, C.tubeGlow, 0.32);
   k.line([[a + 0.25, 0.25, top + 0.3], [a + 0.25, 0.25, zb - 0.2]], '#2e2620', Math.max(0.8, 0.1 * k.s));
   k.box(a - 0.35, 0, TUBE_Z - 0.4, 0.7, 0.2, TUBE_H + 0.8, C.steelDark, { line: k.thin, stripe: false });
   for (const z of [TUBE_Z - 0.15, top + 0.15]) k.rod([[a, 0.15, z], [a, 0.8, z]], C.steelDark, 0.14);
-  tubeLamp(k, a, 0.8, TUBE_Z, TUBE_H, 0.25);
+  tubeLamp(k, a, 0.8, TUBE_Z, TUBE_H, 0.25, on);
 }
 
 // ── the shell's edges: wall tops, cut ends, the floor slab ───────────────────
@@ -1018,8 +1330,8 @@ function shell(k: Kit, v: RoomView): void {
     k.poly([at(0.82, zb), at(1, zb), at(1, zb + BAND), at(0.82, zb + BAND)], k.side(C.steel, nu, nv), 0);
     const lines: Array<[P3, P3]> = [];
     for (let z = POUR; z < zb - 0.5; z += POUR) lines.push([at(0, z), at(1, z)]);
-    lines.push([at(0.82, zb), at(1, zb)], [at(0.82, zb + BAND), at(1, zb + BAND)], [at(0.82, zb), at(0.82, H)]);
-    k.segs(lines, withAlpha('#4a2e18', 0.5), Math.max(0.6, 0.1 * k.s));
+    k.segs(lines, withAlpha('#4a2e18', 0.25), Math.max(0.6, 0.1 * k.s));
+    k.segs([[at(0.82, zb), at(1, zb)], [at(0.82, zb + BAND), at(1, zb + BAND)], [at(0.82, zb), at(0.82, H)]], withAlpha('#4a2e18', 0.5), Math.max(0.6, 0.1 * k.s));
   }
   const capC = mix(C.adobeDark, C.adobe, 0.3);
   k.poly([[0, 0, H], [W, 0, H], [W, T, H], [T, T, H], [T, D, H], [0, D, H]], capC, k.lw);
@@ -1075,7 +1387,8 @@ function gusts(k: Kit, v: RoomView, f: Feature): void {
     }
     k.segs(blades, withAlpha('#6e6052', 0.85), Math.max(0.8, 0.13 * k.s), 'round');
   }
-  // motes in the beam, drifting and glinting
+  // motes in the beam, drifting and glinting (by day)
+  if (!lampsOn(v)) return;
   const pen = k.pen;
   pen.beginPath();
   for (let i = 0; i < 6; i++) {

@@ -6,7 +6,7 @@ import type { RGB } from '../../term/color.ts';
 import { opacity } from '../../world/particles.ts';
 import type { Particle } from '../../world/types.ts';
 import { Canvas } from '../canvas.ts';
-import { hexOf, rgbOf } from '../iso.ts';
+import { INK, hexOf, inkWidth, rgbOf } from '../iso.ts';
 import type { Pen } from '../types.ts';
 
 export type Project = (x: number, y: number, z: number) => [number, number];
@@ -83,6 +83,43 @@ export function ambientBit(p: Particle): boolean {
 // A spin that tells one bit from another (they carry no id).
 const spinOf = (p: Particle) => (p.color[0] * 7 + p.color[1] * 3 + p.vx * 5 + p.vy * 11) % (Math.PI * 2);
 
+// A puff's three rounds: (dx, dy) from its middle and radius, all in
+// units of its size; and the arcs of their rims that are its outline (the
+// parts outside the other rounds), as [round, from, to] angles, as drawn
+// and mirrored.
+const PUFF: ReadonlyArray<readonly [number, number, number]> = [[0, 0, 1], [-0.8, 0.3, 0.7], [0.75, 0.36, 0.62]];
+const PUFF_EDGE = [PUFF, PUFF.map(([dx, dy, r]) => [-dx, dy, r] as const)].map((rs) => {
+  const out: Array<[number, number, number]> = [];
+  rs.forEach(([x, y, r], i) => {
+    const cuts: Array<[number, number]> = [];
+    rs.forEach(([x2, y2, r2], j) => {
+      const d = Math.hypot(x2 - x, y2 - y);
+      if (i === j || d >= r + r2 || d + r2 <= r) return;
+      const phi = Math.atan2(y2 - y, x2 - x);
+      const th = Math.acos(Math.max(-1, Math.min(1, (d * d + r * r - r2 * r2) / (2 * d * r))));
+      cuts.push([phi - th, phi + th]);
+    });
+    // Walk round the rim, keeping what no other round covers.
+    const n = 360;
+    let run: number | null = null;
+    const inside = (t: number) => cuts.some(([a0, a1]) => {
+      const k = (((t - a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      return k < a1 - a0;
+    });
+    const start = cuts.length ? cuts[0][1] : 0;
+    for (let k = 0; k <= n; k++) {
+      const t = start + (k / n) * 2 * Math.PI;
+      const out0 = !inside(t) && k < n;
+      if (out0 && run === null) run = t;
+      if (!out0 && run !== null) {
+        out.push([i, run, t]);
+        run = null;
+      }
+    }
+  });
+  return out;
+});
+
 // One particle drawn at its place, faded by its life.
 export function drawParticle(pen: Pen, at: Project, p: Particle, s: number, t: number): void {
   const a = opacity(p);
@@ -128,18 +165,44 @@ export function drawParticle(pen: Pen, at: Project, p: Particle, s: number, t: n
     }
     case 'smoke':
     case 'steam': {
-      // A soft round puff that swells as it rises.
+      // A cartoon puff: three rounds as one shape, swelling as it rises
+      // and shrinking as it fades, a lighter crescent along its top. Smoke
+      // has a soft ink edge; steam none, and is fainter.
+      const smoke = p.kind === 'smoke';
       const age = Math.max(0, 2.2 - p.life);
-      const r = (p.kind === 'smoke' ? 1.1 + age * 0.9 : 0.6 + age * 0.6) * u;
-      const k = p.kind === 'smoke' ? 0.42 : 0.3;
-      const g = pen.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, hexOf(p.color, k));
-      g.addColorStop(0.55, hexOf(p.color, k * 0.6));
-      g.addColorStop(1, hexOf(p.color, 0));
-      pen.fillStyle = g;
+      const r = (smoke ? 0.55 + age * 0.4 : 0.36 + age * 0.3) * u * (0.5 + 0.5 * a);
+      const flip = spinOf(p) > Math.PI ? 1 : 0;
+      const rounds = PUFF.map(([dx, dy, k]) => [x + (flip ? -dx : dx) * r, y + dy * r, k * r] as const);
+      pen.globalAlpha = a * (smoke ? 0.85 : 0.5);
       pen.beginPath();
-      pen.arc(x, y, r, 0, Math.PI * 2);
+      for (const [cx, cy, cr] of rounds) {
+        pen.moveTo(cx + cr, cy);
+        pen.arc(cx, cy, cr, 0, Math.PI * 2);
+      }
+      pen.fillStyle = hexOf(p.color);
       pen.fill();
+      pen.beginPath();
+      for (const [cx, cy, cr] of rounds) {
+        const k = cr * 0.68;
+        const oy = cy - cr * 0.14;
+        pen.moveTo(cx + k * Math.cos(Math.PI * 1.18), oy + k * Math.sin(Math.PI * 1.18));
+        pen.arc(cx, oy, k, Math.PI * 1.18, Math.PI * 1.82);
+      }
+      pen.strokeStyle = hexOf(lighten(p.color, 0.5));
+      pen.lineWidth = Math.max(1, r * 0.26);
+      pen.lineCap = 'round';
+      pen.stroke();
+      if (smoke) {
+        pen.beginPath();
+        for (const [i, a0, a1] of PUFF_EDGE[flip]) {
+          const [cx, cy, cr] = rounds[i];
+          pen.moveTo(cx + cr * Math.cos(a0), cy + cr * Math.sin(a0));
+          pen.arc(cx, cy, cr, a0, a1);
+        }
+        pen.strokeStyle = hexOf(rgbOf(INK), 0.55);
+        pen.lineWidth = 0.6 * inkWidth(s);
+        pen.stroke();
+      }
       break;
     }
     case 'drop': {

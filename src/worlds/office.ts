@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './office/decor.ts';
 import { INK } from './office/kit.ts';
 import { NPCS } from './office/npcs.ts';
-import { officePois, room } from './office/room.ts';
+import { officePois, officeReserve, room } from './office/room.ts';
 import { STATIONS } from './office/stations.ts';
 import { WORKSTATION } from './office/workstation.ts';
 
@@ -21,8 +21,8 @@ const PALETTE: Palette = {
   bg: hex('#141110'),
   wall: hex('#a85a42'),
   wall2: hex('#80412f'),
-  floor: hex('#aaa7a0'),
-  floor2: hex('#8a8780'),
+  floor: hex('#b0a89c'),
+  floor2: hex('#8f877c'),
   text: hex('#f6f1e8'),
   dim: hex('#a6a096'),
   accent: hex('#ffc857'),
@@ -50,6 +50,15 @@ export const office: WorldDef = {
   decor: DECOR,
   workstation: WORKSTATION,
   npcs: NPCS,
+  // a bright floor: its far corners deeper, so the windows' evening sun
+  // and the pendants' pools stand out on the concrete
+  // and its own night: a dark violet the desks' screens, the neon and the
+  // moon through the windows light
+  light: { falloff: 1.3, night: { tint: [70, 76, 140], strength: 0.55 } },
+  // dusk: the loft a little dimmed toward the sky's lilac, the low sun and
+  // the lamps warm in it
+  ambient: { tint: [200, 172, 205], strength: 0.18 },
+  reserve: officeReserve,
   costume: 'startup',
   critter: { kind: 'corgi', body: hex('#d98a3c') }, // the office dog, a red corgi
   finale: { colors: [[255, 107, 107], [255, 200, 87], [78, 205, 196], [167, 139, 250]] }, // coral, sunflower, teal and lilac confetti

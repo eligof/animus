@@ -1,5 +1,6 @@
 import { shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
 import { ball, barrel, bookRow, crate, frustum, leaf, logU, sack, sprout } from './bits.ts';
 import type { Kit, P3 } from './kit.ts';
@@ -301,6 +302,8 @@ const stove: PropArt = {
   len: 7,
   dep: 4,
   height: 10,
+  // the firebox, glowing through its grate
+  light: [{ kind: 'fire', u: 3.8, v: 3.8, z: 2.0, r: 6, strength: 0.5, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(3.6, 2.1, 3.8, 2.2, 0.28);
@@ -386,17 +389,18 @@ const lamp: PropArt = {
   len: 3,
   dep: 3,
   height: 14,
+  light: [{ kind: 'lamp', u: 1.5, v: 1.5, z: BULB_Z, color: '#ffd27a', r: 10, strength: 0.8, halo: 2.2 }],
   draw(v: PropView): void {
     const k = kitOf(v);
+    const on = lampsOn(v);
     const c = 1.5;
     k.shadow(c, c, 1.3, 1.3, 0.3);
     frustum(k, c, c, 0, 1.0, 1.1, 0.42, '#7a7e84');
     k.rod([[c, c, 0.9], [c, c, BULB_Z - 1.0]], '#8a9096', 0.2);
-    // a collar under the bulb, the bulb, its soft glow
+    // a collar under the bulb, the bulb, its soft glow (off at night)
     k.cyl(c, c, BULB_Z - 1.25, 0.42, 0.45, '#6a6e74', { line: k.thin });
-    k.halo(c, c, BULB_Z, 3.2, '#ffd27a', 0.42);
-    ball(k, c, c, BULB_Z, 0.95, C.bulb, k.thin);
-    k.halo(c, c, BULB_Z, 1.4, '#fffbe0', 0.55);
+    ball(k, c, c, BULB_Z, 0.95, on ? C.bulb : '#a8a290', k.thin);
+    if (on) k.halo(c, c, BULB_Z, 1.4, '#fffbe0', 0.55);
     const [x, y] = k.p(c, c, BULB_Z);
     k.pen.beginPath();
     k.pen.ellipse(x - 0.32 * k.s, y - 0.3 * k.s, 0.22 * k.s, 0.16 * k.s, -0.6, 0, Math.PI * 2);

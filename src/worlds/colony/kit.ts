@@ -56,8 +56,8 @@ export const C = {
   tile: '#e4e8e6',
   tileGrid: '#c6ccc9',
   zone: '#e8d27a',
-  // the walls: plain cut stone blocks
-  block: '#8e7f6a',
+  // the walls: blocks of warm dressed fieldstone
+  block: '#a08c70',
   blockTop: '#c4b394',
   // beds, lamps and the stockpile's goods
   blanket: '#4e7a58',
@@ -402,9 +402,10 @@ const SPRITES = new Map<string, Sprite>();
 const MAX_SPRITES = 48;
 const q = (n: number, k = 1000) => Math.round(n * k) / k;
 
-// Paints `still` (in the prop's frame) through the cache, then returns a Kit
-// on the real pen, snapped like the sprite, for the moving bits. `height`
-// bounds the sprite (units).
+// Paints `still` (in the prop's frame) through the cache (one sprite with
+// the lights on, one with them off), then returns a Kit on the real pen,
+// snapped like the sprite, for the moving bits. `height` bounds the sprite
+// (units).
 export function still(v: PropView, id: string, height: number, paint: (k: Kit) => void): Kit {
   const o = v.at(0, 0, 0);
   const ix = Math.round(o[0]);
@@ -420,7 +421,7 @@ export function still(v: PropView, id: string, height: number, paint: (k: Kit) =
   const eu = a(1, 0, 0);
   const ev = a(0, 1, 0);
   const ez = a(0, 0, 1);
-  const key = [id, v.len, v.dep, v.seed, q(eu[0]), q(eu[1]), q(ev[0]), q(ev[1]), q(ez[0]), q(ez[1])].join('|');
+  const key = [id, v.len, v.dep, v.seed, v.lit === false ? 'dark' : 'lit', q(eu[0]), q(eu[1]), q(ev[0]), q(ev[1]), q(ez[0]), q(ez[1])].join('|');
   let sp = SPRITES.get(key);
   if (sp) SPRITES.delete(key);
   else {

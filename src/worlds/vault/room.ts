@@ -1,23 +1,28 @@
 import type { At } from '../../art/iso.ts';
 import { frame, shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { Rect } from '../../world/layout.ts';
 import { hub, planLayout, wallGaps } from '../../world/layout.ts';
 import { hashString } from '../../world/rng.ts';
+import type { PlacedProp } from '../../world/room.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { barStack, cageLamp, dial, fillPts, hull, rivets, ring } from './bits.ts';
 import type { P3 } from './kit.ts';
-import { DECOR } from './decor.ts';
+import { DECOR, DECOR_ART } from './decor.ts';
 import { C, INK, Kit, circle, hash, withAlpha } from './kit.ts';
 import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
-// The vault's shell: polished stone underfoot in a quiet checker with a
-// brass border and a brass star at the middle; walls of riveted steel
-// plate over a dark wainscot and a brass rail, a girder along the top hung
-// with caged amber lamps, a velvet runner in from the way in. In the free
+// The vault's shell: polished warm marble underfoot in a quiet checker
+// with a brass border and a brass star at the middle, the brass deposit
+// banks mirrored in it; walls of riveted steel plate over a dark wainscot
+// and a brass rail, lit toward the girder along the top that is hung with
+// caged amber lamps, a brass-edged frieze under it, a polished kick plate
+// along the foot (hazard paint only at the way in and behind the acid
+// pit), a velvet runner in from the way in. In the free
 // stretches between the stations: banks of brass deposit boxes (the tall
 // ones up to the girder, a library ladder on some), glass niches of gold
 // bars lit from within, a bank clock, alarm bells, amber sconces and
@@ -30,8 +35,10 @@ type Kind = 'door' | 'bank' | 'niche' | 'clock' | 'alarm' | 'cam' | 'sconce';
 // `side`: for the door, which way its hinge (and the way in) lies along
 // the wall.
 export type Feature = { wall: Wall; kind: Kind; a: number; w: number; k: number; side?: -1 | 1 };
-// `runner`: how far the velvet runner reaches out from the way in.
-export type Plan = { L: Layout; features: Feature[]; runner: number };
+// `runner`: how far the velvet runner reaches out from the way in;
+// `hazard`: the stretches of wall foot painted in hazard chevrons.
+export type Span = { wall: Wall; a0: number; a1: number };
+export type Plan = { L: Layout; features: Feature[]; runner: number; hazard: Span[] };
 
 const SLAB = 2.5; // the floor's thickness, shown along the front cut
 const SKIRT = 1.0;
@@ -65,7 +72,9 @@ export function planFor(W: number, D: number, H: number, T: number): Plan {
   if (hit) return hit;
   let L = planLayout(2 * W + 12, W + H + 12, 'vault');
   if (L.W !== W || L.D !== D || L.H !== H || L.T !== T) L = { W, D, H, T, slots: [] };
-  const plan = { L, features: features(L), runner: runnerLength(L) };
+  const fs = features(L);
+  const props = furnish(L);
+  const plan = { L, features: fs, runner: runnerLength(L, props), hazard: hazardSpans(L, fs, props) };
   PLANS.set(key, plan);
   return plan;
 }
@@ -224,12 +233,34 @@ export const room: RoomArt = {
     }
     v.pen.restore();
   },
+  // The light the shell gives: the caged lamps under the girder and the
+  // amber sconces (out at night); and the security lighting left on all
+  // night: the gold niches' strip lamps, the brass of each deposit bank lit
+  // warm at its foot, the alarm bells' red (with the acid pit and the forge
+  // they light the vault after hours).
+  lights(v): RoomLight[] {
+    const { features: fs } = planFor(v.W, v.D, v.H, v.T);
+    const out: RoomLight[] = [];
+    const z = girder(v.H).z0 - 1.6;
+    for (const wall of ['right', 'left'] as const) {
+      for (const a of lampsAlong(v.T, wall === 'right' ? v.W : v.D)) out.push({ kind: 'lamp', wall, u: a, v: 0.6, z, color: C.glow, r: 10, strength: 0.45, halo: 0 });
+    }
+    for (const f of fs) {
+      if (f.kind === 'sconce') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.3, z: SCONCE_Z + 1.3, color: C.amber, r: 9, strength: 0.7, halo: 0 });
+      else if (f.kind === 'niche') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: WAIN + 15, color: C.glow, r: 7, strength: 0.8, halo: 2.5 });
+      else if (f.kind === 'bank') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 1.5, z: 3.5, color: C.glow, r: Math.min(16, f.w / 2 + 3), strength: 0.35, halo: 0 });
+      else if (f.kind === 'alarm') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.9, z: ALARM_Z + 0.7, color: '#ff5a4a', r: 4, strength: 0.5, halo: 1 });
+    }
+    return out;
+  },
 };
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
-const STONE = ['#535c68', '#5b6571'] as const;
-const GROUT = '#3b424c';
+// Warm taupe marble: a second hue under the cool steel, so the floor parts
+// from the walls and the navy of the guards' uniforms reads on it.
+const STONE = ['#645c52', '#71685d'] as const;
+const GROUT = '#3e3832';
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen, s } = k;
@@ -246,9 +277,11 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   const cols = Math.ceil((W - T) / TILE);
   const rows = Math.ceil((D - T) / TILE);
   const seen = (x: number, y: number) => x - y >= dlo && x - y <= dhi && x + y >= slo && x + y <= shi;
-  // The checker: the other stone in one path; a few slabs a shade off.
+  // The checker: the other stone in one path; a few slabs a shade off, and
+  // when zoomed in, a soft vein across some.
   const odd: P3[][] = [];
   const pale: P3[][] = [];
+  const veins: P3[][] = [];
   for (let j = 0; j < rows; j++) {
     const y0 = T + j * TILE;
     const y1 = Math.min(D, y0 + TILE);
@@ -259,6 +292,12 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
       const q: P3[] = [[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]];
       if ((i + j) & 1) odd.push(q);
       if (hash(i, j, 3) < 0.07) pale.push(q);
+      if (k.fine && hash(i, j, 4) < 0.22) {
+        const t0 = 0.15 + hash(i, j, 5) * 0.7;
+        const t1 = 0.15 + hash(i, j, 6) * 0.7;
+        const bend = (hash(i, j, 7) - 0.5) * 1.4;
+        veins.push(hash(i, j, 8) < 0.5 ? [[x0, y0 + TILE * t0, 0], [(x0 + x1) / 2 + bend, (y0 + y1) / 2 - bend, 0], [x1, y0 + TILE * t1, 0]] : [[x0 + TILE * t0, y0, 0], [(x0 + x1) / 2 - bend, (y0 + y1) / 2 + bend, 0], [x0 + TILE * t1, y1, 0]]);
+      }
     }
   }
   pen.beginPath();
@@ -267,8 +306,22 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   pen.fill();
   pen.beginPath();
   for (const q of pale) k.trace(q);
-  pen.fillStyle = withAlpha('#c8d2dc', 0.07);
+  pen.fillStyle = withAlpha('#e6d8c0', 0.1);
   pen.fill();
+  if (veins.length) {
+    pen.beginPath();
+    for (const [a, m, b] of veins) {
+      const [ax, ay] = k.p(...a);
+      const [mx, my] = k.p(...m);
+      const [bx, by] = k.p(...b);
+      pen.moveTo(ax, ay);
+      pen.quadraticCurveTo(mx, my, bx, by);
+    }
+    pen.strokeStyle = withAlpha('#8a7f70', 0.4);
+    pen.lineWidth = Math.max(0.6, 0.06 * s);
+    pen.lineCap = 'round';
+    pen.stroke();
+  }
   // grout
   const seg: Array<[P3, P3]> = [];
   for (let j = 1; j < rows; j++) seg.push([[T, T + j * TILE, 0], [W, T + j * TILE, 0]]);
@@ -278,16 +331,13 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     // a polish: a soft light line along each slab's lit edge
     const sheen: Array<[P3, P3]> = [];
     for (let j = 0; j < rows; j++) sheen.push([[T, T + j * TILE + 0.18, 0], [W, T + j * TILE + 0.18, 0]]);
-    k.segs(sheen, withAlpha('#dfe8f0', 0.12), 0.1 * s);
+    k.segs(sheen, withAlpha('#f3e6cf', 0.14), 0.1 * s);
   }
   // The brass border, a slab in from the walls and the front cuts.
   const b = 3;
-  const inlay = (d: number) => {
-    k.line([[T + d, D - d, 0], [T + d, T + d, 0], [W - d, T + d, 0], [W - d, D - d, 0], [T + d, D - d, 0]], C.brassDark, Math.max(1, 0.32 * s));
-    k.line([[T + d, D - d, 0], [T + d, T + d, 0], [W - d, T + d, 0], [W - d, D - d, 0], [T + d, D - d, 0]], C.brass, Math.max(0.8, 0.16 * s));
-  };
-  inlay(b);
-  inlay(b + 1.2);
+  const border: P3[] = [[T + b, D - b, 0], [T + b, T + b, 0], [W - b, T + b, 0], [W - b, D - b, 0], [T + b, D - b, 0]];
+  k.line(border, C.brassDark, Math.max(1, 0.32 * s));
+  k.line(border, C.brass, Math.max(0.8, 0.16 * s));
   // the brass star at the middle of the room
   const h = hub(plan.L);
   const R = Math.min(10, (W - T) * 0.06);
@@ -296,41 +346,43 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   const corner = k.p(T, T, 0);
   const far = k.p(W, D, 0);
   const g = pen.createRadialGradient(corner[0], corner[1], 0, corner[0], corner[1], Math.hypot(far[0] - corner[0], far[1] - corner[1]));
-  g.addColorStop(0, '#05081050');
-  g.addColorStop(0.35, '#05081018');
-  g.addColorStop(0.7, '#05081000');
-  g.addColorStop(1, '#05081022');
+  g.addColorStop(0, '#0a070550');
+  g.addColorStop(0.35, '#0a070518');
+  g.addColorStop(0.7, '#0a070500');
+  g.addColorStop(1, '#0a070522');
   k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], g, 0);
   for (const wall of ['right', 'left'] as const) {
     const wk = new Kit(pen, wallAt(v.at, wall, T), s);
     const end = wall === 'right' ? W : D;
-    wk.poly([[T, 0, 0], [end, 0, 0], [end, 3.5, 0], [T, 3.5, 0]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#05081077'], [0.35, '#05081028'], [1, '#05081000']]), 0);
+    wk.poly([[T, 0, 0], [end, 0, 0], [end, 3.5, 0], [T, 3.5, 0]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#0a070577'], [0.35, '#0a070528'], [1, '#0a070500']]), 0);
+  }
+  // The deposit banks mirrored in the polish: streaks of brass running out
+  // from each bank's foot, fading as they come.
+  for (const f of plan.features) {
+    if (f.kind !== 'bank') continue;
+    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
+    if (!wk.sees(f.a - f.w / 2, 0, 0, f.a + f.w / 2, 6, 0)) continue;
+    const n = Math.max(3, Math.round(f.w / 3));
+    for (let i = 0; i < n; i++) {
+      const u = f.a - f.w / 2 + (f.w * (i + 0.5)) / n + (hash(f.k, i, 21) - 0.5) * 0.6;
+      const len = 3.6 + hash(f.k, i, 22) * 2;
+      const hw = 0.35 + hash(f.k, i, 23) * 0.25;
+      wk.poly([[u - hw, 1, 0], [u + hw, 1, 0], [u + hw, 1 + len, 0], [u - hw, 1 + len, 0]], wk.lgrad([0, 1, 0], [0, 1 + len, 0], [1, 0, 0], [[0, withAlpha(C.gold, 0.2)], [1, withAlpha(C.gold, 0)]]), 0);
+    }
   }
   // A velvet runner in from the way in.
   const ent = plan.L.slots.find((q) => q.kind === 'entrance');
   if (ent) runner(new Kit(pen, frame(v.at, ent.wall, ent.x0, ent.y0), s), ent, plan.runner);
-  // Pools of amber light where the stations' lamps shine.
-  const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
-  for (const [kind, u, w, r, a] of [['write', 0.5, 0.75, 9, 0.2], ['read', 0.85, 0.9, 8, 0.16], ['search', 0.45, 0.9, 9, 0.16], ['run', 0.45, 0.5, 12, 0.24], ['web', 0.5, 0.6, 9, 0.16], ['think', 0.5, 0.55, 11, 0.2], ['idle', 0.5, 0.45, 14, 0.26], ['entrance', 0.5, 1.2, 10, 0.22]] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    if (qk.sees(-r, -r, 0, q.len + r, q.dep + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, C.lamp, a);
-  }
-  // and under the sconces, along the walls' feet
-  for (const f of plan.features) {
-    if (f.kind !== 'sconce' && f.kind !== 'niche') continue;
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (wk.sees(f.a - 8, 0, 0, f.a + 8, 6, 0)) wk.pool(f.a, 2.5, f.kind === 'niche' ? 6 : 7, 4, C.glow, f.kind === 'niche' ? 0.12 : 0.14);
-  }
+  // (The light on the floor is the scene's, from what the room and its
+  // stations declare.)
 }
 
 // A compass star inlaid in brass and dark stone, r units across.
 function star(k: Kit, cx: number, cy: number, r: number): void {
   k.shadow(cx, cy, r * 1.05, r * 1.05, 0.08);
-  k.disc(cx, cy, 0, r, '#454d58', k.thin);
+  k.disc(cx, cy, 0, r, '#403a33', k.thin);
   k.disc(cx, cy, 0, r * 0.93, C.brassDark, 0);
-  k.disc(cx, cy, 0, r * 0.86, '#4d5560', 0);
+  k.disc(cx, cy, 0, r * 0.86, '#4a433b', 0);
   const pts = (n: number, r0: number, r1: number, rot: number): P3[] => {
     const out: P3[] = [];
     for (let i = 0; i < n * 2; i++) {
@@ -359,15 +411,45 @@ function star(k: Kit, cx: number, cy: number, r: number): void {
 // The runner's span across the way in (u) and where it starts (v).
 const RUN = { u0: 3.6, u1: 15 - 3.6, v0: 4 - 0.6 };
 
+// The props as the stage places them: it furnishes the room with planRoom
+// seeded by the world's id, its locals in, so the shell can find where the
+// decor stands too (as it finds the stations).
+function furnish(L: Layout): PlacedProp[] {
+  return planRoom({ id: 'vault', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('vault')).props;
+}
+
+// Where the wall's foot wears hazard paint: across the way in and the great
+// door beside it, and behind the acid pit where it stands near a wall.
+// Elsewhere the foot is a polished kick plate, as a bank's would be.
+function hazardSpans(L: Layout, fs: Feature[], props: PlacedProp[]): Span[] {
+  const out: Span[] = [];
+  const ent = L.slots.find((q) => q.kind === 'entrance' && !q.island);
+  if (ent) {
+    const door = fs.find((f) => f.kind === 'door');
+    const e0 = along(ent);
+    let a0 = e0 - 1.5;
+    let a1 = e0 + ent.len + 1.5;
+    if (door) {
+      a0 = Math.min(a0, door.a - door.w / 2 - 1.5);
+      a1 = Math.max(a1, door.a + door.w / 2 + 1.5);
+    }
+    out.push({ wall: ent.wall, a0, a1 });
+  }
+  for (const p of props) {
+    if (p.art !== DECOR_ART.pit) continue;
+    const r = footprint(p);
+    if (r.y0 - L.T < 6) out.push({ wall: 'right', a0: r.x0 - 1, a1: r.x1 + 1 });
+    if (r.x0 - L.T < 6) out.push({ wall: 'left', a0: r.y0 - 1, a1: r.y1 + 1 });
+  }
+  return out;
+}
+
 // How far out the runner reaches (up to 26 units) before it would run
-// under a station or a piece of decor. The stage furnishes the room with
-// planRoom seeded by the world's id, its locals in, so the shell can find
-// where the decor stands too (as it finds the stations).
-function runnerLength(L: Layout): number {
+// under a station or a piece of decor.
+function runnerLength(L: Layout, props: PlacedProp[]): number {
   const ent = L.slots.find((q) => q.kind === 'entrance');
   if (!ent) return 0;
-  const room = planRoom({ id: 'vault', stations: STATIONS, decor: DECOR, npcs: NPCS } as unknown as WorldDef, L, hashString('vault'));
-  const others = room.props.filter((p) => p.slot !== ent).map(footprint);
+  const others = props.filter((p) => p.slot !== ent).map(footprint);
   let len = 0;
   for (let l = 1; l <= 26; l++) {
     const r = runnerArea(ent, l);
@@ -413,7 +495,14 @@ function runner(k: Kit, ent: Slot, len: number): void {
 
 // ── walls ──────────────────────────────────────────────────────────────────
 
-const PLATE: ReadonlyArray<readonly [number, Color]> = [[0, '#5f6b78'], [0.45, '#55606c'], [1, '#3e4752']];
+// The steel plate, darkest low and lightest in a band just under the
+// girder's lamps (they light it from above), a shade darker again behind
+// the girder: stops (z from the wainscot to the wall's top) for a wall H.
+const plate = (H: number): Array<readonly [number, Color]> => {
+  const t = (z: number) => Math.max(0, Math.min(1, (z - WAIN) / (H - WAIN)));
+  const g = girder(H);
+  return [[0, '#4c5662'], [t(g.z0 - 12), '#545f6b'], [t(g.z0 - 1.5), '#66717d'], [t(g.z0 + 0.5), '#5c6773'], [1, '#4a535e']];
+};
 const LOWER = '#3a414b';
 const PW = 8; // plate width along the wall
 const PH = 9; // plate height
@@ -428,8 +517,8 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const g = girder(H);
   const mine = plan.features.filter((f) => f.wall === wall);
   const spans = mine.map((f) => ({ f, r: reach(f, H) }));
-  // Steel plate up to the girder: lit low by the lamps, darker going up.
-  k.poly([[T, 0, WAIN], [end, 0, WAIN], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, WAIN, H, PLATE.map(([t, c]) => [t, tone(c)] as const)), 0);
+  // Steel plate up to the girder, lit from the lamps under it.
+  k.poly([[T, 0, WAIN], [end, 0, WAIN], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, WAIN, H, plate(H).map(([t, c]) => [t, tone(c)] as const)), 0);
   // the far corner in shadow
   k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#0508104a'], [1, '#05081000']]), 0);
   // Plate seams with rivets, skipping what hangs over them.
@@ -475,10 +564,15 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   k.segs(low, withAlpha('#11141a', 0.8), Math.max(0.7, 0.12 * s));
   k.segs(lowLit, withAlpha('#9aa6b2', 0.16), Math.max(0.6, 0.08 * s));
   rivets(k, ldots, tone('#6e7884'), 0.12);
-  // hazard paint along the foot, worn
-  hazardBand(k, T, end, ax0, ax1, tone);
+  // A polished kick plate along the foot under a brass line, hazard paint
+  // where the plan says
+  k.rect(T, 0, end, SKIRT, 0.01, k.vgrad(T, 0.01, 0, SKIRT, [[0, tone('#202329')], [1, tone('#30353d')]]));
+  k.line([[T, 0.02, SKIRT * 0.72], [end, 0.02, SKIRT * 0.72]], withAlpha('#c3ccd6', 0.14), Math.max(0.6, 0.08 * s));
+  for (const h of plan.hazard) if (h.wall === wall) hazardBand(k, Math.max(T, h.a0), Math.min(end, h.a1), ax0, ax1, tone);
+  k.line([[T, 0.03, SKIRT], [end, 0.03, SKIRT]], C.brassDark, Math.max(0.8, 0.1 * s));
   k.box(T, 0, WAIN, end - T, 0.45, RAIL, C.brass, { line: k.thin, stripe: false });
   k.line([[T, 0.46, WAIN + RAIL - 0.12], [end, 0.46, WAIN + RAIL - 0.12]], withAlpha(C.brassLight, 0.8), Math.max(0.6, 0.08 * s));
+  frieze(k, T, end, g.z0, ax0, ax1, covered, lit);
   // What hangs on the wall.
   for (const { f, r } of spans) {
     if (!k.sees(r.a0, 0, r.z0, r.a1, r.n, r.z1)) continue;
@@ -487,7 +581,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'clock') clock(k, f);
     else if (f.kind === 'alarm') alarm(k, v, f);
     else if (f.kind === 'cam') camera(k, v, f);
-    else if (f.kind === 'sconce') sconce(k, f);
+    else if (f.kind === 'sconce') sconce(k, f, lampsOn(v));
     else if (f.kind === 'door') vaultDoor(k, f, lit);
   }
   // The girder along the top, the cornice, and caged lamps under it.
@@ -496,7 +590,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   if (s >= 3) for (let a = Math.max(T + 1, ax0 - 2); a < Math.min(end - 0.5, ax1 + 2); a += 1.6) gd.push([a, 1.12, g.z0 + 0.6], [a, 1.12, g.z1 - 0.6]);
   rivets(k, gd, tone('#8a94a0'), 0.13);
   k.box(T, 0, H - 1.6, end - T, 0.6, 1.6, tone('#4a525d', 0.1), { line: k.thin, stripe: false });
-  lamps(k, v, T, end, ax0, ax1);
+  lamps(k, v, T, end, ax0, ax1, covered);
 }
 
 // The stretch of the wall (along) the pen can see between heights z0..z1.
@@ -524,6 +618,50 @@ function hazardBand(k: Kit, a0: number, a1: number, ax0: number, ax1: number, to
   }
   pen.fillStyle = withAlpha(tone(C.hazard, 0.2), 0.75);
   pen.fill();
+}
+
+// A frieze under the girder: a row of recessed panels edged in brass, a
+// brass lozenge in every other one, where nothing hangs (a bank's cornice
+// over the vault's plate).
+function frieze(k: Kit, a0: number, a1: number, zg: number, ax0: number, ax1: number, covered: (a: number, z: number) => boolean, lit: boolean): void {
+  const { s } = k;
+  const z0 = zg - 3.4;
+  const z1 = zg - 0.6;
+  if (z0 < WAIN + RAIL + 4) return;
+  const PWF = 3.6;
+  const panels: Array<[number, number]> = [];
+  for (let a = a0 + 0.6; a + PWF <= a1 - 0.4; a += PWF + 0.4) {
+    if (a + PWF < ax0 - 4 || a > ax1 + 4) continue;
+    if (covered(a, z0) || covered(a + PWF, z0) || covered(a + PWF / 2, (z0 + z1) / 2) || covered(a, z1) || covered(a + PWF, z1)) continue;
+    panels.push([a, a + PWF]);
+  }
+  if (!panels.length) return;
+  const pen = k.pen;
+  pen.beginPath();
+  for (const [p0, p1] of panels) k.trace([[p0, 0.02, z0], [p1, 0.02, z0], [p1, 0.02, z1], [p0, 0.02, z1]]);
+  pen.fillStyle = lit ? '#454e59' : shade('#454e59', -0.14);
+  pen.fill();
+  pen.strokeStyle = C.brassDark;
+  pen.lineWidth = k.thin;
+  pen.lineJoin = 'round';
+  pen.stroke();
+  // the lit edges: along the top and up the side toward the light
+  const lightSide = k.lit(-1, 0);
+  const e = 0.14;
+  const edges: Array<[P3, P3]> = [];
+  for (const [p0, p1] of panels) {
+    const sa = lightSide ? p0 + e : p1 - e;
+    edges.push([[sa, 0.03, z0 + e], [sa, 0.03, z1 - e]], [[p0 + e, 0.03, z1 - e], [p1 - e, 0.03, z1 - e]]);
+  }
+  k.segs(edges, withAlpha(C.brassLight, 0.6), Math.max(0.6, 0.07 * s), 'round');
+  pen.beginPath();
+  panels.forEach(([p0, p1], i) => {
+    if (i % 2) return;
+    const a = (p0 + p1) / 2;
+    const z = (z0 + z1) / 2;
+    k.trace([[a - 0.7, 0.04, z], [a, 0.04, z + 0.55], [a + 0.7, 0.04, z], [a, 0.04, z - 0.55]]);
+  });
+  k.paint(C.brassDark, k.thin * 0.8);
 }
 
 // A bank of deposit boxes in a steel frame: brass doors in rows, the big
@@ -712,8 +850,10 @@ function clock(k: Kit, f: Feature): void {
 }
 
 // A red alarm bell on a box, its conduit running up to the girder.
+const ALARM_Z = WAIN + 12;
+
 function alarm(k: Kit, v: RoomView, f: Feature): void {
-  const z = WAIN + 12;
+  const z = ALARM_Z;
   const top = girder(v.H).z0;
   k.rod([[f.a + 0.5, 0.35, z + 1.2], [f.a + 0.5, 0.35, Math.min(top, z + 7)]], C.steelDark, 0.2);
   k.box(f.a, 0, Math.min(top, z + 7) - 0.2, 1.0, 0.5, 1.0, C.gunmetal, { line: k.thin, stripe: false });
@@ -782,27 +922,56 @@ function camLed(k: Kit, v: RoomView, f: Feature): void {
   k.pen.fill();
 }
 
-// An amber cage lamp on a curled bracket, washing the wall round it.
-function sconce(k: Kit, f: Feature): void {
-  const z = WAIN + 14;
-  k.wash(f.a, 0.05, z - 1, 6, 7, C.glow, 0.2);
+// An amber cage lamp on a curled bracket (the scene washes the wall round
+// it); out at night.
+const SCONCE_Z = WAIN + 14;
+
+function sconce(k: Kit, f: Feature, on: boolean): void {
+  const z = SCONCE_Z;
   k.poly([[f.a - 0.45, 0.02, z - 1.8], [f.a + 0.45, 0.02, z - 1.8], [f.a + 0.45, 0.02, z + 0.4], [f.a - 0.45, 0.02, z + 0.4]], C.brass, k.thin, 0.3);
   k.rod([[f.a, 0.05, z - 0.9], [f.a, 0.8, z - 1.0], [f.a, 1.3, z - 0.4], [f.a, 1.3, z + 0.5]], C.brass, 0.16);
-  cageLamp(k, f.a, 1.3, z + 1.3, 0.62, true, 0.42);
+  cageLamp(k, f.a, 1.3, z + 1.3, 0.62, on, 0.42);
 }
 
-// Caged lamps hanging under the girder all along a wall.
-function lamps(k: Kit, v: RoomView, a0: number, a1: number, ax0: number, ax1: number): void {
+// Where the caged lamps hang along a wall from a0 to a1.
+function lampsAlong(a0: number, a1: number): number[] {
+  const list: number[] = [];
+  for (let a = a0 + 6; a < a1 - 3; a += 13) list.push(a);
+  return list;
+}
+
+// Caged lamps hanging under the girder all along a wall, each throwing a
+// cone of amber down the plate (where no bank or niche hangs); out at
+// night.
+function lamps(k: Kit, v: RoomView, a0: number, a1: number, ax0: number, ax1: number, covered: (a: number, z: number) => boolean): void {
   const g = girder(v.H);
   const z = g.z0 - 1.6;
-  const pitch = 13;
-  const list: number[] = [];
-  for (let a = a0 + 6; a < a1 - 3; a += pitch) if (a > ax0 - 10 && a < ax1 + 10) list.push(a);
+  const list = lampsAlong(a0, a1).filter((a) => a > ax0 - 10 && a < ax1 + 10);
   if (!list.length) return;
-  for (const a of list) k.wash(a, 0.05, z - 6, 7, 9, C.glow, 0.16);
+  const on = lampsOn(v);
+  if (on) {
+    const pen = k.pen;
+    pen.save();
+    pen.globalCompositeOperation = 'screen';
+    for (const a of list) {
+      if (covered(a, z - 5)) continue;
+      const top = z - 0.6;
+      const foot = Math.max(WAIN + RAIL + 1, z - 11);
+      const p = (u: number, zz: number) => k.p(u, 0.03, zz);
+      pen.beginPath();
+      pen.moveTo(...p(a - 0.9, top));
+      pen.quadraticCurveTo(...p(a - 2.6, (top + foot) / 2), ...p(a - 5, foot));
+      pen.quadraticCurveTo(...p(a, foot - 1.6), ...p(a + 5, foot));
+      pen.quadraticCurveTo(...p(a + 2.6, (top + foot) / 2), ...p(a + 0.9, top));
+      pen.closePath();
+      pen.fillStyle = k.vgrad(a, 0.03, foot, top, [[0, withAlpha(C.glow, 0)], [0.55, withAlpha(C.glow, 0.12)], [1, withAlpha(C.glow, 0.32)]]);
+      pen.fill();
+    }
+    pen.restore();
+  }
   for (const a of list) {
     k.rod([[a, 0.6, g.z0], [a, 0.6, z + 0.9]], INK, 0.08);
-    cageLamp(k, a, 0.6, z, 0.5, true, 0.32);
+    cageLamp(k, a, 0.6, z, 0.5, on, 0.32);
   }
 }
 
@@ -915,9 +1084,9 @@ function shell(k: Kit, v: RoomView): void {
   const cut = '#5c636c';
   // the floor's cut edges
   if (k.sees(T, D - 1, -SLAB, W, D, 0) || k.sees(W - 1, T, -SLAB, W, D, 0)) {
-    k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side('#3c424a', 0, 1), k.lw);
-    k.poly([[W, T, 0], [W, D, 0], [W, D, -SLAB], [W, T, -SLAB]], k.side('#3c424a', 1, 0), k.lw);
-    k.line([[T, D, -0.35], [W, D, -0.35], [W, T, -0.35]], '#6b737d', Math.max(1, 0.22 * k.s));
+    k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side('#4a443d', 0, 1), k.lw);
+    k.poly([[W, T, 0], [W, D, 0], [W, D, -SLAB], [W, T, -SLAB]], k.side('#4a443d', 1, 0), k.lw);
+    k.line([[T, D, -0.35], [W, D, -0.35], [W, T, -0.35]], '#7a7268', Math.max(1, 0.22 * k.s));
   }
   // the walls' cut ends: concrete with steel lining and rebar
   k.poly([[0, D, -SLAB], [T, D, -SLAB], [T, D, H], [0, D, H]], k.side(cut, 0, 1), k.lw);

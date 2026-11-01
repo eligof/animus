@@ -376,24 +376,28 @@ export function awning(k: Kit, u0: number, u1: number, zb: number, vf: number, z
 // ── outside ──────────────────────────────────────────────────────────────────
 
 // The view out of an opening (u0..u1, z0..z1) set back on the plane v = n:
-// a hazy sky warming toward the top, three bands of dunes up to the
-// horizon hz (far, mid and near, the near one lit along its crest), and
-// now and then a pale sun.
-export function dunesView(k: Kit, u0: number, u1: number, z0: number, z1: number, n: number, hz: number, seed: number, sun = true): void {
+// a hard turquoise sky, hazy white at the horizon, three bands of orange
+// dunes up to the horizon hz (far, mid and near, the near one lit along
+// its crest), and now and then a pale sun. At `night`: a deep blue sky
+// with stars, the dunes in blue shadow lit along their crests by the moon,
+// the moon in place of the sun.
+export function dunesView(k: Kit, u0: number, u1: number, z0: number, z1: number, n: number, hz: number, seed: number, sun = true, night = false): void {
   const f = Math.max(0, Math.min(1, (hz - z0) / Math.max(0.1, z1 - z0)));
-  k.poly([[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]], k.vgrad(u0, n, z0, z1, [[0, '#fbe0a8'], [f, '#fbe3b0'], [Math.min(1, f + 0.08), C.sky], [1, C.skyHigh]]), 0);
+  const sky: ReadonlyArray<readonly [number, string]> = night ? [[0, '#4a4a86'], [f, '#4a4a86'], [Math.min(1, f + 0.08), '#283272'], [1, '#141c48']] : [[0, '#ffe9bf'], [f, '#ffe9bf'], [Math.min(1, f + 0.08), C.sky], [1, C.skyHigh]];
+  k.poly([[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]], k.vgrad(u0, n, z0, z1, sky), 0);
+  if (night) stars(k, u0, u1, hz + 0.8, z1 - 0.3, n, seed);
   if (sun && hash(seed, 5) < 0.45 && z1 - hz > 4) {
     const su = u0 + 1.4 + hash(seed, 6) * Math.max(0.2, u1 - u0 - 2.8);
     const sz = hz + 2.4 + hash(seed, 7) * Math.max(0.5, z1 - hz - 4.5);
-    k.halo(su, n, sz, 3.2, '#fff6dc', 0.6);
-    k.face(su, n, sz, 0.85, '#fff4d6', 0, 16);
+    k.halo(su, n, sz, 3.2, night ? '#dce4ff' : '#fff6dc', night ? 0.4 : 0.6);
+    k.face(su, n, sz, night ? 0.7 : 0.85, night ? '#f4eed8' : '#fff4d6', 0, 16);
   }
   const m = Math.max(6, Math.round((u1 - u0) * 2));
   const wave = (u: number, i: number) => Math.sin((u - u0) * (0.55 + i * 0.13) + seed * 1.7 + i * 2.1) * 0.6 + Math.sin((u - u0) * 0.23 + seed + i) * 0.4;
   const bands: Array<[number, number, Color]> = [
-    [hz + 0.3, 0.6, C.duneFar],
-    [hz - 1.1, 0.9, C.dune],
-    [hz - 2.8, 1.4, C.duneShade],
+    [hz + 0.3, 0.6, night ? '#4a4878' : C.duneFar],
+    [hz - 1.1, 0.9, night ? '#383664' : C.dune],
+    [hz - 2.8, 1.4, night ? '#2a2850' : C.duneShade],
   ];
   bands.forEach(([zc, amp, c], i) => {
     const ridge: P3[] = [];
@@ -405,11 +409,27 @@ export function dunesView(k: Kit, u0: number, u1: number, z0: number, z1: number
     if (i === 2) {
       // the near dune's sunlit slope, falling away from its crest
       const lit = ridge.map(([u, w, z], j): P3 => [u, w, Math.max(z0, z - 0.4 - (j / m) * 2.2)]);
-      k.poly([[u0, n, z0], ...lit, [u1, n, z0]], mix(C.dune, '#f8dcaa', 0.45), 0);
+      k.poly([[u0, n, z0], ...lit, [u1, n, z0]], night ? '#3e3e70' : mix(C.dune, '#ffd9a0', 0.45), 0);
     } else if (i === 0) {
-      k.line(ridge, withAlpha('#fff2d4', 0.6), Math.max(0.6, 0.08 * k.s));
+      k.line(ridge, withAlpha(night ? '#9aa4dc' : '#fff2d4', 0.6), Math.max(0.6, 0.08 * k.s));
     }
   });
+}
+
+// A few stars on the plane v = n, between a0..a1 and z0..z1 (seeded).
+export function stars(k: Kit, a0: number, a1: number, z0: number, z1: number, n: number, seed: number): void {
+  if (k.s < 3 || a1 - a0 < 1 || z1 - z0 < 1) return;
+  const pen = k.pen;
+  pen.beginPath();
+  const count = Math.max(2, Math.round(((a1 - a0) * (z1 - z0)) / 7));
+  for (let i = 0; i < count; i++) {
+    const [x, y] = k.p(a0 + hash(seed, i, 41) * (a1 - a0), n, z0 + hash(seed, i, 42) * (z1 - z0));
+    const r = Math.max(0.6, (0.05 + hash(seed, i, 43) * 0.06) * k.s);
+    pen.moveTo(x + r, y);
+    pen.arc(x, y, r, 0, Math.PI * 2);
+  }
+  pen.fillStyle = '#f4f0dc';
+  pen.fill();
 }
 
 // ── tubes ────────────────────────────────────────────────────────────────────
@@ -542,11 +562,12 @@ export function pipe(k: Kit, pts: ReadonlyArray<P3>, w: number, color: Color = C
 }
 
 // A cold-white tube lamp standing at (u, v) from z0 to z0 + h: steel caps,
-// the glowing tube, a faint cold halo round it (`glow` its strength).
-export function tubeLamp(k: Kit, u: number, v: number, z0: number, h: number, glow = 0.3): void {
-  if (glow > 0) k.halo(u, v, z0 + h / 2, Math.min(3.4, h * 0.7), C.tubeGlow, glow);
-  lathe(k, u, v, z0, [[0, 0.22], [h, 0.22]], C.tube, { line: k.thin });
-  k.line([[u - 0.06, v, z0 + 0.25], [u - 0.06, v, z0 + h - 0.25]], '#ffffff', Math.max(0.8, 0.13 * k.s));
+// the glowing tube, a faint cold halo round it (`glow` its strength); off
+// (`on` false, at night) a dull grey tube and no glow.
+export function tubeLamp(k: Kit, u: number, v: number, z0: number, h: number, glow = 0.3, on = true): void {
+  if (on && glow > 0) k.halo(u, v, z0 + h / 2, Math.min(3.4, h * 0.7), C.tubeGlow, glow);
+  lathe(k, u, v, z0, [[0, 0.22], [h, 0.22]], on ? C.tube : '#9a9a90', { line: k.thin });
+  if (on) k.line([[u - 0.06, v, z0 + 0.25], [u - 0.06, v, z0 + h - 0.25]], '#ffffff', Math.max(0.8, 0.13 * k.s));
   k.cyl(u, v, z0 - 0.4, 0.34, 0.45, C.steelDark, { line: k.thin });
   k.cyl(u, v, z0 + h - 0.05, 0.34, 0.45, C.steelDark, { line: k.thin });
 }

@@ -106,6 +106,103 @@ const TALL = 6;
 const NEAR = 4;
 const FRONT_BAND = 2 / 3;
 
+// Rooms up to BASE units across (a 100 x 30 terminal's whole screen) get a
+// world's decor as it asks; a bigger one gets more (see moreDecor).
+export const BASE = 97;
+// A piece this many units long or more is a set piece (a hearth, a
+// kitchen), and one against a wall that the world asks for once a fixture
+// (a sick bay, a phone booth, a snack shelf): a room has the one the world
+// asks for, which its shell may dress round (see moreDecor).
+const SET = 15;
+// The middle of a big room's floor, kept for life, and the floor kept
+// clear in front of a piece of decor (see planRoom).
+const MIDDLE = 0.3;
+const FACE = 8;
+
+// The decor a room bigger than BASE gets over what its world asks for, in
+// step with what it has more of: free wall, for the pieces that stand
+// against one (the free stretches grow one for one with the side), and
+// floor for the rest (by the walls and the stations: a little faster than
+// the side). The more go round the world's pieces in turn, in the order it
+// lists them, one of each before a second of any, so a big room is
+// furnished rather than the same sofa four times; and none more than
+// doubles (a sign it asks for once is at most two), so the room keeps its
+// world's mix; set pieces and fixtures stay one a room. Pieces for the
+// walls first, so the floor's go round them.
+export function moreDecor(world: Pick<WorldDef, 'decor'>, L: Layout): Array<{ art: PropArt; place: 'wall' | 'floor' }> {
+  const decor = world.decor ?? [];
+  if (L.W <= BASE || !decor.length) return [];
+  const free = (['left', 'right'] as const).reduce((n, wall) => wallGaps(L, wall).reduce((m, [a, b]) => m + b - a, n), 0);
+  const grow = { wall: free / Math.max(1, free - 2 * (L.W - BASE)), floor: (L.W / BASE) ** 1.5 };
+  const out: Array<{ art: PropArt; place: 'wall' | 'floor' }> = [];
+  for (const place of ['wall', 'floor'] as const) {
+    // each piece and how many more it may have (as many as it is asked for)
+    const kinds: Array<{ art: PropArt; left: number }> = [];
+    let asked = 0;
+    for (const d of decor) {
+      if (d.place !== place || d.count <= 0) continue;
+      asked += d.count;
+      if (d.art.len >= SET) continue;
+      const k = kinds.find((q) => q.art === d.art);
+      if (k) k.left += d.count;
+      else kinds.push({ art: d.art, left: d.count });
+    }
+    if (place === 'wall') for (const q of kinds) if (q.left < 2) q.left = 0;
+    let more = Math.round(asked * (grow[place] - 1));
+    while (more > 0 && kinds.some((q) => q.left > 0)) {
+      for (const q of kinds) {
+        if (more <= 0 || q.left <= 0) continue;
+        out.push({ art: q.art, place });
+        q.left--;
+        more--;
+      }
+    }
+  }
+  return out;
+}
+
+// A stretch of wall, or a patch of floor, kept clear of decor (see
+// WorldDef.reserve).
+export type Reserve = ReturnType<NonNullable<WorldDef['reserve']>>[number];
+
+// Whether a piece `h` tall on floor `r` stands in front of what a world
+// keeps clear: on a kept patch of floor; or before a kept stretch of wall,
+// out to its `out`, where it hides the wall over its `z` or, for a stretch
+// kept from the floor up (z 0), on the floor before it. In the wall's frame
+// (u along it, v out from its face), a piece from v0 to v1 out hides the
+// wall from u0 - v1 to u1 - v0, up to h - v0 (see WorldDef.reserve).
+export function veils(L: Layout, kept: readonly Reserve[], r: Rect, h: number): boolean {
+  for (const k of kept) {
+    if (!('wall' in k)) {
+      if (clash(r, k, 0)) return true;
+      continue;
+    }
+    const [u0, u1, v0, v1] = k.wall === 'right' ? [r.x0, r.x1, r.y0 - L.T, r.y1 - L.T] : [r.y0, r.y1, r.x0 - L.T, r.x1 - L.T];
+    const z = k.z ?? 0;
+    if (v0 >= k.out) continue;
+    if (z <= 0 && u0 < k.a1 && k.a0 < u1) return true;
+    if (u0 - v1 < k.a1 && k.a0 < u1 - v0 && h - v0 > z) return true;
+  }
+  return false;
+}
+
+// True while a world says what it keeps clear (see keptBy): a room planned
+// meanwhile (a shell looking where the furniture stands, to place its hero
+// piece clear of it) is planned without anything kept clear, so planRoom
+// and a world's reserve never ask each other round and round.
+let reserving = false;
+
+// What `world` keeps clear in room L (none while one is being asked for).
+function keptBy(world: WorldDef, L: Layout): readonly Reserve[] {
+  if (!world.reserve || reserving) return [];
+  reserving = true;
+  try {
+    return world.reserve(L);
+  } finally {
+    reserving = false;
+  }
+}
+
 export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   const rng = new Rng(seed ^ 0xdec0);
   const props: PlacedProp[] = L.slots.map((s) => ({
@@ -168,16 +265,39 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   // Who tall floor decor must not stand in front of.
   const watched: Array<Spot & { r: number }> = [...L.slots.filter((s) => s.kind !== 'entrance').map((s) => ({ ...s.spot, r: 4 })), ...buildSites(L)];
   const hides = (r: Rect) => watched.some((p) => r.x0 - r.y1 < p.x - p.y + p.r + 6 && p.x - p.y - p.r - 6 < r.x1 - r.y0 && r.x0 + r.y0 > p.x + p.y && r.x0 + r.y0 - (p.x + p.y) < 40);
+  // The world's hero walls and floor, kept clear (see veils).
+  const kept = keptBy(world, L);
   let k = 0;
-  for (const d of world.decor ?? []) {
-    for (let n = 0; n < d.count; n++, k++) {
-      const pseed = hashString(`${world.id}:decor:${k}`);
-      const placed = d.place === 'wall' ? onWall(L, d.art, free, open, rng, k) : onFloor(L, d.art, keep.map((c, i) => c | aside[i]), free, open, d.art.height > TALL ? hides : () => false, props, rng);
-      if (!placed) continue;
-      const p: PlacedProp = { art: d.art, ...placed, len: d.art.len, dep: d.art.dep, seed: pseed };
-      props.push(p);
-      mark(footprint(p), 1);
-    }
+  const put = (art: PropArt, place: 'wall' | 'floor', open: (r: Rect) => boolean, by = props) => {
+    const pseed = hashString(`${world.id}:decor:${k}`);
+    const fine = (r: Rect) => free(r) && !veils(L, kept, r, art.height);
+    const placed = place === 'wall' ? onWall(L, art, fine, open, rng, k) : onFloor(L, art, keep.map((c, i) => c | aside[i]), fine, open, art.height > TALL ? hides : () => false, props, rng, by);
+    k++;
+    if (!placed) return;
+    const p: PlacedProp = { art, ...placed, len: art.len, dep: art.dep, seed: pseed };
+    props.push(p);
+    mark(footprint(p), 1);
+  };
+  for (const d of world.decor ?? []) for (let n = 0; n < d.count; n++) put(d.art, d.place, open);
+  // A big room's more (see moreDecor), after all the world asks for, so
+  // that stands where it would in a room BASE across. These line the back
+  // walls: by a wall, or by a station or a piece backed onto one (never
+  // out by the islands, or by a piece out on the floor, where they would
+  // only stand about or be hidden), and keep off where a local that
+  // serves nobody is come up to for a word; off the floor FACE units in
+  // front of each piece already down (where one goes up to it: the spots
+  // by a hearth, a look at a cabinet), so none hides another; and off the
+  // middle of the floor (MIDDLE of it across, round the hub), where a big
+  // room's life goes on: a club's dance floor, the crowds at the islands.
+  const more = moreDecor(world, L);
+  if (more.length) {
+    const word = held.slice();
+    for (const n of npcs) for (const s of [n.front, n.wait]) if (s && !arts[n.k].serve) mark(cells(s, SERVE_M), 0, word);
+    for (const p of props) if (!p.slot) mark(footprint({ ...p, y0: p.wall === 'right' ? p.y0 + p.dep : p.y0, x0: p.wall === 'right' ? p.x0 : p.x0 + p.dep, dep: FACE }), 0, word);
+    const h = hub(L);
+    const m = (MIDDLE / 2) * (Math.min(W, D) - L.T);
+    mark({ x0: h.x - m, y0: h.y - m, x1: h.x + m, y1: h.y + m }, 0, word);
+    for (const d of more) put(d.art, d.place, (r) => clearOf(word, r), props.filter((p) => !p.island));
   }
   const height = new Float32Array(W * D);
   for (const p of props) {
@@ -187,7 +307,7 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
     }
   }
   const all = props.map(footprint);
-  const inside = (x: number, y: number, m: number) => all.some((r) => within(r, x, y, m));
+  const inside = (x: number, y: number, m: number, rs = all) => rs.some((r) => within(r, x, y, m));
   // Where one that serves nobody is come up to for a word (see Locals.near)
   // is not kept clear: none where the decor took it.
   for (const n of npcs) {
@@ -200,17 +320,25 @@ export function planRoom(world: WorldDef, L: Layout, seed: number): Room {
   }
   // The spots idlers like, on open floor off the props, IDLE_APART from a
   // standing local and off the floor (SERVE_M round each) where whoever one
-  // serves stands and waits; the critter's home kept whatever.
+  // serves stands and waits; the critter's home kept whatever. One that
+  // the decor took, in a room over BASE across (with floor to spare, and
+  // more decor), moves to the nearest such floor within NUDGE units (else
+  // it is left out too), so a big room keeps the spots a smaller one has.
   const apart = (p: Spot, s: Spot, d: number) => Math.hypot(p.x - s.x, p.y - s.y) >= d;
-  const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot))).filter(
-    (p) =>
-      p.x > L.T &&
-      p.y > L.T &&
-      p.x < W - 1 &&
-      p.y < D - 1 &&
-      !inside(p.x, p.y, 1) &&
-      (p.kind === 'pet' || (npcs.every((n) => n.mode !== 'standing' || apart(p, n, IDLE_APART)) && served.every((s) => apart(p, s, 2 * SERVE_M)))),
-  );
+  const fit = (p: Poi, rs = all) =>
+    p.x > L.T &&
+    p.y > L.T &&
+    p.x < W - 1 &&
+    p.y < D - 1 &&
+    !inside(p.x, p.y, 1, rs) &&
+    (p.kind === 'pet' || (npcs.every((n) => n.mode !== 'standing' || apart(p, n, IDLE_APART)) && served.every((s) => apart(p, s, 2 * SERVE_M))));
+  const stations = all.slice(0, L.slots.length);
+  const pois = (world.pois?.(L) ?? defaultPois(L, props.filter((p) => !p.slot))).flatMap((p) => {
+    if (fit(p)) return [p];
+    if (L.W <= BASE || !fit(p, stations)) return [];
+    const q = NUDGES.map(([dx, dy]) => ({ ...p, x: p.x + dx, y: p.y + dy })).find((s) => fit(s));
+    return q ? [q] : [];
+  });
   const serves = served.map((s) => cells(s, 0));
   const blocks = [...all, ...stands];
   const blocked = (x: number, y: number, m: number) => blocks.some((r) => within(r, x, y, m));
@@ -241,6 +369,14 @@ const SERVE_M = 1.2;
 // The spots idlers like keep this far from a standing local, as agents keep
 // from each other.
 const IDLE_APART = 3;
+// How far a spot idlers like moves off a big room's more decor (see
+// planRoom): the steps it tries, nearest first.
+const NUDGE = 6;
+const NUDGES: ReadonlyArray<readonly [number, number]> = (() => {
+  const out: Array<[number, number]> = [];
+  for (let dy = -NUDGE; dy <= NUDGE; dy++) for (let dx = -NUDGE; dx <= NUDGE; dx++) if ((dx || dy) && Math.hypot(dx, dy) <= NUDGE) out.push([dx, dy]);
+  return out.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
+})();
 
 // Where each of the world's locals stands (see WorldDef.npcs), in the room
 // with only its stations and supply piles in (the decor goes round them):
@@ -326,13 +462,13 @@ function onWall(L: Layout, art: PropArt, free: (r: Rect) => boolean, open: (r: R
 }
 
 // Somewhere on the floor for `art` by a back wall or a prop (see NEAR and
-// FRONT_BAND), turned toward the middle line of the screen like the
-// islands; tall pieces out of the view of the crowds and plazas. Snug
-// places win, away from the decor already down, give or take, among those
-// `open`; null if none fits.
-function onFloor(L: Layout, art: PropArt, keep: Uint8Array, free: (r: Rect) => boolean, open: (r: Rect) => boolean, hides: (r: Rect) => boolean, props: readonly PlacedProp[], rng: Rng): { wall: 'left' | 'right'; island: boolean; x0: number; y0: number } | null {
+// FRONT_BAND; one of `by`, if given), turned toward the middle line of the
+// screen like the islands; tall pieces out of the view of the crowds and
+// plazas. Snug places win, away from the decor already down, give or take,
+// among those `open`; null if none fits.
+function onFloor(L: Layout, art: PropArt, keep: Uint8Array, free: (r: Rect) => boolean, open: (r: Rect) => boolean, hides: (r: Rect) => boolean, props: readonly PlacedProp[], rng: Rng, by: readonly PlacedProp[] = props): { wall: 'left' | 'right'; island: boolean; x0: number; y0: number } | null {
   const { W, D, T } = L;
-  const rects = props.map(footprint);
+  const rects = by.map(footprint);
   const kept = boxCount(keep, W, D);
   // The floor a step past NEAR of a prop (a box round each), for a first
   // look.

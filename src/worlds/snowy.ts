@@ -3,7 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import { DECOR } from './snowy/decor.ts';
 import { INK } from './snowy/kit.ts';
 import { NPCS } from './snowy/npcs.ts';
-import { room, snowyPois } from './snowy/room.ts';
+import { room, snowyPois, snowyReserve } from './snowy/room.ts';
 import { STATIONS } from './snowy/stations.ts';
 import { WORKSTATION } from './snowy/workstation.ts';
 import type { WorldDef } from './types.ts';
@@ -45,6 +45,13 @@ export const snowy: WorldDef = {
   ink: INK,
   room,
   pois: snowyPois,
+  reserve: snowyReserve,
+  // A faint blue evening over the snow, so the lanterns and the fire warm
+  // it; the far corners fall off a little more (a white floor has little
+  // headroom for the light to show). At night the lamps stay lit (oil),
+  // the snow goes a deep moonlit blue and the skylights fill with the aurora.
+  ambient: { tint: [150, 160, 210], strength: 0.12 },
+  light: { falloff: 1.4, night: { tint: [36, 58, 150], strength: 0.62, figures: 0.4 } },
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,

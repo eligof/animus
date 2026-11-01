@@ -36,10 +36,10 @@ const lavaPool: PropArt = {
   height: 2,
   animated: true,
   movesIdle: true,
+  light: [{ kind: 'lava', u: LAVA.u, v: LAVA.v, z: 0.6, r: 14, strength: 1, halo: 3.5 }],
   draw(v: PropView): void {
     const { u, v: w, ru, rv } = LAVA;
     const k = still(v, 'lava', 3, (k) => {
-      k.pool(u, w, ru + 3, rv + 3, '#ff6a20', 0.4);
       const rim = edge(v.seed, 1.16);
       // the rocks round it, back ones first (the front ones go over the lava)
       k.poly(rim.map(([a, b]) => [a, b, 0.5] as P3), C.basaltDark, k.lw, 0.6);
@@ -137,10 +137,10 @@ const brazier: PropArt = {
   len: 4,
   dep: 4,
   height: 9,
+  light: [{ kind: 'fire', u: 2, v: 2, z: 7.4, r: 9, strength: 0.9, halo: 3.6 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const c = 2;
-    k.pool(c, c, 5, 5, '#ff8a3a', 0.32);
     k.shadow(c, c, 1.5, 1.5, 0.28);
     for (const a of [0.5, 2.6, 4.7]) {
       const ca = Math.cos(a);
@@ -160,7 +160,6 @@ const brazier: PropArt = {
     }
     coals(k, c, c, 6.6, 1.2, v.seed, 0.7);
     fire(k, c, c, 6.6, 1.2, 2.4, 0, v.seed);
-    k.halo(c, c, 7.6, 3.8, '#ff9a4a', 0.45);
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     const n = due(v.t, dt, 1.4, v.seed);
@@ -325,10 +324,10 @@ const skullCandles: PropArt = {
   len: 4,
   dep: 4,
   height: 5,
+  light: [{ kind: 'fire', u: 2, v: 2, z: 3.5, color: '#ffb060', r: 5, strength: 0.5, halo: 1.5 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(2, 2, 1.9, 1.9, 0.28);
-    k.pool(2, 2, 3.4, 3.4, '#ffb060', 0.24);
     k.poly(blob(2, 2, 1.9, 1.9, v.seed, 0.03), '#2e1a24', 0, 0.3);
     const r = 0.72;
     skull(k, 1.2, 1.4, 0, r);

@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './starfall/decor.ts';
 import { INK } from './starfall/kit.ts';
 import { NPCS } from './starfall/npcs.ts';
-import { starfallPois, room } from './starfall/room.ts';
+import { room, starfallPois, starfallReserve } from './starfall/room.ts';
 import { STATIONS } from './starfall/stations.ts';
 import { WORKSTATION } from './starfall/workstation.ts';
 
@@ -52,5 +52,11 @@ export const starfall: WorldDef = {
   costume: 'exosuit',
   critter: { kind: 'hopper', body: hex('#b07ef0') }, // a fluffy hopper
   finale: { colors: [[255, 79, 163], [56, 217, 232], [255, 200, 74]] }, // magenta, cyan and gold confetti
+  // a pink dusk on the base by day, the floor darker toward its far corners
+  // so the light through the glass stands out; at night a violet dark,
+  // the moons' light through the glass, the terrariums and screens glowing
+  ambient: { tint: [220, 170, 220], strength: 0.12 },
+  light: { falloff: 1.25, ao: 1.2, night: { tint: [70, 60, 150], strength: 0.45 } },
+  reserve: starfallReserve,
   build: { colors: [hex('#d9e2ec'), hex('#aebccc'), hex('#ff4fa3'), hex('#38d9e8')], shape: 'tower' }, // a signal beacon, white with magenta and cyan lights
 };

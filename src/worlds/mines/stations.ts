@@ -52,6 +52,8 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 16,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 3.5, v: 2.4, z: 3.8, r: 8, halo: 2.5 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -243,6 +245,8 @@ const read: PropArt = {
   len: 14,
   dep: 4,
   height: 21,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 13.3, v: 1.0, z: 15.4, color: '#ffc27a', r: 10, strength: 0.55, halo: 2.2 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'read', 21, (k) => {
@@ -380,6 +384,8 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 14,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 5.6, v: 1.8, z: 11.1, color: '#ffc27a', r: 9, strength: 0.5, halo: 2.2 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -534,6 +540,8 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 15,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 3.3, v: 5.7, z: 2.4, r: 8, strength: 0.6, halo: 2 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'run', 15, (k) => {
@@ -673,6 +681,8 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 10,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 1.2, v: 2.6, z: 6.1, color: '#ffc27a', r: 7, strength: 0.5, halo: 2 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'web', 10, (k) => {
@@ -750,6 +760,8 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 11,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 8.9, v: 1.3, z: 6.6, color: '#ffc27a', r: 7, strength: 0.5, halo: 2 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -852,6 +864,8 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 10,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 6.6, v: 6.2, z: 1.2, r: 13 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -976,6 +990,8 @@ const entrance: PropArt = {
   len: 15,
   dep: 4,
   height: 27,
+  // its light (an oil lantern or a fire: burning day and night)
+  light: [{ kind: 'fire', u: 0.9, v: 0.7, z: 12.0, color: '#ffc27a', r: 9, strength: 0.5, halo: 2.2 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, h } = SHAFT;

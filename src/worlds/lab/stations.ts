@@ -72,6 +72,8 @@ const write: PropArt = {
   dep: 7,
   height: 13,
   animated: true,
+  // the flask's green brew over the burner
+  light: [{ kind: 'glow', u: FLASK.u, v: FLASK.v, z: FLASK.z, color: '#a8ff8a', r: 7, strength: 0.7, halo: 1.5 }],
   draw(v: PropView): void {
     const k = still(v, 'write', 13, (k) => {
       const { back, front } = BENCH;
@@ -276,6 +278,8 @@ const read: PropArt = {
   dep: 4,
   height: 21,
   animated: true,
+  // the brain's tank, lit green
+  light: [{ kind: 'glow', u: TANK.u, v: TANK.v, z: (TANK.z0 + TANK.z1) / 2, color: '#b9e86a', r: 6, strength: 0.7, halo: 2 }],
   draw(v: PropView): void {
     const body = '#3d6b66';
     const k = still(v, 'read', 21, (k) => {
@@ -568,6 +572,8 @@ const search: PropArt = {
   dep: 4,
   height: 12,
   animated: true,
+  // the monitor's helix
+  light: [{ kind: 'screen', u: 8.7, v: 2.4, z: 9, color: '#9fe0ff', r: 5 }],
   draw(v: PropView): void {
     const zt = 6.3;
     const k = still(v, 'search', 12, (k) => {
@@ -721,6 +727,8 @@ const run: PropArt = {
   dep: 11,
   height: 18,
   animated: true,
+  // the coil's toroid, crackling violet
+  light: [{ kind: 'glow', u: TC.u, v: TC.v, z: TC.top, color: '#b9a8ff', r: 11, strength: 0.9, halo: 3 }],
   draw(v: PropView): void {
     const k = still(v, 'run', 18, (k) => {
       // the floor: hazard stripes round a rubber square
@@ -1194,6 +1202,8 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 9,
+  // the lava lamp on the fridge
+  light: [{ kind: 'glow', u: 13.9, v: 1.9, z: 5.6, color: '#ff7ad8', r: 6, strength: 0.7, halo: 1.8 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(7.2, 3.6, 7.6, 3.4, 0.3);
@@ -1322,6 +1332,8 @@ const entrance: PropArt = {
   dep: 4,
   height: 21,
   animated: true,
+  // the cyan corridor beyond the door
+  light: [{ kind: 'glow', u: (DOOR.u0 + DOOR.u1) / 2, v: 0.5, z: 6, color: '#7fe0ff', r: 8, strength: 0.6, halo: 0 }],
   draw(v: PropView): void {
     const { u0, u1, h } = DOOR;
     const k = still(v, 'entrance', 21, (k) => {

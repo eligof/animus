@@ -6,7 +6,8 @@ import { hashString } from '../../world/rng.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { blot, flame, horn, shieldFace, zigzag } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
@@ -15,13 +16,15 @@ import { NPCS } from './npcs.ts';
 import { STATIONS } from './stations.ts';
 
 // The Longhall's shell at night, after the great timber halls of the
-// north: dark flagstones underfoot with crimson runners on them and rushes
-// strewn about; walls of upright planks on a footing of fieldstones, heavy
-// carved posts every dozen units holding curved knee braces up to a carved
-// beam, crimson swags with gold trim hung along it from post to post and a
-// horn sconce with a candle on each post; above the beam, plaster between
-// the posts' studs going dark with smoke toward the roof, and a row of
-// small high lattice windows onto snow falling on the pines. Between the
+// north: big warm-grey flagstones underfoot with crimson runners on them
+// and rushes strewn about; walls of upright planks on a footing of
+// fieldstones, heavy carved posts every dozen units holding curved knee
+// braces up to a carved beam, crimson swags with gold trim hung along it
+// from post to post and a horn sconce with a candle on each post; above
+// the beam, pale daub between the posts' dark studs going smoky toward the
+// roof, a great tapestry of a longship over the hearth, and along the
+// walls small high lattice windows onto snow falling on the pines, bare
+// bays and long banners by turns. Between the
 // stations hang round shields in plain colours, long plain banners, an elk
 // head on a plaque, iron candle rings on wall brackets and bundles of
 // drying herbs. The firelight from the hearth, the braziers, the forge and
@@ -31,8 +34,8 @@ import { STATIONS } from './stations.ts';
 // it, worked out from the same plan the stage uses.
 
 type Wall = 'left' | 'right';
-type Kind = 'window' | 'hanging' | 'shield' | 'banner' | 'elk' | 'herbs' | 'chandelier';
-type Low = Exclude<Kind, 'window' | 'hanging'>;
+type Kind = 'window' | 'hanging' | 'tapestry' | 'shield' | 'banner' | 'elk' | 'herbs' | 'chandelier';
+type Low = Exclude<Kind, 'window' | 'hanging' | 'tapestry'>;
 // A piece on a wall: `a` its middle along the wall, `w` the width it takes
 // there (everything it draws on the wall lies within a ± w / 2), z0..z1 how
 // high it reaches, `k` a seed.
@@ -53,7 +56,7 @@ const KNEE = 2.9; // a curved knee brace's reach along the beam and down the pos
 const SAG = 2.4; // a swag's sag under the beam (its foot SAG + 0.6 down)
 const CAP = 2.4; // the wall plate along the top, tall
 const BEAM_D = 1.8; // how far the carved beam stands out from the planks
-const BAND = 6; // a course of flagstones, deep
+const BAND = 7; // a course of flagstones, deep
 
 // The carved beam's underside, by the wall's height.
 export const girtZ = (H: number) => Math.min(31, Math.max(22, Math.round(H * 0.46)));
@@ -89,9 +92,9 @@ export function postsOf(T: number, end: number): number[] {
   return Array.from({ length: n + 1 }, (_, i) => T + i * step);
 }
 
-const WIDTH: Record<Kind, number> = { window: 5.6, hanging: 5.4, shield: 5, banner: 5.6, elk: 8.4, herbs: 4.6, chandelier: 5.2 };
-// The hall's caps on the pieces below the beam (over it, windows and long
-// banners take turns in every bay).
+const WIDTH: Record<Kind, number> = { window: 5.6, hanging: 5.4, tapestry: 2 * BAY, shield: 5, banner: 5.6, elk: 8.4, herbs: 4.6, chandelier: 5.2 };
+// The hall's caps on the pieces below the beam (over it, the tapestry over
+// the hearth, and windows and long banners about the rest).
 const CAP_OF: Record<Low, number> = { shield: 6, banner: 4, elk: 1, herbs: 3, chandelier: 3 };
 const ORDER: Low[] = ['shield', 'herbs', 'shield', 'banner', 'chandelier', 'shield', 'herbs', 'banner'];
 
@@ -125,8 +128,9 @@ function against(L: Layout, decor: readonly PlacedProp[], wall: Wall): Array<{ a
 }
 
 // What hangs in the bays between the posts. Over the beam, out of reach
-// of everything standing below, every bay has a small high window or a
-// long banner, the two taking turns. Under it, a bay clear of the stations
+// of everything standing below: the great tapestry across the two bays
+// over the hearth, then along each wall a small high window, a bay of bare
+// daub and a long banner by turns. Under it, a bay clear of the stations
 // (a unit's margin) gets one piece if what stands against the wall there
 // is low enough (candle rings and herbs hang clear over anything that
 // stands under them): the elk head in the bay nearest the middle of a wall
@@ -171,8 +175,28 @@ function hang(L: Layout, posts: Record<Wall, number[]>, decor: readonly PlacedPr
     const [z0, z1] = reach(kind, G, L.H);
     out.push({ wall: b.wall, kind, a: b.c, w: WIDTH[kind], k: (b.wall === 'right' ? 100 : 200) + b.i * 7 + out.length, z0, z1 });
   };
-  // over the beam: windows and long banners by turns, a window first
-  for (const b of bays) put(b, b.i % 2 ? 'hanging' : 'window');
+  // over the beam: the tapestry across the two bays nearest the hearth's
+  // middle (or the right wall's middle, if the hall has no hearth), hung
+  // from the wall plate, then windows, bare daub and long banners by turns
+  // along each wall, a window first
+  const pit = decor.find((p) => p.art === DECOR_ART.hearth);
+  const hung = new Set<Bay>();
+  const tw: Wall = pit ? pit.wall : 'right';
+  const mid = pit ? (pit.wall === 'right' ? pit.x0 : pit.y0) + pit.len / 2 : (L.T + L.W) / 2;
+  const p = posts[tw];
+  let best = -1;
+  for (let i = 0; i + 2 < p.length; i++) if (best < 0 || Math.abs(p[i + 1] + PW / 2 - mid) < Math.abs(p[best + 1] + PW / 2 - mid)) best = i;
+  if (best >= 0) {
+    const [a0, a1] = [p[best] + PW + 0.4, p[best + 2] - 0.4];
+    const z1 = L.H - CAP - 0.9;
+    out.push({ wall: tw, kind: 'tapestry', a: (a0 + a1) / 2, w: a1 - a0, k: (tw === 'right' ? 100 : 200) + best * 7, z0: Math.max(G + GIRT + 0.5, z1 - 13), z1 });
+    for (const b of bays) if (b.wall === tw && (b.i === best || b.i === best + 1)) hung.add(b);
+  }
+  for (const wall of ['right', 'left'] as const) {
+    bays.filter((b) => b.wall === wall && !hung.has(b)).forEach((b, j) => {
+      if (j % 3 !== 1) put(b, j % 3 ? 'hanging' : 'window');
+    });
+  }
   // under it: the elk head and its banners first
   const left: Record<Low, number> = { ...CAP_OF };
   const taken = new Set<Bay>();
@@ -269,7 +293,7 @@ function decorOf(L: Layout): PlacedProp[] {
 // What lights the walls: the hearth and the braziers, the forge's coals,
 // the candles at the stations and the torch by the doors; each a point
 // (world units), how bright it is and how far its light carries.
-type Light = { x: number; y: number; z: number; a: number; reach: number; color: Color };
+type Light = { x: number; y: number; z: number; a: number; reach: number; color: Color; declared: boolean };
 const GLOWS: ReadonlyArray<readonly [SlotKind, number, number, number, number, number]> = [
   ['run', 4.1, 2.9, 4.5, 0.75, 24],
   ['write', 1.6, 2.4, 12, 0.4, 10],
@@ -287,12 +311,12 @@ function lightsOf(L: Layout): Light[] {
   const at = (p: { wall: Wall; x0: number; y0: number }, u: number, w: number) => (p.wall === 'right' ? { x: p.x0 + u, y: p.y0 + w } : { x: p.x0 + w, y: p.y0 + u });
   hit = [];
   for (const p of decorOf(L)) {
-    if (p.art === DECOR_ART.hearth) hit.push({ ...at(p, 8, 4.3), z: 3, a: 0.95, reach: 34, color: '#ff8a3a' });
-    else if (p.art === DECOR_ART.brazier) hit.push({ ...at(p, p.len / 2, p.dep / 2), z: 4, a: 0.5, reach: 16, color: '#ff8a3a' });
+    if (p.art === DECOR_ART.hearth) hit.push({ ...at(p, 8, 4.3), z: 3, a: 0.95, reach: 34, color: '#ff8a3a', declared: true });
+    else if (p.art === DECOR_ART.brazier) hit.push({ ...at(p, p.len / 2, p.dep / 2), z: 4, a: 0.5, reach: 16, color: '#ff8a3a', declared: true });
   }
   for (const [kind, u, w, z, a, reach] of GLOWS) {
     const q = L.slots.find((sl) => sl.kind === kind);
-    if (q) hit.push({ ...at(q, u, w), z, a, reach, color: kind === 'run' ? '#ff8a3a' : '#ffa848' });
+    if (q) hit.push({ ...at(q, u, w), z, a, reach, color: kind === 'run' ? '#ff8a3a' : '#ffa848', declared: kind === 'run' || kind === 'idle' || kind === 'entrance' });
   }
   LIGHTS.set(key, hit);
   return hit;
@@ -348,16 +372,32 @@ export const room: RoomArt = {
     for (const w of walls) for (const f of plan.features) if (f.wall === w.wall && w.k.sees(f.a - f.w / 2, -1, f.z0, f.a + f.w / 2, 6, f.z1)) piece(w.k, v, f);
     for (const w of walls) beam(w.k, v, w.wall, w.end, plan);
     for (const w of walls) wallLight(w.k, v, w.wall, w.end, plan);
-    for (const w of walls) candles(w.k, v, w.wall, plan);
+    for (const w of walls) candles(w.k, v, w.wall, plan, lampsOn(v));
     shell(k, v);
     v.pen.restore();
+  },
+  // The light the shell gives (the scene lays its pools, washes and
+  // glows): the candle in each horn sconce and the candle rings, put out
+  // at night, and the high windows, dark while the fire is lit and letting
+  // the moon in at night. The hearth, the braziers, the forge, the long
+  // table and the doors' torch give theirs as props.
+  lights(v): RoomLight[] {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    const G = girtZ(v.H);
+    const out: RoomLight[] = [];
+    for (const wall of ['right', 'left'] as const) for (const a of plan.lamps[wall]) out.push({ kind: 'lamp', wall, u: a + 0.2, v: PD + 1.2, z: lampZ(G) + 1.85, r: 9, halo: 1.8, strength: 0.6 });
+    for (const f of plan.features) {
+      if (f.kind === 'chandelier') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: RING.out, z: G - 7.3, r: 12, halo: 2.4, strength: 0.7 });
+      if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: WIN.w, z0: sillOf(f), z1: sillOf(f) + WIN.h, bars: 1, rails: 1, strength: 0, night: '#9fb6ee', moon: 0.85 });
+    }
+    return out;
   },
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     v.pen.save();
     firelight(v, plan.L);
     for (const f of plan.features) if (f.kind === 'window') snow(new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s), v, f);
-    flicker(v, plan);
+    if (lampsOn(v)) flicker(v, plan);
     v.pen.restore();
   },
 };
@@ -378,16 +418,17 @@ function seenAlong(k: Kit, a0: number, a1: number, z0: number, z1: number): [num
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
-// Dark with the night, so the cloaks and fur collars of anyone on them
-// read lighter than the stones.
-const FLAGS = ['#4d473c', '#534c40', '#474135', '#585145', '#4f4a3c'];
+// Warm grey stone, lighter than the dark wool cloaks of anyone on them
+// and darker than their fur collars and helmets, so both halves of a
+// figure read.
+const FLAGS = ['#6f6150', '#786853', '#685a49', '#7f6e58', '#73644f'];
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen } = k;
   const { W, D, T, s } = v;
   if (!k.sees(T, T, 0, W, D, 0)) return;
   // the mortar under it all
-  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], '#2c2924', 0);
+  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], '#3a3026', 0);
   // Big irregular flagstones in courses along x: a stone the full course
   // deep, or two across it, the near one split again now and then.
   const groups: P3[][][] = FLAGS.map(() => []);
@@ -401,7 +442,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     let x = T - hash(r, 3) * 6;
     let i = 0;
     while (x < W) {
-      const len = 3.8 + hash(r, i, 5) * 4.4;
+      const len = 5 + hash(r, i, 5) * 5;
       const x0 = Math.max(T, x);
       const x1 = Math.min(W, x + len);
       if (x1 - x0 > 0.6 && k.sees(x0, yy, 0, x1, y1, 0)) {
@@ -436,8 +477,8 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
   pen.beginPath();
   for (const list of groups) for (const q of list) k.trace(q, 0.4);
-  pen.strokeStyle = withAlpha(INK, 0.6);
-  pen.lineWidth = Math.max(0.8, k.thin * 0.7);
+  pen.strokeStyle = withAlpha(INK, 0.32);
+  pen.lineWidth = Math.max(0.7, k.thin * 0.55);
   pen.lineJoin = 'round';
   pen.stroke();
   // the worn, lit far edge of each stone
@@ -450,7 +491,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
       pen.lineTo(x1, y1);
     }
   }
-  pen.strokeStyle = '#9a947f3a';
+  pen.strokeStyle = '#a89c8424';
   pen.lineWidth = Math.max(0.8, 0.16 * s);
   pen.stroke();
   if (k.fine) {
@@ -477,11 +518,14 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   const corner = k.p(T, T, 0);
   const far = k.p(W, D, 0);
   const sh = pen.createRadialGradient(corner[0], corner[1], 0, corner[0], corner[1], Math.hypot(far[0] - corner[0], far[1] - corner[1]));
-  sh.addColorStop(0, '#1a0e0866');
-  sh.addColorStop(0.35, '#1a0e0822');
+  sh.addColorStop(0, '#1a0e0880');
+  sh.addColorStop(0.35, '#1a0e0830');
   sh.addColorStop(0.7, '#1a0e0800');
   sh.addColorStop(1, '#1a0e0826');
   k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], sh, 0);
+  // and toward the front cuts, the hall's edge falling into the night
+  if (k.sees(T, D - 8, 0, W, D, 0)) k.poly([[T, D - 8, 0], [W, D - 8, 0], [W, D, 0], [T, D, 0]], k.lgrad([0, D, 0], [0, D - 8, 0], [1, 0, 0], [[0, '#1a0e0850'], [1, '#1a0e0800']]), 0);
+  if (k.sees(W - 8, T, 0, W, D, 0)) k.poly([[W - 8, T, 0], [W, T, 0], [W, D, 0], [W - 8, D, 0]], k.lgrad([W, 0, 0], [W - 8, 0, 0], [0, 1, 0], [[0, '#1a0e0850'], [1, '#1a0e0800']]), 0);
   for (const wall of ['right', 'left'] as const) {
     const wk = new Kit(pen, wallAt(v.at, wall, T), s);
     const end = wall === 'right' ? W : D;
@@ -489,38 +533,20 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   }
   for (const r of plan.runners) runner(k, r);
   rushes(k, v, plan);
-  // The light on the floor: warm before the hearth and round the braziers,
-  // a pool at each lit station, a small one under each sconce.
-  for (const p of decorOf(plan.L)) {
-    const pk = new Kit(pen, propAt(v.at, p), s);
-    if (p.art === DECOR_ART.hearth) {
-      if (!pk.sees(-14, -4, 0, p.len + 14, p.dep + 22, 0)) continue;
-      pk.pool(8, 5, 22, 20, '#ff8a3a', 0.42);
-      pk.pool(8, 6, 12, 9, '#ffb050', 0.4);
-    } else if (p.art === DECOR_ART.brazier) {
-      if (!pk.sees(-9, -9, 0, p.len + 9, p.dep + 9, 0)) continue;
-      pk.pool(p.len / 2, p.dep / 2, 9, 9, '#ff9a48', 0.32);
-    }
-  }
+  // The light on the floor round the candles at the desks (the hearth,
+  // the braziers, the forge, the long table, the doors' torch and the
+  // sconces declare theirs: the scene lays those pools).
   const lights: ReadonlyArray<readonly [SlotKind, number, number, number, number, Color, number]> = [
-    ['run', 4.5, 4.5, 14, 12, '#ff8a3a', 0.42],
     ['write', 2.4, 4.2, 8, 6.5, '#ffb44a', 0.3],
     ['search', 9.5, 3.2, 8, 6, '#ffb44a', 0.3],
     ['read', 11.5, 3, 7, 5, '#ffb44a', 0.24],
     ['think', 4, 3.5, 9, 7, '#ffb44a', 0.22],
-    ['idle', 7.5, 5.5, 13, 9, '#ffb44a', 0.26],
-    ['entrance', 1.5, 2.5, 7, 5, '#ffb44a', 0.26],
-    ['entrance', 6.5, 3, 8, 5, '#9fc8e8', 0.14],
   ];
   for (const [kind, u, w, ru, rv, color, a] of lights) {
     const q = plan.L.slots.find((sl) => sl.kind === kind);
     if (!q) continue;
     const qk = new Kit(pen, propAt(v.at, q), s);
     if (qk.sees(u - ru, w - rv, 0, u + ru, w + rv, 0)) qk.pool(u, w, ru, rv, color, a);
-  }
-  for (const wall of ['right', 'left'] as const) {
-    const wk = new Kit(pen, wallAt(v.at, wall, T), s);
-    for (const a of plan.lamps[wall]) if (wk.sees(a - 5, 0, 0, a + 5, 6, 0)) wk.pool(a, 2.5, 5, 3.5, '#ffb050', 0.22);
   }
 }
 
@@ -567,16 +593,21 @@ function runner(k: Kit, r: Runner): void {
 }
 
 // Rushes strewn on the floor: little drifts of straw (short strokes when
-// zoomed in, soft patches when not), kept off the stations and runners.
+// zoomed in, soft patches when not), more of them kicked against the walls'
+// feet, kept off the stations and runners.
 function rushes(k: Kit, v: RoomView, plan: Plan): void {
   const { pen, s } = k;
   const { W, D, T } = v;
   const rects = [...plan.L.slots.map((q) => footprint(q)), ...plan.runners];
   const n = Math.round(((W - T) * (D - T)) / 380);
+  const by = Math.round((W + D - 2 * T) / 14);
   const spots: Array<[number, number, number]> = [];
-  for (let i = 0; i < n; i++) {
-    const x = T + 2 + hash(i, 61) * (W - T - 4);
-    const y = T + 2 + hash(i, 62) * (D - T - 4);
+  for (let i = 0; i < n + by; i++) {
+    // over the floor, or within a few units of a wall
+    const wall = i >= n ? (hash(i, 64) < 0.5 ? 'right' : 'left') : null;
+    const off = T + 1.5 + hash(i, 60) * 5;
+    const x = wall === 'left' ? off : T + 2 + hash(i, 61) * (W - T - 4);
+    const y = wall === 'right' ? off : T + 2 + hash(i, 62) * (D - T - 4);
     if (rects.some((r) => x > r.x0 - 1 && x < r.x1 + 1 && y > r.y0 - 1 && y < r.y1 + 1)) continue;
     if (!k.sees(x - 2, y - 2, 0, x + 2, y + 2, 0)) continue;
     spots.push([x, y, i]);
@@ -766,7 +797,7 @@ function wallFace(k: Kit, v: RoomView, end: number): void {
       }
     }
     // smoke darkening it toward the roof
-    k.poly([[s0, 0, zp], [s1, 0, zp], [s1, 0, H], [s0, 0, H]], k.vgrad(s0, 0, zp, H, [[0, '#120a0600'], [0.35, '#120a0660'], [1, '#0e0805d0']]), 0);
+    k.poly([[s0, 0, zp], [s1, 0, zp], [s1, 0, H], [s0, 0, H]], k.vgrad(s0, 0, zp, H, [[0, '#120a0600'], [0.5, '#120a0630'], [1, '#0e0805a0']]), 0);
   }
   // the far corner in shadow
   if (s0 < T + 10) k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#120a0650'], [1, '#120a0600']]), 0);
@@ -922,8 +953,10 @@ function swag(k: Kit, a0: number, a1: number, G: number, lit: boolean): void {
 
 // The firelight on a wall, over the planks and what hangs on them: the hall
 // falls dark away from the fires, and each light warms the wall nearest it,
-// the more the nearer it stands (a wide faint wash from far off, a bright
-// pool close by); each sconce warms the planks round it.
+// the more the nearer it stands (a wide faint wash from far off; close by,
+// a light the scene knows of washes the wall itself, so only the candles
+// at the desks are drawn here). Under each window the cold of the night,
+// stronger with the lamps out.
 function wallLight(k: Kit, v: RoomView, wall: Wall, end: number, plan: Plan): void {
   const { T, H } = v;
   const G = girtZ(H);
@@ -931,20 +964,18 @@ function wallLight(k: Kit, v: RoomView, wall: Wall, end: number, plan: Plan): vo
   if (!span) return;
   const [s0, s1] = [Math.max(T, span[0] - 2), Math.min(end, span[1] + 2)];
   // the night's dark over the whole wall
-  k.poly([[s0, 0, 0], [s1, 0, 0], [s1, 0, H], [s0, 0, H]], '#0c070466', 0);
+  k.poly([[s0, 0, 0], [s1, 0, 0], [s1, 0, H], [s0, 0, H]], '#0c070428', 0);
   const top = G + GIRT + 8;
   for (const l of lightsOf(plan.L)) {
     const d = wall === 'right' ? l.y - T : l.x - T;
     const along = wall === 'right' ? l.x : l.y;
-    if (d < 0) continue;
+    if (d < 0 || (l.declared && d < 6)) continue;
     const a = l.a / (1 + (d / l.reach) ** 2);
     if (a < 0.025) continue;
     glow(k, along, Math.min(l.z, G - 4), 6 + d * 0.9 + l.reach * 0.5, 5 + d * 0.45 + l.reach * 0.35, T, end, 0, top, l.color, a);
   }
-  const lz = lampZ(G);
-  for (const a of plan.lamps[wall]) glow(k, a, lz + 1.6, 6, 5.5, T, end, 0, top, '#ffa848', 0.3);
-  // the night's cold light round the windows
-  for (const f of plan.features) if (f.wall === wall && f.kind === 'window') glow(k, f.a, f.z0 + 4, 5, 5, T, end, f.z0 - 2, f.z1 + 3, C.frost, 0.16);
+  // the night's cold light round the windows, washing down the daub
+  for (const f of plan.features) if (f.wall === wall && f.kind === 'window') glow(k, f.a, f.z0 + 1.5, 5.5, 8, T, end, f.z0 - 6, f.z1 + 3, C.frost, lampsOn(v) ? 0.12 : 0.3);
 }
 
 // A soft light (screen) on the wall's plane round (cu, cz), ru along by rz
@@ -980,25 +1011,29 @@ function glow(k: Kit, cu: number, cz: number, ru: number, rz: number, u0: number
 
 // The candles over the dark: a horn sconce on each lit post, the flames of
 // the candle rings.
-function candles(k: Kit, v: RoomView, wall: Wall, plan: Plan): void {
+function candles(k: Kit, v: RoomView, wall: Wall, plan: Plan, on: boolean): void {
   const G = girtZ(v.H);
   const lz = lampZ(G);
-  for (const a of plan.lamps[wall]) if (k.sees(a - 1.5, 0, lz - 3, a + 1.5, PD + 2, lz + 3)) sconce(k, a, lz);
+  for (const a of plan.lamps[wall]) if (k.sees(a - 1.5, 0, lz - 3, a + 1.5, PD + 2, lz + 3)) sconce(k, a, lz, on);
   for (const f of plan.features) {
     if (f.wall !== wall || f.kind !== 'chandelier' || !k.sees(f.a - 3, 0, f.z0, f.a + 3, 7, f.z1)) continue;
-    for (const [u, w, z] of ringCandles(f, G)) flame(k, u, w, z + 1.25, 0.85, 0.5, 0.4);
+    for (const [u, w, z] of ringCandles(f, G)) {
+      if (on) flame(k, u, w, z + 1.25, 0.85, 0.5, 0.4);
+      else k.line([[u, w, z + 0.95], [u, w, z + 1.25]], INK, Math.max(0.7, 0.07 * k.s));
+    }
   }
 }
 
 // A drinking horn held out from the post at `a` on an iron strap, its mouth
-// up holding a lit candle.
-function sconce(k: Kit, a: number, z: number): void {
+// up holding a candle, lit (`on`) or snuffed for the night.
+function sconce(k: Kit, a: number, z: number, on: boolean): void {
   const n = PD;
   k.rod([[a, n - 0.05, z - 1.75], [a, n + 0.35, z - 1.75], [a + 0.05, n + 0.75, z - 1.0]], C.ironDark, 0.18);
   k.disc(a, n + 0.02, z - 1.75, 0.18, C.ironLight, 0);
   horn(k, [[a + 0.2, n + 1.2, z + 0.9], [a + 0.15, n + 1.15, z + 0.1], [a + 0.05, n + 0.85, z - 0.8], [a, n + 0.45, z - 1.5], [a, n + 0.15, z - 1.9]], 0.46, false);
   k.cyl(a + 0.2, n + 1.2, z + 0.7, 0.2, 0.75, C.wax);
-  flame(k, a + 0.2, n + 1.2, z + 1.85, 0.9, 0.5, 0.5);
+  if (on) flame(k, a + 0.2, n + 1.2, z + 1.85, 0.9, 0.5, 0.5);
+  else k.line([[a + 0.2, n + 1.2, z + 1.45], [a + 0.2, n + 1.2, z + 1.75]], INK, Math.max(0.7, 0.07 * k.s));
 }
 
 // ── wall pieces ──────────────────────────────────────────────────────────────
@@ -1006,6 +1041,7 @@ function sconce(k: Kit, a: number, z: number): void {
 function piece(k: Kit, v: RoomView, f: Feature): void {
   const G = girtZ(v.H);
   if (f.kind === 'window') windowArt(k, f);
+  else if (f.kind === 'tapestry') tapestry(k, f);
   else if (f.kind === 'hanging') {
     const { top, bottom } = hangingZ(G, v.H);
     banner(k, top, bottom, f);
@@ -1052,8 +1088,8 @@ function windowArt(k: Kit, f: Feature): void {
   pen.clip();
   // the view, set back in the wall's depth
   const n = -DEPTH;
-  k.poly([[u0 - 1, n, z0 - 1], [u1 + 1, n, z0 - 1], [u1 + 1, n, z1 + 1], [u0 - 1, n, z1 + 1]], k.vgrad(a, n, z0, z1, [[0, C.nightLow], [0.55, '#2e3a5c'], [1, C.night]]), 0);
-  if (hash(f.k, 3) < 0.5) k.halo(a + (hash(f.k, 4) - 0.5) * 2, n, z1 - 1.2, 2.0, C.frost, 0.34);
+  k.poly([[u0 - 1, n, z0 - 1], [u1 + 1, n, z0 - 1], [u1 + 1, n, z1 + 1], [u0 - 1, n, z1 + 1]], k.vgrad(a, n, z0, z1, [[0, '#5a76a8'], [0.5, '#3e5486'], [1, '#2c3a62']]), 0);
+  k.halo(a + (hash(f.k, 4) - 0.5) * 2, n, z1 - 1.2, 2.2, C.frost, hash(f.k, 3) < 0.5 ? 0.42 : 0.2);
   pen.beginPath();
   for (let i = 0; i < 3; i++) {
     const [x, y] = k.p(u0 + 0.4 + hash(f.k, i, 5) * (WIN.w - 0.8), n, z1 - 0.6 - hash(f.k, i, 6) * 1.6);
@@ -1066,7 +1102,7 @@ function windowArt(k: Kit, f: Feature): void {
   const slope: P3[] = [[u0 - 1, n, z0 - 1]];
   for (let i = 0; i <= 6; i++) slope.push([u0 - 1 + ((WIN.w + 2) * i) / 6, n, z0 + 1.5 + Math.sin(i * 1.3 + f.k) * 0.4 + (hash(f.k, 7) - 0.5) * 0.8]);
   slope.push([u1 + 1, n, z0 - 1]);
-  k.poly(slope, k.vgrad(a, n, z0, z0 + 2, [[0, '#b9c8dc'], [1, '#d6e2ee']]), 0);
+  k.poly(slope, k.vgrad(a, n, z0, z0 + 2, [[0, '#c8d6e6'], [1, '#e2ecf6']]), 0);
   for (let i = 0; i < 3; i++) {
     const pu = u0 + 0.2 + ((i + 0.3 + hash(f.k, i, 8) * 0.4) / 3) * WIN.w;
     pine(k, pu, n, z0 + 0.4 + hash(f.k, i, 10) * 0.8, 1.9 + hash(f.k, i, 9) * 1.4, 0.7 + hash(f.k, i, 11) * 0.3);
@@ -1075,17 +1111,18 @@ function windowArt(k: Kit, f: Feature): void {
   // the reveal's lit side and its sill, inside the wall
   k.poly([[u0, FACE, z0], [u0, n, z0], [u0, n, z1], [u0, FACE, z1]], '#5a4030', 0);
   k.poly([[u0, FACE, z0], [u1, FACE, z0], [u1, n, z0], [u0, n, z0]], '#6e5038', 0);
-  // the lattice: two sets of diagonal bars, set halfway back
+  // the lattice: two sets of diagonal lead cames, set halfway back, about
+  // two diamonds across
   const bn = -0.45;
   const bars: P3[][] = [];
-  const step = 1.3;
+  const step = 2.3;
   for (let c = -WIN.h; c <= WIN.w + WIN.h; c += step) {
     bars.push([[u0 + c, bn, z0], [u0 + c - WIN.h, bn, z1]]);
     bars.push([[u0 + c - WIN.h, bn, z0], [u0 + c, bn, z1]]);
   }
-  const bw = Math.max(0.9, 0.17 * s);
-  k.segs(bars.map((b) => [b[0], b[1]] as [P3, P3]), INK, bw + k.thin);
-  k.segs(bars.map((b) => [b[0], b[1]] as [P3, P3]), '#4a3422', bw);
+  const bw = Math.max(0.7, 0.1 * s);
+  k.segs(bars.map((b) => [b[0], b[1]] as [P3, P3]), withAlpha(INK, 0.5), bw + k.thin);
+  k.segs(bars.map((b) => [b[0], b[1]] as [P3, P3]), '#3a3a40', bw);
   k.poly(open, k.vgrad(a, FACE, z1 - 1.5, z1, [[0, '#00000000'], [1, '#0a0a1a66']]), 0);
   pen.restore();
   pen.beginPath();
@@ -1118,7 +1155,7 @@ function banner(k: Kit, top: number, bottom: number, f: Feature): void {
   const a = f.a;
   const n = 0.55;
   const hw = 2.1;
-  const c = (f.kind === 'hanging' ? [C.red, C.red, C.redDark, C.red, C.blue, C.red] : [C.red, C.blue, C.green, C.redDark, C.red, C.green])[Math.floor(hash(f.k, 21) * 6)];
+  const c = (f.kind === 'hanging' ? [C.red, C.blue, C.green, C.ochre, C.red, C.blue] : [C.red, C.blue, C.green, C.redDark, C.red, C.green])[Math.floor(hash(f.k, 21) * 6)];
   const trim = C.gold;
   const end = Math.floor(hash(f.k, 23) * 3); // 0 swallow-tail, 1 point, 2 fringe
   const z1 = top - 0.25;
@@ -1174,6 +1211,132 @@ function banner(k: Kit, top: number, bottom: number, f: Feature): void {
     k.paint(C.gold, k.thin);
   }
   k.line([[a - hw + 0.2, n + 0.02, z0 + (end === 1 ? notch : end === 0 ? 0.3 : 0.7)], [a + hw - 0.2, n + 0.02, z0 + (end === 1 ? notch : 0.7)]], '#ffa04a66', Math.max(0.8, 0.14 * s));
+}
+
+// The great tapestry over the hearth, across two bays: a woven hanging on
+// a pole on three pegs, a deep red ground in a gold border with a teal
+// band inside it; in its middle a longship on a zigzag sea (a dark hull
+// rising to a curled prow and stern, round shields along its side, a
+// striped square sail on its mast), a gold sun and two ravens over it;
+// soft folds down it and a fringe at its foot.
+function tapestry(k: Kit, f: Feature): void {
+  const { pen, s } = k;
+  const a = f.a;
+  const hw = f.w / 2 - 0.3;
+  const top = f.z1 - 0.4;
+  const z0 = f.z0 + 0.5;
+  const n = 0.55;
+  blot(k, a + 0.6, 0.02, (z0 + top) / 2 - 0.3, hw * 1.04, (top - z0) * 0.6, '#0c0604', 0.42);
+  const cloth: P3[] = [[a - hw, n, top], [a + hw, n, top], [a + hw, n, z0], [a - hw, n, z0]];
+  const ground = '#7a2a22';
+  k.poly(cloth, k.hgrad([a - hw, n, top], [a + hw, n, top], [[0, shade(ground, 0.12)], [0.4, ground], [1, shade(ground, -0.18)]]), k.lw);
+  pen.save();
+  pen.beginPath();
+  k.trace(cloth);
+  pen.clip();
+  // the border: gold, a teal band inside it
+  const ring = (d0: number, d1: number, c: Color) => {
+    pen.beginPath();
+    k.trace([[a - hw + d0, n, top - d0], [a + hw - d0, n, top - d0], [a + hw - d0, n, z0 + d0], [a - hw + d0, n, z0 + d0]]);
+    k.trace([[a - hw + d1, n, z0 + d1], [a + hw - d1, n, z0 + d1], [a + hw - d1, n, top - d1], [a - hw + d1, n, top - d1]]);
+    pen.fillStyle = c;
+    pen.fill();
+  };
+  ring(0.25, 0.85, C.gold);
+  ring(0.85, 1.2, '#2f6f6a');
+  if (k.fine) zigzag(k, a - hw + 0.4, a + hw - 0.4, n + 0.01, top - 0.55, 0.3, shade(C.gold, -0.25), Math.max(0.6, 0.06 * s));
+  // the field inside it
+  const [u0, u1, f0, f1] = [a - hw + 1.2, a + hw - 1.2, z0 + 1.2, top - 1.2];
+  const fh = f1 - f0;
+  const L = Math.min((u1 - u0) * 0.62, 15);
+  const zs = f0 + Math.min(fh * 0.18, 1.6); // the sea's line
+  const hh = Math.min(fh * 0.2, L * 0.08); // the hull, deep
+  const rise = Math.min(fh * 0.46, L * 0.2); // how high prow and stern rise over the sea
+  // the sea: a band of zigzag waves the field's width
+  k.poly([[u0, n, f0], [u1, n, f0], [u1, n, zs], [u0, n, zs]], '#24504c', 0);
+  zigzag(k, u0, u1, n + 0.01, zs, Math.min(0.5, fh * 0.12), '#bfd8e8', Math.max(0.7, 0.1 * s));
+  if (fh > 3) zigzag(k, u0 + 0.4, u1, n + 0.01, f0 + (zs - f0) * 0.45, Math.min(0.4, fh * 0.08), '#5f9a94', Math.max(0.6, 0.08 * s));
+  // the sail on its mast, behind the hull
+  const sw = L * 0.42;
+  const sb = zs + hh + 0.35;
+  const st = Math.min(f1 - 0.2, sb + Math.min(fh * 0.46, L * 0.36));
+  k.line([[a, n + 0.01, zs + hh * 0.5], [a, n + 0.01, st + 0.45]], C.timberDark, Math.max(0.9, 0.2 * s));
+  const sail: P3[] = [[a - sw / 2, n + 0.02, st], [a + sw / 2, n + 0.02, st], [a + sw / 2 + 0.3, n + 0.02, (sb + st) / 2], [a + sw / 2, n + 0.02, sb], [a - sw / 2, n + 0.02, sb], [a - sw / 2 + 0.3, n + 0.02, (sb + st) / 2]];
+  k.poly(sail, '#e8d8b0', k.thin);
+  pen.save();
+  pen.beginPath();
+  k.trace(sail);
+  pen.clip();
+  pen.beginPath();
+  const stripe = sw / 5;
+  for (let i = 1; i < 5; i += 2) k.trace([[a - sw / 2 + i * stripe, n + 0.03, st + 0.1], [a - sw / 2 + (i + 1) * stripe, n + 0.03, st + 0.1], [a - sw / 2 + (i + 1) * stripe + 0.25, n + 0.03, sb - 0.1], [a - sw / 2 + i * stripe + 0.25, n + 0.03, sb - 0.1]]);
+  pen.fillStyle = C.red;
+  pen.fill();
+  pen.restore();
+  k.line([[a - sw / 2 - 0.2, n + 0.03, st], [a + sw / 2 + 0.2, n + 0.03, st]], C.timberDark, Math.max(0.8, 0.14 * s));
+  // the hull, its prow and stern rising and curling in
+  const hull: P3[] = [
+    [a - L / 2 - 0.25, n + 0.04, zs + rise],
+    [a - L / 2 + 0.35, n + 0.04, zs + rise - 0.35],
+    [a - L / 2 + 0.7, n + 0.04, zs + hh],
+    [a + L / 2 - 0.7, n + 0.04, zs + hh],
+    [a + L / 2 - 0.35, n + 0.04, zs + rise - 0.35],
+    [a + L / 2 + 0.25, n + 0.04, zs + rise],
+    [a + L / 2 + 0.15, n + 0.04, zs + rise * 0.55],
+    [a + L / 2 - 0.5, n + 0.04, zs + hh * 0.45],
+    [a + L * 0.3, n + 0.04, zs - 0.15],
+    [a - L * 0.3, n + 0.04, zs - 0.15],
+    [a - L / 2 + 0.5, n + 0.04, zs + hh * 0.45],
+    [a - L / 2 - 0.15, n + 0.04, zs + rise * 0.55],
+  ];
+  k.poly(hull, k.vgrad(a, n, zs, zs + hh, [[0, '#2e1c10'], [1, '#4a2e18']]), k.thin, 0.15);
+  for (const d of [-1, 1]) {
+    const curl: P3[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const t = (i / 8) * Math.PI * 1.3;
+      curl.push([a + d * (L / 2 - 0.05 - Math.sin(t) * 0.45), n + 0.05, zs + rise + 0.05 - (1 - Math.cos(t)) * 0.3]);
+    }
+    k.line(curl, '#4a2e18', Math.max(0.8, 0.16 * s));
+  }
+  k.line([[a - L / 2 + 0.6, n + 0.05, zs + hh * 0.35], [a + L / 2 - 0.6, n + 0.05, zs + hh * 0.35]], '#7a5232', Math.max(0.6, 0.08 * s));
+  // round shields along its side
+  const m = Math.max(5, Math.min(9, Math.round(L / 1.6)));
+  const r = Math.min(0.42, (L * 0.75) / m / 2.1);
+  for (let i = 0; i < m; i++) {
+    const u = a - L * 0.36 + (L * 0.72 * i) / (m - 1);
+    k.face(u, n + 0.06, zs + hh * 0.72, r, i % 2 ? '#bfd8e8' : C.gold, k.thin * 0.7, 12);
+    if (k.fine) k.face(u, n + 0.07, zs + hh * 0.72, r * 0.3, C.ironDark, 0, 8);
+  }
+  // a gold sun, two ravens
+  if (fh > 2.6) {
+    k.face(u1 - 1.4, n + 0.02, f1 - 0.9, 0.6, C.gold, k.thin * 0.7, 16);
+    for (const [bu, bz] of [[u0 + 1.4, f1 - 0.7], [u0 + 2.6, f1 - 1.2]] as const) k.line([[bu - 0.45, n + 0.02, bz + 0.15], [bu, n + 0.02, bz - 0.12], [bu + 0.45, n + 0.02, bz + 0.15]], '#1e1a20', Math.max(0.7, 0.12 * s));
+  }
+  // soft folds down it
+  pen.beginPath();
+  for (let u = a - hw + 1.6; u < a + hw - 0.6; u += 2.5) k.trace([[u - 0.3, n + 0.08, top], [u + 0.3, n + 0.08, top], [u + 0.35, n + 0.08, z0], [u - 0.25, n + 0.08, z0]]);
+  pen.fillStyle = withAlpha('#1a0806', 0.12);
+  pen.fill();
+  pen.restore();
+  pen.beginPath();
+  k.trace(cloth);
+  k.paint(null, k.lw);
+  // the fringe at its foot
+  pen.beginPath();
+  for (let u = a - hw + 0.3; u <= a + hw - 0.2; u += 0.45) {
+    const [x0, y0] = k.p(u, n, z0);
+    const [x1, y1] = k.p(u, n, z0 - 0.5);
+    pen.moveTo(x0, y0);
+    pen.lineTo(x1, y1);
+  }
+  pen.strokeStyle = C.gold;
+  pen.lineWidth = Math.max(0.8, 0.12 * s);
+  pen.lineCap = 'round';
+  pen.stroke();
+  // the pole on three pegs
+  for (const du of [-hw + 1.2, 0, hw - 1.2]) k.rod([[a + du, 0.05, top + 0.3], [a + du, n + 0.25, top + 0.3]], C.timberDark, 0.25);
+  k.rod([[a - hw - 0.3, n, top + 0.05], [a + hw + 0.3, n, top + 0.05]], C.timberDark, 0.32);
+  for (const du of [-hw - 0.4, hw + 0.4]) k.face(a + du, n + 0.05, top + 0.05, 0.3, C.gold, k.thin, 12);
 }
 
 // An elk's head mounted on a carved plaque: a long brown face with a pale
@@ -1476,18 +1639,19 @@ function snow(k: Kit, v: RoomView, f: Feature): void {
   pen.restore();
 }
 
-// The hearth's light breathing on the floor and anyone round it.
+// The hearth's light breathing on the floor before it (the scene lays its
+// steady pool; this is only the flicker, kept small).
 function firelight(v: RoomView, L: Layout): void {
   const pit = decorOf(L).find((p) => p.art === DECOR_ART.hearth);
   if (!pit) return;
   const t = v.t;
   const n = 0.5 + 0.5 * (0.6 * Math.sin(t * 5.3) + 0.4 * Math.sin(t * 9.1 + 1.3));
   const pk = new Kit(v.pen, propAt(v.at, pit), v.s);
-  pk.pool(8 + Math.sin(t * 2.3) * 0.4, 7, 16, 14, C.ember, 0.06 + 0.06 * n);
+  pk.pool(8 + Math.sin(t * 2.3) * 0.4, 6, 10, 8, C.ember, 0.08 + 0.1 * n);
 }
 
 // The candles' flicker: a soft breath of light round each sconce and each
-// candle ring.
+// candle ring (none at night: they are snuffed).
 function flicker(v: RoomView, plan: Plan): void {
   const G = girtZ(v.H);
   const lz = lampZ(G);

@@ -131,7 +131,7 @@ const bit = (kind: Particle['kind'], x: number, y: number, z: number, color: RGB
 const blocks: Block[] = [];
 for (let z = 0; z < 3; z++) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) blocks.push({ x: 44 + x, y: 40 + y, z, c: (x + z) % 2 });
 const build = (complete: boolean): BuildFrame => ({
-  shape: 'house',
+  shape: 'tower',
   blocks: complete ? blocks : blocks.slice(0, 15),
   pending: complete ? [] : blocks.slice(15),
   colors: [[200, 120, 70], [230, 220, 190], [255, 240, 200]],
@@ -199,7 +199,9 @@ test('the plate composites to the picture painted straight, but for rounding', (
 
 test('with the lights on it differs only round the glows, and the glows lighten', () => {
   const glowing = [bit('spark', 33, 34, 7, [255, 214, 120], true), bit('bolt', 22, 30, 9, [80, 140, 255], true), bit('glint', 40, 36, 12, [255, 241, 184], true)];
-  const f = frame({ lit: true, particles: glowing, builds: [build(true)], labels: [] });
+  // The floor left its flat grey (no shell light), to measure the glows on.
+  const plain: WorldDef = { ...world, id: 'plate-plain', light: { ao: 0, falloff: 0, top: 0, turn: 0, backs: 0 } };
+  const f = frame({ world: plain, lit: true, particles: glowing, builds: [build(true)], labels: [] });
   const scene = new Scene();
   const p = scene.plate(f);
   const now = composite(p).data;

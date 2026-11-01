@@ -28,10 +28,10 @@ export const C = {
   beamLight: '#4a4648',
   base: '#3a3332',
   // the floor: polished concrete and its joints, the wood-plank corner
-  concrete: '#aaa7a0',
-  concreteLight: '#bdbab3',
-  concreteDark: '#8e8b84',
-  joint: '#7f7c76',
+  concrete: '#b0a89c',
+  concreteLight: '#c4bcae',
+  concreteDark: '#958d82',
+  joint: '#857c72',
   plank: '#b8885a',
   plankLight: '#cb9a6a',
   plankDark: '#9a6f46',
@@ -404,7 +404,7 @@ export const kitOf = (v: { pen: Pen; at: At; s: number }): Kit => new Kit(v.pen,
 
 // ── sprites for animated props ─────────────────────────────────────────────
 // An animated prop is redrawn every frame; its still parts are painted once
-// per (scale, frame axes, placement) into a sprite and copied in whole
+// per (scale, frame axes, placement, lights on or off) into a sprite and copied in whole
 // pixels, so a frame costs a copy plus the moving bits. The whole prop is
 // snapped to the pixel grid (under half a pixel), so a panning camera does
 // not repaint it.
@@ -432,7 +432,7 @@ export function still(v: PropView, id: string, height: number, paint: (k: Kit) =
   const eu = a(1, 0, 0);
   const ev = a(0, 1, 0);
   const ez = a(0, 0, 1);
-  const key = [id, v.len, v.dep, v.seed, q(eu[0]), q(eu[1]), q(ev[0]), q(ev[1]), q(ez[0]), q(ez[1])].join('|');
+  const key = [id, v.len, v.dep, v.seed, q(eu[0]), q(eu[1]), q(ev[0]), q(ev[1]), q(ez[0]), q(ez[1]), v.lit === false ? 0 : 1].join('|');
   let sp = SPRITES.get(key);
   if (sp) SPRITES.delete(key);
   else {

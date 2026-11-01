@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color, Gradient } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
 import type { PropArt, PropView } from '../types.ts';
@@ -108,6 +109,8 @@ const read: PropArt = {
   len: 14,
   dep: 4,
   height: 21,
+  // the banker's lamp on the reading table
+  light: [{ kind: 'lamp', u: 12.75, v: 1.6, z: 7.3, r: 9, strength: 0.8, halo: 2 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'read', 21, (k) => {
@@ -158,17 +161,17 @@ const read: PropArt = {
       k.poly([[12.05, 2.0, 5.42], [12.95, 2.0, 5.42], [12.95, 3.0, 5.42], [12.05, 3.0, 5.42]], '#f6edd8', k.thin);
       if (k.fine) for (const u0 of [11.3, 12.2]) for (let i = 0; i < 4; i++) k.line([[u0, 2.2 + i * 0.2, 5.43], [u0 + 0.6, 2.2 + i * 0.2, 5.43]], '#b8a888', Math.max(0.6, 0.05 * k.s));
     });
-    // the shade: green glass, glowing when lit
-    const on = v.active;
+    // the shade: green glass, glowing while the lights are on (brighter
+    // with someone reading here)
+    const on = lampsOn(v);
     const shadeC = on ? '#4fae7a' : '#2f6f4f';
     const [s0, s1, sv0, sv1, sz] = [11.7, 13.8, 0.75, 1.85, 7.25];
     k.poly([[s0, sv0, sz], [s1, sv0, sz], [s1, sv1, sz], [s0, sv1, sz]], on ? '#fff0c0' : shade(shadeC, -0.3), 0);
     k.poly([[s0, sv0, sz], [s1, sv0, sz], [s1 - 0.15, (sv0 + sv1) / 2, sz + 1.0], [s0 + 0.15, (sv0 + sv1) / 2, sz + 1.0]], shade(shadeC, 0.12), k.lw);
     k.poly([[s0, sv1, sz], [s1, sv1, sz], [s1 - 0.15, (sv0 + sv1) / 2, sz + 1.0], [s0 + 0.15, (sv0 + sv1) / 2, sz + 1.0]], shadeC, k.lw);
     k.line([[s0 + 0.15, (sv0 + sv1) / 2, sz + 1.0], [s1 - 0.15, (sv0 + sv1) / 2, sz + 1.0]], shade(shadeC, 0.4), Math.max(0.8, 0.1 * k.s));
-    if (on) {
-      k.pool(12.2, 2.3, 1.7, 1.3, '#ffe2a0', 0.55, 5.45);
-      k.halo(12.75, 1.6, 6.9, 3.4, '#ffd890', 0.42);
+    if (on) k.pool(12.2, 2.3, 1.7, 1.3, '#ffe2a0', v.active ? 0.55 : 0.35, 5.45);
+    if (v.active) {
       // a page turning over, right to left
       const ph = (v.t * 0.8) % 1;
       if (ph < 0.45) {
@@ -197,6 +200,8 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 11,
+  // the case's own light, warm through the glass
+  light: [{ kind: 'lamp', u: 4.1, v: 1.8, z: 7.8, r: 6, strength: 0.45, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'search', 11, (k) => {
@@ -262,7 +267,7 @@ const search: PropArt = {
     k.poly([[u0 + 0.6, v1, z0 + 0.4], [u0 + 1.4, v1, z0 + 0.4], [u0 + 2.6, v1, z1 - 0.3], [u0 + 1.8, v1, z1 - 0.3]], '#ffffff30', 0);
     k.poly([[u0 + 2.0, v1, z0 + 0.4], [u0 + 2.4, v1, z0 + 0.4], [u0 + 3.6, v1, z1 - 0.3], [u0 + 3.2, v1, z1 - 0.3]], '#ffffff24', 0);
     if (!v.active) return;
-    k.halo((u0 + u1) / 2, 1.8, (z0 + z1) / 2, 5.5, '#ffe2a8', 0.32);
+    if (lampsOn(v)) k.halo((u0 + u1) / 2, 1.8, (z0 + z1) / 2, 5.5, '#ffe2a8', 0.32);
     // the glint, sliding along the front glass (once every two seconds,
     // the loop a worked station is drawn round)
     const f = (v.t * 0.7) % 1.4;
@@ -608,6 +613,8 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 16,
+  // the reading lamp over the armchair
+  light: [{ kind: 'lamp', u: 10.4, v: 1.6, z: 13.6, r: 12, strength: 0.9 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'think', 16, (k) => {
@@ -633,8 +640,10 @@ const think: PropArt = {
       k.box(10.15, 4.7, 4.95, 1.3, 1.0, 0.35, '#b5543a', { line: k.thin, stripe: false });
       teapot(k, 9.25, 4.4, 4.6);
     });
-    // the shade, lit; brighter while someone thinks here
-    frustum(k, 10.4, 1.5, 12.6, 1.95, 15.0, 1.15, '#f3e2bd', v.active ? '#fff3cf' : '#f6e6c4');
+    // the shade, lit while the lights are on, brighter while someone
+    // thinks here (the scene pools its light: see `light`)
+    const on = lampsOn(v);
+    frustum(k, 10.4, 1.5, 12.6, 1.95, 15.0, 1.15, on ? '#f3e2bd' : '#b8a684', on ? (v.active ? '#fff3cf' : '#f6e6c4') : '#8a7a62');
     const pen = k.pen;
     pen.beginPath();
     for (let i = 0; i <= 14; i++) {
@@ -646,10 +655,10 @@ const think: PropArt = {
     pen.strokeStyle = C.mustard;
     pen.lineWidth = Math.max(0.8, 0.1 * k.s);
     pen.stroke();
-    const a = v.active ? 0.55 + 0.05 * Math.sin(v.t * Math.PI) : 0.3;
-    k.halo(10.4, 1.6, 13.6, 5, '#ffd890', a);
-    k.pool(9.0, 3.2, 4.5, 3.4, '#ffd890', a * 0.45, 0);
-    if (v.active) k.pool(5.5, 3.4, 2.6, 2.2, '#ffd890', 0.18, 2.9);
+    if (on && v.active) {
+      k.halo(10.4, 1.6, 13.6, 3, '#ffd890', 0.25 + 0.05 * Math.sin(v.t * Math.PI));
+      k.pool(5.5, 3.4, 2.6, 2.2, '#ffd890', 0.18, 2.9);
+    }
   },
   emit(v: PropView, dt: number, spawn: Spawn): void {
     if (!v.active) return;
@@ -687,6 +696,8 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 9,
+  // the lamp on the side table past the sofa's end
+  light: [{ kind: 'lamp', u: 13.9, v: 2.0, z: 5.8, r: 8, strength: 0.7, halo: 2 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(7.2, 3.6, 7.6, 3.4, 0.3);
@@ -724,8 +735,8 @@ const idle: PropArt = {
     k.box(12.9, 1.0, 0, 2.0, 2.0, 3.6, C.walnut);
     k.cyl(13.9, 2.0, 3.6, 0.45, 0.9, '#c86a48');
     k.rod([[13.9, 2.0, 4.5], [13.9, 2.0, 5.2]], C.brass, 0.1);
-    frustum(k, 13.9, 2.0, 5.0, 1.0, 6.5, 0.65, '#efd9a8', '#fff3cf');
-    k.halo(13.9, 2.0, 5.6, 3.4, '#ffd890', 0.45);
+    const on = lampsOn(v);
+    frustum(k, 13.9, 2.0, 5.0, 1.0, 6.5, 0.65, on ? '#efd9a8' : '#b4a07c', on ? '#fff3cf' : '#8a7a62');
     // the cat's basket, its cushion still dented
     k.shadow(13.6, 8.0, 1.8, 1.6, 0.22);
     k.cyl(13.6, 8.0, 0, 1.55, 1.1, '#c8995a');
@@ -765,6 +776,8 @@ const entrance: PropArt = {
   len: 15,
   dep: 4,
   height: 21,
+  // the lantern by the door
+  light: [{ kind: 'lamp', u: 2.2, v: 1.2, z: 12.3, r: 8, strength: 0.6, halo: 2.2 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, h } = DOOR;
@@ -840,12 +853,11 @@ const entrance: PropArt = {
       // the lantern by the door
       k.rod([[2.2, 0.05, 13.4], [2.2, 0.9, 13.4]], C.iron, 0.12);
       k.box(1.7, 0.7, 11.4, 1.0, 1.0, 1.8, C.iron, { line: k.lw, stripe: false });
-      k.poly([[1.82, 1.71, 11.55], [2.58, 1.71, 11.55], [2.58, 1.71, 13.05], [1.82, 1.71, 13.05]], '#ffe0a0', 0);
-      k.poly([[2.71, 0.82, 11.55], [2.71, 1.58, 11.55], [2.71, 1.58, 13.05], [2.71, 0.82, 13.05]], '#f0c070', 0);
+      const on = lampsOn(v);
+      k.poly([[1.82, 1.71, 11.55], [2.58, 1.71, 11.55], [2.58, 1.71, 13.05], [1.82, 1.71, 13.05]], on ? '#ffe0a0' : '#8a8070', 0);
+      k.poly([[2.71, 0.82, 11.55], [2.71, 1.58, 11.55], [2.71, 1.58, 13.05], [2.71, 0.82, 13.05]], on ? '#f0c070' : '#706858', 0);
       k.box(1.6, 0.6, 13.2, 1.2, 1.2, 0.3, C.iron, { line: k.thin });
     });
-    // the lantern's glow
-    k.halo(2.2, 1.2, 12.3, 3.6, '#ffc870', 0.4);
     // the door: shut, or swung in while someone passes
     const th = v.active ? 0.62 + 0.05 * Math.sin(v.t * 2.2) : 0;
     doorLeaf(k, th);
