@@ -247,7 +247,7 @@ function lights(v: { W: number; D: number; H: number; T: number }): RoomLight[] 
   for (const wall of ['right', 'left'] as const) {
     const { bulbs } = stringOf(v, wall === 'right' ? v.W : v.D);
     bulbs.forEach(([a, n, z], i) => {
-      if (i & 1) out.push({ wall, kind: 'glow', u: a, v: n, z, color: '#ffcf7a', r: 1, strength: 0.7, halo: 1.3 });
+      if (i & 1) out.push({ wall, kind: 'glow', u: a, v: n, z, color: '#ffcf7a', r: 7, strength: 0.2, halo: 1.3 });
     });
   }
   return out;
@@ -562,21 +562,13 @@ function bricks(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, tone: 
   // the plaster's broken edge throws a little shadow down onto the brick
   pen.beginPath();
   k.trace(blob.map(([u, n, zz]) => [a + (u - a) * 1.08, n, z + (zz - z) * 1.08 + 0.3] as [number, number, number]));
-  pen.strokeStyle = withAlpha('#3a1d0e', 0.28);
-  pen.lineWidth = Math.max(1, 0.35 * s);
+  pen.strokeStyle = withAlpha('#2a1408', 0.3);
+  pen.lineWidth = Math.max(1, 0.5 * s);
   pen.stroke();
   pen.restore();
-  // the broken plaster's lip, lit along the bottom where it catches light
-  pen.beginPath();
-  k.trace(blob);
-  pen.strokeStyle = tone('#f6e6c6');
-  pen.lineWidth = Math.max(1, 0.22 * s);
-  pen.stroke();
-  pen.beginPath();
-  k.trace(blob);
-  pen.strokeStyle = withAlpha(INK, 0.45);
-  pen.lineWidth = Math.max(0.7, 0.08 * s);
-  pen.stroke();
+  // no outline (plaster gone, not a sticker): only the broken lip catching
+  // the light along its bottom rim
+  k.line(blob.filter((_, j) => Math.sin((j / 16) * Math.PI * 2) < -0.2), withAlpha(tone('#fff4dc'), 0.45), Math.max(0.8, 0.15 * s));
 }
 
 // An arched sash window set into the wall: the reveal, glass onto the

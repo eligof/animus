@@ -52,7 +52,9 @@ export const office: WorldDef = {
   npcs: NPCS,
   // a bright floor: its far corners deeper, so the windows' evening sun
   // and the pendants' pools stand out on the concrete
-  light: { falloff: 1.3 },
+  // and its own night: a dark violet the desks' screens, the neon and the
+  // moon through the windows light
+  light: { falloff: 1.3, night: { tint: [70, 76, 140], strength: 0.55 } },
   // dusk: the loft a little dimmed toward the sky's lilac, the low sun and
   // the lamps warm in it
   ambient: { tint: [200, 172, 205], strength: 0.18 },

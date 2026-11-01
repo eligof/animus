@@ -49,6 +49,9 @@ export const cafe: WorldDef = {
   npcs: NPCS,
   // a rainy evening: the room dimmed cool, the lamps and the fire warm in it
   ambient: { tint: [120, 112, 168], strength: 0.3 },
+  // the left wall turned well away from the light; after hours a warm
+  // violet dark the fire, the string lights and the windows glow in
+  light: { turn: 1.6, night: { tint: [96, 78, 120], strength: 0.45 } },
   reserve: cafeReserve,
   costume: 'casual',
   critter: { kind: 'cat', body: hex('#e8913a') }, // a ginger cat
