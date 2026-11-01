@@ -4,7 +4,7 @@ import type { RoomView } from '../types.ts';
 import type { Kit, P3 } from './kit.ts';
 import { C, INK, NEONS, hash, withAlpha } from './kit.ts';
 import type { Feature, Plan, Wall } from './plan.ts';
-import { PAINT, STRIP, TRUSS, fh, muralTop } from './plan.ts';
+import { PAINT, STRIP, TRUSS, fh, muralSpan } from './plan.ts';
 import { sign, signColor } from './signs.ts';
 
 // The club's walls: old brick, black-painted along the foot, a neon strip
@@ -74,8 +74,8 @@ export function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   // the far corner in shadow
   k.rect(T, 0, 0, T + 10, H, k.grad([T, 0, H / 2], [T + 10, 0, H / 2], [[0, '#0a051055'], [1, '#0a051000']]));
   // what the truss's cans throw down the brick
-  truss(k, v, end, 'wash');
-  for (const f of plan.features) {
+  truss(k, v, plan, wall, end, 'wash');
+  for (const f of [...plan.features, ...plan.over]) {
     if (f.wall !== wall || !k.seenBox(f.a - f.w / 2 - 6, 0, 0, f.a + f.w / 2 + 6, 1, H, 8 * s)) continue;
     if (f.kind === 'mural') mural(k, f, lit, H);
     else if (f.kind === 'exit') exitDoor(k, f, lit);
@@ -90,13 +90,13 @@ export function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   for (let a = T + 1; a < end - 1; a += 12) k.line([[a, 0.02, STRIP - 0.5], [a, 0.45, STRIP - 0.5]], C.steelDark, Math.max(1, 0.18 * s));
   let from = T + 0.8;
   for (const f of plan.features) {
-    if (f.wall !== wall || f.kind !== 'mural' || muralTop(H) < STRIP + 1) continue;
+    if (f.wall !== wall || f.kind !== 'mural' || muralSpan(H)[0] > STRIP) continue;
     k.neon([[from, 0.45, STRIP], [f.a - f.w / 2 - 0.8, 0.45, STRIP]], strip, 0.36);
     from = f.a + f.w / 2 + 0.8;
   }
   k.neon([[from, 0.45, STRIP], [end - 0.5, 0.45, STRIP]], strip, 0.36);
   if (wall === 'left' && H >= 44) duct(k, v, end);
-  truss(k, v, end, 'rig');
+  truss(k, v, plan, wall, end, 'rig');
 }
 
 // Mortar courses and joints over the visible brick, a few bricks a shade
@@ -166,22 +166,48 @@ function bricks(k: Kit, plan: Plan, wall: Wall, T: number, end: number, H: numbe
 
 // ── the rig along the top ──────────────────────────────────────────────────
 // The lights hung along a wall's truss: a par can every 9 units, every third
-// a moving head, each with its colour.
-export function rig(T: number, end: number): Array<{ a: number; c: Color; head: boolean }> {
+// a moving head, each with its colour; none in front of a sign or the mural
+// where they reach up into the lights (on a wall under about 44 tall): a
+// par can there is left off, a moving head slides along the truss to the
+// near side of it. The cans hang 1.9 out, so they hide the brick 1.9
+// nearer the corner and 1.9 lower, down to `reach`.
+export function rig(plan: Plan, wall: Wall, T: number, end: number): Array<{ a: number; c: Color; head: boolean }> {
+  const { H } = plan.L;
+  const reach = H - TRUSS - 5.5;
+  const clear: Array<readonly [number, number]> = [];
+  for (const f of [...plan.features, ...plan.over]) {
+    if (f.wall !== wall) continue;
+    if (f.kind === 'mural' && muralSpan(H)[1] > reach) clear.push([f.a - f.w / 2 - 1.5, f.a + f.w / 2 + 1.5]);
+    const r = f.r ?? plan.sign.r;
+    if (f.kind === 'bay' && f.sign >= 0 && plan.sign.z + r > reach) clear.push([f.a - r - 0.9, f.a + r + 0.9]);
+  }
+  const hides = (a: number) => clear.find(([a0, a1]) => a - 1.9 > a0 && a - 1.9 < a1);
+  const grid: number[] = [];
+  for (let a = T + 5; a < end - 3; a += 9) grid.push(a);
   const out: Array<{ a: number; c: Color; head: boolean }> = [];
-  let i = 0;
-  for (let a = T + 5; a < end - 3; a += 9, i++) out.push({ a, c: NEONS[(i * 3 + (end > 150 ? 1 : 0)) % NEONS.length], head: i % 3 === 1 });
+  grid.forEach((a, i) => {
+    const c = NEONS[(i * 3 + (end > 150 ? 1 : 0)) % NEONS.length];
+    const head = i % 3 === 1;
+    const z = hides(a);
+    if (!z) out.push({ a, c, head });
+    else if (head) {
+      const to = [z[0] + 1.9, z[1] + 1.9]
+        .sort((p, q) => Math.abs(p - a) - Math.abs(q - a))
+        .find((b) => b > T + 2 && b < end - 2 && !hides(b) && grid.every((g) => g === a || hides(g) || Math.abs(g - b) >= 2));
+      if (to !== undefined) out.push({ a: to, c, head });
+    }
+  });
   return out;
 }
 
 // A box truss on brackets, par cans hanging under it every few units and a
 // moving head now and then; 'wash' paints the cones of light they throw
 // down the brick (under everything on the wall), 'rig' the truss itself.
-function truss(k: Kit, v: RoomView, end: number, part: 'wash' | 'rig'): void {
+function truss(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, part: 'wash' | 'rig'): void {
   const { T, H } = v;
   const z = H - TRUSS;
   const n = 1.9;
-  const cans = rig(T, end);
+  const cans = rig(plan, wall, T, end);
   if (part === 'wash') {
     for (const c of cans) {
       if (!k.seen([[c.a - 5, 0, 0], [c.a + 5, 0, z]], 0)) continue;
@@ -255,7 +281,8 @@ function duct(k: Kit, v: RoomView, end: number): void {
 
 // A neon sign over something low.
 function bay(k: Kit, plan: Plan, f: Feature, lit: boolean): void {
-  const { r, z } = plan.sign;
+  const { z } = plan.sign;
+  const r = f.r ?? plan.sign.r;
   if (f.sign >= 0) {
     const c = signColor(f.sign);
     k.wash(f.a, 0.05, z, r * 2.2, r * 1.7, c, 0.32);
@@ -421,12 +448,12 @@ function exitDoor(k: Kit, f: Feature, lit: boolean): void {
 }
 
 // The mural: the club's grey cat in pink headphones on a sunburst, spray
-// stars round it, drips under it.
+// stars round it, drips under it; down on the brick, or up over the strip
+// on a low wall (see muralSpan).
 function mural(k: Kit, f: Feature, lit: boolean, H: number): void {
   const { pen } = k;
   const w = f.w;
-  const z0 = 2.2;
-  const z1 = muralTop(H);
+  const [z0, z1] = muralSpan(H);
   const h = z1 - z0;
   const a = f.a;
   const n = 0.06;

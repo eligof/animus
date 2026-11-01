@@ -86,10 +86,12 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const wk = new Kit(pen, wallAt(v.at, wall, T), s);
     const end = wall === 'right' ? W : D;
     wk.poly([[T, 0, 0], [end, 0, 0], [end, 4, 0], [T, 4, 0]], wk.lgrad([0, 0, 0], [0, 4, 0], [1, 0, 0], [[0, '#0a051088'], [0.4, '#0a051030'], [1, '#0a051000']]), 0);
-    // the neon strip caught in the polish along the wall's foot
+    // the neon strip caught in the polish along the wall's foot: a soft
+    // falloff and a crisp line, as a gloss reads
     pen.save();
     pen.globalCompositeOperation = 'screen';
-    wk.poly([[T, 0.5, 0], [end, 0.5, 0], [end, 7, 0], [T, 7, 0]], wk.lgrad([0, 0.5, 0], [0, 7, 0], [1, 0, 0], [[0, withAlpha(STRIPS[wall], 0.16)], [1, withAlpha(STRIPS[wall], 0)]]), 0);
+    wk.poly([[T, 0.5, 0], [end, 0.5, 0], [end, 9, 0], [T, 9, 0]], wk.lgrad([0, 0.5, 0], [0, 9, 0], [1, 0, 0], [[0, withAlpha(STRIPS[wall], 0.24)], [0.4, withAlpha(STRIPS[wall], 0.08)], [1, withAlpha(STRIPS[wall], 0)]]), 0);
+    wk.line([[T + 0.6, 1.3, 0.01], [end - 0.4, 1.3, 0.01]], withAlpha(STRIPS[wall], 0.3), Math.max(1, 0.16 * s));
     pen.restore();
     // and each sign's colour under it
     for (const f of plan.features) {
@@ -259,7 +261,7 @@ function beams(k: Kit, v: RoomView, plan: Plan): void {
   for (const wall of ['right', 'left'] as const) {
     const end = wall === 'right' ? v.W : v.D;
     const along = wall === 'right' ? cx : cy;
-    const heads = rig(v.T, end).filter((c) => c.head).sort((p, q) => Math.abs(p.a - along) - Math.abs(q.a - along)).slice(0, 2);
+    const heads = rig(plan, wall, v.T, end).filter((c) => c.head).sort((p, q) => Math.abs(p.a - along) - Math.abs(q.a - along)).slice(0, 2);
     for (const h of heads) {
       const z = v.H - TRUSS - 0.6 - 2.4;
       const src: [number, number, number] = wall === 'right' ? [h.a, v.T + 2.3, z] : [v.T + 2.3, h.a, z];
@@ -329,33 +331,63 @@ function shell(k: Kit, v: RoomView): void {
 
 // ── per frame, over everyone's heads ─────────────────────────────────────────
 
-// Where the mirror ball hangs (world units) and how big it is.
+// Where the mirror ball hangs (world units) and how big it is: high, at
+// the truss's height, so it hangs over the room rather than sitting on
+// whatever stands under it.
 export function ballAt(plan: Plan): { x: number; y: number; z: number; r: number } {
   const { L } = plan;
   const d = plan.dance;
   const x = d ? d.x0 + (d.n * TILE) / 2 : L.T + (L.W - L.T) * 0.55;
   const y = d ? d.y0 + (d.n * TILE) / 2 : L.T + (L.D - L.T) * 0.55;
-  return { x, y, z: Math.max(22, Math.min(40, L.H * 0.55)), r: Math.max(2.2, Math.min(4.8, L.H / 15)) };
+  const r = Math.max(2.2, Math.min(4.8, L.H / 15));
+  return { x, y, z: Math.max(22, Math.min(40, L.H - TRUSS - r * 0.4)), r };
 }
 
-// The mirror ball: a chain up into the dark, a sphere of tiny mirrors
-// turning, each catching the light as it comes round.
+// The mirror ball: a chain up to the walls' tops and on into the dark, a
+// sphere of tiny mirrors turning, each catching the light as it comes
+// round.
 function ball(k: Kit, v: RoomView, plan: Plan): void {
   const b = ballAt(plan);
   const { pen, s } = k;
   const [cx, cy] = k.p(b.x, b.y, b.z);
   const R = b.r * s;
-  const top = Math.min(v.H + 6, b.z + b.r + 16);
-  const [tx, ty] = k.p(b.x, b.y, top);
-  const g = pen.createLinearGradient(tx, ty, cx, cy - R);
+  const hook = Math.max(b.z + b.r + 3, v.H - 0.5);
+  const [rx, ry] = k.p(b.x, b.y, hook);
+  const [tx, ty] = k.p(b.x, b.y, hook + 5);
+  const g = pen.createLinearGradient(tx, ty, rx, ry);
   g.addColorStop(0, '#8e8aa300');
   g.addColorStop(1, '#8e8aa3');
+  pen.lineCap = 'round';
   pen.beginPath();
   pen.moveTo(tx, ty);
-  pen.lineTo(cx, cy - R);
+  pen.lineTo(rx, ry);
   pen.strokeStyle = g;
   pen.lineWidth = Math.max(1, 0.18 * s);
   pen.stroke();
+  // the chain: inked links down to the ball's cap
+  pen.beginPath();
+  pen.moveTo(rx, ry);
+  pen.lineTo(cx, cy - R);
+  pen.strokeStyle = INK;
+  pen.lineWidth = Math.max(1.6, 0.34 * s);
+  pen.stroke();
+  pen.strokeStyle = '#8e8aa3';
+  pen.lineWidth = Math.max(1, 0.18 * s);
+  pen.stroke();
+  const link = Math.max(3, 0.7 * s);
+  pen.beginPath();
+  for (let y = ry + link * 0.5; y < cy - R - link * 0.3; y += link) {
+    pen.moveTo(cx - 0.16 * s, y);
+    pen.lineTo(cx + 0.16 * s, y);
+  }
+  pen.strokeStyle = '#c8c4dc';
+  pen.lineWidth = Math.max(0.7, 0.1 * s);
+  pen.stroke();
+  // the cap the chain hooks into
+  pen.beginPath();
+  pen.ellipse(cx, cy - R * 0.97, Math.max(1.5, 0.45 * s), Math.max(1, 0.22 * s), 0, 0, Math.PI * 2);
+  pen.fillStyle = '#5f5a72';
+  pen.fill();
   softDot(pen, cx, cy, R * 2.4, '#d8c8ff', 0.22);
   // the sphere, then its mirrors band by band
   pen.beginPath();
@@ -465,6 +497,6 @@ function flicker(v: RoomView, plan: Plan): void {
   if (!off) return;
   const k = new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s);
   // as walls.ts hangs it: on a board, or on the brick
-  sign(k, f.sign, f.a, fh(f, 1) < 0.45 ? 0.55 : 0.4, plan.sign.z, plan.sign.r, false, 1);
+  sign(k, f.sign, f.a, fh(f, 1) < 0.45 ? 0.55 : 0.4, plan.sign.z, f.r ?? plan.sign.r, false, 1);
 }
 

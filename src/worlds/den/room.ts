@@ -10,10 +10,10 @@ import { cable, code, droop, rain, sticker, STICKERS } from './bits.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, on, withAlpha } from './kit.ts';
 
-// The den's shell: a basement at night. Painted cinder block over a dark
-// band with a green line round it, a cable tray and a duct along the tops
-// of the walls with a strip of green LEDs under them, high little windows
-// onto the moonlit grass. Between the stations hang a video wall of green
+// The den's shell: a basement at night, lit by its screens. Dark painted
+// cinder block over a darker band with a green line round it, a cable tray
+// and a duct along the tops of the walls with a strip of green LEDs under
+// them, high little windows onto the moonlit grass and the street lamps. Between the stations hang a video wall of green
 // rain, monitors on arms, a whiteboard of diagrams, a cork board strung
 // with red thread, a pegboard of tools, shelves of toys, neon signs,
 // posters and long banners. Carpet tiles on the floor, cables snaking to
@@ -35,7 +35,7 @@ const TILE = 4; // carpet tiles
 const HIGH = 48; // walls this tall have an upper row of pieces
 
 // The bands at the top of a wall H tall.
-const tops = (H: number) => ({ duct: H - 3.3, tray: H - 5.1, win0: H - 12.4, win1: H - 7.2 });
+const tops = (H: number) => ({ duct: H - 3.3, tray: H - 5.1, win0: H - 13.6, win1: H - 7.2 });
 
 // ── the plan ───────────────────────────────────────────────────────────────
 
@@ -82,7 +82,9 @@ function features(L: Layout): Feature[] {
     const z0 = high ? 24 : 8.5;
     const z1 = high ? Math.min(L.H - 14.5, z0 + 24) : 19.5;
     out.push({ wall: rw.wall, kind: 'rainwall', a: mid, w: RW, k: 1, z0, z1 });
-    if (!high) low.splice(low.indexOf(rw), 1, { wall: rw.wall, a0: rw.a0, a1: mid - RW / 2 - 3 }, { wall: rw.wall, a0: mid + RW / 2 + 3, a1: rw.a1 });
+    // its neighbours keep back far enough to leave room for the rain it
+    // spills onto the block (see spill)
+    if (!high) low.splice(low.indexOf(rw), 1, { wall: rw.wall, a0: rw.a0, a1: mid - RW / 2 - SPILL }, { wall: rw.wall, a0: mid + RW / 2 + SPILL, a1: rw.a1 });
   }
   // Eye level: one of each board, screens, signs, a cluster of posters or
   // two, the odd thing hung up; pipes in the gaps left.
@@ -132,7 +134,7 @@ function features(L: Layout): Feature[] {
         const w = kind === 'traces' ? 18 : kind === 'vent' ? 5 : 7;
         const c = a + w / 2;
         if (c + w / 2 > s.a1) break;
-        if (taken.some((f) => f.wall === s.wall && Math.abs(f.a - c) < f.w / 2 + w / 2 + 4) || pipes.some((f) => f.wall === s.wall && Math.abs(f.a - c) < w / 2 + 1.5)) {
+        if (taken.some((f) => f.wall === s.wall && Math.abs(f.a - c) < f.w / 2 + w / 2 + SPILL) || pipes.some((f) => f.wall === s.wall && Math.abs(f.a - c) < w / 2 + 1.5)) {
           a += 4;
           continue;
         }
@@ -144,20 +146,24 @@ function features(L: Layout): Feature[] {
       }
     }
   }
-  // Little high windows along the top of each stretch.
+  // Little high windows along the top of each stretch, numbered in `k`
+  // (90, 93, ...: every second one looks out on a street lamp).
+  let m = 0;
   for (const s of spans) {
     const len = s.a1 - s.a0;
     const count2 = Math.max(len >= 12 ? 1 : 0, Math.floor((len + 10) / 32));
-    for (let i = 0; i < count2; i++) {
+    for (let i = 0; i < count2; i++, m++) {
       const a = s.a0 + ((i + 0.5) * len) / count2;
-      out.push({ wall: s.wall, kind: 'window', a, w: 8, k: 90 + i * 3 + (s.wall === 'left' ? 40 : 0), z0: win0, z1: win1 });
+      out.push({ wall: s.wall, kind: 'window', a, w: WIDTH.window, k: 90 + m * 3, z0: win0, z1: win1 });
     }
   }
   return out;
 }
 
 // Eye-level pieces: their widths and heights.
-const WIDTH: Record<Kind, number> = { rainwall: 19, screens: 14, whiteboard: 16, cork: 10, pegboard: 11, shelf: 10, neon: 8, posters: 12, panel: 4, guitar: 4, dartboard: 4, clock: 3, sign: 5, window: 8, banner: 7, vent: 5, traces: 18, pipe: 1 };
+const WIDTH: Record<Kind, number> = { rainwall: 19, screens: 14, whiteboard: 16, cork: 10, pegboard: 11, shelf: 10, neon: 8, posters: 12, panel: 4, guitar: 4, dartboard: 4, clock: 3, sign: 5, window: 11, banner: 7, vent: 5, traces: 18, pipe: 1 };
+// How far the video wall's rain runs out past its bezel, to either side.
+const SPILL = 5;
 const ZS: Record<Kind, readonly [number, number]> = {
   rainwall: [8.5, 19.5],
   screens: [10, 17.5],
@@ -229,8 +235,9 @@ export const room: RoomArt = {
 // ── floor ──────────────────────────────────────────────────────────────────
 
 // Carpet tiles laid quarter-turned (two tones in a checker, a little
-// variation within each) and the odd replacement in another dye lot.
-const CARPET = ['#3f4a47', '#414c49', '#3c4744', '#3e4946', '#3f4a50', '#46443f'];
+// variation within each) and the odd replacement in another dye lot: dark,
+// a step under the walls, so the screens' light is what shows on it.
+const CARPET = ['#283130', '#2b3433', '#262f2e', '#293231', '#283136', '#302e29'];
 
 function floor(k: Kit, v: RoomView, plan: Plan): void {
   const { pen } = k;
@@ -263,7 +270,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     pen.moveTo(a[0], a[1]);
     pen.lineTo(b[0], b[1]);
   }
-  pen.strokeStyle = '#2a333188';
+  pen.strokeStyle = '#181f1e88';
   pen.lineWidth = Math.max(0.7, 0.08 * s);
   pen.lineCap = 'butt';
   pen.stroke();
@@ -281,7 +288,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
         }
       }
     }
-    pen.strokeStyle = '#5a68631c';
+    pen.strokeStyle = '#52605b1c';
     pen.lineWidth = 0.14 * s;
     pen.stroke();
   }
@@ -430,7 +437,9 @@ function roundRug(k: Kit, cu: number, cv: number, r: number): void {
 
 // ── walls ──────────────────────────────────────────────────────────────────
 
-const BLOCKS: ReadonlyArray<readonly [number, Color]> = [[0, '#40504b'], [0.35, '#4c5c57'], [0.8, '#455550'], [1, '#3a4844']];
+// The block's paint from the band up: dark, a little lighter at eye level,
+// falling off into the dark at the top.
+const BLOCKS: ReadonlyArray<readonly [number, Color]> = [[0, '#2c3a37'], [0.35, '#344542'], [0.8, '#2d3c39'], [1, '#1f2a28']];
 
 function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const { pen, s } = k;
@@ -439,13 +448,13 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const lit = k.lit(0, 1);
   const tone = (c: Color, d = 0.16) => (lit ? c : shade(c, -d));
   const { duct, tray } = tops(H);
-  // Painted block: a little lighter in the middle, darker toward the top.
+  // Painted block (BLOCKS).
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, LOW, H, BLOCKS.map(([t, c]) => [t, tone(c)] as const)), 0);
   // the far corner in shadow
   k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.lgrad([T, 0, 0], [T + 10, 0, 0], [0, 0, 1], [[0, '#03080640'], [1, '#03080600']]), 0);
   blocks(k, v, end, lit);
   // the dark band, the green line on it, the rubber skirting
-  k.rect(T, 0, end, LOW, 0, tone('#2e3836'));
+  k.rect(T, 0, end, LOW, 0, tone('#1e2725'));
   k.rect(T, LOW, end, LOW + 0.45, 0.01, tone(C.stripe, 0.12));
   k.line([[T, 0.02, LOW + 0.45], [end, 0.02, LOW + 0.45]], shade(C.stripe, 0.35), Math.max(0.7, 0.08 * s));
   k.rect(T, 0, end, BASE, 0.02, C.rubber);
@@ -454,14 +463,15 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     if (f.wall !== wall) continue;
     if (f.kind === 'window') windowArt(k, v, f, lit);
   }
-  // The LED strip's green wash down the wall under the tray.
+  // The LED strip's green wash down the wall under the tray: the room's
+  // top edge is a line of green light.
   pen.save();
   pen.globalCompositeOperation = 'screen';
-  k.poly([[T, 0.02, tray - 9], [end, 0.02, tray - 9], [end, 0.02, tray], [T, 0.02, tray]], k.vgrad(T, 0.02, tray - 9, tray, [[0, '#39ff6e00'], [0.75, '#39ff6e1c'], [1, '#39ff6e40']]), 0);
+  k.poly([[T, 0.02, tray - 12], [end, 0.02, tray - 12], [end, 0.02, tray], [T, 0.02, tray]], k.vgrad(T, 0.02, tray - 12, tray, [[0, '#39ff6e00'], [0.7, '#39ff6e2a'], [1, '#39ff6e66']]), 0);
   pen.restore();
   for (const f of plan.features) {
     if (f.wall !== wall) continue;
-    if (f.kind === 'rainwall') rainWall(k, v, f);
+    if (f.kind === 'rainwall') rainWall(k, v, f, plan);
     else if (f.kind === 'screens') screens(k, v, f);
     else if (f.kind === 'whiteboard') whiteboard(k, f);
     else if (f.kind === 'cork') cork(k, f);
@@ -530,7 +540,7 @@ function blocks(k: Kit, v: RoomView, end: number, lit: boolean): void {
       pen.lineTo(p1, q1);
     }
   }
-  pen.strokeStyle = lit ? '#2a35328c' : '#202a278c';
+  pen.strokeStyle = lit ? '#18201eaa' : '#131a18aa';
   pen.lineWidth = Math.max(0.6, 0.1 * s);
   pen.lineCap = 'butt';
   pen.stroke();
@@ -542,7 +552,7 @@ function blocks(k: Kit, v: RoomView, end: number, lit: boolean): void {
       pen.moveTo(a[0], a[1]);
       pen.lineTo(b[0], b[1]);
     }
-    pen.strokeStyle = lit ? '#6a7b7530' : '#5a6a6428';
+    pen.strokeStyle = lit ? '#5a6b6530' : '#4a5a5428';
     pen.lineWidth = 0.1 * s;
     pen.stroke();
   }
@@ -579,7 +589,7 @@ function trayArt(k: Kit, v: RoomView, end: number, z: number, lit: boolean): voi
   k.line(humps.map(([a, n, zz]) => [a, n + 0.1, zz - 0.15] as P3), '#2b3a6a', Math.max(0.8, 0.14 * k.s));
   k.line(humps.map(([a, n, zz]) => [a, n + 0.2, zz - 0.35] as P3), '#7a2a2a', Math.max(0.8, 0.12 * k.s));
   // the basket's front: wire mesh
-  k.poly([[T, 1.6, z], [end, 1.6, z], [end, 1.6, z + 0.9], [T, 1.6, z + 0.9]], withAlpha(lit ? '#9aa5a1' : '#7e8985', 0.35), 0);
+  k.poly([[T, 1.6, z], [end, 1.6, z], [end, 1.6, z + 0.9], [T, 1.6, z + 0.9]], withAlpha(lit ? '#6e7975' : '#5a6561', 0.35), 0);
   pen.beginPath();
   for (let a = T + 0.6; a < end; a += 0.6) {
     const [x0, y0] = k.p(a, 1.6, z);
@@ -587,11 +597,11 @@ function trayArt(k: Kit, v: RoomView, end: number, z: number, lit: boolean): voi
     pen.moveTo(x0, y0);
     pen.lineTo(x1, y1);
   }
-  pen.strokeStyle = '#a9b3af99';
+  pen.strokeStyle = '#7e898599';
   pen.lineWidth = Math.max(0.6, 0.06 * k.s);
   pen.stroke();
-  k.line([[T, 1.6, z + 0.9], [end, 1.6, z + 0.9]], '#c3ccc8', Math.max(1, 0.14 * k.s));
-  k.line([[T, 1.6, z], [end, 1.6, z]], '#8a9692', Math.max(1, 0.12 * k.s));
+  k.line([[T, 1.6, z + 0.9], [end, 1.6, z + 0.9]], '#93a09b', Math.max(1, 0.14 * k.s));
+  k.line([[T, 1.6, z], [end, 1.6, z]], '#66726e', Math.max(1, 0.12 * k.s));
   // brackets, and a cable drooping out now and then
   for (let a = T + 3; a < end - 1; a += 12) {
     k.poly([[a, 0, z - 0.4], [a, 1.7, z - 0.05], [a, 1.7, z + 0.05], [a, 0, z + 0.05]], C.steelDark, k.thin * 0.8);
@@ -602,8 +612,10 @@ function trayArt(k: Kit, v: RoomView, end: number, z: number, lit: boolean): voi
   }
 }
 
-// A high basement window: a deep concrete reveal, the night outside (a
-// strip of grass against the sky, a star or two), bars, a cobweb.
+// A high basement window: a deep concrete reveal, the night outside at
+// ground level (grass rimmed by the moon in front of the kerb, the sky
+// glowing low over the town, a star or two, on some a street lamp's warm
+// glow or a cat sat on the kerb), bars, a cobweb.
 function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const { pen, s } = k;
   const { a, w, z0, z1 } = f;
@@ -611,29 +623,66 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const u1 = a + w / 2;
   // moonlight down the wall under it
   k.wash(a, 0.02, z0 - 4, w * 0.75, 8, C.moon, 0.1);
-  k.rect(u0 - 0.6, z0 - 0.6, u1 + 0.6, z1 + 0.5, 0.03, lit ? '#6a7470' : shade('#6a7470', -0.16), k.lw);
+  k.rect(u0 - 0.6, z0 - 0.6, u1 + 0.6, z1 + 0.5, 0.03, lit ? '#4c5753' : shade('#4c5753', -0.16), k.lw);
+  // The view lies on a plane `back` units behind the wall, which shows
+  // through the opening shifted along and up by as much: what is seen of
+  // it runs (vu0..vu1) x (z0..vz1), the bottom of that hidden by the sill.
   const back = -1.6;
+  const vu0 = u0 + back;
+  const vu1 = u1 + back;
+  const vz1 = z1 + back;
+  const vc = (vu0 + vu1) / 2;
   pen.save();
   pen.beginPath();
   k.trace([[u0, 0.04, z0], [u1, 0.04, z0], [u1, 0.04, z1], [u0, 0.04, z1]]);
   pen.clip();
-  k.rect(u0 - 1, z0 - 1, u1 + 1, z1 + 1, back, k.vgrad(a, back, z0, z1, [[0, '#3b4f7a'], [0.6, '#22305a'], [1, '#141c38']]));
-  k.halo(a + (hash(f.k, 1) - 0.5) * w * 0.5, back, z1 - 1.2, 2.2, '#dfe8ff', 0.4);
-  // grass blades against the sky
-  const blades: P3[] = [[u0 - 1, back, z0]];
-  for (let u = u0 - 1; u <= u1 + 1; u += 0.32) blades.push([u, back, z0 + 1.1 + hash(Math.floor(u * 10), f.k, 2) * 1.4], [u + 0.16, back, z0 + 0.9]);
-  blades.push([u1 + 1, back, z0]);
-  k.poly(blades, '#16241e', 0);
+  k.rect(vu0 - 0.6, z0 - 2, vu1 + 0.6, vz1 + 0.6, back, k.vgrad(a, back, z0 + 1, vz1, [[0, '#56679a'], [0.45, '#2b3866'], [1, '#141c3a']]));
+  const nth = Math.round((f.k - 90) / 3);
+  const lamp = nth % 2 === 1;
+  // the lamp in an end pane, its arm reaching in; the moon over the other end
+  const dir = hash(f.k, 8) < 0.5 ? 1 : -1;
+  const lu = (dir > 0 ? vu0 : vu1) + dir * 1.1;
+  k.halo(lamp ? 2 * vc - lu : vc + (hash(f.k, 1) - 0.5) * w * 0.5, back, vz1 - 1.1, 2.2, '#dfe8ff', 0.4);
+  // the kerb, and a street lamp on it, or a cat sat on it
+  const kz = z0 + 1.7;
+  k.rect(vu0 - 0.6, kz - 0.5, vu1 + 0.6, kz, back, '#2c3340');
+  k.line([[vu0 - 0.6, back, kz], [vu1 + 0.6, back, kz]], '#5a5f66', Math.max(0.7, 0.1 * s));
+  if (lamp) {
+    const top = vz1 - 0.75;
+    const hu = lu + dir * 0.95;
+    k.halo(hu, back, kz, 2.4, C.lamp, 0.2);
+    k.line([[lu, back, kz - 0.2], [lu, back, top], [lu + dir * 0.25, back, top + 0.45], [lu + dir * 0.9, back, top + 0.5]], '#4a4f5c', Math.max(1, 0.2 * s));
+    k.line([[lu - 0.07, back, kz - 0.2], [lu - 0.07, back, top]], '#7a7f8c', Math.max(0.6, 0.06 * s));
+    k.poly([[hu - 0.4, back, top + 0.55], [hu + 0.4, back, top + 0.55], [hu + 0.25, back, top + 0.15], [hu - 0.25, back, top + 0.15]], '#4a4f5c', 0);
+    k.halo(hu, back, top, 2.6, C.lamp, 0.6);
+    k.line([[hu - 0.23, back, top + 0.12], [hu + 0.23, back, top + 0.12]], '#fff6dc', Math.max(1, 0.16 * s));
+  } else if (nth % 4 === 2) {
+    const cu = vc + (hash(f.k, 10) - 0.5) * w * 0.4;
+    const cat: P3[] = [];
+    for (let i = 0; i <= 12; i++) {
+      const th = Math.PI * (i / 12);
+      cat.push([cu + Math.cos(th) * 0.45, back, kz + Math.sin(th) * 0.95]);
+    }
+    k.poly(cat, '#0b1018', 0);
+    k.poly([[cu - 0.38, back, kz + 0.9], [cu + 0.3, back, kz + 0.9], [cu + 0.36, back, kz + 1.45], [cu + 0.15, back, kz + 1.25], [cu - 0.2, back, kz + 1.25], [cu - 0.42, back, kz + 1.45]], '#0b1018', 0);
+    k.line([[cu + 0.4, back, kz + 0.1], [cu + 0.85, back, kz + 0.15], [cu + 0.95, back, kz + 0.55]], '#0b1018', Math.max(0.8, 0.12 * s));
+  }
+  // grass blades against it all, their tips catching the moon
+  const blades: P3[] = [[vu0 - 0.6, back, z0 - 1]];
+  for (let u = vu0 - 0.6; u <= vu1 + 0.6; u += 0.32) blades.push([u, back, z0 + 0.6 + hash(Math.floor(u * 10), f.k, 2) * 1.0], [u + 0.16, back, z0 + 0.4]);
+  blades.push([vu1 + 0.6, back, z0 - 1]);
+  k.poly(blades, '#122019', 0);
+  k.line(blades.slice(1, -1), '#36604a', Math.max(0.6, 0.06 * s));
   pen.beginPath();
   for (let i = 0; i < 4; i++) {
-    const [x, y] = k.p(u0 + 0.6 + hash(f.k, i, 3) * (w - 1.2), back, z0 + 3 + hash(f.k, i, 4) * (z1 - z0 - 3.4));
+    const [x, y] = k.p(vu0 + 0.6 + hash(f.k, i, 3) * (w - 1.2), back, kz + 1.2 + hash(f.k, i, 4) * (vz1 - kz - 1.6));
     pen.moveTo(x + 1, y);
     pen.arc(x, y, Math.max(0.6, 0.08 * s), 0, Math.PI * 2);
   }
   pen.fillStyle = '#e8eeff';
   pen.fill();
   // the reveal's lit underside
-  k.poly([[u0, 0.04, z0], [u1, 0.04, z0], [u1, back, z0], [u0, back, z0]], '#7c8682', 0);
+  k.poly([[u0, 0.04, z0], [u1, 0.04, z0], [u1, back, z0], [u0, back, z0]], '#58635f', 0);
   k.poly([[u0, 0.04, z1], [u1, 0.04, z1], [u1, back, z1], [u0, back, z1]], '#2a3230', 0);
   pen.restore();
   // bars
@@ -690,10 +739,13 @@ function wallPanels(f: Feature): Panel[] {
 }
 
 // A wall of flat panels showing one green rain, bezels between them, its
-// glow on the wall and cables to the tray.
-function rainWall(k: Kit, v: RoomView, f: Feature): void {
+// glow on the wall, the rain run off it onto the block, and cables to the
+// tray.
+function rainWall(k: Kit, v: RoomView, f: Feature, plan: Plan): void {
   const { a, w, z0, z1 } = f;
   k.wash(a, 0.02, (z0 + z1) / 2, w * 0.85, (z1 - z0) * 0.9, C.green, 0.22);
+  const wins = plan.features.filter((g) => g.wall === f.wall && g.kind === 'window');
+  spill(k, f, (u) => (wins.some((g) => Math.abs(u - g.a) < g.w / 2 + 1.2) ? tops(v.H).win0 - 1.2 : z1 + 6), z0 > LOW + 13 ? LOW + 13.5 : BASE + 0.6);
   k.shadow(a + 0.3, 0.4, w * 0.5, 0.8, 0.2, z0 - 0.4);
   // the mount and the cables up to the tray
   const { tray } = tops(v.H);
@@ -705,6 +757,60 @@ function rainWall(k: Kit, v: RoomView, f: Feature): void {
   }
   // the glass's sheen, top left
   k.poly([[a - w / 2 + 0.6, 0.63, z1 - 0.6], [a - w / 2 + 6, 0.63, z1 - 0.6], [a - w / 2 + 2.5, 0.63, z0 + 0.8], [a - w / 2 + 0.6, 0.63, z0 + 0.8]], '#ffffff0c', 0);
+}
+
+// The green rain run off the video wall onto the block, "green rain on the
+// walls" taken at its word: columns of dim glyphs painted straight on the
+// paint above and below the bezel and down both sides of it, brightest
+// where they leave the screens and fading out 2 to 5 units on, kept under
+// `top(u)` (a window over it) and over `floor`. Still: only the heads on
+// the panels move.
+function spill(k: Kit, f: Feature, top: (u: number) => number, floor: number): void {
+  const { a, w, z0, z1 } = f;
+  const pen = k.pen;
+  const n = 0.03;
+  const PITCH = 0.75; // a glyph and the gap under it, up the column
+  const ALPHA = [0.6, 0.4, 0.24, 0.11];
+  const lists: Array<Array<[number, number, number, number]>> = ALPHA.map(() => []);
+  // a column at u from z = from on toward z = to, glyph by glyph, fading
+  // from `dim` (0 brightest) as it goes, gone after `reach` units
+  const column = (u: number, from: number, to: number, dim: number, reach: number, salt: number) => {
+    const dir = to > from ? 1 : -1;
+    for (let i = 0; ; i++) {
+      const zc = from + dir * (i + 0.5) * PITCH;
+      if (dir > 0 ? zc + 0.3 > to : zc - 0.3 < to) break;
+      const level = dim + Math.floor((((i + 0.5) * PITCH) / reach) * (ALPHA.length - dim));
+      if (level >= ALPHA.length || hash(salt, i, 62) < 0.18) continue;
+      const gw = 0.32 + hash(salt, i, 63) * 0.26;
+      lists[level].push([u - gw / 2, zc - 0.27, u + gw / 2, zc + 0.27]);
+    }
+  };
+  // above and below the bezel, a column every 1.1 units, some missing
+  for (let i = 0, u = a - w / 2 + 0.6; u < a + w / 2 - 0.3; i++, u += 1.1) {
+    if (hash(f.k, i, 60) < 0.25) continue;
+    const up = 2 + hash(f.k, i, 61) * 3;
+    column(u, z1 + 0.25, Math.min(top(u), z1 + 0.25 + up), 0, up + 0.5, f.k * 97 + i);
+    const down = 2 + hash(f.k, i, 64) * 3;
+    column(u, z0 - 0.25, Math.max(floor, z0 - 0.25 - down), 0, down + 0.5, f.k * 89 + i);
+  }
+  // down both sides: four columns a side, each farther one dimmer and
+  // shorter, falling from somewhere up the bezel
+  for (const side of [-1, 1]) {
+    for (let j = 0; j < 4; j++) {
+      const u = a + side * (w / 2 + 0.65 + j * 1.05);
+      const salt = f.k * 53 + j * 7 + (side > 0 ? 3 : 0);
+      const len = (z1 - z0) * (0.85 - j * 0.17) * (0.7 + hash(salt, 65) * 0.3);
+      const from = z1 + 1 - hash(salt, 66) * (z1 - z0 - len);
+      column(u, Math.min(top(u), from), Math.max(floor, from - len), Math.min(3, j), len + 1, salt);
+    }
+  }
+  lists.forEach((list, i) => {
+    if (!list.length) return;
+    pen.beginPath();
+    for (const [u0, q0, u1, q1] of list) k.trace([[u0, n, q0], [u1, n, q0], [u1, n, q1], [u0, n, q1]]);
+    pen.fillStyle = withAlpha(C.glyph, ALPHA[i]);
+    pen.fill();
+  });
 }
 
 // The bright heads of the rain on a panel (the overlay): each column's
@@ -1406,14 +1512,14 @@ function pipe(k: Kit, v: RoomView, f: Feature): void {
 function shell(k: Kit, v: RoomView): void {
   const { pen } = k;
   const { W, D, H, T } = v;
-  const cap = '#5d6864';
+  const cap = '#434e4a';
   // the floor's cut edges: carpet over a concrete slab
-  k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side('#4a5150', 0, 1), k.lw);
-  k.poly([[W, T, 0], [W, D, 0], [W, D, -SLAB], [W, T, -SLAB]], k.side('#4a5150', 1, 0), k.lw);
+  k.poly([[T, D, 0], [W, D, 0], [W, D, -SLAB], [T, D, -SLAB]], k.side('#3a4140', 0, 1), k.lw);
+  k.poly([[W, T, 0], [W, D, 0], [W, D, -SLAB], [W, T, -SLAB]], k.side('#3a4140', 1, 0), k.lw);
   k.line([[T, D, -0.3], [W, D, -0.3], [W, T, -0.3]], '#2c3634', Math.max(1, 0.3 * k.s));
   // the walls' cut ends and tops
-  k.poly([[0, D, -SLAB], [T, D, -SLAB], [T, D, H], [0, D, H]], k.side('#56625e', 0, 1), k.lw);
-  k.poly([[W, 0, -SLAB], [W, T, -SLAB], [W, T, H], [W, 0, H]], k.side('#56625e', 1, 0), k.lw);
+  k.poly([[0, D, -SLAB], [T, D, -SLAB], [T, D, H], [0, D, H]], k.side('#3c4744', 0, 1), k.lw);
+  k.poly([[W, 0, -SLAB], [W, T, -SLAB], [W, T, H], [W, 0, H]], k.side('#3c4744', 1, 0), k.lw);
   // block courses in the cut ends
   for (const [p, q] of [[[0, D], [T, D]], [[W, 0], [W, T]]] as const) {
     pen.beginPath();
