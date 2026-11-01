@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { clearSprites, spriteStats } from '../src/art/figure.ts';
 import { LOOP } from '../src/art/figure/rig.ts';
-import { Scene } from '../src/art/scene.ts';
+import { AMBIENT_FPS, CYCLE, Scene } from '../src/art/scene.ts';
+import { composite } from '../src/art/plate.ts';
 import { buildSprite, wallValue } from '../src/art/scene/build.ts';
 import { compare, depthOrder, pointVsBox } from '../src/art/scene/depth.ts';
 import type { Drawable } from '../src/art/scene/depth.ts';
@@ -731,4 +732,44 @@ test('a busy plate where everyone wears everything, feels something and hops, wi
     16,
     { runs: 5, calls: 30 },
   );
+});
+
+test("a room's floor loop (RoomArt.floor): drawn under the figures, a picture a step round two seconds, each kept", () => {
+  // a patch of floor that turns red and blue step by step
+  let drawn = 0;
+  const patch: WorldDef = {
+    ...world,
+    room: {
+      ...world.room,
+      floor(v) {
+        drawn++;
+        v.pen.beginPath();
+        [v.at(20, 20, 0), v.at(40, 20, 0), v.at(40, 40, 0), v.at(20, 40, 0)].forEach(([x, y], i) => (i ? v.pen.lineTo(x, y) : v.pen.moveTo(x, y)));
+        v.pen.closePath();
+        v.pen.fillStyle = Math.round(v.t * AMBIENT_FPS) % 2 ? '#ff0000' : '#0000ff';
+        v.pen.fill();
+      },
+    },
+  };
+  const r = room([]);
+  const crew = [figure('a', 30, 30)];
+  const scene = new Scene();
+  const at = (t: number) => scene.plate(frame(r, { world: patch, figures: crew, t }));
+  const floorOf = (p: Plate) => p.layers.filter((l) => l.id.startsWith('room-floor'));
+  const a = at(0);
+  assert.ok(floorOf(a).length > 0, 'nothing laid on the floor');
+  // the figure stands over it: its chest the same as on a room without it
+  const plain = new Scene().plate(frame(r, { figures: crew }));
+  const [cx, cy] = [D * S + 20 + (30 - 30) * S, H * S + 20 + ((30 + 30) * S) / 2 - 6 * S];
+  assert.deepEqual(px(composite(a), cx, cy), px(composite(plain), cx, cy), 'the floor loop drawn over the figure');
+  // the patch shows where nobody stands, and changes step by step
+  const [fx, fy] = [D * S + 20 + (36 - 24) * S, H * S + 20 + ((36 + 24) * S) / 2];
+  assert.deepEqual(px(composite(a), fx, fy), [0, 0, 255]);
+  assert.deepEqual(px(composite(at(1 / AMBIENT_FPS)), fx, fy), [255, 0, 0]);
+  // round the loop its pictures come again, the same ones, not drawn again
+  const n = drawn;
+  const b = at(CYCLE / AMBIENT_FPS);
+  assert.deepEqual(floorOf(b).map((l) => l.pic.key), floorOf(a).map((l) => l.pic.key), 'a new picture for the same step');
+  for (let k = 0; k < 3 * CYCLE; k++) at(k / AMBIENT_FPS);
+  assert.ok(drawn - n <= 2 * CYCLE, `drawn ${drawn - n} times more`);
 });

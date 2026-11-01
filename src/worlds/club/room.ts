@@ -4,7 +4,7 @@ import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { Slot } from '../../world/types.ts';
 import type { RoomArt, RoomLight, RoomView } from '../types.ts';
-import { C, INK, Kit, NEONS, hash, softDot, withAlpha } from './kit.ts';
+import { BEAT, C, INK, Kit, NEONS, hash, kick, softDot, withAlpha } from './kit.ts';
 import type { Dance, Plan, Wall } from './plan.ts';
 import { EXIT_SIGN, STRIP, TILE, TRUSS, fh, planFor } from './plan.ts';
 import { sign, signColor } from './signs.ts';
@@ -28,7 +28,6 @@ export const room: RoomArt = {
     v.pen.save();
     floor(k, v, plan);
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
-    if (lampsOn(v)) beams(k, v, plan);
     shell(k, v);
     v.pen.restore();
   },
@@ -39,6 +38,19 @@ export const room: RoomArt = {
     // the ball's sparkles are the rig's light thrown back: gone with it
     if (lampsOn(v)) for (const wall of ['right', 'left'] as const) sparkles(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
     flicker(v, plan);
+    v.pen.restore();
+  },
+  // What moves on the floor, under the dancers, round a loop of four beats
+  // (two seconds; the scene keeps each picture of it): the dance floor's
+  // tiles lighting up (on with the lights off too: lit from under its
+  // glass), and with the lights on the moving heads' beams sweeping it.
+  floor(v: RoomView): void {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    if (!plan.dance) return;
+    v.pen.save();
+    const k = new Kit(v.pen, v.at, v.s);
+    danceTiles(k, plan.dance, v.t);
+    if (lampsOn(v)) beams(k, v, plan);
     v.pen.restore();
   },
   // The light the shell gives (see RoomLight): each neon sign and the fire
@@ -122,7 +134,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   if (idle) rug(new Kit(pen, frame(v.at, idle.wall, idle.x0, idle.y0), s), idle.len / 2, idle.dep / 2 - 0.5, Math.max(idle.len, idle.dep) * 0.62);
   if (plan.dance) {
     confetti(k, plan.dance);
-    danceFloor(k, plan.dance);
+    danceFrame(k, plan.dance);
   }
   // (The light the stations, the signs and the dance floor lay on the
   // floor is declared: room.lights, the stations' own.)
@@ -179,49 +191,98 @@ function rug(k: Kit, cu: number, cv: number, r: number): void {
   }
 }
 
-// The dance floor: square glass tiles in a steel frame, lit from below in
-// rings of colour as the chase passes (a moment of it, held), a few dark,
-// its glow spilling onto the concrete round it.
-export function danceFloor(k: Kit, d: Dance): void {
-  const { pen } = k;
+// The dance floor's steel frame and the dark glass in it, a step up from
+// the concrete (the base: its tiles light up in room.floor, see
+// danceTiles).
+function danceFrame(k: Kit, d: Dance): void {
   const size = d.n * TILE;
   const { x0, y0 } = d;
   const x1 = x0 + size;
   const y1 = y0 + size;
   if (!k.seenBox(x0 - 8, y0 - 8, 0, x1 + 8, y1 + 8, 0.5, 4)) return;
+  k.shadow(x0 + size / 2, y0 + size / 2, size * 0.62, size * 0.62, 0.25);
+  k.box(x0 - 0.7, y0 - 0.7, 0, size + 1.4, size + 1.4, FRAME, C.steelDark, { line: k.lw, top: '#8a86a0' });
+  k.poly([[x0, y0, FRAME + 0.01], [x1, y0, FRAME + 0.01], [x1, y1, FRAME + 0.01], [x0, y1, FRAME + 0.01]], '#120c1a', 0);
+  k.line([[x0 - 0.7, y1 + 0.7, FRAME], [x1 + 0.7, y1 + 0.7, FRAME], [x1 + 0.7, y0 - 0.7, FRAME]], C.cyan, Math.max(1, 0.16 * k.s));
+}
+
+const FRAME = 0.35; // the dance floor's frame, how far it stands up
+
+// How bright tile (i, j) of an n x n floor is (0..1) at clock t: the chase
+// on the club's 120 BPM, one pattern a beat, round a loop of four beats
+// (two seconds: the scene keeps each picture of it, see RoomArt.floor) —
+// a ripple out from the middle, the checker flipping, a sweep corner to
+// corner, a chase round the rim — each lit on the kick and fading.
+export function tileGlow(i: number, j: number, n: number, t: number): number {
+  const b = Math.floor(t / BEAT);
+  const p = t / BEAT - b;
+  const c = (n - 1) / 2;
+  const ring = Math.max(Math.abs(i - c), Math.abs(j - c));
+  const near = (d: number, w: number) => Math.max(0, 1 - Math.abs(d) / w);
+  let g: number;
+  switch (((b % 4) + 4) % 4) {
+    case 0: // a ripple out from the middle
+      g = near(ring - p * (c + 1), 0.9);
+      break;
+    case 1: // the checker, flipping halfway
+      g = (i + j) % 2 === (p < 0.5 ? 0 : 1) ? 1 : 0.12;
+      break;
+    case 2: // a sweep from the back corner to the front
+      g = near((i + j) / Math.max(1, 2 * (n - 1)) - p * 1.3 + 0.15, 0.22);
+      break;
+    default: {
+      // a chase round the rim, a tail behind it; the middle glows low
+      if (ring < c - 0.01) {
+        g = 0.18;
+        break;
+      }
+      // tile k of the rim's per, counted round it; the head at p of the way
+      const per = Math.max(1, 4 * (n - 1));
+      const k = i === 0 ? j : j === n - 1 ? n - 1 + i : i === n - 1 ? 3 * (n - 1) - j : 4 * (n - 1) - i;
+      g = near((p * per - k + per) % per, 3.5);
+    }
+  }
+  // never dark: the whole floor glows low under the pattern
+  return Math.min(1, (0.28 + 0.72 * g) * (0.7 + 0.3 * kick(t)));
+}
+
+// The dance floor's glass tiles lit from under at clock t (see tileGlow),
+// each in its ring's colour: by colour and level, one path each (the
+// glass, a bright core on the brightest), a sheen along their back edges,
+// the bloom over it all and the mirror ball's flecks.
+function danceTiles(k: Kit, d: Dance, t: number): void {
+  const { pen } = k;
+  const size = d.n * TILE;
+  const { x0, y0 } = d;
   const cx = x0 + size / 2;
   const cy = y0 + size / 2;
-  k.shadow(cx, cy, size * 0.62, size * 0.62, 0.25);
-  // the frame, a step up from the concrete
-  const z = 0.35;
-  k.box(x0 - 0.7, y0 - 0.7, 0, size + 1.4, size + 1.4, z, C.steelDark, { line: k.lw, top: '#8a86a0' });
-  k.poly([[x0, y0, z + 0.01], [x1, y0, z + 0.01], [x1, y1, z + 0.01], [x0, y1, z + 0.01]], '#120c1a', 0);
-  // The tiles by colour and level, one path each: the glass, the lit core.
   const c = (d.n - 1) / 2;
-  const groups = new Map<string, { glass: Array<[number, number]>; color: Color; lit: boolean }>();
+  const LEVELS = 4;
+  const groups = new Map<string, { glass: Array<[number, number]>; color: Color; level: number }>();
   for (let i = 0; i < d.n; i++) {
     for (let j = 0; j < d.n; j++) {
       const ring = Math.round(Math.max(Math.abs(i - c), Math.abs(j - c)));
       const color = NEONS[(ring + 1) % NEONS.length];
-      const lit = hash(i, j, 43) > 0.2 && (ring + i + j) % 4 !== 3;
-      const key = `${color}|${lit}`;
+      const level = Math.round(tileGlow(i, j, d.n, t) * LEVELS);
+      const key = `${color}|${level}`;
       let g = groups.get(key);
-      if (!g) groups.set(key, (g = { glass: [], color, lit }));
+      if (!g) groups.set(key, (g = { glass: [], color, level }));
       g.glass.push([x0 + i * TILE, y0 + j * TILE]);
     }
   }
-  const zt = z + 0.02;
+  const zt = FRAME + 0.02;
   const m = 0.22;
   for (const g of groups.values()) {
+    const lv = g.level / LEVELS;
     pen.beginPath();
     for (const [x, y] of g.glass) k.trace([[x + m, y + m, zt], [x + TILE - m, y + m, zt], [x + TILE - m, y + TILE - m, zt], [x + m, y + TILE - m, zt]]);
-    pen.fillStyle = g.lit ? mix(g.color, '#2a1238', 0.3) : mix(g.color, '#1a1226', 0.84);
+    pen.fillStyle = mix(mix(g.color, '#1a1226', 0.84), mix(g.color, '#2a1238', 0.3), lv);
     pen.fill();
-    if (!g.lit) continue;
+    if (lv < 0.7) continue;
     const q = 1.0;
     pen.beginPath();
     for (const [x, y] of g.glass) k.trace([[x + q, y + q, zt], [x + TILE - q, y + q, zt], [x + TILE - q, y + TILE - q, zt], [x + q, y + TILE - q, zt]], 0.35);
-    pen.fillStyle = mix(g.color, '#ffffff', 0.35);
+    pen.fillStyle = mix(g.color, '#ffffff', 0.2 + 0.4 * (lv - 0.7));
     pen.fill();
   }
   // a sheen along each tile's back edges
@@ -242,9 +303,9 @@ export function danceFloor(k: Kit, d: Dance): void {
   pen.lineWidth = Math.max(0.7, 0.12 * k.s);
   pen.lineCap = 'round';
   pen.stroke();
-  // the bloom over it all, and the mirror ball's light thrown down on it in
-  // a ring of flecks
-  k.pool(cx, cy, size * 0.62, size * 0.62, '#ff8ad8', 0.22, zt);
+  // the bloom over it all, swelling on the kick, and the mirror ball's
+  // light thrown down on it in a ring of flecks
+  k.pool(cx, cy, size * 0.62, size * 0.62, '#ff8ad8', 0.16 + 0.1 * kick(t), zt);
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + hash(i, 48) * 0.5;
     const rr = size * (0.26 + hash(i, 49) * 0.14);
@@ -254,13 +315,18 @@ export function danceFloor(k: Kit, d: Dance): void {
     pen.fillStyle = '#ffffff59';
     pen.fill();
   }
-  k.line([[x0 - 0.7, y1 + 0.7, z], [x1 + 0.7, y1 + 0.7, z], [x1 + 0.7, y0 - 0.7, z]], C.cyan, Math.max(1, 0.16 * k.s));
 }
 
-// ── the light show, held ─────────────────────────────────────────────────────
-// The moving heads nearest the dance floor on each wall, each throwing a
-// cone of light through the haze onto a spot on the floor (where they were
-// pointing when the picture was taken: the base does not move).
+// ── the light show ───────────────────────────────────────────────────────────
+// The two moving heads nearest the dance floor on each wall sweep their
+// beams across and round it, a pair mirroring each other (crossing in the
+// middle), each wall's pair a quarter turn behind the other's: a figure of
+// eight round the floor loop's four beats (SWEEP seconds), each beam a
+// slim soft cone through the haze, its gobo landing and turning on the
+// floor. Drawn in room.floor, under what stands in its way; off with the
+// lights.
+const SWEEP = 4 * BEAT;
+
 function beams(k: Kit, v: RoomView, plan: Plan): void {
   const d = plan.dance;
   if (!d) return;
@@ -268,32 +334,37 @@ function beams(k: Kit, v: RoomView, plan: Plan): void {
   const size = d.n * TILE;
   const cx = d.x0 + size / 2;
   const cy = d.y0 + size / 2;
-  const spots: ReadonlyArray<readonly [number, number]> = [[-0.28, -0.22], [0.24, 0.3], [-0.18, 0.32], [0.3, -0.26]];
-  let n = 0;
-  for (const wall of ['right', 'left'] as const) {
+  const th = ((((v.t % SWEEP) + SWEEP) % SWEEP) / SWEEP) * Math.PI * 2;
+  (['right', 'left'] as const).forEach((wall, w) => {
     const end = wall === 'right' ? v.W : v.D;
     const along = wall === 'right' ? cx : cy;
-    const heads = rig(plan, wall, v.T, end).filter((c) => c.head).sort((p, q) => Math.abs(p.a - along) - Math.abs(q.a - along)).slice(0, 2);
-    for (const h of heads) {
+    const heads = rig(plan, wall, v.T, end)
+      .filter((c) => c.head)
+      .sort((p, q) => Math.abs(p.a - along) - Math.abs(q.a - along))
+      .slice(0, 2)
+      .sort((p, q) => p.a - q.a);
+    heads.forEach((h, j) => {
+      const ph = th + (w * Math.PI) / 2;
+      // along the wall and out from it, from the dance floor's middle
+      const a = size * 0.3 * Math.sin(ph) * (j ? -1 : 1);
+      const o = size * 0.2 * Math.sin(2 * ph);
+      const [fx, fy] = wall === 'right' ? [cx + a, cy + o] : [cx + o, cy + a];
       const z = v.H - TRUSS - 0.6 - 2.4;
       const src: [number, number, number] = wall === 'right' ? [h.a, v.T + 2.3, z] : [v.T + 2.3, h.a, z];
-      const [ox, oy] = spots[n++ % spots.length];
-      const fx = cx + ox * size;
-      const fy = cy + oy * size;
-      if (!k.seen([src, [fx, fy, 0]], 4 * s)) continue;
+      if (!k.seen([src, [fx, fy, 0]], 4 * s)) return;
       const [sx, sy] = k.p(...src);
       const [tx, ty] = k.p(fx, fy, 0);
       const l = Math.hypot(tx - sx, ty - sy) || 1;
       const px = -(ty - sy) / l;
       const py = (tx - sx) / l;
-      const ws = 0.4 * s;
-      const wf = 2.6 * s;
+      const ws = 0.3 * s;
+      const wf = 1.5 * s;
       pen.save();
       pen.globalCompositeOperation = 'screen';
       const g = pen.createLinearGradient(sx, sy, tx, ty);
-      g.addColorStop(0, withAlpha(h.c, 0.3));
-      g.addColorStop(0.5, withAlpha(h.c, 0.12));
-      g.addColorStop(1, withAlpha(h.c, 0.06));
+      g.addColorStop(0, withAlpha(h.c, 0.26));
+      g.addColorStop(0.5, withAlpha(h.c, 0.1));
+      g.addColorStop(1, withAlpha(h.c, 0.05));
       pen.beginPath();
       pen.moveTo(sx + px * ws, sy + py * ws);
       pen.lineTo(tx + px * wf, ty + py * wf);
@@ -303,20 +374,20 @@ function beams(k: Kit, v: RoomView, plan: Plan): void {
       pen.fillStyle = g;
       pen.fill();
       pen.restore();
-      gobo(k, fx, fy, h.c, n * 0.7);
-    }
-  }
+      gobo(k, fx, fy, h.c, 2 * th + j * Math.PI);
+    });
+  });
 }
 
-// Where a beam lands: its gobo's pattern on the concrete, a soft disc
-// ringed with six spots round a bright middle, turned by `turn`.
+// Where a beam lands: its gobo's pattern on the floor, a soft disc ringed
+// with six spots round a bright middle, turned by `turn`.
 function gobo(k: Kit, x: number, y: number, c: Color, turn: number): void {
-  k.pool(x, y, 3.4, 3.4, c, 0.22);
+  k.pool(x, y, 3.0, 3.0, c, 0.2);
   for (let i = 0; i < 6; i++) {
     const a = turn + (i / 6) * Math.PI * 2;
-    k.pool(x + Math.cos(a) * 2.2, y + Math.sin(a) * 2.2, 0.75, 0.75, c, 0.6);
+    k.pool(x + Math.cos(a) * 2.0, y + Math.sin(a) * 2.0, 0.7, 0.7, c, 0.55);
   }
-  k.pool(x, y, 1.1, 1.1, '#ffffff', 0.45);
+  k.pool(x, y, 1.0, 1.0, '#ffffff', 0.4);
 }
 
 // ── the shell's edges: wall tops, cut ends, the floor slab ───────────────────

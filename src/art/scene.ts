@@ -161,6 +161,8 @@ type Layer = {
   // The steps of the stations the locals work, by prop and step (see
   // cyclePic).
   cycles: Map<string, { pic: Pic; x: number; y: number } | null>;
+  // the room's floor loop (RoomArt.floor): its tiles, by grade and step
+  floors: Map<string, ReadonlyArray<{ id: string; pic: Pic; x: number; y: number }>>;
   used: number;
 };
 
@@ -383,6 +385,7 @@ export class Scene {
 
     const r = tilesOf(cam);
     for (let ty = r.y0; ty <= r.y1; ty++) for (let tx = r.x0; tx <= r.x1; tx++) put(`base:${tx},${ty}`, this.tile(f, l, tx, ty, true).pic, OX + tx * TILE, OY + ty * TILE);
+    if (f.world.room.floor) for (const p of this.roomFloorPics(f, l, gr.emit)) put(p.id, p.pic, OX + p.x, OY + p.y);
     const floors: Item[] = [];
     const items = this.items(f, l, P, s, OX, OY, ink, w, h, floors);
     for (const it of floors) put(it.id, picOf(it.img!, gr[it.tone ?? 'room']), it.x, it.y);
@@ -593,7 +596,7 @@ export class Scene {
     }
     let no = layerNos.get(key);
     if (no === undefined) layerNos.set(key, (no = layerNos.size + 1));
-    l = { key, scope, s, no, lit: f.lit, props: [], builds: new Map(), piles: new Map(), warmed: new Set(), cycles: new Map(), used: this.renders };
+    l = { key, scope, s, no, lit: f.lit, props: [], builds: new Map(), piles: new Map(), warmed: new Set(), cycles: new Map(), floors: new Map(), used: this.renders };
     this.layers.push(l);
     return l;
   }
@@ -1306,6 +1309,56 @@ export class Scene {
       gradeAll(onto.data, t);
     }
     return lift(img, onto, under);
+  }
+
+  // What the room lays on its floor at this ambient step (RoomArt.floor),
+  // world pixels, under everything standing on it: a loop of CYCLE steps,
+  // each drawn once a layer (in pieces round what it paints, graded t, its
+  // light lifted off the base: see laid), laid out in tiles on a grid
+  // fixed to the world, each cropped, and kept: after the first loop only
+  // their placements change.
+  private roomFloorPics(f: SceneFrame, l: Layer, t: Tint): ReadonlyArray<{ id: string; pic: Pic; x: number; y: number }> {
+    const step = ((Math.floor(f.t * AMBIENT_FPS) % CYCLE) + CYCLE) % CYCLE;
+    const key = `${t?.key ?? '-'}|${step}`;
+    const had = l.floors.get(key);
+    if (had) return had;
+    const draw = f.world.room.floor!;
+    const at = { ...f, t: step / AMBIENT_FPS };
+    const s = l.s;
+    const P0: Project = (x, y, z) => [(x - y) * s, ((x + y) * s) / 2 - z * s];
+    const B = new Bounds(TILE, TILE);
+    B.save();
+    draw(this.roomView(at, B, P0, s));
+    B.restore();
+    const pieces = clusters(B.marks, GAP).map((b) => {
+      const x0 = Math.floor(b.x0);
+      const y0 = Math.floor(b.y0);
+      const shifted: Project = (x, y, z) => {
+        const q = P0(x, y, z);
+        return [q[0] - x0, q[1] - y0];
+      };
+      const img = this.laid(f, l, x0, y0, Math.ceil(b.x1) - x0, Math.ceil(b.y1) - y0, t, b.light, (pen) => {
+        pen.save();
+        draw(this.roomView(at, pen, shifted, s));
+        pen.restore();
+      });
+      return { x0, y0, img };
+    });
+    const T = OVERLAY_TILE;
+    const tiles = new Set<string>();
+    for (const p of pieces) {
+      for (let gy = Math.floor(p.y0 / T); gy * T < p.y0 + p.img.height; gy++) for (let gx = Math.floor(p.x0 / T); gx * T < p.x0 + p.img.width; gx++) tiles.add(`${gx},${gy}`);
+    }
+    const out: Array<{ id: string; pic: Pic; x: number; y: number }> = [];
+    for (const name of tiles) {
+      const [gx, gy] = name.split(',').map(Number);
+      const c = new Canvas(T, T);
+      for (const p of pieces) c.drawImage(p.img, p.x0 - gx * T, p.y0 - gy * T);
+      const crop = cropped(c);
+      if (crop) out.push({ id: `room-floor#${name}`, pic: fresh(crop.img), x: gx * T + crop.x, y: gy * T + crop.y });
+    }
+    l.floors.set(key, out);
+    return out;
   }
 
   // The room's overlay (world pixels) per ambient step: found in pieces

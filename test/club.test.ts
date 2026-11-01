@@ -10,6 +10,7 @@ import { club } from '../src/worlds/club.ts';
 import { DECOR_ART } from '../src/worlds/club/decor.ts';
 import { STRIP, TILE, TRUSS, muralSpan, planFor } from '../src/worlds/club/plan.ts';
 import { rig } from '../src/worlds/club/walls.ts';
+import { tileGlow } from '../src/worlds/club/room.ts';
 import type { PropArt } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { budget } from './helpers.ts';
@@ -280,4 +281,21 @@ test("the club's locals on a sheet: a row each, and each at its station", () => 
 test('Underground Club: three locals at work, each where its job puts it', () => {
   assert.deepEqual(club.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['dj', 'write', 'behind'], ['bartender', 'run', 'behind'], ['coatCheck', 'search', 'behind']]);
   assert.ok(club.npcs!.some((n) => n.show), 'no show');
+});
+
+test('club floor loop: the dance floor lights up on the beat round two seconds, the beams sweep it with the lights on', () => {
+  const L = planLayout(375, 220, 'club');
+  const s = 4;
+  const P = project(L.D * s + 30, L.H * s + 20, s);
+  const shot = (t: number, lit: boolean) => {
+    const c = new Canvas(1500, 920);
+    club.room.floor!({ pen: c, s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t, seed: 1, lit });
+    return c;
+  };
+  for (const lit of [true, false]) assert.ok(!same(shot(0, lit), shot(0.5, lit)), `it stands still${lit ? '' : ' at night'}`);
+  assert.ok(!same(shot(0.2, true), shot(0.2, false)), 'the beams stay on at night');
+  // every tile comes round to how it was two seconds on
+  const n = planFor(L.W, L.D, L.H, L.T).dance!.n;
+  for (let k = 0; k < 30; k++) for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) assert.ok(Math.abs(tileGlow(i, j, n, k / 15) - tileGlow(i, j, n, k / 15 + 2)) < 1e-9, `tile ${i}, ${j} at ${k / 15} s`);
+  budget('the floor loop a step', (i) => club.room.floor!({ pen: new Canvas(1500, 920), s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t: i / 15, seed: 1, lit: true }), 8, { calls: 10 });
 });
