@@ -8,14 +8,15 @@ import { dunesPois, room } from './dunes/room.ts';
 import { STATIONS } from './dunes/stations.ts';
 import { WORKSTATION } from './dunes/workstation.ts';
 
-// Dust Outpost: a drifters' bar and workshop in a drum of poured adobe
-// under a ribbed steel dome, on a deck of sun-bleached planks; hard white
-// daylight through slatted shutters, cold tube lamps, one warm lantern;
-// barrels racked behind the bar, crates and scrap stacked two high, sand
-// on the wind outside. In outlined cartoon (dark leather-brown ink): the
-// shell in dunes/room.ts, the stations in dunes/stations.ts, the furniture
-// in dunes/decor.ts, the locals in dunes/npcs.ts, all drawn with the kit
-// in dunes/kit.ts and dunes/bits.ts.
+// Dust Outpost: a drifters' bar and workshop in a drum of terracotta
+// adobe under a ribbed steel dome hung with sun-sails of hide and canvas,
+// on a deck of sun-bleached planks; turquoise sky and orange dunes out of
+// the windows; hard white daylight through slatted shutters, cold tube
+// lamps, one warm lantern; barrels racked behind the bar, crates and scrap
+// stacked two high, sand on the wind outside. In outlined cartoon (dark
+// leather-brown ink): the shell in dunes/room.ts, the stations in
+// dunes/stations.ts, the furniture in dunes/decor.ts, the locals in
+// dunes/npcs.ts, all drawn with the kit in dunes/kit.ts and dunes/bits.ts.
 
 const PALETTE: Palette = {
   bg: hex('#1c140c'),
