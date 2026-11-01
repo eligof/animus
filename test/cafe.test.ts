@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
+import { hashString } from '../src/world/rng.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import { cafe } from '../src/worlds/cafe.ts';
 import { DECOR_ART } from '../src/worlds/cafe/decor.ts';
@@ -149,6 +150,15 @@ test('café room: the menu, the shelves and the clock hang over their stations, 
     const all = [...plan.features, ...plan.over];
     assert.ok(all.filter((f) => f.kind === 'menu').length <= 1, `${L.W}: two menus`);
     assert.ok(all.filter((f) => f.kind === 'shelf').length <= 2, `${L.W}: over two shelves`);
+  }
+});
+
+test('café room: no furniture stands before the hearth, its irons and its basket, in any room', () => {
+  for (const [w, h] of [[375, 220], [300, 165], [200, 120], [160, 110], [500, 300]]) {
+    const L = planLayout(w, h, 'cafe');
+    const keep = cafe.reserve!(L);
+    assert.equal(keep.length, 1, `${L.W}: no hearth kept clear`);
+    for (const p of planRoom(cafe, L, hashString('cafe')).props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: a ${p.art.len}x${p.art.dep} piece before the hearth`);
   }
 });
 

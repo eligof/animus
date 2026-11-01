@@ -6,7 +6,8 @@ import { defaultPois, footprint, planRoom } from '../../world/room.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { hashString } from '../../world/rng.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { candle, flames, frustum, ivy } from './bits.ts';
 import { DECOR } from './decor.ts';
 import { C, INK, Kit, hash, withAlpha } from './kit.ts';
@@ -228,7 +229,40 @@ export function cafePois(L: Layout): Poi[] {
 
 const wallAt = (P: At, wall: Wall, T: number): At => frame(P, wall, wall === 'right' ? 0 : T, wall === 'right' ? T : 0);
 
+// The light the shell gives (asked once a room): the fire in the hearth
+// carrying across the room and the candles on its mantel, the sconces, the
+// windows (the wet street's warm light, moonlight once the lights are
+// off) and every other bulb of the string lights, left on at night.
+function lights(v: { W: number; D: number; H: number; T: number }): RoomLight[] {
+  const out: RoomLight[] = [];
+  const { z0, z1 } = windowZ(v.H);
+  for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+    const at = { wall: f.wall, u: f.a };
+    if (f.kind === 'hearth') {
+      out.push({ ...at, kind: 'fire', v: 1.6, z: 3, r: 19, strength: 1.1, halo: 4 });
+      for (const [du, h] of CANDLES) out.push({ wall: f.wall, kind: 'fire', u: f.a + du, v: 1.9, z: MANTEL + 1 + h + 0.45, r: 1, strength: 0.6, halo: 1 });
+    } else if (f.kind === 'sconce') out.push({ ...at, kind: 'lamp', v: 1.1, z: SCONCE_Z + 1.2, strength: 0.75 });
+    else if (f.kind === 'window') out.push({ ...at, kind: 'window', w: f.w - 1.6, z0, z1: z1 - (f.w - 1.6) / 2, bars: 1, rails: 2, color: '#ffcf8a', strength: 0.45, night: '#8fa8e0', moon: 0.6 });
+  }
+  for (const wall of ['right', 'left'] as const) {
+    const { bulbs } = stringOf(v, wall === 'right' ? v.W : v.D);
+    bulbs.forEach(([a, n, z], i) => {
+      if (i & 1) out.push({ wall, kind: 'glow', u: a, v: n, z, color: '#ffcf7a', r: 1, strength: 0.7, halo: 1.3 });
+    });
+  }
+  return out;
+}
+
+// What the café keeps clear of its furniture: the hearth with its irons
+// and log basket, and the floor before it out to its rug and the warm
+// spots (from the furniture as it stands without this: see planFor).
+export function cafeReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number }> {
+  const h = planFor(L.W, L.D, L.H, L.T).features.find((f) => f.kind === 'hearth');
+  return h ? [{ wall: h.wall, a0: h.a - 9.8, a1: h.a + 9.8, out: 10 }] : [];
+}
+
 export const room: RoomArt = {
+  lights,
   draw(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     const k = new Kit(v.pen, v.at, v.s);
@@ -327,7 +361,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const end = wall === 'right' ? W : D;
     wk.poly([[T, 0, 0], [end, 0, 0], [end, 3.5, 0], [T, 3.5, 0]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#2a120666'], [0.35, '#2a120622'], [1, '#2a120600']]), 0);
   }
-  // Rugs where people sit and gather, then the light that falls on the floor.
+  // Rugs where people sit and gather.
   const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
   const idle = slot('idle');
   if (idle) rug(new Kit(pen, frame(v.at, idle.wall, idle.x0, idle.y0), s), -2.5, -2, idle.len + 5, idle.dep + 3.5, RED);
@@ -349,20 +383,9 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   if (hearth) {
     const hk = new Kit(pen, wallAt(v.at, hearth.wall, T), s);
     rug(hk, hearth.a - 6, 5, 12, 5.5, RED);
-    hk.pool(hearth.a, 4, 14, 10, '#ff9a48', 0.34);
   }
-  for (const [kind, u, w, r, a] of [['think', 0.8, 0.35, 11, 0.3], ['idle', 0.9, 0.3, 13, 0.26], ['run', 0.5, 0.6, 12, 0.28], ['write', 0.3, 1, 9, 0.18], ['read', 0.85, 0.5, 9, 0.2], ['web', 0.5, 0.5, 9, 0.16]] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    qk.pool(q.len * u, q.dep * w, r, r * 0.8, C.lamp, a);
-  }
-  for (const f of plan.features) {
-    if (f.kind !== 'window') continue;
-    // a cool spill of evening light under each window
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    wk.pool(f.a, 3, 6, 4, '#8aa4d6', 0.08);
-  }
+  // (the light on the floor, the fire's, the lamps' and the windows', is
+  // the scene's: see room.lights and the props' own `light`)
 }
 
 // A rug's colours: edge, border band, field, then the medallion's rings.
@@ -437,8 +460,10 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   // Plaster: warm under the lamps, falling off to a deep ochre at the top.
   const plaster = k.vgrad(T, 0, WAIN, H, PLASTER.map(([t, c]) => [t, tone(c)] as const));
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, H], [T, 0, H]], plaster, 0);
-  // the far corner in shadow
+  // the far corner in shadow, and the wall falling off toward its cut end
+  // (the middle, the hearth and the lamps, reads warmest)
   k.poly([[T, 0, 0], [T + 9, 0, 0], [T + 9, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 9, 0, 0], [[0, '#3a1d0e30'], [1, '#3a1d0e00']]), 0);
+  k.poly([[end - 14, 0, 0], [end, 0, 0], [end, 0, H], [end - 14, 0, H]], k.hgrad([end - 14, 0, 0], [end, 0, 0], [[0, '#3a1d0e00'], [1, '#3a1d0e30']]), 0);
   bricks(k, v, plan, wall, end, tone);
   // Wainscot: sage panels in a frame, a dark skirting below.
   const sage = tone(C.sage, 0.12);
@@ -483,7 +508,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
     else if (f.kind === 'menu') menuBoard(k, f);
     else if (f.kind === 'shelf') mugShelf(k, f);
     else if (f.kind === 'art') gallery(k, f);
-    else if (f.kind === 'sconce') sconce(k, f);
+    else if (f.kind === 'sconce') sconce(k, f, lampsOn(v));
     else if (f.kind === 'clock') clock(k, f);
   }
   stringLights(k, v, end);
@@ -738,6 +763,8 @@ function sillPot(k: Kit, u: number, n: number, z: number, seed: number): void {
 // and a gilt mirror above.
 const FIRE = { w: 7, z1: 7.4 }; // the firebox opening
 const MANTEL = 9.6;
+// the candles on the mantel: along it from the middle, how tall
+const CANDLES: ReadonlyArray<readonly [number, number]> = [[-4.6, 1.8], [-3.7, 1.2], [4.3, 1.5]];
 
 function hearthArt(k: Kit, v: RoomView, f: Feature): void {
   const { pen, s } = k;
@@ -745,8 +772,6 @@ function hearthArt(k: Kit, v: RoomView, f: Feature): void {
   const bw = BREAST;
   const out = 1.4;
   const lit = k.lit(0, 1);
-  // a soft glow on the wall round the breast
-  k.halo(a, 0.1, 6, 15, '#ff9a48', 0.16);
   // hearth stone
   k.box(a - bw / 2 - 1.2, 0, 0, bw + 2.4, out + 2.6, 0.45, '#a89d90', { line: k.lw });
   // the breast: plaster to the cornice, brick round the fire
@@ -793,8 +818,7 @@ function hearthArt(k: Kit, v: RoomView, f: Feature): void {
   for (const du of [-sw / 2 + 0.4, sw / 2 - 1.2]) k.box(a + du, out, MANTEL - 1.4, 0.8, 0.6, 1.4, C.walnut, { line: k.thin });
   k.box(a - bw / 2 - 1, 0, MANTEL, bw + 2, out + 1.1, 1, C.walnut, { line: k.lw });
   const mz = MANTEL + 1;
-  for (const [du, hgt] of [[-4.6, 1.8], [-3.7, 1.2]] as const) candle(k, a + du, out + 0.5, mz, hgt);
-  candle(k, a + 4.3, out + 0.5, mz, 1.5);
+  for (const [du, hgt] of CANDLES) candle(k, a + du, out + 0.5, mz, hgt);
   // a squat clock, its face blank
   k.box(a + 1.2, out - 0.3, mz, 1.8, 0.9, 1.9, C.walnutDark, { line: k.thin, round: 0.3 });
   k.disc(a + 2.1, out + 0.62, mz + 1.05, 0.55, C.cream, k.thin);
@@ -1061,46 +1085,56 @@ function clock(k: Kit, f: Feature): void {
   k.line([[a - CLOCK_R * 0.5, 0.78, zc + CLOCK_R * 0.25], [a - CLOCK_R * 0.15, 0.78, zc + CLOCK_R * 0.55]], '#ffffff80', Math.max(0.8, 0.16 * s));
 }
 
-// A brass wall lamp with a cream glass shade, glowing.
-function sconce(k: Kit, f: Feature): void {
+// A brass wall lamp with a cream glass shade, glowing while the lights are
+// on (the scene washes the wall round it: see room.lights).
+const SCONCE_Z = WAIN + 9;
+function sconce(k: Kit, f: Feature, on: boolean): void {
   const a = f.a;
-  const z = WAIN + 9;
-  k.halo(a, 0.3, z + 1.5, 9, '#ffc77a', 0.32);
-  k.halo(a, 0.3, z + 1.5, 4, '#ffd89a', 0.3);
+  const z = SCONCE_Z;
   // backplate and a curled arm
   k.poly([[a - 0.4, 0.02, z - 1.6], [a + 0.4, 0.02, z - 1.6], [a + 0.4, 0.02, z + 0.2], [a - 0.4, 0.02, z + 0.2]], C.brass, k.thin, 0.3);
   k.rod([[a, 0.05, z - 0.8], [a, 0.7, z - 0.9], [a, 1.1, z - 0.5], [a, 1.1, z + 0.1]], C.brass, 0.16);
-  // a frosted glass shade opening upward, lit from inside
-  frustum(k, a, 1.1, z, 0.45, z + 2, 1.15, '#ffe9bc', '#fff8e4');
-  k.halo(a, 1.1, z + 1.2, 2.2, '#ffe2a0', 0.55);
+  // a frosted glass shade opening upward, lit from inside (dull with the
+  // lights off)
+  frustum(k, a, 1.1, z, 0.45, z + 2, 1.15, on ? '#ffe9bc' : '#b8ab92', on ? '#fff8e4' : '#8f846e');
+  if (on) k.halo(a, 1.1, z + 1.2, 2.2, '#ffe2a0', 0.4);
 }
 
 // String lights along the top of a wall: wire in swags between hooks, a
 // warm bulb every couple of units.
-function stringLights(k: Kit, v: RoomView, end: number): void {
-  const { pen, s } = k;
+// The string's points along a wall (`end` long) and its bulbs, every
+// BULB of them (the scene keeps every other bulb lit at night: see
+// room.lights).
+const BULB = 5;
+function stringOf(v: { H: number; T: number }, end: number): { pts: Array<[number, number, number]>; bulbs: Array<[number, number, number]> } {
   const z = v.H - LIGHTS;
   const span = 12;
   const sag = 1.4;
-  const n = 0.25;
+  const pts: Array<[number, number, number]> = [];
+  for (let a = v.T + 1; a <= end - 1; a += 0.5) {
+    const ph = ((a - v.T - 1) % span) / span;
+    pts.push([a, 0.25, z - sag * 4 * ph * (1 - ph)]);
+  }
+  const bulbs: Array<[number, number, number]> = [];
+  for (let i = 2; i < pts.length; i += BULB) bulbs.push([pts[i][0], pts[i][1], pts[i][2] - 0.5]);
+  return { pts, bulbs };
+}
+
+function stringLights(k: Kit, v: RoomView, end: number): void {
+  const { pen, s } = k;
+  const z = v.H - LIGHTS;
   // their warm wash on the plaster
   pen.save();
   pen.globalCompositeOperation = 'screen';
   k.poly([[v.T, 0.05, z - 6], [end, 0.05, z - 6], [end, 0.05, z + 2], [v.T, 0.05, z + 2]], k.vgrad(v.T, 0.05, z - 6, z + 2, [[0, '#ffc07a00'], [0.65, '#ffc07a2a'], [1, '#ffc07a00']]), 0);
   pen.restore();
-  const pts: Array<[number, number, number]> = [];
-  for (let a = v.T + 1; a <= end - 1; a += 0.5) {
-    const ph = ((a - v.T - 1) % span) / span;
-    pts.push([a, n, z - sag * 4 * ph * (1 - ph)]);
-  }
+  const { pts, bulbs } = stringOf(v, end);
   k.line(pts, '#3a2a22', Math.max(0.8, 0.1 * s));
-  const bulbs: Array<[number, number, number]> = [];
-  for (let i = 2; i < pts.length; i += 5) bulbs.push(pts[i]);
-  for (const [a, nn, zz] of bulbs) k.halo(a, nn, zz - 0.5, 2.6, '#ffcf7a', 0.36);
+  for (const [a, nn, zz] of bulbs) k.halo(a, nn, zz, 2.6, '#ffcf7a', 0.22);
   pen.beginPath();
   const br = Math.max(1.3, 0.34 * s);
   for (const [a, nn, zz] of bulbs) {
-    const [x, y] = k.p(a, nn, zz - 0.5);
+    const [x, y] = k.p(a, nn, zz);
     pen.moveTo(x + br, y);
     pen.ellipse(x, y, br, br * 1.3, 0, 0, Math.PI * 2);
   }

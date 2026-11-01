@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { PropArt, PropView, WorldDef } from '../types.ts';
 import { beanbag as bag, dome, frustum, monstera, mug, paddle, pot, snake, stool } from './bits.ts';
@@ -227,12 +228,12 @@ const booth: PropArt = {
     if (k.fine) k.segs([1.4, 2.4, 3.4, 4.4].map((u): [P3, P3] => [[u, back + 0.01, 1], [u, back + 0.01, H - 1]]), withAlpha('#1f4a46', 0.5), 0.08 * k.s);
     k.poly([[g0, back, gz0], [g1, back, gz0], [g1, n, gz0], [g0, n, gz0]], '#4a4c52', 0);
     k.poly([[g0, back, gz0], [g0, n, gz0], [g0, n, gz1], [g0, back, gz1]], k.side(C.felt, 1, 0, 0.12), 0);
-    k.wash(3, back + 0.05, 13, 2.6, 4.5, C.lamp, 0.35);
+    if (lampsOn(v)) k.wash(3, back + 0.05, 13, 2.6, 4.5, C.lamp, 0.35);
     k.box(g0, back, 8.6, g1 - g0, 1.5, 0.3, C.birch, { line: k.thin });
     k.box(2.0, back + 0.3, 8.9, 1.6, 1.0, 0.12, '#c9ccd2', { line: k.thin * 0.8 });
     stool(k, 3.2, 3.6, 5.6, C.chartWarm, 0.75);
-    dome(k, 3, 2.6, 15.6, 0.7, C.white, C.lamp);
-    k.halo(3, 2.6, 15.3, 2.0, C.lamp, 0.45);
+    dome(k, 3, 2.6, 15.6, 0.7, C.white, lampsOn(v) ? C.lamp : null);
+    if (lampsOn(v)) k.halo(3, 2.6, 15.3, 2.0, C.lamp, 0.45);
     pen.restore();
     // the glass over it, a streak of reflection, the frame and the handle
     k.poly(quad(g0, gz0, g1, gz1, n), withAlpha(C.glass, 0.25), 0);
@@ -253,17 +254,19 @@ const booth: PropArt = {
 
 // ── the standing lamps ──────────────────────────────────────────────────────
 // By seed: an arc lamp (a heavy base, a curved steel arm, a dome shade) or
-// a tripod lamp (three birch legs, a linen drum); lit, with a soft warm
-// pool under it.
+// a tripod lamp (three birch legs, a linen drum); lit while the lights are
+// on (the scene pools its light: see `light`).
 
 const lamp: PropArt = {
   len: 3,
   dep: 3,
   height: 16,
+  // between the two kinds' bulbs (the scene pools the light round it)
+  light: [{ kind: 'lamp', u: 1.9, v: 1.3, z: 11.6, r: 9, strength: 0.7, halo: 1.6 }],
   draw(v: PropView): void {
     const k = kitOf(v);
+    const on = lampsOn(v);
     if (hash(v.seed, 1) < 0.5) {
-      k.pool(2.3, 1.1, 1.4, 1.0, C.lamp, 0.32);
       k.shadow(0.8, 2.1, 0.9, 0.9, 0.3);
       k.cyl(0.8, 2.1, 0, 0.72, 0.45, C.white);
       // the arm: a cubic from the base up and over to the shade
@@ -275,18 +278,15 @@ const lamp: PropArt = {
         arm.push([0, 1, 2].map((j) => m.reduce((acc, w, q) => acc + w * B[q][j], 0)) as P3);
       }
       k.rod(arm, C.chrome, 0.15);
-      dome(k, 2.35, 1.05, 12.75, 0.95, C.chartWarm, C.lamp);
-      k.halo(2.35, 1.05, 12.3, 1.6, C.lamp, 0.5);
+      dome(k, 2.35, 1.05, 12.75, 0.95, C.chartWarm, on ? C.lamp : null);
       return;
     }
-    k.pool(1.5, 1.6, 1.4, 1.2, C.lamp, 0.28);
     k.shadow(1.5, 1.5, 1.3, 1.3, 0.24);
     const apex: P3 = [1.5, 1.5, 9.6];
     const feet: P3[] = [0.6, 2.7, 4.8].map((a) => [1.5 + Math.cos(a) * 1.2, 1.5 + Math.sin(a) * 1.2, 0]);
     feet.sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
     for (const f of feet.slice(0, 2)) k.rod([f, apex], C.birch, 0.16);
-    k.cyl(1.5, 1.5, 9.4, 1.05, 3.0, '#f3ead6', { top: '#ffe9b0' });
-    k.halo(1.5, 1.5, 11, 1.4, C.lamp, 0.4);
+    k.cyl(1.5, 1.5, 9.4, 1.05, 3.0, on ? '#f3ead6' : '#c4bba8', { top: on ? '#ffe9b0' : '#a89f8c' });
     k.rod([feet[2], [1.5, 1.5, 9.4]], C.birch, 0.16);
   },
 };

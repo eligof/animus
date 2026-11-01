@@ -7,7 +7,8 @@ import { defaultPois, footprint, planRoom, toWorld } from '../../world/room.ts';
 import type { PlacedProp } from '../../world/room.ts';
 import { hashString } from '../../world/rng.ts';
 import type { Layout, Poi, Slot, SlotKind } from '../../world/types.ts';
-import type { PropArt, RoomArt, RoomView, WorldDef } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { PropArt, RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { dome, hull, succulent } from './bits.ts';
 import { DECOR, DECOR_ART } from './decor.ts';
 import type { P3 } from './kit.ts';
@@ -217,8 +218,8 @@ const MURAL_MIN = 8;
 export const CLOCK_R = 1.55;
 const CLOCKS_W = 6 * CLOCK_R + 1.4;
 const OVERS = [
-  { kind: 'mural', station: 'write', w: WIDTH.mural, gap: OVER, at: null },
-  { kind: 'clocks', station: 'entrance', w: CLOCKS_W, gap: 1.2, at: 4.6 },
+  { kind: 'mural', station: 'write', w: WIDTH.mural, gap: OVER, at: null, grow: true },
+  { kind: 'clocks', station: 'entrance', w: CLOCKS_W, gap: 1.2, at: 4.6, grow: false },
 ] as const;
 
 function overs(L: Layout, pieces: readonly Feature[], decor: readonly PlacedProp[]): Feature[] {
@@ -233,8 +234,10 @@ function overs(L: Layout, pieces: readonly Feature[], decor: readonly PlacedProp
     // the mural shrinks to fit, the clocks slide along (within one of
     // their widths) to where they do
     const slide = o.kind === 'clocks' ? o.w / 2 : 0;
-    let a0 = c - o.w / 2 - slide;
-    let a1 = c + o.w / 2 + slide;
+    // (the mural as much wider as a tall room is taller)
+    const ow = o.grow ? o.w * Math.max(1, L.H / 41) : o.w;
+    let a0 = c - ow / 2 - slide;
+    let a1 = c + ow / 2 + slide;
     for (const g of pieces) {
       if (g.wall !== wall) continue;
       if (g.a < c) a0 = Math.max(a0, g.a + g.w / 2 + GAP);
@@ -351,10 +354,16 @@ function lamps(L: Layout, wall: Wall, pieces: readonly Feature[], decor: readonl
   return out;
 }
 
-// Windows: sill and top (z) for a wall H tall.
+// Windows: sill and top (z) for a wall H tall (taller in a tall room, so
+// a big loft's walls are glass to three quarters of their height), and how
+// many rows of panes (about 5.5 units a row, four at least).
 function windowZ(H: number): { z0: number; z1: number } {
-  return { z0: 7, z1: Math.min(H - 7, 32) };
+  return { z0: 7, z1: Math.min(H - 7, Math.max(32, 0.75 * H)) };
 }
+const rowsOf = (H: number) => {
+  const { z0, z1 } = windowZ(H);
+  return Math.max(4, Math.round((z1 - z0) / 5.5));
+};
 
 // A pendant's rim (z) on a wall H tall.
 export const pendantZ = (H: number) => Math.min(H - 11, 24);
@@ -414,13 +423,36 @@ export function officePois(L: Layout): Poi[] {
 
 const wallAt = (P: At, wall: Wall, T: number): At => frame(P, wall, wall === 'right' ? 0 : T, wall === 'right' ? T : 0);
 
+// The light the shell gives (asked once a room): the low sun of the
+// evening through the big windows, its patch on the concrete barred by the
+// steel (moonlight once the lights are off), the pendants and the neon.
+function lights(v: { W: number; D: number; H: number; T: number }): RoomLight[] {
+  const out: RoomLight[] = [];
+  const { z0, z1 } = windowZ(v.H);
+  for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+    if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 1, z0, z1, bars: 2, rails: rowsOf(v.H) - 1, color: SUN, strength: 1.4, night: '#9fb6ee', moon: 0.6 });
+    else if (f.kind === 'pendant') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: LAMP_N, z: pendantZ(v.H) - 0.5, strength: 0.9 });
+    else if (f.kind === 'neon') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: 23, color: '#ff5fa2', r: 7, halo: 3, strength: 0.8 });
+  }
+  return out;
+}
+
+// What the loft keeps clear of its furniture: the mural and the clocks,
+// from their feet up (nothing taller may stand before them; the furniture
+// they were hung over, as it stands without this, is lower: see overs).
+export function officeReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z: number }> {
+  return planFor(L.W, L.D, L.H, L.T).over.map((f) => ({ wall: f.wall, a0: f.a - f.w / 2, a1: f.a + f.w / 2, out: f.kind === 'clocks' ? 6 : 8, z: f.z0! }));
+}
+
 export const room: RoomArt = {
+  lights,
   draw(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
     const k = new Kit(v.pen, v.at, v.s);
     v.pen.save();
     floor(k, v, plan);
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
+    if (lampsOn(v)) for (const f of plan.features) if (f.kind === 'window') shaft(new Kit(v.pen, wallAt(v.at, f.wall, v.T), v.s), v, f);
     shell(k, v);
     v.pen.restore();
   },
@@ -516,36 +548,9 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const end = wall === 'right' ? W : D;
     if (wk.sees(T, 0, 0, end, 3.5, 0)) wk.poly([[T, 0, 0], [end, 0, 0], [end, 3.5, 0], [T, 3.5, 0]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#1a100a66'], [0.35, '#1a100a22'], [1, '#1a100a00']]), 0);
   }
-  // Light on the floor: the evening's light in front of each window (and
-  // its long reflection in the polish), warm pools under the pendants, a
-  // warm one round the kitchen and the screens' cool glow.
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (f.kind === 'window') {
-      const w = f.w - 1;
-      if (!wk.sees(f.a - w, 0, 0, f.a + w + 5, 15, 0)) continue;
-      pen.save();
-      pen.globalCompositeOperation = 'screen';
-      const spill = wk.lgrad([0, 0.3, 0], [0, 11, 0], [1, 0, 0], [[0, withAlpha(C.skyLow, 0.42)], [0.45, withAlpha(C.skyLow, 0.2)], [1, withAlpha(C.skyLow, 0)]]);
-      wk.poly([[f.a - w / 2, 0.3, 0], [f.a + w / 2, 0.3, 0], [f.a + w / 2 + 4.5, 14, 0], [f.a - w / 2 + 4.5, 14, 0]], spill, 0);
-      if (k.fine) {
-        // the panes' bars in the light, as darker lines
-        const bars: Array<[P3, P3]> = [];
-        for (const fu of [1 / 3, 2 / 3]) bars.push([[f.a - w / 2 + w * fu, 0.6, 0], [f.a - w / 2 + w * fu + 4.2, 13.4, 0]]);
-        pen.globalCompositeOperation = 'source-over';
-        wk.segs(bars, withAlpha('#5a4a40', 0.08), 0.3 * s);
-      }
-      pen.restore();
-    } else if (f.kind === 'pendant') {
-      if (wk.sees(f.a - 7, 0, 0, f.a + 7, 10, 0)) wk.pool(f.a, LAMP_N + 0.8, 6, 4.2, C.lamp, 0.24);
-    }
-  }
-  for (const [kind, u, w, r, a, c] of [['idle', 0.5, 0.55, 14, 0.26, C.lamp], ['web', 0.5, 0.7, 8, 0.12, C.screenGlow], ['write', 0.5, 0.9, 7, 0.1, C.screenGlow]] as const) {
-    const q = plan.L.slots.find((sl) => sl.kind === kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    if (qk.sees(q.len * u - r, q.dep * w - r, 0, q.len * u + r, q.dep * w + r, 0)) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
+  // (the light on the floor, the windows' evening sun, the pendants' pools
+  // and the screens' glow, is the scene's: see room.lights and the props'
+  // own `light`)
 }
 
 // The kitchen's floor: the island's footprint grown by 7 on every side,
@@ -838,6 +843,37 @@ function pothos(k: Kit, a: number, n: number, zc: number, r: number, seed: numbe
   for (let i = 0; i < 4; i++) leaf(a - 1.1 + i * 0.75, n + r * 0.7, zc + r * (i & 1 ? 0.5 : 0.8), i & 1 ? 1 : -1, 1.1, i + 1);
 }
 
+// The evening sun through a window as a shaft in the air: the opening
+// thrown along the light (from the upper left, as the scene throws its
+// patch on the floor: across by z/1.6, along by z/3.2) onto the floor, the
+// volume between them a soft warm veil, strongest at the glass.
+const SUN = '#ffc27a';
+
+function shaft(k: Kit, v: RoomView, f: Feature): void {
+  const { z0, z1 } = windowZ(v.H);
+  const w = f.w - 1;
+  // where a point of the opening (along a, up z) lands on the floor, in the
+  // wall's frame
+  const land = (a: number, z: number): P3 => (f.wall === 'right' ? [a + z / 1.6, z / 3.2, 0] : [a + z / 3.2, z / 1.6, 0]);
+  const glass: P3[] = [[f.a - w / 2, 0, z0], [f.a + w / 2, 0, z0], [f.a + w / 2, 0, z1], [f.a - w / 2, 0, z1]];
+  const floor = glass.map(([a, , z]) => land(a, z));
+  const lo = floor.reduce((m, q) => [Math.min(m[0], q[0]), Math.min(m[1], q[1])], [Infinity, Infinity]);
+  const hi = floor.reduce((m, q) => [Math.max(m[0], q[0]), Math.max(m[1], q[1])], [-Infinity, -Infinity]);
+  if (!k.sees(Math.min(lo[0], f.a - w / 2), 0, 0, Math.max(hi[0], f.a + w / 2), hi[1], z1)) return;
+  const sil = hull([...glass, ...floor].map(([a, n, z]) => k.p(a, n, z)));
+  const pen = k.pen;
+  pen.save();
+  pen.globalCompositeOperation = 'screen';
+  pen.beginPath();
+  sil.forEach(([x, y], i) => (i ? pen.lineTo(x, y) : pen.moveTo(x, y)));
+  pen.closePath();
+  const mid = (z0 + z1) / 2;
+  const [fa, fn] = land(f.a, mid);
+  pen.fillStyle = k.grad([f.a, 0, mid], [fa, fn, 0], [[0, withAlpha(SUN, 0.2)], [0.55, withAlpha(SUN, 0.09)], [1, withAlpha(SUN, 0.02)]]);
+  pen.fill();
+  pen.restore();
+}
+
 // The stretch of the wall (along) the pen can see between heights z0..z1.
 function visibleAlong(k: Kit, a0: number, a1: number, z0: number, z1: number): [number, number] {
   let lo = a1;
@@ -1119,14 +1155,16 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const bw = Math.max(1.2, 0.34 * s);
   const bars: P3[][] = [];
   for (const fu of [0, 1 / 3, 2 / 3, 1]) bars.push([[a - w / 2 + w * fu, n, z0], [a - w / 2 + w * fu, n, z1]]);
-  for (const fz of [0, 0.25, 0.5, 0.75, 1]) bars.push([[a - w / 2, n, z0 + (z1 - z0) * fz], [a + w / 2, n, z0 + (z1 - z0) * fz]]);
+  const rows = rowsOf(v.H);
+  const rails = Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows);
+  for (const fz of [0, ...rails, 1]) bars.push([[a - w / 2, n, z0 + (z1 - z0) * fz], [a + w / 2, n, z0 + (z1 - z0) * fz]]);
   for (const b of bars) k.line(b, INK, bw + k.thin * 1.2);
   for (const b of bars) k.line(b, C.frame, bw);
   // a glint along the lit edges of the bars
   const glint: Array<[P3, P3]> = [];
   const lu = k.lit(-1, 0) ? -1 : 1;
   for (const fu of [1 / 3, 2 / 3]) glint.push([[a - w / 2 + w * fu + (lu * 0.09 * bw) / s, n, z0 + 0.2], [a - w / 2 + w * fu + (lu * 0.09 * bw) / s, n, z1 - 0.2]]);
-  for (const fz of [0.25, 0.5, 0.75]) glint.push([[a - w / 2 + 0.2, n, z0 + (z1 - z0) * fz + (0.09 * bw) / s], [a + w / 2 - 0.2, n, z0 + (z1 - z0) * fz + (0.09 * bw) / s]]);
+  for (const fz of rails) glint.push([[a - w / 2 + 0.2, n, z0 + (z1 - z0) * fz + (0.09 * bw) / s], [a + w / 2 - 0.2, n, z0 + (z1 - z0) * fz + (0.09 * bw) / s]]);
   k.segs(glint, withAlpha(C.steelLight, 0.9), Math.max(0.6, bw * 0.28));
   if (k.fine) {
     // a latch on the middle row
@@ -1303,7 +1341,6 @@ function squiggle(a: number): P3[] {
 function neonArt(k: Kit, f: Feature): void {
   const a = f.a;
   const plate: P3[] = [[a - 3.3, 0.3, NEON.z0 + 0.2], [a + 3.3, 0.3, NEON.z0 + 0.2], [a + 3.3, 0.3, NEON.z1 - 0.2], [a - 3.3, 0.3, NEON.z1 - 0.2]];
-  k.wash(a, 0.05, 23, 5.5, 4.5, C.neon, 0.22);
   k.poly(plate, '#1c1a1f', k.lw, 0.5);
   if (k.fine) for (const du of [-2.9, 2.9]) for (const dz of [0.6, 5.4]) k.face(a + du, 0.32, NEON.z0 + dz, 0.12, C.chrome, 0, 10);
   neonGlow(k, f, 0.22);
@@ -1393,18 +1430,17 @@ function bikeArt(k: Kit, f: Feature): void {
 }
 
 // A pendant lamp hung from the beam on a black cord: a black dome shade,
-// the warm bulb under it, its halo, and its light washing the bricks.
+// the warm bulb under it while the lights are on (its light on the bricks
+// and the floor is the scene's: see room.lights).
 function pendant(k: Kit, v: RoomView, f: Feature): void {
   const zs = pendantZ(v.H);
   const a = f.a;
   const n = LAMP_N;
-  // its light on the bricks it is seen against, LAMP_N back along the wall
-  k.wash(a - n, 0.05, zs - n - 1, 4.5, 8, C.lamp, 0.32);
+  const on = lampsOn(v);
   k.line([[a, n, v.H - BEAM], [a, n, zs + 1.7]], INK, Math.max(0.9, 0.14 * k.s));
   k.cyl(a, n, zs + 1.2, 0.22, 0.6, C.beam, { line: k.thin });
-  dome(k, a, n, zs, 1.55, C.beam, C.lamp);
-  k.halo(a, n, zs - 0.4, 4, C.lamp, 0.45);
-  k.halo(a, n, zs - 0.4, 1.5, C.bulb, 0.6);
+  dome(k, a, n, zs, 1.55, C.beam, on ? C.lamp : null);
+  if (on) k.halo(a, n, zs - 0.4, 1.5, C.bulb, 0.6);
 }
 
 // ── the shell's edges: wall tops, cut ends, the floor slab ───────────────────
@@ -1457,11 +1493,12 @@ function skyLife(k: Kit, v: RoomView, f: Feature): void {
   // the panes above lo
   const panes: P3[][] = [];
   for (let c = 0; c < 3; c++) {
-    for (let r = 0; r < 4; r++) {
+    const rows = rowsOf(v.H);
+    for (let r = 0; r < rows; r++) {
       const u0 = a0(f, w) + (w * c) / 3 + bar;
       const u1 = a0(f, w) + (w * (c + 1)) / 3 - bar;
-      const pz0 = Math.max(lo, z0 + ((z1 - z0) * r) / 4 + bar);
-      const pz1 = z0 + ((z1 - z0) * (r + 1)) / 4 - bar;
+      const pz0 = Math.max(lo, z0 + ((z1 - z0) * r) / rows + bar);
+      const pz1 = z0 + ((z1 - z0) * (r + 1)) / rows - bar;
       if (pz1 - pz0 > 0.2) panes.push([[u0, n, pz0], [u1, n, pz0], [u1, n, pz1], [u0, n, pz1]]);
     }
   }

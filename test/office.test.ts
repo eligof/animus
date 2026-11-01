@@ -4,7 +4,7 @@ import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
 import { hashString } from '../src/world/rng.ts';
-import { footprint, planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import type { PropArt, RoomArt } from '../src/worlds/types.ts';
 import { office } from '../src/worlds/office.ts';
@@ -272,6 +272,17 @@ test('The Startup room: the mural and the clocks hang over the furniture, clear 
     const L = planLayout(w, h, 'office');
     const { over } = planFor(L.W, L.D, L.H, L.T);
     assert.ok(over.some((f) => f.kind === 'mural'), `${L.W}: no mural over the desks`);
+  }
+});
+
+test('The Startup room: nothing taller than their feet stands before the mural and the clocks, and keeping them clear moves no furniture the shell drew round', () => {
+  for (const [w, h] of SIZES) {
+    const L = planLayout(w, h, 'office');
+    const keep = office.reserve!(L);
+    const room = planRoom(office, L, hashString('office'));
+    for (const p of room.props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: a ${p.art.len}x${p.art.dep} piece before the mural or the clocks`);
+    const loose = planRoom({ ...office, reserve: undefined }, L, hashString('office'));
+    assert.deepEqual(room.props.map(footprint), loose.props.map(footprint), `${L.W}: the furniture moved`);
   }
 });
 

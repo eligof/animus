@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './cafe/decor.ts';
 import { INK } from './cafe/kit.ts';
 import { NPCS } from './cafe/npcs.ts';
-import { cafePois, room } from './cafe/room.ts';
+import { cafePois, cafeReserve, room } from './cafe/room.ts';
 import { STATIONS } from './cafe/stations.ts';
 import { WORKSTATION } from './cafe/workstation.ts';
 
@@ -47,6 +47,9 @@ export const cafe: WorldDef = {
   decor: DECOR,
   workstation: WORKSTATION,
   npcs: NPCS,
+  // a rainy evening: the room dimmed cool, the lamps and the fire warm in it
+  ambient: { tint: [120, 112, 168], strength: 0.3 },
+  reserve: cafeReserve,
   costume: 'casual',
   critter: { kind: 'cat', body: hex('#e8913a') }, // a ginger cat
   finale: { colors: [[244, 236, 220], [226, 204, 170], [250, 250, 244]] }, // paper confetti

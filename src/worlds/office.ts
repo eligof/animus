@@ -4,7 +4,7 @@ import type { WorldDef } from './types.ts';
 import { DECOR } from './office/decor.ts';
 import { INK } from './office/kit.ts';
 import { NPCS } from './office/npcs.ts';
-import { officePois, room } from './office/room.ts';
+import { officePois, officeReserve, room } from './office/room.ts';
 import { STATIONS } from './office/stations.ts';
 import { WORKSTATION } from './office/workstation.ts';
 
@@ -50,6 +50,13 @@ export const office: WorldDef = {
   decor: DECOR,
   workstation: WORKSTATION,
   npcs: NPCS,
+  // a bright floor: its far corners deeper, so the windows' evening sun
+  // and the pendants' pools stand out on the concrete
+  light: { falloff: 1.3 },
+  // dusk: the loft a little dimmed toward the sky's lilac, the low sun and
+  // the lamps warm in it
+  ambient: { tint: [200, 172, 205], strength: 0.18 },
+  reserve: officeReserve,
   costume: 'startup',
   critter: { kind: 'corgi', body: hex('#d98a3c') }, // the office dog, a red corgi
   finale: { colors: [[255, 107, 107], [255, 200, 87], [78, 205, 196], [167, 139, 250]] }, // coral, sunflower, teal and lilac confetti
