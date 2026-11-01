@@ -4,7 +4,7 @@ import type { Color } from '../../art/types.ts';
 import { hub, keepClear, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { crystal, heap, icicles, lantern, rock } from './bits.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, SPOT, hash, softDot, sparkle, wave, withAlpha } from './kit.ts';
@@ -192,6 +192,11 @@ function scatter(L: Layout, fs: Feature[]): Bit[] {
   return out.sort((p, q) => p.x + p.y - (q.x + q.y));
 }
 
+// What the snow cave keeps decor away from: the foot of each frozen falls
+// (its frozen pool and splash), so nothing stands in front of the hero.
+export const snowyReserve: NonNullable<WorldDef['reserve']> = (L) =>
+  planFor(L.W, L.D, L.H, L.T).features.filter((f) => f.kind === 'falls').map((f) => ({ wall: f.wall, a0: f.a - f.w / 2 - 1, a1: f.a + f.w / 2 + 1, out: 9 }));
+
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots (warm by the fire pit, a seat by it, a drink by the
 // stove...), and a look at the frozen falls and into the ice windows.
@@ -225,6 +230,17 @@ export const room: RoomArt = {
     for (const w of walls) for (const f of plan.features) if (f.wall === w.wall) glows(w.k, f);
     shell(k, v);
     v.pen.restore();
+  },
+  // The warm lanterns on the walls (oil: they burn all night), the falls'
+  // cold glow on the snow at their foot, the crystals' faint one.
+  lights(v): RoomLight[] {
+    const out: RoomLight[] = [];
+    for (const f of planFor(v.W, v.D, v.H, v.T).features) {
+      if (f.kind === 'lantern') out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 1.3, z: 10.4, color: '#ffb862', r: 9, strength: 0.7, halo: 2.4 });
+      else if (f.kind === 'falls') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 4, z: 3, color: '#9fdcff', r: 12, strength: 0.5, halo: 0 });
+      else if (f.kind === 'crystals') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 1.5, z: 3, color: '#8ed2ff', r: 6, strength: 0.5, halo: 0 });
+    }
+    return out;
   },
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
@@ -355,25 +371,7 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const ik = new Kit(pen, slotAt(v.at, idle), s);
     hearthGround(ik, SPOT.fire[0], SPOT.fire[1]);
   }
-  // The light the stations lay on the snow.
-  const lights: ReadonlyArray<readonly [Slot['kind'], number, number, number, number, Color, number]> = [
-    ['idle', SPOT.fire[0], SPOT.fire[1], 16, 13, '#ff8a3a', 0.42],
-    ['run', SPOT.stove[0], SPOT.stove[1] + 3, 11, 9, '#ff8a3a', 0.34],
-    ['write', 9.2, 4.5, 7, 5.5, '#ffb44a', 0.26],
-    ['read', 11.4, 3, 6.5, 5, '#ffb44a', 0.24],
-    ['search', 11, 3, 6, 5, '#ffb44a', 0.26],
-    ['search', 5, 4, 8, 4, '#e6f8ff', 0.3],
-    ['web', 4.5, 6, 6, 5, '#c8ffe0', 0.22],
-    ['think', 1.2, 5.6, 6, 5, '#ffb44a', 0.26],
-    ['think', 11.8, 2.2, 5, 4, '#ffb44a', 0.22],
-    ['entrance', 7, 3, 9, 6, '#e6f0ff', 0.32],
-    ['entrance', 2.5, 2.6, 6, 5, '#ffb44a', 0.26],
-  ];
-  for (const [kind, u, w, ru, rv, color, a] of lights) {
-    const q = slot(kind);
-    if (!q) continue;
-    new Kit(pen, slotAt(v.at, q), s).pool(u, w, ru, rv, color, a, 0, 'source-over');
-  }
+  // (the stations' light on the snow is their own, declared with them)
   for (const b of plan.scatter) if (k.seen([[b.x - b.r - 1, b.y - b.r - 1, 0], [b.x + b.r + 1, b.y + b.r + 1, 0], [b.x - b.r, b.y + b.r, 2.5]])) bit(k, b);
 }
 
@@ -1111,17 +1109,9 @@ function skis(k: Kit, f: Feature): void {
 // under them, the falls and crystals a cold glow.
 function glows(k: Kit, f: Feature): void {
   if (!k.seen([[f.a - f.w - 8, 0, 0], [f.a + f.w + 8, 12, 0], [f.a - f.w - 8, 0, 20], [f.a + f.w + 8, 0, 20]])) return;
-  if (f.kind === 'lantern') {
-    k.halo(f.a, 1.3, 10.4, 8, '#ffb862', 0.3);
-    k.halo(f.a, 1.3, 10.4, 2.6, '#ffe0a0', 0.45);
-    k.pool(f.a, 4, 7.5, 5.5, '#ffb44a', 0.24, 0, 'source-over');
-  } else if (f.kind === 'falls') {
-    k.halo(f.a, 1.5, 7, f.w * 0.7, '#9fdcff', 0.2);
-    k.pool(f.a, 6, f.w * 0.7, 6, '#e6f8ff', 0.3, 0, 'source-over');
-  } else if (f.kind === 'crystals') {
-    k.halo(f.a, 1.5, 3.5, 6, '#8fe0ff', 0.28);
-    k.pool(f.a, 3, 6, 4, '#c8f2ff', 0.3, 0, 'source-over');
-  }
+  // (their light on the snow and the wall is declared: room.lights)
+  if (f.kind === 'falls') k.halo(f.a, 1.5, 7, f.w * 0.7, '#9fdcff', 0.2);
+  else if (f.kind === 'crystals') k.halo(f.a, 1.5, 3.5, 6, '#8fe0ff', 0.28);
 }
 
 // ── drifts ─────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import type { Palette } from '../themes/types.ts';
 import { DECOR } from './hell/decor.ts';
 import { INK } from './hell/kit.ts';
 import { NPCS } from './hell/npcs.ts';
-import { hellPois, room } from './hell/room.ts';
+import { hellPois, hellReserve, room } from './hell/room.ts';
 import { STATIONS } from './hell/stations.ts';
 import { WORKSTATION } from './hell/workstation.ts';
 import type { WorldDef } from './types.ts';
@@ -42,6 +42,11 @@ export const hell: WorldDef = {
   ink: INK,
   room,
   pois: hellPois,
+  reserve: hellReserve,
+  // No evening tint: the lava is the light of the place. The left wall is
+  // already darker than most (turn 0.5); at night the lamps go out and the
+  // room sinks to a deep red-brown, lit from below by the lava and fire.
+  light: { turn: 0.5, night: { tint: [128, 52, 40], strength: 0.5, figures: 0.3 } },
   stations: STATIONS,
   decor: DECOR,
   workstation: WORKSTATION,

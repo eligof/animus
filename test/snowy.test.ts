@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
+import { hashString } from '../src/world/rng.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { snowy } from '../src/worlds/snowy.ts';
 import { DECOR_ART } from '../src/worlds/snowy/decor.ts';
@@ -222,4 +223,14 @@ test('Snowy Depths: its desks have things of their own to pick from, and somethi
 test('Snowy Depths: three locals at work, each where its job puts it', () => {
   assert.deepEqual(snowy.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['cook', 'run', 'standing'], ['fisher', 'think', 'seated'], ['radioOperator', 'web', 'seated']]);
   assert.ok(snowy.npcs!.some((n) => n.show), 'no show');
+});
+
+test('snowy room: no decor stands in front of the falls, and its light is declared', () => {
+  for (const side of [72, 90, 146]) {
+    const L = planLayout(2 * side + 12, 1000, 'snowy');
+    const keep = snowy.reserve!(L);
+    assert.ok(keep.length >= 1, `${L.W}: nothing kept clear`);
+    for (const p of planRoom(snowy, L, hashString('snowy')).props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: decor in front of the falls`);
+    assert.ok(snowy.room.lights!({ W: L.W, D: L.D, H: L.H, T: L.T, seed: 1 }).length >= 1, 'no light declared');
+  }
 });
