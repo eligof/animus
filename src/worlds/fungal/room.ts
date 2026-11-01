@@ -341,8 +341,9 @@ export const room: RoomArt = {
       v.pen.restore();
     }
     const mother = plan.features.find((f) => f.kind === 'mother');
-    if (mother) motherShroom(new Kit(v.pen, wallAt(v.at, mother.wall, v.T), v.s), v, mother);
     shell(k, v);
+    // the giant after the shell, so the corner's line doesn't cut her
+    if (mother) motherShroom(new Kit(v.pen, wallAt(v.at, mother.wall, v.T), v.s), v, mother);
     v.pen.restore();
   },
   // The cave lights itself: the geode, the mother mushroom, the lichen and
@@ -469,15 +470,34 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     k.paint(GROUND.stone, k.thin);
     k.line([[st.x - st.r * 0.85, st.y + st.r * 0.1, 0.13], [st.x - st.r * 0.55, st.y - st.r * 0.6, 0.13], [st.x + st.r * 0.1, st.y - st.r * 0.85, 0.13]], '#b9b2cc', Math.max(0.8, 0.14 * s));
   }
-  // Worn earth where agents stand to work and round the tunnel mouth.
+  // Ground trodden where agents stand to work and round the tunnel mouth,
+  // like the trail: a rim of trodden moss, plum earth inside, a few
+  // pebbles, and a short spur toward the trail when it passes near.
   for (const sl of L.slots) {
     const kind: SlotKind = sl.kind;
     const r = kind === 'entrance' ? 5.5 : 3.4;
-    if (!vis(sl.spot.x, sl.spot.y, r * 2 * s)) continue;
+    if (!vis(sl.spot.x, sl.spot.y, (r + 8) * 2 * s)) continue;
+    const seed = sl.x0 * 7 + sl.y0;
+    const near = trail.reduce<[number, number, number] | null>((m, [x, y]) => {
+      const d = Math.hypot(x - sl.spot.x, y - sl.spot.y);
+      return d < 8 && (!m || d < m[2]) ? [x, y, d] : m;
+    }, null);
+    for (const [grow, c] of [[0.5, withAlpha(GROUND.bump, 0.4)], [0, withAlpha('#6a5468', 0.45)]] as const) {
+      pen.beginPath();
+      blob(k, sl.spot.x, sl.spot.y, 0, r + grow, (r + grow) * 0.8, seed, 12);
+      if (near && near[2] > r) {
+        for (let t = 0.35; t < 1; t += 0.2) blob(k, sl.spot.x + (near[0] - sl.spot.x) * t, sl.spot.y + (near[1] - sl.spot.y) * t, 0, 1 + grow, 0.9 + grow, seed + Math.round(t * 10), 8);
+      }
+      pen.fillStyle = c;
+      pen.fill();
+    }
     pen.beginPath();
-    blob(k, sl.spot.x, sl.spot.y, 0, r, r * 0.8, sl.x0 * 7 + sl.y0, 12);
-    pen.fillStyle = withAlpha(GROUND.earth, 0.6);
-    pen.fill();
+    for (let i = 0; i < 3; i++) {
+      const e = k.ell(sl.spot.x + (hash(seed, i, 47) - 0.5) * r * 1.2, sl.spot.y + (hash(seed, i, 48) - 0.5) * r, 0, 0.22 + hash(seed, i, 49) * 0.15);
+      pen.moveTo(e.cx + e.rx, e.cy);
+      pen.ellipse(e.cx, e.cy, e.rx, e.ry * 1.2, 0, 0, Math.PI * 2);
+    }
+    k.paint(GROUND.stone, Math.max(0.7, k.thin * 0.6), '#4a4458');
   }
   // contact shade along the foot of each wall
   for (const wall of ['right', 'left'] as const) {

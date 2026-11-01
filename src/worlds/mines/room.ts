@@ -43,7 +43,7 @@ const ADIT = AW + 4; // the portal, posts and all
 const AW_S = 7; // a small drift, for walls too short for a big one
 const AH_S = 12;
 const ADIT_S = AW_S + 4;
-const BAY = 15; // posts at most this far apart
+const BAY = 21; // posts at most this far apart
 const LAMP_Z = 20.5; // where a lamp's bracket leaves its post
 
 // The wall plate: the beam the posts carry, its underside (z).
@@ -128,7 +128,6 @@ function features(L: Layout): Feature[] {
   const counts = { left: {} as Partial<Record<Kind, number>>, right: {} as Partial<Record<Kind, number>> };
   const tall = L.H >= 44; // room above the wall plate for an upper working
   let bay = 0;
-  let lamp = 0;
   spans.sort((p, q) => (p.wall === q.wall ? p.a0 - q.a0 : p.wall === 'right' ? -1 : 1));
   for (const s of spans) {
     const len = s.a1 - s.a0;
@@ -138,7 +137,7 @@ function features(L: Layout): Feature[] {
     for (let i = 0; i <= m; i++) {
       if (i === m && len - 1.4 < 0.5) break;
       out.push({ wall: s.wall, kind: 'post', a: at(i), w: WIDTH.post, k: n++ });
-      if (lamp++ % 2 === 0) out.push({ wall: s.wall, kind: 'lamp', a: at(i), w: WIDTH.lamp, k: n++ });
+      out.push({ wall: s.wall, kind: 'lamp', a: at(i), w: WIDTH.lamp, k: n++ });
     }
     for (let i = 0; i < m; i++) {
       const room = at(i + 1) - at(i) - 1.4 - 2;
@@ -213,7 +212,7 @@ function scatter(L: Layout, rs: Rail[]): Scatter[] {
 // fallen rock; three to five of them.
 function puddles(L: Layout, fs: Feature[], rs: Rail[], sc: Scatter[]): Puddle[] {
   const rects = L.slots.map(slotRect);
-  const want = Math.max(3, Math.min(5, Math.round((L.W + L.D) / 50)));
+  const want = Math.max(4, Math.min(8, Math.round((L.W + L.D) / 30)));
   const out: Puddle[] = [];
   const lamps = fs.filter((f) => f.kind === 'lamp');
   for (let i = 0; i < lamps.length * 4 && out.length < want; i++) {
@@ -413,6 +412,29 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
       k.line(line, withAlpha('#2e2016', 0.38), Math.max(1, 0.42 * s));
     }
   }
+  // A duckboard walk laid along each rut from the rails to the middle of
+  // the room: planks across it, light and dark timber, a gap between.
+  for (const rut of plan.ruts) {
+    const path = rut.slice(0, 11);
+    let carry = 0;
+    let n = 0;
+    for (let i = 1; i < path.length; i++) {
+      const [x0, y0] = path[i - 1];
+      const [x1, y1] = path[i];
+      const l = Math.hypot(x1 - x0, y1 - y0);
+      if (!l) continue;
+      const [dx, dy] = [(x1 - x0) / l, (y1 - y0) / l];
+      for (let d = carry; d < l; d += 1.05) {
+        const [cx, cy] = [x0 + dx * d, y0 + dy * d];
+        if (k.vis(cx, cy, 0, 3)) {
+          const q = (a: number, b: number): P3 => [cx + dx * a - dy * b, cy + dy * a + dx * b, 0.06];
+          k.poly([q(-0.45, -1.5), q(0.45, -1.5), q(0.45, 1.5), q(-0.45, 1.5)], n % 2 ? C.timber : C.plank, k.thin);
+        }
+        n++;
+        carry = d + 1.05 - l;
+      }
+    }
+  }
   // Gravel: a shadow under each pebble, then the pebbles by tone.
   const pebbles = Math.round(area / 120);
   const vis: number[] = [];
@@ -522,8 +544,8 @@ function puddle(k: Kit, p: Puddle): void {
   pen.fill();
   pen.beginPath();
   blob(k, p.x, p.y, p.rx, p.ry, p.k + 71, 0.02, 11);
-  k.paint(k.grad([p.x - p.rx, p.y - p.ry, 0], [p.x + p.rx, p.y + p.ry, 0], [[0, '#2f2f38'], [0.55, '#3f4650'], [1, '#5a6b78']]), Math.max(0.8, k.thin * 0.8), withAlpha(INK, 0.6));
-  k.line([[p.x - p.rx * 0.55, p.y - p.ry * 0.05, 0.03], [p.x - p.rx * 0.05, p.y - p.ry * 0.5, 0.03]], withAlpha('#ffd08a', 0.6), Math.max(1, 0.24 * s));
+  k.paint(k.grad([p.x - p.rx, p.y - p.ry, 0], [p.x + p.rx, p.y + p.ry, 0], [[0, '#465a6b'], [0.6, '#5f7889'], [1, '#86a0b2']]), Math.max(0.8, k.thin * 0.8), withAlpha(INK, 0.6));
+  k.line([[p.x - p.rx * 0.55, p.y - p.ry * 0.05, 0.03], [p.x - p.rx * 0.05, p.y - p.ry * 0.5, 0.03]], withAlpha('#ffe0a0', 0.8), Math.max(1, 0.24 * s));
   k.line([[p.x + p.rx * 0.1, p.y + p.ry * 0.05, 0.03], [p.x + p.rx * 0.35, p.y - p.ry * 0.2, 0.03]], withAlpha('#ffe6b8', 0.35), Math.max(0.8, 0.16 * s));
 }
 
@@ -534,20 +556,20 @@ function puddle(k: Kit, p: Puddle): void {
 // enough that the walls fall back behind the lit floor and the lanterns'
 // light reads on them.
 const COAL = '#241d1b';
-const MARKER = '#b08a58';
+const MARKER = '#c49a5e';
 const STRATA: ReadonlyArray<readonly [Color, number]> = [
-  ['#6e5644', 4.5],
-  ['#86694f', 4],
-  ['#5f4b3d', 3.2],
+  ['#6d5443', 4.5],
+  ['#8e6f52', 4],
+  ['#584539', 3.2],
   [COAL, 3.4],
-  ['#7a5f49', 6],
+  ['#7d614a', 6],
   [MARKER, 2.2],
-  ['#665141', 6.5],
-  ['#5a483b', 4.5],
+  ['#614d3f', 6.5],
+  ['#514136', 4.5],
   [COAL, 2.2],
-  ['#7d634d', 5.5],
-  ['#94785a', 3.5],
-  ['#5f4c3f', 7],
+  ['#826750', 5.5],
+  ['#a28462', 3.5],
+  ['#58463c', 7],
 ];
 
 // How the beds dip: one plane through the hill, rising toward the right
@@ -628,7 +650,9 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   // reaching out over the room from it above each post
   k.box(T, 0, pz, end - T, 1.4, 1.5, C.timberOld, { stripe: false });
   if (k.fine) k.line([[T, 1.41, pz + 0.75], [end, 1.41, pz + 0.75]], shade(C.timberOld, -0.25), Math.max(0.6, 0.06 * s));
-  for (const f of mine) if (f.kind === 'post') beam(k, v, f);
+  // (over every other post: fewer timbers, so the rock shows)
+  const posts = plan.features.filter((g) => g.kind === 'post');
+  for (const f of mine) if (f.kind === 'post' && posts.indexOf(f) % 2 === 0) beam(k, v, f);
   for (const f of mine) {
     if (f.kind === 'rack') rack(k, f);
     else if (f.kind === 'board') board(k, f);
