@@ -4,7 +4,8 @@ import type { Color, Gradient } from '../../art/types.ts';
 import { hub, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
+import type { RoomArt, RoomLight, RoomView, WorldDef } from '../types.ts';
 import { bone, candle, chain, flame, skull, swag } from './bits.ts';
 import type { P3, Pt } from './kit.ts';
 import { C, INK, Kit, hash, withAlpha } from './kit.ts';
@@ -126,6 +127,15 @@ function features(L: Layout): Feature[] {
   return out;
 }
 
+// What hell keeps decor away from: the Maw, its basin and the floor its
+// lava lights (the planner keeps the walls' feet before it clear).
+export const hellReserve: NonNullable<WorldDef['reserve']> = (L) => {
+  const maw = planFor(L.W, L.D, L.H, L.T).features.find((f) => f.kind === 'maw');
+  if (!maw) return [];
+  const m = maw.w / MAW;
+  return [{ wall: maw.wall, a0: maw.a - 9.5 * m, a1: maw.a + 9.5 * m, out: 9 }];
+};
+
 // Windows: sill and apex (z) for a wall H tall.
 function windowZ(H: number): { z0: number; z1: number } {
   const z0 = PLINTH + 7;
@@ -205,6 +215,30 @@ export const room: RoomArt = {
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
     shell(k, v);
     v.pen.restore();
+  },
+  // Hell is lit from below: the Maw's lava (and its burning eyes), every
+  // vent and seep in the walls, the torches; the burning land through the
+  // windows, day and night; the lanterns on the chains are the only lamps
+  // (out at night, when the room glows red from the lava alone).
+  lights(v): RoomLight[] {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    const out: RoomLight[] = [];
+    const { z0, z1 } = windowZ(v.H);
+    for (const f of plan.features) {
+      const m = f.w / MAW;
+      if (f.kind === 'maw') {
+        out.push({ kind: 'lava', wall: f.wall, u: f.a, v: 3 * m, z: 2 * m, r: 16, strength: 1.3, halo: 6 });
+        out.push({ kind: 'lava', wall: f.wall, u: f.a, v: 1.6 * m, z: 26.4 * m, r: 5, strength: 0.35, halo: 4 * m });
+      } else if (f.kind === 'torch') out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 1.2, z: TORCH_Z + 1.5, r: 9, strength: 0.8, halo: 3 });
+      else if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2, z0, z1, bars: 3, rails: 1, color: '#ff8a4a', strength: 0.45, night: '#ff6a2a', moon: 0.45 });
+    }
+    for (const wall of ['right', 'left'] as const) {
+      const end = wall === 'right' ? v.W : v.D;
+      for (const a of ventSpots(plan, wall, end)) out.push({ kind: 'lava', wall, u: a, v: 0.6, z: 1.8, r: 7, strength: 0.6, halo: 2.2 });
+      for (const pts of seeps(v, plan, wall, end)) out.push({ kind: 'lava', wall, u: pts[0][0], v: 0.4, z: PLINTH + 2, r: 6, strength: 0.45, halo: 2 });
+      for (const a of lanternSpots(v.T, end)) out.push({ kind: 'lamp', wall, u: a, v: 0.9, z: v.H - FRIEZE - 4.2, r: 9, strength: 0.5, halo: 1.8 });
+    }
+    return out;
   },
   overlay(v: RoomView): void {
     const plan = planFor(v.W, v.D, v.H, v.T);
@@ -332,24 +366,10 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     if (seen(ik, [[-3, -3, 0], [idle.len + 3, idle.dep + 3, 0]], 6)) {
       ik.disc(idle.len / 2, idle.dep / 2, 0.02, 7.6, '#3a2628', 0);
       ik.disc(idle.len / 2, idle.dep / 2, 0.02, 6.2, '#2c1c1e', 0);
-      ik.pool(idle.len / 2, idle.dep / 2, 12, 10, '#ff8a3a', 0.3);
     }
   }
-  for (const [kind, u, w, r, a, c] of [['think', 0.5, 0.6, 12, 0.22, '#ff7a3a'], ['run', 0.5, 0.6, 13, 0.3, '#ff8a3a'], ['web', 0.5, 0.5, 9, 0.22, '#5fe0b0'], ['write', 0.5, 0.8, 8, 0.16, '#ffb060'], ['read', 0.6, 0.8, 8, 0.14, '#ffb060'], ['search', 0.5, 1, 8, 0.16, '#ffd060'], ['entrance', 0.5, 1, 10, 0.26, '#ff6a2a']] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    if (seen(qk, [[q.len * u - r, q.dep * w - r, 0], [q.len * u + r, q.dep * w + r, 0]])) qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
-  const maw = plan.features.find((f) => f.kind === 'maw');
-  if (maw) {
-    const mk = mawKit(new Kit(pen, wallAt(v.at, maw.wall, T), s), maw);
-    if (seen(mk, [[maw.a - 16, 0, 0], [maw.a + 16, 14, 0]], 2)) {
-      mk.pool(maw.a, 4, 15, 11, '#ff6a20', 0.42);
-      // scorch round the basin
-      mk.pool(maw.a, 3, 10, 6, '#100204', 0.3, 0, 'screen');
-    }
-  }
+  // (the stations' and the Maw's light on the floor is declared: see
+  // room.lights and the stations' own)
 }
 
 // Cracks across the floor with lava glowing in them: a fan of them running
@@ -574,7 +594,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   // The lava's glow on the wall's foot.
   pen.save();
   pen.globalCompositeOperation = 'screen';
-  k.poly([[T, 0.03, 0], [end, 0.03, 0], [end, 0.03, 16], [T, 0.03, 16]], k.vgrad(T, 0.03, 0, 16, [[0, '#ff6a2a30'], [0.4, '#ff6a2a12'], [1, '#ff6a2a00']]), 0);
+  k.poly([[T, 0.03, 0], [end, 0.03, 0], [end, 0.03, 20], [T, 0.03, 20]], k.vgrad(T, 0.03, 0, 20, [[0, '#ff6a2a60'], [0.3, '#ff6a2a28'], [1, '#ff6a2a00']]), 0);
   pen.restore();
   frieze(k, v, end, lit);
   for (const f of plan.features) {
@@ -597,7 +617,7 @@ type Course = { z0: number; z1: number; joints: Array<[number, number]> };
 // The courses of blocks up a wall, of three heights in turn: each one's
 // foot and head, and its joints (where each meets the course's foot and
 // head, a little off true, staggered), the wall's two ends among them.
-function courses(v: RoomView, wall: Wall, end: number): Course[] {
+function courses(v: { T: number; H: number }, wall: Wall, end: number): Course[] {
   const top = v.H - FRIEZE;
   const out: Course[] = [];
   for (let z = PLINTH, r = 0; z < top - 0.5; z += COURSES[r % 3], r++) {
@@ -670,14 +690,15 @@ function masonry(k: Kit, v: RoomView, wall: Wall, end: number, lit: boolean): vo
 // back: up a joint from the plinth, along the seam to the next joint over,
 // up that one, a step or three; not behind a station, nor under a piece
 // that comes down that low (cages, torches and high banners hang above).
-function glowCracks(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): void {
+function seeps(v: { T: number; H: number }, plan: Plan, wall: Wall, end: number): P3[][] {
+  const out: P3[][] = [];
   const low = (f: Feature) => f.kind === 'window' || f.kind === 'niche' || f.kind === 'shackles' || f.kind === 'maw' || (f.kind === 'banner' && v.H - FRIEZE - 30.5 < PLINTH + 14);
   const taken = plan.features.filter((f) => f.wall === wall && low(f)).map((f) => [f.a - f.w / 2 - 1.5, f.a + f.w / 2 + 1.5] as const);
   const slots = plan.L.slots.filter((q) => q.wall === wall && !q.island).map((q): readonly [number, number] => (wall === 'right' ? [q.x0 - 2, q.x0 + q.len + 2] : [q.y0 - 2, q.y0 + q.len + 2]));
   const blocked = (a0: number, a1: number) => [...taken, ...slots].some(([b0, b1]) => a1 > b0 && a0 < b1);
   const cs = courses(v, wall, end);
   const inner = (c: Course) => c.joints.slice(1, -1);
-  if (cs.length < 2) return;
+  if (cs.length < 2) return out;
   const n = Math.max(1, Math.round((end - v.T) / 36));
   let placed = 0;
   for (let i = 0; i < 40 && placed < n; i++) {
@@ -699,6 +720,15 @@ function glowCracks(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): v
     const us = pts.map(([pu]) => pu);
     if (blocked(Math.min(...us) - 1, Math.max(...us) + 1)) continue;
     placed++;
+    out.push(pts);
+  }
+  return out;
+}
+
+// The seeps drawn: a glow, the dark lip, the hot line (their light on the
+// wall and floor is declared, see room.lights).
+function glowCracks(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): void {
+  for (const pts of seeps(v, plan, wall, end)) {
     if (!seen(k, pts, 4)) continue;
     k.pen.save();
     k.pen.globalCompositeOperation = 'screen';
@@ -707,7 +737,6 @@ function glowCracks(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number): v
     k.line(pts, '#1a0608', Math.max(1.6, 0.5 * k.s));
     k.line(pts, C.lava, Math.max(0.8, 0.22 * k.s));
     if (k.fine) k.line(pts.slice(0, 2), C.lavaHot, 0.08 * k.s);
-    k.halo(pts[0][0], 0.3, PLINTH + 1, 4, '#ff6a2a', 0.25);
   }
 }
 
@@ -753,13 +782,21 @@ function frieze(k: Kit, v: RoomView, end: number, lit: boolean): void {
 // behind a station or the Maw's basin), one every 8 to 10 units: pointed
 // arches rimmed in obsidian, the lava inside white-hot at its foot and
 // darkening up the flue, three iron bars across, a drip over the sill.
-function vents(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, lit: boolean): void {
+function ventSpots(plan: Plan, wall: Wall, end: number): number[] {
   const keep = plan.L.slots.filter((q) => q.wall === wall && !q.island).map((q): readonly [number, number] => (wall === 'right' ? [q.x0 - 1.5, q.x0 + q.len + 1.5] : [q.y0 - 1.5, q.y0 + q.len + 1.5]));
   for (const f of plan.features) if (f.wall === wall && f.kind === 'maw') keep.push([f.a - (9.5 * f.w) / MAW, f.a + (9.5 * f.w) / MAW]);
+  const out: number[] = [];
+  for (let a = plan.L.T + 4 + hash(wall === 'right' ? 3 : 4, 121) * 4, i = 0; a < end - 3; a += 8 + hash(i, 122) * 2, i++) {
+    if (!keep.some(([a0, a1]) => a + 2.2 > a0 && a - 2.2 < a1)) out.push(a);
+  }
+  return out;
+}
+
+function vents(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, lit: boolean): void {
   const w = 3.4;
   const [z0, z1] = [0.45, 3.45];
-  for (let a = v.T + 4 + hash(wall === 'right' ? 3 : 4, 121) * 4, i = 0; a < end - 3; a += 8 + hash(i, 122) * 2, i++) {
-    if (keep.some(([a0, a1]) => a + 2.2 > a0 && a - 2.2 < a1) || !seen(k, [[a - 2.4, 0, 0], [a + 2.4, 0.1, 4]], 2)) continue;
+  for (const a of ventSpots(plan, wall, end)) {
+    if (!seen(k, [[a - 2.4, 0, 0], [a + 2.4, 0.1, 4]], 2)) continue;
     k.poly(arch(a, w + 0.9, 0.12, z1 + 0.45, 0.03, 8), lit ? C.obsidianLight : shade(C.obsidianLight, -0.12), k.thin);
     const open = arch(a, w, z0, z1, 0.05, 8);
     k.poly(open, k.vgrad(a, 0.05, z0, z1, [[0, C.lavaWhite], [0.28, C.lavaHot], [0.6, C.lava], [1, C.lavaDeep]]), 0);
@@ -782,23 +819,30 @@ function vents(k: Kit, v: RoomView, plan: Plan, wall: Wall, end: number, lit: bo
 }
 
 // Chains swagged along under the frieze, an iron lantern at every other hook.
+// The hooks a lantern hangs from (every other one along the chains).
+const SWAG = 16;
+function lanternSpots(T: number, end: number): number[] {
+  const out: number[] = [];
+  for (let a = T + 2, i = 0; a + SWAG <= end; a += SWAG, i++) if (i % 2) out.push(a);
+  return out;
+}
+
 function lanterns(k: Kit, v: RoomView, end: number): void {
   const z = v.H - FRIEZE - 1.6;
-  const span = 16;
   const n = 0.4;
-  for (let a = v.T + 2, i = 0; a + span <= end; a += span, i++) {
-    if (!seen(k, [[a, 0, z - 6], [a + span, 2, z + 1]], 4)) continue;
-    chain(k, swag([a, n, z], [a + span, n, z], 2.2, 10), 0.55, '#5a4e52');
-    if (i % 2 === 0) continue;
-    // a lantern hanging from the hook at a
+  for (let a = v.T + 2; a + SWAG <= end; a += SWAG) {
+    if (seen(k, [[a, 0, z - 6], [a + SWAG, 2, z + 1]], 4)) chain(k, swag([a, n, z], [a + SWAG, n, z], 2.2, 10), 0.55, '#5a4e52');
+  }
+  // a lantern at every other hook: lit (its glow declared), or dark at night
+  const on = lampsOn(v);
+  for (const a of lanternSpots(v.T, end)) {
+    if (!seen(k, [[a - 1, 0, z - 6], [a + 1, 2, z + 1]], 4)) continue;
     const hz = z - 0.2;
-    k.halo(a, 0.8, hz - 3, 5.5, '#ff9a4a', 0.28);
     k.line([[a, n, hz], [a, n + 0.4, hz - 1.2]], INK, Math.max(1, 0.12 * k.s));
     k.box(a - 0.55, n - 0.15, hz - 3.4, 1.1, 1.1, 1.9, C.iron, { line: k.thin, stripe: false });
-    k.poly([[a - 0.38, n + 0.96, hz - 3.2], [a + 0.38, n + 0.96, hz - 3.2], [a + 0.38, n + 0.96, hz - 1.7], [a - 0.38, n + 0.96, hz - 1.7]], '#ffc260', 0);
+    k.poly([[a - 0.38, n + 0.96, hz - 3.2], [a + 0.38, n + 0.96, hz - 3.2], [a + 0.38, n + 0.96, hz - 1.7], [a - 0.38, n + 0.96, hz - 1.7]], on ? '#ffc260' : '#3a2a2e', 0);
     k.line([[a, n + 0.98, hz - 3.2], [a, n + 0.98, hz - 1.7]], C.iron, Math.max(0.7, 0.1 * k.s));
     k.poly([[a - 0.7, n - 0.3, hz - 1.5], [a + 0.7, n - 0.3, hz - 1.5], [a, n + 0.4, hz - 0.8]], C.iron, k.thin);
-    k.halo(a, n + 1, hz - 2.4, 1.6, '#ffd890', 0.5);
   }
 }
 
@@ -898,8 +942,6 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
     candle(k, cu, 0.7, z0 - 0.3, 1.2 + hash(f.k, 33) * 0.8, 0.3);
     if (hash(f.k, 34) < 0.5) candle(k, cu + (cu < a ? 0.8 : -0.8), 0.75, z0 - 0.3, 0.7, 0.26);
   }
-  // fire's light spilling in under it
-  k.pool(a, 3, 7, 4, '#ff7a3a', 0.1);
 }
 
 // A crimson banner from an iron rod, a gold flame on it, swallowtailed.
@@ -1038,7 +1080,6 @@ function shackles(k: Kit, f: Feature): void {
 function torch(k: Kit, f: Feature): void {
   const a = f.a;
   const z = TORCH_Z;
-  k.halo(a, 0.2, z + 2, 9, '#ff8a3a', 0.24);
   k.poly([[a - 0.45, 0.02, z - 3], [a + 0.45, 0.02, z - 3], [a + 0.45, 0.02, z - 0.6], [a - 0.45, 0.02, z - 0.6]], C.iron, k.thin, 0.2);
   k.rod([[a, 0.1, z - 2.2], [a, 1.0, z - 1.4], [a, 1.2, z - 0.3]], C.iron, 0.2);
   k.pen.beginPath();

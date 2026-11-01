@@ -45,6 +45,7 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 16,
+  light: [{ kind: 'fire', u: 9.5, v: 1.3, z: ZT + 1.1, color: '#ffc870', r: 8, strength: 0.6, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 16, (k) => {
@@ -297,6 +298,7 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 12,
+  light: [{ kind: 'fire', u: 11.2, v: 3.4, z: 6.3, color: '#ffc870', r: 6, strength: 0.5, halo: 0 }, { kind: 'glow', u: 4.8, v: 3.4, z: 5, color: '#cff3ff', r: 7, strength: 0.45, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, F } = ICE;
@@ -430,6 +432,7 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 23,
+  light: [{ kind: 'fire', u: SPOT.stove[0], v: SPOT.stove[1] + 2.9, z: 3.3, r: 11, strength: 1, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u: cu, v: cv, r } = STOVE;
@@ -576,6 +579,7 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 22,
+  light: [{ kind: 'screen', u: DIAL[0], v: DIAL[1], z: DIAL[2], color: '#c8ffe0', r: 6, strength: 0.5, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, v.active ? 'web-worn' : 'web', 22, (k) => {
@@ -668,6 +672,7 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 9,
+  light: [{ kind: 'fire', u: 7.7, v: 5.0, z: 1.0, color: '#ffc870', r: 6, strength: 0.6, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const [hu, hv] = SPOT.hole;
@@ -820,6 +825,7 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 9,
+  light: [{ kind: 'fire', u: SPOT.fire[0], v: SPOT.fire[1], z: 1.6, r: 15, strength: 1.1, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const { u: fu, v: fv } = FIRE;
@@ -931,6 +937,7 @@ const entrance: PropArt = {
   len: 15,
   dep: 4,
   height: 16,
+  light: [{ kind: 'fire', u: 2.5, v: 2.4, z: 7.5, color: '#ffc870', r: 7, strength: 0.6, halo: 0 }, { kind: 'glow', u: GC - 1.4, v: -0.6, z: 10, color: '#dfe9ff', r: 9, strength: 0.5, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'entrance', 16, (k) => {

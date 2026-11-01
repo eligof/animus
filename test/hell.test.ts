@@ -4,7 +4,8 @@ import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { ANIM_FPS } from '../src/art/motion.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
+import { hashString } from '../src/world/rng.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { hell } from '../src/worlds/hell.ts';
 import { DECOR_ART } from '../src/worlds/hell/decor.ts';
@@ -236,4 +237,14 @@ test('Hell: its desks have things of their own to pick from, and something that 
 test('Hell: three locals at work, each where its job puts it', () => {
   assert.deepEqual(hell.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['clerk', 'write', 'seated'], ['forgeDemon', 'run', 'standing'], ['witch', 'web', 'standing']]);
   assert.ok(hell.npcs!.some((n) => n.show), 'no show');
+});
+
+test('hell room: no decor stands in front of the Maw, and its light is declared', () => {
+  for (const side of [72, 90, 146]) {
+    const L = planLayout(2 * side + 12, 1000, 'hell');
+    const keep = hell.reserve!(L);
+    assert.ok(keep.length >= 1, `${L.W}: nothing kept clear`);
+    for (const p of planRoom(hell, L, hashString('hell')).props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: decor in front of the Maw`);
+    assert.ok(hell.room.lights!({ W: L.W, D: L.D, H: L.H, T: L.T, seed: 1 }).length >= 3, 'no light declared');
+  }
 });
