@@ -1,4 +1,5 @@
 import { shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
 import type { PropArt, PropView } from '../types.ts';
@@ -59,6 +60,8 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 12,
+  // the banker's lamp (out at night)
+  light: [{ kind: 'lamp', u: 1.3, v: 3.0, z: DESK + 2.1, color: '#ffd890', r: 8, strength: 0.7, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const b = COUNTER.back;
@@ -131,8 +134,10 @@ const write: PropArt = {
     k.line(arcAt(s1), withAlpha(INK, 0.7), k.thin);
     k.line([[s0 + 0.1, sv - sr * 0.3, sz + sr * 0.85], [s1 - 0.2, sv - sr * 0.3, sz + sr * 0.85]], withAlpha('#d8ffe8', 0.6), Math.max(0.7, 0.08 * k.s));
     k.line([[s0 + 0.1, sv + sr, sz], [s1 - 0.1, sv + sr, sz]], '#fff0c0', Math.max(0.8, 0.12 * k.s));
-    k.pool(2.2, 4.0, 2.4, 1.6, '#ffe2a0', v.active ? 0.5 : 0.3, DESK + 0.05);
-    k.halo(1.3, 3.2, sz - 0.1, 2.6, '#ffd890', v.active ? 0.45 : 0.3);
+    if (lampsOn(v)) {
+      k.pool(2.2, 4.0, 2.4, 1.6, '#ffe2a0', v.active ? 0.5 : 0.3, DESK + 0.05);
+      k.halo(1.3, 3.2, sz - 0.1, 2.6, '#ffd890', v.active ? 0.45 : 0.3);
+    }
     // the balance's beam and pans, swaying while the teller counts (once
     // in two seconds, so a worked desk loops cleanly)
     const tilt = v.active ? Math.sin(v.t * Math.PI) * 0.16 : 0.04;
@@ -437,6 +442,8 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 15,
+  // the melting pot's fire, banked all night
+  light: [{ kind: 'fire', u: 2.9, v: 4.8, z: 1.6, r: 10, strength: 0.9, halo: 2.5 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'run', 15, (k) => {
@@ -615,6 +622,8 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 13,
+  // the security monitors
+  light: [{ kind: 'screen', u: 4.5, v: 4.0, z: 9.4, color: '#a6e8c8', r: 6 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'web', 13, (k) => {
@@ -740,6 +749,8 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 14,
+  // the architect's lamp over the plan (out at night)
+  light: [{ kind: 'lamp', u: 4.0, v: 3.3, z: 9.4, color: '#ffe2a0', r: 8, strength: 0.7, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'think', 14, (k) => {
@@ -791,9 +802,12 @@ const think: PropArt = {
     const back = ring(k, head, dir, 0.35, 12);
     const sil = hull([...rim, ...back]);
     fillPts(k, sil, across(k, sil, C.steelLight), k.lw);
-    fillPts(k, rim, act ? '#fff4cc' : '#e6d6a8', k.thin);
-    k.pool(4.4, 3.4, 2.8, 2.0, '#ffe2a0', act ? 0.45 : 0.22, 5.65);
-    k.halo(head[0] + 0.4, head[1], head[2] - 1.4, 2.6, '#ffe2a0', act ? 0.45 : 0.25);
+    const lamp = lampsOn(v);
+    fillPts(k, rim, act ? '#fff4cc' : lamp ? '#e6d6a8' : '#8a8064', k.thin);
+    if (lamp) {
+      k.pool(4.4, 3.4, 2.8, 2.0, '#ffe2a0', act ? 0.45 : 0.22, 5.65);
+      k.halo(head[0] + 0.4, head[1], head[2] - 1.4, 2.6, '#ffe2a0', act ? 0.45 : 0.25);
+    }
     if (!act) return;
     // the red route being drawn across the plan, the pencil at its end
     const f = (v.t * 0.25) % 1;

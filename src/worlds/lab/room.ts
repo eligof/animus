@@ -1,10 +1,11 @@
 import type { At } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import { frame, mix, shade } from '../../art/iso.ts';
 import type { Color, Pen } from '../../art/types.ts';
 import { planLayout, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import { bolt, bulb, beaker, erlenmeyer, gauge, hazard, mutant, pilot, pot, ring, fillPts, scrawl, zigzag } from './bits.ts';
 import type { P3 } from './kit.ts';
 import { C, INK, Kit, hash, withAlpha } from './kit.ts';
@@ -182,7 +183,17 @@ function lancet(a: number, h: number, R: number, zs: number, z0: number, d: numb
 }
 
 // The Jacob's ladder over the generator: its rods' feet and tops.
-const LADDER = { u: 4, z0: 17.4, z1: 29, gap0: 0.35, gap1: 2.2 };
+const LADDER = { u: 1.5, z0: 17.4, z1: 27, gap0: 0.35, gap1: 1.8 };
+// The plasma globe on the generator's top (along from its middle, and up).
+const GLOBE = { u: 5, z: 17.6 };
+
+// What the lab keeps decor clear of: its generator's bay and the floor in
+// front of it out to the warm spots (planFor works from the layout alone,
+// so this never plans the room itself).
+export function labReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number }> {
+  const gen = planFor(L.W, L.D, L.H, L.T).features.find((f) => f.kind === 'gen');
+  return gen ? [{ wall: gen.wall, a0: gen.a - gen.w / 2, a1: gen.a + gen.w / 2, out: 6 }] : [];
+}
 
 // ── points of interest ─────────────────────────────────────────────────────
 // The usual spots, but warm by the generator (its valves glow) rather than
@@ -231,6 +242,23 @@ export const room: RoomArt = {
       else ladderArc(k, v, f);
     }
     v.pen.restore();
+  },
+  // The light the shell gives: the lancets (a little storm light with the
+  // lights on, the moon at night), the generator's plasma globe and its
+  // valves (they carry the night), the caged lamps (out at night).
+  lights(v): RoomLight[] {
+    const { features: fs } = planFor(v.W, v.D, v.H, v.T);
+    const { z0, zs, z1 } = windowZ(v.H);
+    const rails = Math.max(1, Math.round((zs - z0) / 4.5)) - 1;
+    const out: RoomLight[] = [];
+    for (const f of fs) {
+      if (f.kind === 'window') out.push({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 1.6, z0, z1: zs + (z1 - zs) * 0.5, bars: 1, rails, color: '#c9d6ff', strength: 0.3, night: '#9fb6ee', moon: 1.3 });
+      else if (f.kind === 'gen') {
+        out.push({ kind: 'glow', wall: f.wall, u: f.a + GLOBE.u, v: 0.9, z: GLOBE.z, color: '#b49cff', r: 13, strength: 1.2, halo: 3.5 });
+        out.push({ kind: 'glow', wall: f.wall, u: f.a - 3.35, v: 0.9, z: 17.2, color: '#ffae5a', r: 7, strength: 0.6, halo: 1.5 });
+      } else if (f.kind === 'lamp') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 1.6, z: lampZ(v.H), color: '#e9fbff', r: 10, strength: 0.8 });
+    }
+    return out;
   },
 };
 
@@ -311,7 +339,9 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const end = wall === 'right' ? W : D;
     wk.poly([[T, 0, 0], [end, 0, 0], [end, 3.5, 0], [T, 3.5, 0]], wk.lgrad([0, 0, 0], [0, 3.5, 0], [1, 0, 0], [[0, '#0a1e2466'], [0.35, '#0a1e2422'], [1, '#0a1e2400']]), 0);
   }
-  // Mats where people stand and work, the break corner's rug, then light.
+  // Mats where people stand and work, the break corner's rug. (The light
+  // on the floor is the scene's, from what the room and its stations
+  // declare.)
   const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
   const sk = (q: Slot) => new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
   const write = slot('write');
@@ -327,25 +357,6 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     const gk = new Kit(pen, wallAt(v.at, gen.wall, T), s);
     hazard(gk, [[gen.a - 7.5, 2.6, 0.04], [gen.a + 7.5, 2.6, 0.04], [gen.a + 7.5, 5.4, 0.04], [gen.a - 7.5, 5.4, 0.04]], 0.7);
     scorch(gk, gen.a + 1.5, 4.2, gen.k);
-    gk.pool(gen.a + LADDER.u, 4, 12, 9, '#a68cff', 0.22);
-  }
-  for (const [kind, u, w, r, c, a] of [
-    ['write', 0.55, 0.6, 10, '#a8ff8a', 0.22],
-    ['run', 0.45, 0.45, 15, '#a68cff', 0.3],
-    ['web', 0.5, 0.6, 9, '#7ff0d0', 0.2],
-    ['idle', 0.85, 0.3, 11, C.warm, 0.26],
-    ['search', 0.4, 0.8, 9, '#9fe0ff', 0.18],
-    ['read', 0.5, 0.8, 9, C.lamp, 0.16],
-    ['think', 0.5, 0.9, 9, C.lamp, 0.14],
-  ] as const) {
-    const q = slot(kind);
-    if (!q) continue;
-    sk(q).pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    if (f.kind === 'lamp') wk.pool(f.a, 4, 8, 6, C.lamp, 0.2);
-    else if (f.kind === 'window') wk.pool(f.a, 3, 6, 4, '#8aa4d6', 0.1);
   }
 }
 
@@ -438,7 +449,10 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   k.poly([[T, 0, H - 2.4], [end, 0, H - 2.4], [end, 0, H], [T, 0, H]], tone('#6c7a78'), 0);
   k.box(T, 0, H - 1.3, end - T, 0.5, 0.9, '#98a5a2', { line: k.thin, stripe: false });
   k.line([[T, 0, H - 2.4], [end, 0, H - 2.4]], C.stoneDark, Math.max(0.8, 0.12 * s));
-  pipes(k, v, end, lit);
+  // the generator's bay first: the pipes run on across its head
+  const bays = plan.features.filter((f) => f.wall === wall && f.kind === 'gen');
+  for (const f of bays) bay(k, v, f, lit);
+  pipes(k, v, end, lit, bays.map((f) => [f.a - f.w / 2, f.a + f.w / 2] as const));
   for (const f of plan.features) {
     if (f.wall !== wall) continue;
     if (f.kind === 'window' && hash(f.k, 81) < 0.6) vent(k, v, f.a, f.k);
@@ -554,17 +568,18 @@ function grout(k: Kit, a0: number, a1: number, z0: number, z1: number, tw: numbe
   pen.stroke();
 }
 
-// Two pipes along the top band on standoffs, a copper one and a steel one,
+// Two pipes along the stone on standoffs, a copper one and a steel one,
 // with flanges, valve wheels and now and then a glass section where a green
 // reagent glows through.
-function pipes(k: Kit, v: RoomView, end: number, lit: boolean): void {
+function pipes(k: Kit, v: RoomView, end: number, lit: boolean, open: ReadonlyArray<readonly [number, number]> = []): void {
   const { T, H } = v;
   const z0 = H - 5.2;
   const z1 = H - 7.2;
   if (z1 < tileTop(H) + 1) return;
   const n = 0.75;
-  // standoff brackets
+  // standoff brackets (none where the pipes bridge an opening)
   for (let a = T + 4; a < end - 1; a += 12) {
+    if (open.some(([a0, a1]) => a > a0 - 0.5 && a < a1 + 0.5)) continue;
     k.poly([[a - 0.25, 0.02, z1 - 0.7], [a + 0.25, 0.02, z1 - 0.7], [a + 0.25, 0.02, z0 + 0.5], [a - 0.25, 0.02, z0 + 0.5]], C.steelDark, k.thin * 0.8);
   }
   const pipe = (z: number, color: Color, w: number) => {
@@ -811,14 +826,14 @@ function surround(k: Kit, a: number, h: number, R: number, zs: number, z0: numbe
 // top, a plasma globe, a Jacob's ladder over it (its arc climbs in the
 // overlay) and fat cables up to the pipes.
 
-// The generator's bay: a pointed recess cut into the wall from the floor,
-// dark inside (darker up in its head), in a stone surround like the
-// windows'. The cabinet, the glowing valves and the ladder's arc stand out
+// The generator's bay: a pointed recess cut into the wall from the floor
+// up past the pipes (they bridge its head), dark inside (darker up in its
+// head), in a stone surround like the windows'. The cabinet, the glowing valves and the ladder's arc stand out
 // against it: the room's focal point.
 function bay(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const tone = (c: Color, d = 0.12) => (lit ? c : shade(c, -d));
   const h = f.w / 2 - SUR - 0.1;
-  const z1 = Math.min(v.H - 9.2, LADDER.z1 + 3);
+  const z1 = Math.min(v.H - 4, 30);
   const rise = Math.min(h * 1.6, z1 - 12);
   const zs = z1 - rise;
   const R = archR(h, rise);
@@ -837,7 +852,6 @@ function generator(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const out = 1.7;
   const z1 = 15;
   const steel = '#57767f';
-  bay(k, v, f, lit);
   // the cables first, behind everything: up the wall to the pipes
   const top = v.H - 6.5;
   if (top > z1 + 4) {
@@ -847,7 +861,6 @@ function generator(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
     for (const du of [-6.2, -5.3]) for (let z = z1 + 4; z < top - 2; z += 6) k.box(a + du * (1 + ((z - z1) / (top - z1)) * 0.1) - 0.35, 0.02, z, 0.7, 0.6, 0.4, C.steelDark, { line: k.thin, stripe: false });
   }
   // a glow on the wall round it
-  k.halo(a + LADDER.u, 0.1, 22, 12, '#a68cff', 0.14);
   k.shadow(a, 1.2, 8.5, 2.2, 0.3);
   k.box(a - 7.4, 0, 0, 14.8, out + 0.3, 0.8, C.iron, { stripe: false });
   k.box(a - 7, 0, 0.8, 14, out, z1 - 0.8, steel, { stripe: false });
@@ -908,7 +921,7 @@ function generator(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
     k.glass(u, 0.9, [[z1 + 1, 0.4], [z1 + 2.6, 0.4], [z1 + 3.1, 0.25], [z1 + 3.25, 0.06]], null);
     k.line([[u - 0.15, 0.9, z1 + 1.4], [u - 0.15, 0.9, z1 + 2.4], [u + 0.15, 0.9, z1 + 2.4], [u + 0.15, 0.9, z1 + 1.4]], '#ffcf7a', Math.max(0.8, 0.1 * s));
   }
-  plasma(k, a + 1, 0.9, z1 + 0.5, f.k);
+  plasma(k, a + GLOBE.u, 0.9, z1 + 0.5, f.k);
   // the Jacob's ladder: two insulators and the rods in a V
   const L = LADDER;
   const lu = a + L.u;
@@ -990,7 +1003,8 @@ function ladderArc(k: Kit, v: RoomView, f: Feature): void {
 }
 
 // Lightning, now and then, in each window: the glass flashes and a fork
-// runs down the sky (above anyone's head), all inside the lancet.
+// runs down the sky (above anyone's head), all inside the lancet, and the
+// flash falls on the floor.
 function lightning(k: Kit, v: RoomView, f: Feature): void {
   const { z0, zs, z1 } = windowZ(v.H);
   const period = 7 + hash(f.k, 41) * 9;
@@ -1015,6 +1029,18 @@ function lightning(k: Kit, v: RoomView, f: Feature): void {
   k.line(pts, '#ffffffd0', Math.max(1, 0.18 * k.s));
   const mid = pts[3];
   k.line([mid, [mid[0] + 1.3, -depth, mid[2] - 1.4], [mid[0] + 1.6, -depth, mid[2] - 2.6]], '#ffffffa0', Math.max(0.8, 0.12 * k.s));
+  pen.restore();
+  // and the flash thrown into the room: the lancet's light on the floor,
+  // along the scene's light (from the upper left), brightest by the wall
+  const T = v.T;
+  const fk = new Kit(pen, v.at, v.s);
+  const zt = zs + (z1 - zs) * 0.5;
+  const at = (a: number, z: number): P3 => (f.wall === 'right' ? [a + z / 1.6, T + z / 3.2, 0.02] : [T + z / 1.6, a + z / 3.2, 0.02]);
+  const a0 = f.a - w / 2;
+  const a1 = f.a + w / 2;
+  pen.save();
+  pen.globalCompositeOperation = 'screen';
+  fk.poly([at(a0, z0), at(a1, z0), at(a1, zt), at(a0, zt)], fk.grad(at(f.a, z0), at(f.a, zt), [[0, withAlpha('#dfe8ff', flash * 0.5)], [1, withAlpha('#dfe8ff', flash * 0.12)]]), 0);
   pen.restore();
 }
 
@@ -1237,25 +1263,29 @@ function clock(k: Kit, v: RoomView, f: Feature): void {
   k.dot(f.a, 0.35, z, Math.max(0.8, 0.1 * k.s), C.red);
 }
 
-// A caged bulkhead lamp on a bracket, its light washing the tile under it.
+// A caged bulkhead lamp on a bracket, its beam down the wall under it; out
+// at night.
 function lamp(k: Kit, v: RoomView, f: Feature): void {
   const z = lampZ(v.H);
   const a = f.a;
   const pen = k.pen;
   const n = 1.6;
-  pen.save();
-  pen.globalCompositeOperation = 'screen';
-  k.poly([[a - 0.7, 0.05, z - 0.8], [a + 0.7, 0.05, z - 0.8], [a + 4.5, 0.05, z - 12], [a - 4.5, 0.05, z - 12]], k.vgrad(a, 0.05, z - 12, z, [[0, '#e9fbff00'], [1, '#e9fbff38']]), 0);
-  pen.restore();
-  k.halo(a, 0.6, z, 7, C.lamp, 0.4);
+  const on = lampsOn(v);
+  // its beam down the wall (the scene adds its pool, wash and glow)
+  if (on) {
+    pen.save();
+    pen.globalCompositeOperation = 'screen';
+    k.poly([[a - 0.7, 0.05, z - 0.8], [a + 0.7, 0.05, z - 0.8], [a + 4.5, 0.05, z - 12], [a - 4.5, 0.05, z - 12]], k.vgrad(a, 0.05, z - 12, z, [[0, '#e9fbff00'], [1, '#e9fbff2c']]), 0);
+    pen.restore();
+  }
   // the backplate and the arm
   k.poly([[a - 0.7, 0.02, z + 0.9], [a + 0.7, 0.02, z + 0.9], [a + 0.7, 0.02, z + 2.9], [a - 0.7, 0.02, z + 2.9]], C.iron, k.thin, 0.25);
   k.rod([[a, 0.05, z + 2.2], [a, n * 0.7, z + 2.2], [a, n, z + 1.6]], C.iron, 0.24);
   k.cyl(a, n, z + 0.9, 0.95, 0.6, C.iron, { line: k.thin });
-  // the bulb in its glass, glowing, and the cage over it
-  k.halo(a, n, z, 2.6, '#ffffff', 0.55);
-  k.lathe(a, n, [[z - 1.4, 0.05], [z - 1.25, 0.5], [z - 0.6, 0.8], [z + 0.9, 0.72]], '#f6feff', k.thin, false);
-  k.dot(a - 0.15, n, z - 0.4, Math.max(1, 0.35 * k.s), '#ffffff');
+  // the bulb in its glass, glowing (grey glass when out), the cage over it
+  if (on) k.halo(a, n, z, 2.6, '#ffffff', 0.55);
+  k.lathe(a, n, [[z - 1.4, 0.05], [z - 1.25, 0.5], [z - 0.6, 0.8], [z + 0.9, 0.72]], on ? '#f6feff' : '#9fb1b6', k.thin, false);
+  k.dot(a - 0.15, n, z - 0.4, Math.max(1, 0.35 * k.s), on ? '#ffffff' : '#c8d6d9');
   pen.beginPath();
   for (const du of [-0.75, -0.25, 0.25, 0.75]) {
     const [x0, y0] = k.p(a + du, n + 0.55, z + 0.9);

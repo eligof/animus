@@ -48,6 +48,10 @@ export const vault: WorldDef = {
   decor: DECOR,
   workstation: WORKSTATION,
   npcs: NPCS,
+  // Cold steel in a cool evening, so the amber lamps and the gold warm
+  // what they light; at night (after hours) only the gold niches, the acid,
+  // the melting pot and the monitors are left on.
+  ambient: { tint: [120, 128, 160], strength: 0.15, figures: 0.4 },
   costume: 'guard',
   critter: { kind: 'drone', body: hex('#a9b3bf') }, // a security drone
   finale: { colors: [[255, 211, 74]] }, // gold dust
