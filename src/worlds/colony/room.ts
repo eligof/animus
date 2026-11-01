@@ -244,7 +244,7 @@ export const room: RoomArt = {
   // night. (The fire, the forge and the lamps give theirs as props.)
   lights(v): RoomLight[] {
     const { z0, z1 } = windowZ(v.H);
-    return planFor(v.W, v.D, v.H, v.T).features.filter((f) => f.kind === 'window').map((f) => ({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2.4, z0, z1, bars: 1, rails: 1, color: '#ffc68a', strength: 1.0, night: '#9fb6ee', moon: 0.6 }));
+    return planFor(v.W, v.D, v.H, v.T).features.filter((f) => f.kind === 'window').map((f) => ({ kind: 'window', wall: f.wall, u: f.a, w: f.w - 2.4, z0, z1, bars: 1, rails: 1, color: '#ffd29a', strength: 1.35, night: '#9fb6ee', moon: 0.6 }));
   },
   // The scene draws the overlay once through a pen that only measures
   // (to find its pieces: everything must be drawn then, so any pen not a
@@ -670,7 +670,8 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   k.poly([[T, 0, 0], [end, 0, 0], [end, 0, H], [T, 0, H]], k.vgrad(T, 0, 0, H, [[0, '#1a100600'], [0.5, '#1a100608'], [1, '#1a100638']]), 0);
   if (k.sees(T, 0, 0, T + 10, 0.5, H)) k.poly([[T, 0, 0], [T + 10, 0, 0], [T + 10, 0, H], [T, 0, H]], k.hgrad([T, 0, 0], [T + 10, 0, 0], [[0, '#1a100650'], [1, '#1a100600']]), 0);
   wallPlate(k, T, end, H, lo, hi, seed, tone);
-  girt(k, T, end, H, lo, hi, seed, tone, mine);
+  if (girtZ(H) === null) pegRail(k, T, end, H, lo, hi, seed, tone, mine);
+  else girt(k, T, end, H, lo, hi, seed, tone, mine);
   for (const f of mine) {
     if (f.kind === 'window') {
       if (k.sees(f.a - f.w / 2 - 1, 0, SILL - 3, f.a + f.w / 2 + 1, 2.5, wz1 + 2)) windowArt(k, v, f, lit);
@@ -740,6 +741,9 @@ function windowArt(k: Kit, v: RoomView, f: Feature, lit: boolean): void {
   const w = f.w - 2.4; // the opening, inside the casing
   const depth = 0.9;
   const tone = (c: Color, d = 0.14) => (lit ? c : shade(c, -d));
+  // the low sun warm on the stone round the opening, down toward the
+  // floor (in the evening; not at night)
+  if (lampsOn(v)) k.wash(a, 0.03, z0 + (z1 - z0) * 0.25, w * 0.95, (z1 - z0) * 0.9, '#ffcf9a', 0.16);
   // the casing: plank jambs
   k.box(a - w / 2 - 1.2, 0, z0 - 0.2, 1.2, 0.5, z1 - z0 + 0.6, C.plankLight, { line: k.lw, stripe: false });
   k.box(a + w / 2, 0, z0 - 0.2, 1.2, 0.5, z1 - z0 + 0.6, C.plankLight, { line: k.lw, stripe: false });
@@ -811,6 +815,40 @@ function girt(k: Kit, T: number, end: number, H: number, lo: number, hi: number,
     if (kind === 0) onions(k, a, n + 0.3, z0 + 0.5, i, tone);
     else if (kind === 1) herbs(k, a, n + 0.3, z0 + 0.5, i, tone);
     else corn(k, a, n + 0.3, z0 + 0.5, tone);
+  }
+}
+
+// In a room too low for a girt, a peg rail runs along the stone under the
+// window heads instead, across each stretch of 7 units or more between the
+// windows, the harvest hung from its pegs (none over what hangs below).
+function pegRail(k: Kit, T: number, end: number, H: number, lo: number, hi: number, seed: number, tone: Tone, mine: Feature[]): void {
+  const z = windowZ(H).z1 - 2;
+  if (!k.sees(lo, 0, z - 4.5, hi, 1.5, z + 1)) return;
+  const wins = mine.filter((f) => f.kind === 'window').map((f) => [f.a - f.w / 2 - 0.8, f.a + f.w / 2 + 0.8] as const).sort((p, q) => p[0] - q[0]);
+  const gaps: Array<[number, number]> = [];
+  let from = T + 1.5;
+  for (const [w0, w1] of wins) {
+    gaps.push([from, w0]);
+    from = w1;
+  }
+  gaps.push([from, end - 1.5]);
+  const pieces = mine.filter((f) => f.kind !== 'window');
+  for (const [g0, g1] of gaps) {
+    if (g1 - g0 < 7 || g1 < lo - 2 || g0 > hi + 2) continue;
+    k.box(g0, 0, z - 0.4, g1 - g0, 0.3, 0.8, tone(C.plankDark), { line: k.thin, stripe: false });
+    k.line([[g0 + 0.1, 0.31, z + 0.3], [g1 - 0.1, 0.31, z + 0.3]], withAlpha(C.plankLight, 0.5), Math.max(0.6, 0.1 * k.s));
+    const n = Math.max(1, Math.floor((g1 - g0 - 1) / 3));
+    const step = (g1 - g0) / (n + 1);
+    for (let i = 1; i <= n; i++) {
+      const a = g0 + i * step;
+      const j = Math.round(a * 7) + seed;
+      k.rod([[a, 0.3, z], [a, 0.8, z + 0.1]], tone(C.iron), 0.12);
+      if (hash(j, 58) < 0.2 || pieces.some((f) => Math.abs(a - f.a) < f.w / 2 + 0.8)) continue;
+      const kind = Math.floor(hash(j, 59) * 3);
+      if (kind === 0) onions(k, a, 0.66, z, j, tone);
+      else if (kind === 1) herbs(k, a, 0.66, z, j, tone);
+      else corn(k, a, 0.66, z, tone);
+    }
   }
 }
 

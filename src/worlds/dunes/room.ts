@@ -59,7 +59,7 @@ const SUN_V = 0.45;
 const throwOf = (wall: Wall): [number, number] => (wall === 'right' ? [1 / 1.6, 0.5 / 1.6] : [0.5 / 1.6, 1 / 1.6]);
 // The sun's colour through the openings, and the moon's.
 const SUN = '#ffe0a8';
-const MOON = '#8fa8f0';
+const MOON = '#a8c0ff';
 const LANTERN_Z = 16.5; // the wall lantern's flame
 
 // ── the plan ───────────────────────────────────────────────────────────────
@@ -199,8 +199,8 @@ export const room: RoomArt = {
     for (const f of planFor(v.W, v.D, v.H, v.T).features) {
       if (f.kind === 'window') {
         const w = OPEN - 0.6;
-        out.push({ kind: 'window', wall: f.wall, u: f.a, w, z0: LOUVRE, z1: WTOP, color: SUN, strength: 1.4, night: MOON, moon: 0.75 });
-        out.push({ kind: 'window', wall: f.wall, u: f.a, w, z0: SILL, z1: LOUVRE, rails: 4, color: SUN, strength: 0.9, night: MOON, moon: 0.45 });
+        out.push({ kind: 'window', wall: f.wall, u: f.a, w, z0: LOUVRE, z1: WTOP, color: SUN, strength: 1.4, night: MOON, moon: 1.1 });
+        out.push({ kind: 'window', wall: f.wall, u: f.a, w, z0: SILL, z1: LOUVRE, rails: 4, color: SUN, strength: 0.9, night: MOON, moon: 0.7 });
       } else if (f.kind === 'lantern') out.push({ kind: 'fire', wall: f.wall, u: f.a, v: 1.35, z: LANTERN_Z, color: '#ffc070', r: 14, strength: 1.0, halo: 3 });
       else if (f.kind === 'tube') out.push({ kind: 'lamp', wall: f.wall, u: f.a, v: 0.8, z: TUBE_Z + TUBE_H / 2, color: '#cfeee8', r: 9, strength: 0.6, halo: 1.6 });
     }
@@ -287,11 +287,12 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
   if (nails.length) rivets(k, nails, withAlpha('#7a6650', 0.7), 0.09);
   // The room is in the shade of its walls and its sails, the sun only
   // where it comes through the windows: a cool lavender cast over the
-  // deck, which keeps the bleached boards' step over a coat but sets them
-  // under the white of the shafts and apart from the warm adobe.
+  // deck (to about L 170), which keeps the bleached boards' step over a
+  // coat but sets them a clear step under the sun's striped patches and
+  // apart from the warm adobe.
   pen.save();
   pen.globalCompositeOperation = 'multiply';
-  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], withAlpha('#cfc8d6', 0.36), 0);
+  k.poly([[T, T, 0], [W, T, 0], [W, D, 0], [T, D, 0]], withAlpha('#cfc6d8', 0.85), 0);
   pen.restore();
   // What the islands stand on: the workbench on a deck plate, a kilim
   // runner before the bar.
