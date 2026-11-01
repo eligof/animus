@@ -1,6 +1,7 @@
 import { mix, shade } from '../../art/iso.ts';
 import type { Color } from '../../art/types.ts';
 import type { Particle, SlotKind } from '../../world/types.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { PropArt, PropView } from '../types.ts';
 import { awning, band, barrelSide, bookRow, bottle, claypot, crate, cushion, dunesView, fillPts, frontArc, gear, glass, jar, jug, keg, lantern, lathe, leaf, pipe, ring, rivets, ropeCoil, seams, stool, tube, tubeLamp } from './bits.ts';
 import type { Kit, P3 } from './kit.ts';
@@ -29,13 +30,15 @@ const write: PropArt = {
   dep: 7,
   height: 16,
   animated: true,
+  light: [{ kind: 'lamp', u: 10.3, v: 0.7, z: 13.0, color: '#cfeee8', r: 8, strength: 0.6, halo: 1.6 }],
   draw(v: PropView): void {
+    const on = lampsOn(v);
     const k = still(v, 'write', 16, (k) => {
       k.shadow(5.5, 3.2, 6.2, 3.6, 0.3);
       // a cold tube lamp on a pole behind the desk's far end
       k.cyl(10.3, 0.7, 0, 0.5, 0.3, C.steelDark, { line: k.thin });
       k.rod([[10.3, 0.7, 0.3], [10.3, 0.7, 10.5]], C.rustDark, 0.18);
-      tubeLamp(k, 10.3, 0.7, 10.7, 4.6, 0.3);
+      tubeLamp(k, 10.3, 0.7, 10.7, 4.6, 0.3, on);
       // the crates under it: the left open on a stash of scrolls
       crate(k, 0.5, 0.6, 0, 3.2, 4.2, 5.2, C.woodLight, true);
       for (let i = 0; i < 3; i++) for (let j = 0; j < 3 - i; j++) scrollEnd(k, 1.3 + j * 0.85 + i * 0.42, 4.75, 0.75 + i * 0.75, 0.4);
@@ -70,7 +73,7 @@ const write: PropArt = {
       lathe(k, 8.7, 2.1, zt, [[0, 0.5], [0.45, 0.52], [0.62, 0.3], [0.8, 0.32]], C.inkPot, { mouth: '#0e0c14' });
       if (k.fine) k.line([[8.45, 2.5, zt + 0.15], [8.45, 2.5, zt + 0.42]], withAlpha('#ffffff', 0.5), 0.08 * k.s);
       // the tube lamp's cold light on the desk
-      k.pool(8.6, 2.8, 3.2, 2.2, C.tubeGlow, 0.2, zt + 0.02);
+      if (on) k.pool(8.6, 2.8, 3.2, 2.2, C.tubeGlow, 0.2, zt + 0.02);
       // the stool pulled up
       stool(k, 5.4, 6.1, 3.6, C.hide);
     });
@@ -705,11 +708,12 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 6,
+  // the little lantern's flame, day and night
+  light: [{ kind: 'fire', u: 10.9, v: 1.1, z: 1.3, color: '#ffc070', r: 6, strength: 0.7, halo: 2.2 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     rug(k, 0.3, 0.3, 11.4, 6.4);
     // a little lantern on the rug's far corner
-    k.pool(10.9, 1.2, 2.6, 2.0, C.lamp, 0.22, 0.06);
     lanternStanding(k, 10.9, 1.1, 0.05);
     // cushions round it: a bolster at the back, two to the sides
     cushion(k, 2.2, 0.55, 0.05, 7.6, 1.5, 1.9, C.cloth, C.brass);
@@ -796,7 +800,7 @@ function teapot(k: Kit, cu: number, cv: number, z: number): void {
 // A small tin lantern standing on z, lit.
 function lanternStanding(k: Kit, u: number, v: number, z: number): void {
   k.shadow(u, v, 0.8, 0.7, 0.25, z);
-  lantern(k, u, v, z + 2.75, true, 0.38);
+  lantern(k, u, v, z + 2.75, true, 0.22);
 }
 
 // ── idle: the bar ────────────────────────────────────────────────────────────
@@ -814,8 +818,10 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 16,
+  light: [{ kind: 'lamp', u: 14.5, v: 3.0, z: 13.1, color: '#cfeee8', r: 9, strength: 0.6, halo: 1.6 }],
   draw(v: PropView): void {
     const k = kitOf(v);
+    const on = lampsOn(v);
     k.shadow(7.5, 5.0, 8.2, 5.0, 0.3);
     // the barrel rack, shoulder high against the back: a plank stand,
     // posts at the back, three short barrels on their sides, the posts in
@@ -838,7 +844,7 @@ const idle: PropArt = {
     // the lamp at the counter's end, behind it
     k.cyl(14.5, 3.0, 0, 0.5, 0.3, C.steelDark, { line: k.thin });
     k.rod([[14.5, 3.0, 0.3], [14.5, 3.0, 10.6]], C.rustDark, 0.2);
-    tubeLamp(k, 14.5, 3.0, 10.8, 4.6, 0.28);
+    tubeLamp(k, 14.5, 3.0, 10.8, 4.6, 0.28, on);
     // the counter: a base of plate, planks on it strapped with iron
     const cv0 = BAR.edge + 0.3;
     const cv1 = cv0 + 2.6;
@@ -870,7 +876,7 @@ const idle: PropArt = {
     bottle(k, 12.9, cv0 + 0.9, zt, 2.1, '#4f8a5a', 0.32);
     bottle(k, 13.4, cv0 + 1.8, zt, 1.8, '#c07a2a', 0.3);
     lathe(k, 9.0, cv0 + 1.9, zt, [[0, 0.3], [0.35, 0.6]], C.cream, { mouth: '#d8c49a', line: k.thin });
-    k.pool(12.6, cv0 + 1.2, 3.0, 2.0, C.tubeGlow, 0.18, zt + 0.02);
+    if (on) k.pool(12.6, cv0 + 1.2, 3.0, 2.0, C.tubeGlow, 0.18, zt + 0.02);
     // the stools before it
     for (const u of [3.2, 7.4, 11.4]) stool(k, u, cv1 + 2.1, 3.9, C.hide);
   },
@@ -890,13 +896,21 @@ const entrance: PropArt = {
   dep: 4,
   height: 20,
   animated: true,
+  // the sun (the moon at night) in through the doorway, bright through
+  // its open half and warm through the cloth; the cold tube beside it
+  light: [
+    { kind: 'window', u: (DOOR.u0 + DOOR.u1) / 2 + 1.5, w: (DOOR.u1 - DOOR.u0) / 2, z0: 0, z1: DOOR.h, color: '#ffe0a8', strength: 1.1, night: '#8fa8f0', moon: 0.6 },
+    { kind: 'window', u: (DOOR.u0 + DOOR.u1) / 2 - 1.5, w: (DOOR.u1 - DOOR.u0) / 2, z0: 0, z1: DOOR.h, color: '#ff9a5a', strength: 0.45, night: '#8fa8f0', moon: 0.2 },
+    { kind: 'lamp', u: DOOR.u0 - 2.45, v: 0.75, z: 11.1, color: '#cfeee8', r: 7, strength: 0.5, halo: 1.4 },
+  ],
   draw(v: PropView): void {
     const { u0, u1, h } = DOOR;
+    const on = lampsOn(v);
     const k = still(v, 'entrance', 20, (k) => {
       const out = -0.6;
-      dunesView(k, u0, u1, 0, h, out, 6.2, v.seed + 9);
-      // the ground outside, bright sand
-      k.poly([[u0, out, 0], [u1, out, 0], [u1, out, 2.4], [u0, out, 1.6]], '#f2d6a2', 0);
+      dunesView(k, u0, u1, 0, h, out, 6.2, v.seed + 9, true, !on);
+      // the ground outside, bright sand (blue under the moon)
+      k.poly([[u0, out, 0], [u1, out, 0], [u1, out, 2.4], [u0, out, 1.6]], on ? '#f2d6a2' : '#4a4a80', 0);
       // the reveal, the threshold step
       k.poly([[u0, 0, 0], [u0, out, 0], [u0, out, h], [u0, 0, h]], C.adobeDark, 0);
       k.poly([[u1, 0, 0], [u1, out, 0], [u1, out, h], [u1, 0, h]], C.adobeDark, 0);
@@ -925,7 +939,7 @@ const entrance: PropArt = {
       k.disc(1.4, 2.0, 3.62, 0.55, '#3a5a5a', 0);
       k.box(u0 - 2.75, 0, 8.7, 0.6, 0.2, 4.8, C.steelDark, { line: k.thin, stripe: false });
       for (const z of [8.95, 13.25]) k.rod([[u0 - 2.45, 0.15, z], [u0 - 2.45, 0.75, z]], C.steelDark, 0.12);
-      tubeLamp(k, u0 - 2.45, 0.75, 9.1, 4.0, 0.25);
+      tubeLamp(k, u0 - 2.45, 0.75, 9.1, 4.0, 0.25, on);
     });
     // the cloth: hanging over the left half, or swaying aside
     const open = v.active ? 0.75 + Math.sin(v.t * 2.6) * 0.15 : 0;

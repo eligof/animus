@@ -552,21 +552,39 @@ export function chair(k: Kit, cu: number, cv: number, face: number, wood: Color 
 // The view out at dusk on the plane v = n, from a0 to a1 along and z0 to
 // z1 up (the caller clips it to the opening): a big sky going from blue to
 // apricot at the horizon, a low sun on some, a cloud or two lit from
-// below, far hills and near green ones with a tree or a fence on them.
-export function dusk(k: Kit, a0: number, a1: number, z0: number, z1: number, n: number, seed: number): void {
+// below, far hills and near green ones with a tree or a fence on them. At
+// `night` the sky deep blue with stars and a moon, the clouds dim, the
+// hills dark.
+export function dusk(k: Kit, a0: number, a1: number, z0: number, z1: number, n: number, seed: number, night = false): void {
   const { pen, s } = k;
   const hz = z1 - z0;
   const horizon = z0 + hz * 0.36;
-  k.poly([[a0, n, z0], [a1, n, z0], [a1, n, z1], [a0, n, z1]], k.vgrad(a0, n, z0, z1, [[0, C.skyLow], [0.3, C.skyLow], [0.5, '#e8b4a0'], [0.72, '#9a9ccc'], [1, C.skyTop]]), 0);
-  // the sun going down, and its glow
-  if (hash(seed, 81) < 0.55) {
+  k.poly([[a0, n, z0], [a1, n, z0], [a1, n, z1], [a0, n, z1]], k.vgrad(a0, n, z0, z1, night ? [[0, '#3a4478'], [0.35, '#283464'], [1, '#121a3c']] : [[0, C.skyLow], [0.3, C.skyLow], [0.5, '#e8b4a0'], [0.72, '#9a9ccc'], [1, C.skyTop]]), 0);
+  if (night) {
+    // stars, and the moon
+    if (s >= 3) {
+      pen.beginPath();
+      for (let i = 0; i < 9; i++) {
+        const [x, y] = k.p(a0 + hash(seed, i, 91) * (a1 - a0), n, horizon + 1 + hash(seed, i, 92) * (z1 - horizon - 1.5));
+        const r = Math.max(0.6, (0.05 + hash(seed, i, 93) * 0.06) * s);
+        pen.moveTo(x + r, y);
+        pen.arc(x, y, r, 0, Math.PI * 2);
+      }
+      pen.fillStyle = '#f2f0dc';
+      pen.fill();
+    }
+    const mu = a0 + (a1 - a0) * (0.3 + hash(seed, 82) * 0.4);
+    const mz = horizon + hz * 0.38;
+    k.halo(mu, n, mz, Math.min(4, hz * 0.3), '#dce4ff', 0.35);
+    k.face(mu, n, mz, 0.8, '#f4eed8', 0, 16);
+  } else if (hash(seed, 81) < 0.55) {
     const su = a0 + (a1 - a0) * (0.25 + hash(seed, 82) * 0.5);
     const sz = horizon + 1.2;
     k.halo(su, n, sz, Math.min(6, hz * 0.4), '#ffe0a0', 0.55);
     k.face(su, n, sz, 1.1, '#fff2c0', 0, 16);
   } else k.halo(a0 + (a1 - a0) * 0.5, n, horizon, Math.min(7, hz * 0.4), '#ffd0a0', 0.35);
-  // clouds: soft lumps, pink underneath
-  const nc = 1 + Math.floor(hash(seed, 83) * 2);
+  // clouds: soft lumps, pink underneath (none at night)
+  const nc = night ? 0 : 1 + Math.floor(hash(seed, 83) * 2);
   for (let i = 0; i < nc; i++) {
     const cu = a0 + (a1 - a0) * (0.2 + hash(seed, i, 84) * 0.6);
     const cz = horizon + hz * (0.32 + hash(seed, i, 85) * 0.22);
@@ -587,11 +605,11 @@ export function dusk(k: Kit, a0: number, a1: number, z0: number, z1: number, n: 
     for (let a = a0; a <= a1 + 0.01; a += 0.5) pts.push([a, n, base + amp * wave(a * f + sd * 3.1, sd)]);
     return pts;
   };
-  k.poly(ridge(horizon + 1.0, hz * 0.07, 0.3, seed + 1), '#8aa6a0', 0);
-  k.poly(ridge(horizon - 0.6, hz * 0.08, 0.42, seed + 2), C.hillFar, 0);
+  k.poly(ridge(horizon + 1.0, hz * 0.07, 0.3, seed + 1), night ? '#2e3a5a' : '#8aa6a0', 0);
+  k.poly(ridge(horizon - 0.6, hz * 0.08, 0.42, seed + 2), night ? '#24344a' : C.hillFar, 0);
   const near = ridge(z0 + hz * 0.2, hz * 0.07, 0.55, seed + 3);
-  k.poly(near, k.vgrad(a0, n, z0, z0 + hz * 0.3, [[0, '#3e7030'], [1, C.hill]]), 0);
-  k.line(near.slice(2), '#7ab85a', Math.max(0.8, 0.14 * s));
+  k.poly(near, k.vgrad(a0, n, z0, z0 + hz * 0.3, night ? [[0, '#14202e'], [1, '#1c2c3a']] : [[0, '#3e7030'], [1, C.hill]]), 0);
+  k.line(near.slice(2), night ? '#4a5e80' : '#7ab85a', Math.max(0.8, 0.14 * s));
   // a tree on the far hill, or a fence on the near one
   if (hash(seed, 87) < 0.6) {
     const tu = a0 + (a1 - a0) * (0.2 + hash(seed, 88) * 0.6);
