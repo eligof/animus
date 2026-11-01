@@ -28,6 +28,7 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 14,
+  light: [{ kind: 'screen', u: 5.5, v: 7, z: 2, color: C.green, r: 12, strength: 0.7, halo: 0 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -299,6 +300,7 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 20,
+  light: [{ kind: 'screen', u: 6, v: 4.5, z: 2, color: C.cyan, r: 10, strength: 0.5, halo: 0 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -455,6 +457,7 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 15,
+  light: [{ kind: 'glow', u: 5.5, v: 7.7, z: 2, color: C.magenta, r: 11, strength: 0.45, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, back, z0 } = RIG;
@@ -589,6 +592,7 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 14,
+  light: [{ kind: 'screen', u: 4.5, v: 7, z: 2, color: C.amber, r: 9, strength: 0.5, halo: 0 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -702,6 +706,7 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 16,
+  light: [{ kind: 'screen', u: 5.4, v: 7, z: 2, color: C.green, r: 14, strength: 0.8, halo: 0 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -792,6 +797,7 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 9,
+  light: [{ kind: 'glow', u: 14, v: 1.6, z: 3.4, color: '#ff9a48', r: 11, strength: 0.6, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     k.shadow(7.2, 4.0, 7.8, 3.8, 0.3);

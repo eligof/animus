@@ -1,11 +1,12 @@
 import type { At } from '../../art/iso.ts';
 import { frame, mix, shade } from '../../art/iso.ts';
+import { lampsOn } from '../../art/scene/light.ts';
 import type { Color } from '../../art/types.ts';
 import type { Slot } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import { C, INK, Kit, NEONS, hash, softDot, withAlpha } from './kit.ts';
 import type { Dance, Plan, Wall } from './plan.ts';
-import { STRIP, TILE, TRUSS, fh, planFor } from './plan.ts';
+import { EXIT_SIGN, STRIP, TILE, TRUSS, fh, planFor } from './plan.ts';
 import { sign, signColor } from './signs.ts';
 import { STRIPS, rig, wallFace } from './walls.ts';
 
@@ -27,7 +28,7 @@ export const room: RoomArt = {
     v.pen.save();
     floor(k, v, plan);
     for (const wall of ['right', 'left'] as const) wallFace(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
-    beams(k, v, plan);
+    if (lampsOn(v)) beams(k, v, plan);
     shell(k, v);
     v.pen.restore();
   },
@@ -35,9 +36,31 @@ export const room: RoomArt = {
     const plan = planFor(v.W, v.D, v.H, v.T);
     v.pen.save();
     ball(new Kit(v.pen, v.at, v.s), v, plan);
-    for (const wall of ['right', 'left'] as const) sparkles(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
+    // the ball's sparkles are the rig's light thrown back: gone with it
+    if (lampsOn(v)) for (const wall of ['right', 'left'] as const) sparkles(new Kit(v.pen, wallAt(v.at, wall, v.T), v.s), v, plan, wall);
     flicker(v, plan);
     v.pen.restore();
+  },
+  // The light the shell gives (see RoomLight): each neon sign and the fire
+  // exit's sign (glows, on all night), the dance floor lit from under its
+  // glass, and the moving heads on the truss (lamps: house lights, out at
+  // night). The stations and the jukebox and totems give their own.
+  lights(v): RoomLight[] {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    const out: RoomLight[] = [];
+    for (const f of [...plan.features, ...plan.over]) {
+      if (f.kind === 'bay' && f.sign >= 0) out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.5, z: plan.sign.z, color: signColor(f.sign), r: 8, strength: 0.55, halo: 0.8 * (f.r ?? plan.sign.r) });
+      else if (f.kind === 'exit') out.push({ kind: 'glow', wall: f.wall, u: f.a, v: 0.7, z: EXIT_SIGN, color: '#3cff8a', r: 5, strength: 0.4, halo: 1.6 });
+    }
+    for (const wall of ['right', 'left'] as const) {
+      for (const c of rig(plan, wall, v.T, wall === 'right' ? v.W : v.D)) if (c.head) out.push({ kind: 'lamp', wall, u: c.a, v: 1.9, z: v.H - TRUSS - 2.8, color: c.c, r: 10, strength: 0.4, halo: 0 });
+    }
+    const d = plan.dance;
+    if (d) {
+      const size = d.n * TILE;
+      out.push({ kind: 'glow', wall: 'right', u: d.x0 + size / 2, v: d.y0 + size / 2 - v.T, z: 0.4, color: '#c46cff', r: Math.min(40, size * 0.85), strength: 0.7, halo: Math.min(12, size * 0.3) });
+    }
+    return out;
   },
 };
 
@@ -93,11 +116,6 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     wk.poly([[T, 0.5, 0], [end, 0.5, 0], [end, 9, 0], [T, 9, 0]], wk.lgrad([0, 0.5, 0], [0, 9, 0], [1, 0, 0], [[0, withAlpha(STRIPS[wall], 0.24)], [0.4, withAlpha(STRIPS[wall], 0.08)], [1, withAlpha(STRIPS[wall], 0)]]), 0);
     wk.line([[T + 0.6, 1.3, 0.01], [end - 0.4, 1.3, 0.01]], withAlpha(STRIPS[wall], 0.3), Math.max(1, 0.16 * s));
     pen.restore();
-    // and each sign's colour under it
-    for (const f of plan.features) {
-      if (f.wall !== wall || f.kind !== 'bay' || f.sign < 0) continue;
-      wk.pool(f.a, 3, plan.sign.r * 1.8, 4, signColor(f.sign), 0.16);
-    }
   }
   const slot = (kind: Slot['kind']) => plan.L.slots.find((q) => q.kind === kind);
   const idle = slot('idle');
@@ -106,23 +124,8 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     confetti(k, plan.dance);
     danceFloor(k, plan.dance);
   }
-  // Light the stations lay on the floor round them.
-  const pools: ReadonlyArray<readonly [Slot['kind'], number, number, number, Color, number]> = [
-    ['write', 0.5, 1.6, 10, C.pink, 0.22],
-    ['run', 0.5, 0.6, 11, C.amber, 0.2],
-    ['web', 0.5, 0.6, 8, C.cyan, 0.2],
-    ['think', 0.5, 0.8, 9, C.violet, 0.22],
-    ['idle', 0.5, 0.5, 11, '#ffb070', 0.16],
-    ['read', 0.5, 1.5, 8, '#ffcf8a', 0.14],
-    ['search', 0.5, 1.8, 8, '#ffcf8a', 0.16],
-    ['entrance', 0.4, 2.5, 7, '#ff6a8a', 0.16],
-  ];
-  for (const [kind, u, w, r, c, a] of pools) {
-    const q = slot(kind);
-    if (!q) continue;
-    const qk = new Kit(pen, frame(v.at, q.wall, q.x0, q.y0), s);
-    qk.pool(q.len * u, q.dep * w, r, r * 0.8, c, a);
-  }
+  // (The light the stations, the signs and the dance floor lay on the
+  // floor is declared: room.lights, the stations' own.)
 }
 
 // Confetti and glitter trodden into the concrete round the dance floor,
@@ -188,7 +191,6 @@ export function danceFloor(k: Kit, d: Dance): void {
   if (!k.seenBox(x0 - 8, y0 - 8, 0, x1 + 8, y1 + 8, 0.5, 4)) return;
   const cx = x0 + size / 2;
   const cy = y0 + size / 2;
-  k.pool(cx, cy, size * 0.85, size * 0.85, C.violet, 0.3);
   k.shadow(cx, cy, size * 0.62, size * 0.62, 0.25);
   // the frame, a step up from the concrete
   const z = 0.35;
@@ -291,10 +293,20 @@ function beams(k: Kit, v: RoomView, plan: Plan): void {
       pen.fillStyle = g;
       pen.fill();
       pen.restore();
-      k.pool(fx, fy, 3.2, 3.2, h.c, 0.42);
-      k.pool(fx, fy, 1.6, 1.6, '#ffffff', 0.25);
+      gobo(k, fx, fy, h.c, n * 0.7);
     }
   }
+}
+
+// Where a beam lands: its gobo's pattern on the concrete, a soft disc
+// ringed with six spots round a bright middle, turned by `turn`.
+function gobo(k: Kit, x: number, y: number, c: Color, turn: number): void {
+  k.pool(x, y, 3.4, 3.4, c, 0.22);
+  for (let i = 0; i < 6; i++) {
+    const a = turn + (i / 6) * Math.PI * 2;
+    k.pool(x + Math.cos(a) * 2.2, y + Math.sin(a) * 2.2, 0.75, 0.75, c, 0.6);
+  }
+  k.pool(x, y, 1.1, 1.1, '#ffffff', 0.45);
 }
 
 // ── the shell's edges: wall tops, cut ends, the floor slab ───────────────────

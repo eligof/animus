@@ -35,6 +35,7 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 17,
+  light: [{ kind: 'screen', u: 5.5, v: 8, z: 2, color: C.pink, r: 10, strength: 0.5, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { z, back, front, decks, dv, scr } = DJ;
@@ -159,6 +160,7 @@ const read: PropArt = {
   len: 14,
   dep: 4,
   height: 20,
+  light: [{ kind: 'lamp', u: 7, v: 5, z: 2, color: '#ffcf8a', r: 8, strength: 0.35, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, f, rows, top, cols } = SHELF;
@@ -297,6 +299,7 @@ const search: PropArt = {
   len: 12,
   dep: 4,
   height: 16,
+  light: [{ kind: 'lamp', u: 6, v: 5, z: 2, color: '#ffcf8a', r: 8, strength: 0.4, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { z, top, bell, lamp } = HATCH;
@@ -366,6 +369,7 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 13,
+  light: [{ kind: 'glow', u: 5.5, v: 7, z: 2, color: C.amber, r: 11, strength: 0.45, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { v0, v1, z } = BAR;
@@ -459,6 +463,7 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 18,
+  light: [{ kind: 'glow', u: 4.5, v: 5.4, z: 2, color: C.cyan, r: 8, strength: 0.45, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, v0, v1, z1 } = BOOTH;
@@ -548,6 +553,7 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 12,
+  light: [{ kind: 'glow', u: 6, v: 5.6, z: 2, color: C.violet, r: 9, strength: 0.45, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const P = PIN;
@@ -648,6 +654,7 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 7,
+  light: [{ kind: 'fire', u: 7.5, v: 5.5, z: 1.5, color: '#ffb070', r: 10, strength: 0.35, halo: 0 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     const V = C.velvet;
@@ -712,6 +719,7 @@ const entrance: PropArt = {
   len: 15,
   dep: 4,
   height: 21,
+  light: [{ kind: 'glow', u: 6, v: 5, z: 2, color: '#ff6a8a', r: 7, strength: 0.4, halo: 0 }],
   animated: true,
   draw(v: PropView): void {
     const { u0, u1, h } = DOOR;
