@@ -376,12 +376,12 @@ export function awning(k: Kit, u0: number, u1: number, zb: number, vf: number, z
 // ── outside ──────────────────────────────────────────────────────────────────
 
 // The view out of an opening (u0..u1, z0..z1) set back on the plane v = n:
-// a hazy sky warming toward the top, three bands of dunes up to the
-// horizon hz (far, mid and near, the near one lit along its crest), and
-// now and then a pale sun.
+// a hard turquoise sky, hazy white at the horizon, three bands of orange
+// dunes up to the horizon hz (far, mid and near, the near one lit along
+// its crest), and now and then a pale sun.
 export function dunesView(k: Kit, u0: number, u1: number, z0: number, z1: number, n: number, hz: number, seed: number, sun = true): void {
   const f = Math.max(0, Math.min(1, (hz - z0) / Math.max(0.1, z1 - z0)));
-  k.poly([[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]], k.vgrad(u0, n, z0, z1, [[0, '#fbe0a8'], [f, '#fbe3b0'], [Math.min(1, f + 0.08), C.sky], [1, C.skyHigh]]), 0);
+  k.poly([[u0, n, z0], [u1, n, z0], [u1, n, z1], [u0, n, z1]], k.vgrad(u0, n, z0, z1, [[0, '#ffe9bf'], [f, '#ffe9bf'], [Math.min(1, f + 0.08), C.sky], [1, C.skyHigh]]), 0);
   if (sun && hash(seed, 5) < 0.45 && z1 - hz > 4) {
     const su = u0 + 1.4 + hash(seed, 6) * Math.max(0.2, u1 - u0 - 2.8);
     const sz = hz + 2.4 + hash(seed, 7) * Math.max(0.5, z1 - hz - 4.5);
@@ -405,7 +405,7 @@ export function dunesView(k: Kit, u0: number, u1: number, z0: number, z1: number
     if (i === 2) {
       // the near dune's sunlit slope, falling away from its crest
       const lit = ridge.map(([u, w, z], j): P3 => [u, w, Math.max(z0, z - 0.4 - (j / m) * 2.2)]);
-      k.poly([[u0, n, z0], ...lit, [u1, n, z0]], mix(C.dune, '#f8dcaa', 0.45), 0);
+      k.poly([[u0, n, z0], ...lit, [u1, n, z0]], mix(C.dune, '#ffd9a0', 0.45), 0);
     } else if (i === 0) {
       k.line(ridge, withAlpha('#fff2d4', 0.6), Math.max(0.6, 0.08 * k.s));
     }

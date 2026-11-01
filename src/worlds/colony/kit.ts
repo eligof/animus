@@ -56,8 +56,8 @@ export const C = {
   tile: '#e4e8e6',
   tileGrid: '#c6ccc9',
   zone: '#e8d27a',
-  // the walls: plain cut stone blocks
-  block: '#8e7f6a',
+  // the walls: blocks of warm dressed fieldstone
+  block: '#a08c70',
   blockTop: '#c4b394',
   // beds, lamps and the stockpile's goods
   blanket: '#4e7a58',

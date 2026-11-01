@@ -11,7 +11,7 @@ import type { PropArt } from '../src/worlds/types.ts';
 import { colony } from '../src/worlds/colony.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { DECOR_ART } from '../src/worlds/colony/decor.ts';
-import { planFor, zonesFor } from '../src/worlds/colony/room.ts';
+import { LOW, planFor, zonesFor } from '../src/worlds/colony/room.ts';
 import { budget } from './helpers.ts';
 
 // The Frontier Colony's art: every piece draws in both wall frames and as
@@ -128,7 +128,7 @@ test('Frontier Colony stations: animated ones hold still while nobody works them
   }
 });
 
-test('Frontier Colony room: the walls keep their windows off the stations and apart', () => {
+test('Frontier Colony room: the walls keep their windows off the stations (what hangs between them clear over a low one) and apart', () => {
   for (const [w, h] of SIZES) {
     const L = planLayout(w, h, 'colony');
     const plan = planFor(L.W, L.D, L.H, L.T);
@@ -140,7 +140,10 @@ test('Frontier Colony room: the walls keep their windows off the stations and ap
       for (const s of slotsOn(L, f.wall)) {
         const r = slotRect(s);
         const [a0, a1] = f.wall === 'right' ? [r.x0, r.x1] : [r.y0, r.y1];
-        assert.ok(f.a + f.w / 2 <= a0 - 1 || f.a - f.w / 2 >= a1 + 1, `${L.W}: ${f.kind} at ${f.a} behind ${s.kind}`);
+        // what hangs between the windows may hang over a low station,
+        // well clear of its top
+        const over = f.kind !== 'window' && colony.stations[s.kind].height <= LOW;
+        assert.ok(f.a + f.w / 2 <= a0 - 1 || f.a - f.w / 2 >= a1 + 1 || over, `${L.W}: ${f.kind} at ${f.a} behind ${s.kind}`);
       }
       // and clear of each other along the wall
       for (const g of plan.features) {

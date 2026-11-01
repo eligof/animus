@@ -10,8 +10,9 @@ import { WORKSTATION } from './colony/workstation.ts';
 
 // Frontier Colony: stone and planks under a big sky, a campfire and a husky,
 // in outlined cartoon (dark earth-brown ink), after the frontier colony
-// games: plain cut stone walls, a floor zoned plank, tile and stone, neat
-// stockpiles and a room full of the colony's things. The shell in
+// games: fieldstone walls under a timber plate, a floor zoned plank, tile
+// and stone, neat stockpiles and a room full of the colony's things. The
+// shell in
 // colony/room.ts, the stations in colony/stations.ts, the furniture in
 // colony/decor.ts, the locals (a tailor, a blacksmith and a camp cook) in
 // colony/npcs.ts, all drawn with the kit in colony/kit.ts and

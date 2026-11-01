@@ -47,12 +47,13 @@ export const C = {
   glass: '#9fd4cf',
   inkPot: '#2b2a3a',
   clay: '#c66a42',
-  // outside: haze over the dunes
-  sky: '#efd3a8',
-  skyHigh: '#e9c290',
-  dune: '#e6b872',
-  duneShade: '#c9925a',
-  duneFar: '#efc995',
+  // outside: a hard turquoise sky over orange dunes, the complement of
+  // the warm room, so a window reads from across it
+  sky: '#bfe3dc',
+  skyHigh: '#6fbfcf',
+  dune: '#eaa75a',
+  duneShade: '#c47a42',
+  duneFar: '#f2c88c',
   // light, plants and bone
   lamp: '#ffd08a',
   flame: '#ffc04a',
@@ -61,9 +62,9 @@ export const C = {
   bone: '#efe6d2',
   boneDark: '#cbbd9e',
   // poured adobe, bleached planks, plate steel and pipe
-  adobe: '#b29270',
-  adobeLight: '#c4a682',
-  adobeDark: '#8e7052',
+  adobe: '#c4946a',
+  adobeLight: '#d6aa80',
+  adobeDark: '#9e7450',
   plank: '#c2a57a',
   plankLight: '#d8bf94',
   plankDark: '#9a7c55',
