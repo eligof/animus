@@ -24,6 +24,10 @@ export type Project = (x: number, y: number, z: number) => [number, number];
 // free-standing islands (which are drawn as if backed onto `wall`, front
 // toward the viewer). `t` is the scene clock in seconds; `active` is true
 // while an agent works the prop; `seed` varies the details per placement.
+// `lit` is false at night, with the lights off (the `l` key): a lamp is
+// drawn switched off then (its shade unlit, no glow). The scene always
+// says; a view made without it (a test's) counts as lit, so read it as
+// `v.lit !== false` (see lampsOn in art/scene/light.ts).
 export type PropView = {
   pen: Pen;
   s: number;
@@ -35,6 +39,7 @@ export type PropView = {
   t: number;
   active: boolean;
   seed: number;
+  lit?: boolean;
 };
 
 // A piece of furniture or machinery. `len` x `dep` is its footprint on the
@@ -55,6 +60,10 @@ export type PropArt = {
   // every ambient step. Without it, one idle draws the same whatever the
   // clock, and is drawn once until it is worked.
   movesIdle?: boolean;
+  // The light it gives, in its own frame (see PropLight): the scene lays
+  // the pools, washes and spill on the room's base and the glow round the
+  // light itself over everything, all drawn once (see art/scene/light.ts).
+  light?: readonly PropLight[];
   draw(v: PropView): void;
   emit?(v: PropView, dt: number, spawn: (p: Particle) => void): void;
 };
@@ -218,6 +227,7 @@ export type Npc = {
 // What the room shell draws with: the floor and the two back walls.
 // `W` x `D` is the floor (units), `H` the wall height, `T` the wall
 // thickness.
+// `lit` as PropView's: false at night, absent counts as lit.
 export type RoomView = {
   pen: Pen;
   s: number;
@@ -228,13 +238,69 @@ export type RoomView = {
   T: number;
   t: number;
   seed: number;
+  lit?: boolean;
 };
 
 // `draw` paints the static shell once; `overlay`, when given, paints over
-// the finished frame every frame (rain on the windows, a flicker).
+// the finished frame every frame (rain on the windows, a flicker);
+// `lights` names the light its shell gives (see RoomLight), asked once a
+// room.
 export type RoomArt = {
   draw(v: RoomView): void;
   overlay?(v: RoomView): void;
+  lights?(v: { W: number; D: number; H: number; T: number; seed: number }): readonly RoomLight[];
+};
+
+// ── light (see art/scene/light.ts) ───────────────────────────────────────
+// Light a world declares; the scene draws it with one set of rules for
+// every room, baked into the base and the glows (nothing per frame).
+//
+// A 'lamp' is switched: on with the lights, off at night (the `l` key).
+// 'fire', 'lava', 'glow' (crystals, tanks, neon) and 'screen' always
+// shine: at night they are what lights the room. Each throws a pool on
+// the floor (pushed out into the room when it hangs on a wall), washes a
+// wall it stands within 6 units of, and glows round itself.
+export type LightKind = 'lamp' | 'fire' | 'lava' | 'glow' | 'screen';
+
+// A light at a point (u, v, z) of its frame: a prop's own (as PropView),
+// or for the room a wall's (u along `wall` from the back corner, v out
+// from its face, z up). `color` is a '#rrggbb' (each kind has its own:
+// warm lamps, orange fire). `r`: how far its pool reaches on the floor,
+// units (by kind and height when left out); `strength` scales the pool,
+// the wash and the glow (1 as it comes, 0 to 2); `halo` is the glow's
+// radius round the light itself, units (0: none).
+export type PointLight = { kind: LightKind; u: number; v: number; z: number; color?: string; r?: number; strength?: number; halo?: number };
+
+// A window: an opening `w` wide centred at `u` along its wall (or its
+// prop's back), its sill at `z0` and its top at `z1`. With the lights on
+// it lets in `color` at `strength` (warm late sun, 1, as it comes), at
+// night `night` at `moon` (moonlight, 0.85): a patch on the floor in the
+// light's direction (from the upper left), cut by `bars` upright glazing
+// bars and `rails` across. A strength of 0 lets none in (a window dark
+// outside with the lights on, or curtained at night).
+export type WindowLight = { kind: 'window'; u: number; w: number; z0: number; z1: number; bars?: number; rails?: number; color?: string; strength?: number; night?: string; moon?: number };
+
+export type PropLight = PointLight | WindowLight;
+export type RoomLight = (PointLight | WindowLight) & { wall: 'left' | 'right' };
+
+// How the scene lights a world's room, each a share of the shared rule
+// (1 as it comes, 0 none, up to 2): `ao` the shade where the floor meets
+// the walls and in the back corner, `falloff` the floor darkening toward
+// its far corners (kept light where the crew walks), `top` the walls
+// darkening toward their tops, `turn` the left wall's shade (it faces away
+// from the light), `backs` the soft shadows on the wall behind what stands
+// against it, `pools` every declared light's pool, wash and spill. `night`
+// is how the room looks with the lights off: multiplied toward `tint` by
+// `strength` (cool and dim as it comes), the crew and the locals by
+// `figures` of that (0 to 1).
+export type WorldLight = {
+  ao?: number;
+  falloff?: number;
+  top?: number;
+  turn?: number;
+  backs?: number;
+  pools?: number;
+  night?: { tint?: RGB; strength?: number; figures?: number };
 };
 
 export type CritterKind = 'cat' | 'rat' | 'drone' | 'slime' | 'fox' | 'imp' | 'beetle' | 'hopper' | 'husky' | 'corgi';
@@ -258,8 +324,13 @@ export type WorldDef = {
   workstation?: WorkstationArt;
   // Its locals (see Npc): three, each at a station of its own.
   npcs?: readonly Npc[];
-  // A colour multiplied over the finished scene (0 = none, 1 = full).
-  ambient?: { tint: RGB; strength: number };
+  // A colour multiplied over the scene (0 = none, 1 = full): the room,
+  // its props and builds; the crew, the locals and the critter by
+  // `figures` of it (half as it comes), emotes and labels not at all.
+  // Declared lights shine over it (an evening the lamps warm).
+  ambient?: { tint: RGB; strength: number; figures?: number };
+  // How the scene lights its room (see WorldLight); all on as it comes.
+  light?: WorldLight;
   costume: Costume;
   critter: { kind: CritterKind; body: RGB };
   finale: { colors: RGB[] };

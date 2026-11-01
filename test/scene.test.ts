@@ -31,7 +31,8 @@ import { budget } from './helpers.ts';
 
 // A test room: a flat grey floor in a 60 x 60 room, props filled flat in
 // one colour each (their whole silhouette), so a pixel of that colour is a
-// pixel of the prop.
+// pixel of the prop. Its frames have the lights off, so the night is left
+// out of its grades: the props keep their colours.
 const S = 6;
 const W = 60;
 const D = 60;
@@ -81,6 +82,7 @@ const world: WorldDef = {
   backdrop: [20, 20, 30],
   ink: '#101018',
   ambient: undefined,
+  light: { night: { strength: 0 } },
   room: {
     draw(v) {
       v.pen.beginPath();
