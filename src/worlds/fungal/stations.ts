@@ -75,6 +75,8 @@ const write: PropArt = {
   len: 11,
   dep: 7,
   height: 12,
+  // its light (glowing fungus, or the fire under the pot)
+  light: [{ kind: 'glow', u: 9.4, v: 1.3, z: 7.4, color: '#62e8c4', r: 6, strength: 0.6, halo: 1.6 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'write', 12, (k) => {
@@ -430,6 +432,8 @@ const run: PropArt = {
   len: 11,
   dep: 11,
   height: 15,
+  // its light (glowing fungus, or the fire under the pot)
+  light: [{ kind: 'fire', u: 4.6, v: 5.4, z: 1.2, r: 10, strength: 0.8, halo: 0 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -621,6 +625,8 @@ const web: PropArt = {
   len: 9,
   dep: 9,
   height: 15,
+  // its light (glowing fungus, or the fire under the pot)
+  light: [{ kind: 'glow', u: 4.5, v: 4.5, z: 9.6, color: '#62e8c4', r: 9, strength: 0.7, halo: 3 }],
   animated: true,
   movesIdle: true,
   draw(v: PropView): void {
@@ -768,6 +774,8 @@ const think: PropArt = {
   len: 12,
   dep: 7,
   height: 16,
+  // its light (glowing fungus, or the fire under the pot)
+  light: [{ kind: 'glow', u: 7.0, v: 1.1, z: 11.5, color: '#62e8c4', r: 9, strength: 0.7, halo: 3 }],
   animated: true,
   draw(v: PropView): void {
     const k = still(v, 'think', 16, (k) => {
@@ -842,6 +850,8 @@ const idle: PropArt = {
   len: 15,
   dep: 11,
   height: 11,
+  // its light (glowing fungus, or the fire under the pot)
+  light: [{ kind: 'glow', u: 13.3, v: 2.0, z: 7.8, color: '#62e8c4', r: 7, strength: 0.6, halo: 2.5 }],
   draw(v: PropView): void {
     const k = kitOf(v);
     // a carpet of soft pale moss under it all, ringed with pebbles

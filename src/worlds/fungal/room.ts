@@ -4,7 +4,7 @@ import type { Color } from '../../art/types.ts';
 import { hub, keepClear, planLayout, slotRect, wallGaps } from '../../world/layout.ts';
 import { defaultPois } from '../../world/room.ts';
 import type { Layout, Poi, SlotKind } from '../../world/types.ts';
-import type { RoomArt, RoomView } from '../types.ts';
+import type { RoomArt, RoomLight, RoomView } from '../types.ts';
 import type { Cap } from './bits.ts';
 import { boulder, bracket, candle, clump, crystal, crystals, curve, ribbon, root, shroom, vine } from './bits.ts';
 import type { P3, Pt } from './kit.ts';
@@ -345,7 +345,49 @@ export const room: RoomArt = {
     shell(k, v);
     v.pen.restore();
   },
+  // The cave lights itself: the geode, the mother mushroom, the lichen and
+  // its seeps, the glow pods, the crystals and the sludge, all teal and
+  // violet and acid green (still shining with the lights out), and a
+  // candle in each alcove.
+  lights(v): RoomLight[] {
+    const plan = planFor(v.W, v.D, v.H, v.T);
+    const out: RoomLight[] = [];
+    for (const f of plan.features) {
+      const g = (u: number, n: number, z: number, color: string, r: number, strength: number, halo: number) => out.push({ kind: 'glow', wall: f.wall, u, v: n, z, color, r, strength, halo });
+      if (f.kind === 'geode') {
+        const { rw, rh, lift } = geodeOf(f, v.H);
+        g(f.a, 1.2, 2 + rh * 1.15 + lift, '#b892ff', Math.min(16, rw * 1.5), 0.9, Math.min(10, rw * 0.9));
+      } else if (f.kind === 'mother') g(v.T + 4.6, 3.8, motherH(v.H), C.glow, 14, 1, 6);
+      else if (f.kind === 'lichen') g(f.a, 0.6, 12 + hash(f.k, 81) * 4, C.glow, 7, 0.6, 3.5);
+      else if (f.kind === 'seep') g(f.a, 1.8, 0.4, '#9cff57', 8, 0.7, 3);
+      else if (f.kind === 'crystals') g(f.a, 1.2, 13 + hash(f.k, 61) * 3, hash(f.k, 62) < 0.4 ? '#6fb0f0' : '#b892ff', 6, 0.45, 2.5);
+      else if (f.kind === 'pod') {
+        const top = topOf(v, f.wall)(f.a);
+        g(f.a, 1.0, top - podLen(f, top) - 1.1, C.glow, 6, 0.55, 2.5);
+      } else if (f.kind === 'niche') out.push({ kind: 'fire', wall: f.wall, u: f.a + 0.9, v: 0.8, z: 12, color: '#ffc070', r: 5, strength: 0.35, halo: 1.5 });
+    }
+    for (const wall of ['right', 'left'] as const) {
+      const end = wall === 'right' ? v.W : v.D;
+      const { gaps } = lobesOf(v.T, end, v.H, wall);
+      const clear = clearOf(plan, wall, v.H);
+      for (const [a, z] of lichenSpots(v.T, end, v.H, wall, gaps, clear)) out.push({ kind: 'glow', wall, u: a, v: 0.4, z, color: '#8ff0d8', r: 5, strength: 0.4, halo: 2.2 });
+      for (const run of rivuletSpots(v.T, end, v.H, wall, gaps, clear)) out.push({ kind: 'glow', wall, u: run[run.length - 1][0], v: 0.4, z: 1, color: '#8ff0d8', r: 4, strength: 0.35, halo: 1.6 });
+    }
+    return out;
+  },
 };
+
+// What the furniture keeps clear of: the geode (down to its floor
+// crystals, or over its ledge when it sits high) and the mother
+// mushroom's stalk under her cap.
+export function fungalReserve(L: Layout): Array<{ wall: Wall; a0: number; a1: number; out: number; z?: number }> {
+  const out: Array<{ wall: Wall; a0: number; a1: number; out: number; z?: number }> = [];
+  for (const f of planFor(L.W, L.D, L.H, L.T).features) {
+    if (f.kind === 'geode') out.push({ wall: f.wall, a0: f.a - f.w / 2, a1: f.a + f.w / 2, out: 10, z: geodeOf(f, L.H).lift ? 6 : 0 });
+    else if (f.kind === 'mother') out.push({ wall: f.wall, a0: L.T, a1: L.T + 11, out: 9, z: 14 });
+  }
+  return out;
+}
 
 // ── floor ──────────────────────────────────────────────────────────────────
 
@@ -491,20 +533,6 @@ function floor(k: Kit, v: RoomView, plan: Plan): void {
     pen.fillStyle = C.glowHot;
     pen.fill();
   }
-  // Light on the ground: a lantern's warm pool where each agent works, the
-  // walls' wonders spilling their glow.
-  for (const sl of L.slots) {
-    const r = sl.kind === 'idle' ? 12 : sl.kind === 'entrance' ? 9 : 8;
-    if (!vis(sl.spot.x, sl.spot.y, r * 2 * s)) continue;
-    k.pool(sl.spot.x, sl.spot.y, r, r * 0.85, C.lantern, sl.kind === 'entrance' ? 0.16 : 0.22);
-  }
-  for (const f of plan.features) {
-    const wk = new Kit(pen, wallAt(v.at, f.wall, T), s);
-    const spill: Partial<Record<Kind, [number, number, Color, number]>> = { geode: [16, 11, C.crystal, 0.32], seep: [7, 6, C.sludge, 0.3], crystals: [7, 5, C.crystal, 0.16], lichen: [7, 5, C.glow, 0.14], pod: [5, 4, C.glow, 0.1], grove: [9, 6, C.glow, 0.1] };
-    const sp = spill[f.kind];
-    if (!sp || !wk.seen([[f.a - sp[0], -sp[1], 0], [f.a + sp[0], -sp[1], 0], [f.a - sp[0], sp[1] * 2, 0], [f.a + sp[0], sp[1] * 2, 0]], 2 * s)) continue;
-    wk.pool(f.a, sp[1] * 0.4, sp[0], sp[1], sp[2], sp[3]);
-  }
 }
 
 // ── walls ──────────────────────────────────────────────────────────────────
@@ -517,11 +545,7 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   const lit = k.lit(0, 1);
   const tone = (c: Color, d = 0.16) => (lit ? c : shade(c, -d));
   const mine = plan.features.filter((f) => f.wall === wall);
-  const boxes = mine.map((f) => {
-    const [z0, z1] = extent(f, H);
-    return { a0: f.a - f.w / 2 - 1, a1: f.a + f.w / 2 + 1, z0: z0 - 1, z1: z1 + 1 };
-  });
-  const clear = (a: number, z: number, ra: number, rz: number) => !boxes.some((b) => a + ra > b.a0 && a - ra < b.a1 && z + rz > b.z0 && z - rz < b.z1);
+  const clear = clearOf(plan, wall, H);
   // only the stretch of wall the pen shows
   const [a0, a1] = span(k, T, end, H, s);
   if (a1 <= a0) return;
@@ -534,8 +558,8 @@ function wallFace(k: Kit, v: RoomView, plan: Plan, wall: Wall): void {
   // the dark under the roof, from below halfway up: the upper walls fall
   // into darkness and the glow reads against them
   k.poly([[a0, 0, H * 0.45], [a1, 0, H * 0.45], [a1, 0, H], [a0, 0, H]], k.vgrad(T, 0, H * 0.45, H, [[0, '#120a1a00'], [0.5, '#120a1a70'], [1, '#120a1ad0']]), 0);
-  lichenDots(k, T, end, a0, a1, H, wall, gaps, clear);
-  rivulets(k, T, end, a0, a1, H, wall, gaps, clear);
+  lichenDots(k, a0, a1, lichenSpots(T, end, H, wall, gaps, clear));
+  rivulets(k, a0, a1, rivuletSpots(T, end, H, wall, gaps, clear));
   footMoss(k, a0, a1, wall, tone);
   const standing = (f: Feature) => (f.kind === 'grove' ? 1 : 0);
   for (const f of [...mine].sort((p, q) => standing(p) - standing(q))) {
@@ -735,20 +759,43 @@ function cracks(k: Kit, T: number, end: number, a0: number, a1: number, H: numbe
   pen.stroke();
 }
 
-// Colonies of glowing lichen, most of them in the recesses between the
-// lobes where the damp is, big enough to read across the room.
-function lichenDots(k: Kit, T: number, end: number, a0: number, a1: number, H: number, wall: Wall, gaps: number[], clear: (a: number, z: number, ra: number, rz: number) => boolean): void {
-  const { pen, s } = k;
+// Whether a spot on a wall (a, z, give or take ra, rz) is clear of its
+// wonders.
+type Clear = (a: number, z: number, ra: number, rz: number) => boolean;
+function clearOf(plan: Plan, wall: Wall, H: number): Clear {
+  const boxes = plan.features
+    .filter((f) => f.wall === wall)
+    .map((f) => {
+      const [z0, z1] = extent(f, H);
+      return { a0: f.a - f.w / 2 - 1, a1: f.a + f.w / 2 + 1, z0: z0 - 1, z1: z1 + 1 };
+    });
+  return (a, z, ra, rz) => !boxes.some((b) => a + ra > b.a0 && a - ra < b.a1 && z + rz > b.z0 && z - rz < b.z1);
+}
+
+// Where the lichen grows on a wall: colonies in most of the recesses
+// between the lobes, where the damp is (a, z, and which recess). The
+// drawing and its light share it.
+function lichenSpots(T: number, end: number, H: number, wall: Wall, gaps: number[], clear: Clear): Array<[number, number, number]> {
   const salt = wall === 'right' ? 5 : 6;
-  const dots: Array<[number, number, number]> = [];
+  const out: Array<[number, number, number]> = [];
   gaps.forEach((g, ia) => {
     if (hash(ia, salt, 1) < 0.4) return;
     const a = g + (hash(ia, salt, 4) - 0.5) * 1.2;
     const z = 4 + hash(ia, salt, 3) * Math.max(2, H - 12);
-    if (a < a0 - 6 || a > a1 + 6 || a < T + 2 || a > end - 3 || !clear(a, z, 2, 2)) return;
-    k.halo(a, 0.2, z, 4.5, C.glow, 0.34);
-    for (let i = 0; i < 9; i++) dots.push([...k.p(a + (hash(ia, i, 7) - 0.5) * 3, 0.08, z + (hash(ia, i, 8) - 0.5) * 3.2), i]);
+    if (a >= T + 2 && a <= end - 3 && clear(a, z, 2, 2)) out.push([a, z, ia]);
   });
+  return out;
+}
+
+// Colonies of glowing lichen, big enough to read across the room.
+function lichenDots(k: Kit, a0: number, a1: number, spots: Array<[number, number, number]>): void {
+  const { pen, s } = k;
+  const dots: Array<[number, number, number]> = [];
+  for (const [a, z, ia] of spots) {
+    if (a < a0 - 6 || a > a1 + 6) continue;
+    k.halo(a, 0.2, z, 4.5, C.glow, 0.3);
+    for (let i = 0; i < 9; i++) dots.push([...k.p(a + (hash(ia, i, 7) - 0.5) * 3, 0.08, z + (hash(ia, i, 8) - 0.5) * 3.2), i]);
+  }
   pen.beginPath();
   for (const [x, y, i] of dots) {
     const r = Math.max(1, (0.28 + (i % 3) * 0.06) * s);
@@ -759,24 +806,32 @@ function lichenDots(k: Kit, T: number, end: number, a0: number, a1: number, H: n
   pen.fill();
 }
 
-// Glowing seeps: thin runs of teal light trickling down a recess, here and
-// there (about one in four).
-function rivulets(k: Kit, T: number, end: number, a0: number, a1: number, H: number, wall: Wall, gaps: number[], clear: (a: number, z: number, ra: number, rz: number) => boolean): void {
-  const { s } = k;
+// Where the glowing seeps run: down about one recess in four, clear of the
+// wall's wonders (the run's points, top to foot).
+function rivuletSpots(T: number, end: number, H: number, wall: Wall, gaps: number[], clear: Clear): P3[][] {
   const salt = wall === 'right' ? 15 : 16;
+  const out: P3[][] = [];
   gaps.forEach((g, ia) => {
-    if (hash(ia, salt, 1) > 0.28 || g < T + 3 || g > end - 3 || g < a0 - 4 || g > a1 + 4) return;
+    if (hash(ia, salt, 1) > 0.28 || g < T + 3 || g > end - 3) return;
     const top = H * (0.3 + hash(ia, salt, 2) * 0.25);
     const line: P3[] = [];
     for (let z = top; z > 1.2; z -= 0.6) line.push([g + Math.sin(z * 0.55 + ia) * 0.45 + Math.sin(z * 1.7 + ia * 3) * 0.15, 0.05, z]);
-    if (line.some(([a, , z]) => !clear(a, z, 0.6, 0.6))) return;
+    if (line.every(([a, , z]) => clear(a, z, 0.6, 0.6))) out.push(line);
+  });
+  return out;
+}
+
+// Glowing seeps: thin runs of teal light trickling down a recess.
+function rivulets(k: Kit, a0: number, a1: number, runs: P3[][]): void {
+  const { s } = k;
+  for (const line of runs) {
+    if (line[0][0] < a0 - 4 || line[0][0] > a1 + 4) continue;
     for (let i = 0; i < line.length; i += 4) k.halo(line[i][0], 0.1, line[i][2], 1.4, C.glow, 0.22);
     k.line(line, withAlpha(C.glowSoft, 0.9), Math.max(1, 0.24 * s));
     k.line(line, C.glowHot, Math.max(0.7, 0.09 * s));
-    // beads of it caught on the way down, and where it pools at the foot
+    // beads of it caught on the way down
     for (let i = 3; i < line.length - 2; i += 5) k.disc(line[i][0], 0.1, line[i][2], 0.22, C.glowHot, 0);
-    k.halo(line[line.length - 1][0], 0.3, 0.8, 2.4, C.glow, 0.3);
-  });
+  }
 }
 
 // Moss creeping up from the floor, with tongues of it here and there.
@@ -883,7 +938,7 @@ function geode(k: Kit, v: RoomView, f: Feature, tone: (c: Color, d?: number) => 
     for (let i = 0; i < steps; i++) pts.push(at((i / steps) * Math.PI * 2, sc, q, jag, n));
     return pts;
   };
-  k.halo(a, 0.3, zc, rw * 2.4, C.crystal, 0.32);
+  k.halo(a, 0.3, zc, rw * 2.4, C.crystal, 0.2);
   // the crust round the opening, bulging from the rock, broken unevenly
   k.poly(oval(1.16, 0.1, 1, 0.13), tone('#8f84a6'), k.lw, 0.8);
   k.poly(oval(1.0, 0.12, 4, 0.1), tone('#ddd4e6'), k.thin, 0.5);
@@ -971,7 +1026,29 @@ function motherShroom(k: Kit, v: RoomView, f: Feature): void {
   k.shadow(u + 0.4, w + 0.4, 3.4, 2.8, 0.32);
   clump(k, u + 3.2, w + 2.4, 0, 3, 1.0, 0.75, [C.glow], f.k + 31, true);
   shroom(k, u, w, 0, h, 6.6, C.glow, { cap: 'dome', glow: true, spots: C.glowHot, skirt: true, lean: [1.4, 1.2], rb: 2.1, seed: f.k + 33 });
-  k.halo(u + 1.4, w + 1.2, h - 1.2, 9, C.glow, 0.3);
+  k.halo(u + 1.4, w + 1.2, h - 1.2, 9, C.glow, 0.18);
+  // her stalk's face: where it is at height z (its front, toward the room)
+  const at = (z: number, side = 0): P3 => {
+    const t = z / h;
+    const r = 2.1 * (1 - 0.28 * t);
+    return [u + 1.4 * t + side * r * 0.75, w + 1.2 * t + r * 0.68, z];
+  };
+  // fibres running up it, teal freckles glowing on it, two shelf fungi
+  // grown on it and a torn cup round its foot
+  for (const side of [-0.45, 0.1, 0.55]) k.line([at(2.2, side), at(h * 0.45, side + 0.05), at(h - 3, side)], withAlpha(INK, 0.22), Math.max(0.8, 0.09 * k.s));
+  for (let i = 0; i < 9; i++) {
+    const p = at(3 + hash(f.k, i, 35) * (h - 7), (hash(f.k, i, 36) - 0.5) * 1.1);
+    k.disc(p[0], p[1] + 0.05, p[2], 0.16 + hash(f.k, i, 37) * 0.14, C.glowHot, 0);
+  }
+  const b0 = at(h * 0.32, -0.3);
+  const b1 = at(h * 0.5, 0.4);
+  bracket(k, b0[0], b0[1] - 0.2, b0[2], 1.0, '#d8a66a', false, 0.4);
+  bracket(k, b1[0], b1[1] - 0.2, b1[2], 0.8, C.glowSoft, true, 0.35);
+  k.cyl(u, w, 0, 2.6, 1.3, '#d9cdb0', { line: k.thin, top: '#bdb193' });
+  for (let i = 0; i < 6; i++) {
+    const th = Math.PI * (0.05 + i * 0.18);
+    k.poly([[u + Math.cos(th) * 2.6, w + Math.sin(th) * 2.6, 1.25], [u + Math.cos(th + 0.12) * 2.6, w + Math.sin(th + 0.12) * 2.6, 1.9 + hash(f.k, i, 38) * 0.6], [u + Math.cos(th + 0.25) * 2.6, w + Math.sin(th + 0.25) * 2.6, 1.25]], '#e8dec4', k.thin);
+  }
   clump(k, u + 0.8, w + 3.8, 0, 4, 1.2, 0.8, [C.capViolet, '#a974d6'], f.k + 32);
   clump(k, u - 0.6, w + 5.2, 0, 2, 0.8, 0.6, [C.glow], f.k + 34, true);
 }
@@ -1166,7 +1243,7 @@ function lichen(k: Kit, f: Feature): void {
   const { pen, s } = k;
   const a = f.a;
   const zc = 12 + hash(f.k, 81) * 4;
-  k.halo(a, 0.2, zc, 6.5, C.glow, 0.34);
+  k.halo(a, 0.2, zc, 6.5, C.glow, 0.22);
   const rosettes: Array<[number, number, number]> = [];
   for (let i = 0; i < 7; i++) rosettes.push([a + (hash(f.k, i, 82) - 0.5) * 5, zc + (hash(f.k, i, 83) - 0.5) * 5, 0.9 + hash(f.k, i, 84) * 1.1]);
   const scallop = (u: number, z: number, r: number) => {
@@ -1230,7 +1307,7 @@ function pod(k: Kit, v: RoomView, f: Feature): void {
   const sw = (hash(f.k, 91) - 0.5) * 1.5;
   root(k, [f.a, 0.3, H - 0.3], [f.a + sw, 0.6, H - l * 0.5], [f.a, 0.9, H - l], 0.25, C.root);
   const z = H - l - 1.1;
-  k.halo(f.a, 1.0, z, 5.5, C.glow, 0.38);
+  k.halo(f.a, 1.0, z, 5.5, C.glow, 0.25);
   const [x, y] = k.p(f.a, 1.0, z);
   const r = 1.05 * k.s;
   const pen = k.pen;

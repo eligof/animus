@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Canvas } from '../src/art/canvas.ts';
 import { frame, project } from '../src/art/iso.ts';
 import { planLayout, slotRect, slotsOn } from '../src/world/layout.ts';
-import { planRoom, toWorld } from '../src/world/room.ts';
+import { footprint, planRoom, toWorld, veils } from '../src/world/room.ts';
+import { hashString } from '../src/world/rng.ts';
 import type { SlotKind } from '../src/world/types.ts';
 import { fungal } from '../src/worlds/fungal.ts';
 import { DECOR_ART } from '../src/worlds/fungal/decor.ts';
@@ -204,4 +205,13 @@ test('Fungal Caverns: its desks have things of their own to pick from, and somet
 test('Fungal Caverns: three locals at work, each where its job puts it', () => {
   assert.deepEqual(fungal.npcs!.map((n) => [n.name, n.station, n.place.mode]), [['herbalist', 'search', 'standing'], ['witch', 'run', 'standing'], ['myconid', 'think', 'seated']]);
   assert.ok(fungal.npcs!.some((n) => n.show), 'no show');
+});
+
+test('fungal room: the furniture keeps clear of the geode and the mother mushroom', () => {
+  for (const side of [72, 86, 146]) {
+    const L = planLayout(2 * side + 12, 1000, 'fungal');
+    const keep = fungal.reserve!(L);
+    assert.ok(keep.length > 0, `${L.W}: nothing kept clear`);
+    for (const p of planRoom(fungal, L, hashString('fungal')).props.filter((q) => !q.slot)) assert.ok(!veils(L, keep, footprint(p), p.art.height), `${L.W}: a piece of decor hides it`);
+  }
 });
