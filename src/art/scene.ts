@@ -26,11 +26,16 @@
 //   glows     (lit) halos round glowing bits and finished builds.
 //   pills     behind the labels, under the terminal's text.
 //
-// The world's ambient tint is baked into everything below the glows,
-// through a cache of tinted copies. Light blended 'screen' (halos, the
-// overlay's glow, a lamp on an animated prop) cannot be carried by a
-// picture laid over: halos are matched to a mid ground (see haloSprite),
-// the rest is lifted off the base it is drawn on (see lift). Everything
+// The room's light (see scene/light.ts) is baked into the base: the shell
+// pass, and the pools, washes and window patches of the lights the world
+// declares; the glow round each light is a halo in the glows layer. The
+// world's grades (its evening tint, and the night while the lights are
+// off) are baked in too, through a cache of graded copies: the room, the
+// props and builds fully, what glows and the crew less, emotes and pills
+// not at all (see gradesOf). Light blended 'screen' (halos, the overlay's
+// glow, a lamp on an animated prop) cannot be carried by a picture laid
+// over: halos are matched to a mid ground (see haloSprite), the rest is
+// lifted off the base it is drawn on (see lift). Everything
 // sits on whole pixels: the camera's origin is rounded, so a sprite placed
 // again is the same picture. Sprites (tiles, props, workstations, builds,
 // figures, desk upgrades, emotes, shadows, rings, halos, pills) are cached
@@ -51,7 +56,7 @@ import type { CritterKind, NpcAct, RoomView, WorldDef } from '../worlds/types.ts
 import { workstationOf } from '../worlds/workstation.ts';
 import { Canvas } from './canvas.ts';
 import { critterSprite, emoteSprite, figureSprite, npcSprite, spriteStats, trinketSprite } from './figure.ts';
-import { hexOf, ink as inkFrom, inkWidth } from './iso.ts';
+import { hexOf, ink as inkFrom, inkWidth, rgbOf } from './iso.ts';
 import { ANIM_FPS, framesFor } from './motion.ts';
 import { framesOf } from './npc/acts.ts';
 import type { Pic, Placed, Plate } from './plate.ts';
@@ -62,8 +67,9 @@ import { POP_STEPS, type DeskSprite, deskPictures, deskStats, growth, loopSprite
 import type { Sprite } from './scene/build.ts';
 import { depthOrder, slotOf } from './scene/depth.ts';
 import type { Drawable } from './scene/depth.ts';
-import { addHalo, ambientBit, drawParticle, floorRing, haloSprite, pill, pillSprite, ringSprite, shadowSprite, tintAll } from './scene/fx.ts';
+import { addHalo, ambientBit, drawParticle, floorRing, haloSprite, pill, pillSprite, ringSprite, shadowSprite } from './scene/fx.ts';
 import type { Project } from './scene/fx.ts';
+import { type Grade, type Tone, glowsIn, gradeAll, gradesOf, halosOf, keepGlows, paintLights, rigOf, shellLight, tuneOf, ungradeAll } from './scene/light.ts';
 import { clusters, cropped, hullOf, lift, same, split } from './scene/pixels.ts';
 import type { Box } from './scene/pixels.ts';
 import type { Bitmap, Pen } from './types.ts';
@@ -122,7 +128,8 @@ const PILL_ALPHA = 20;
 
 // A depth-sorted thing: a cached sprite, top-left at (x, y) on the canvas,
 // or an animated prop (drawn on its own, or live).
-type Item = Drawable & { id: string; img?: Bitmap; x: number; y: number; anim?: { p: PlacedProp; i: number; active: boolean; local?: boolean } };
+// `tone` is its grade (the room's when left out; see Tone).
+type Item = Drawable & { id: string; img?: Bitmap; x: number; y: number; tone?: Tone; anim?: { p: PlacedProp; i: number; active: boolean; local?: boolean } };
 type Build = { sprite: Sprite | null; box: [number, number, number, number, number]; seen: number };
 // A prop's picture in two parts: its body (inside the outline of its box),
 // drawn in depth order, and what it lays on the floor round it (its
@@ -132,12 +139,14 @@ type PropSprite = { body: Sprite | null; floor: Sprite | null };
 // What one scale keeps besides its tiles: the sprites (per prop idle and
 // worked; builds by state; piles by place) and which animated props have
 // had their still parts drawn. `scope` is everything but the scale the
-// pictures depend on; `no` names the layer in tile keys.
+// pictures depend on (the world and its grades, the room, the lights on
+// or off, the ink); `no` names the layer in tile keys.
 type Layer = {
   key: string;
   scope: string;
   s: number;
   no: number;
+  lit: boolean;
   props: Array<[PropSprite | undefined, PropSprite | undefined]>;
   builds: Map<string, Build>;
   piles: Map<string, Sprite>;
@@ -148,8 +157,8 @@ type Layer = {
   used: number;
 };
 
-// A base tile: its pixels as painted (the ground light is lifted off) and
-// as placed (tinted).
+// A base tile: its pixels as painted and graded (the ground light is lifted
+// off), and as placed.
 type Tile = { img: Canvas; pic: Pic };
 
 // A picture drawn afresh, kept while `tag` (what it was drawn from) holds;
@@ -159,8 +168,8 @@ type Drawn = { img: Bitmap; x: number; y: number } | null;
 // Pictures drawn together, the pieces of one thing, by their names.
 type Group = { tag: string; ids: string[]; seen: number };
 
-// The ambient tint as a cache key.
-type Tint = { rgb: RGB; k: number; key: string } | null;
+// A grade, or none.
+type Tint = Grade | null;
 
 // Keys name pixels for the life of the process (see plate.ts): sprites by
 // the identity of their bitmap (and the tint baked in), tiles by their
@@ -179,13 +188,6 @@ const fresh = (img: Bitmap): Pic => ({ key: `v${++serial}`, img });
 
 const pack = (c: RGB) => (c[0] << 16) | (c[1] << 8) | c[2];
 
-function tintOf(w: WorldDef): Tint {
-  const a = w.ambient;
-  if (!a || !(a.strength > 0)) return null;
-  const k = Math.min(1, a.strength);
-  return { rgb: a.tint, k, key: `${pack(a.tint)}*${k}` };
-}
-
 const copyOf = (b: Bitmap): Canvas => {
   const c = new Canvas(b.width, b.height);
   c.data.set(b.data);
@@ -195,7 +197,7 @@ const copyOf = (b: Bitmap): Canvas => {
 const plain = new WeakMap<Bitmap, Pic>();
 const tinted = new WeakMap<Bitmap, Map<string, Pic>>();
 
-// A cached sprite as a picture, the tint baked into a copy kept as long as
+// A cached sprite as a picture, the grade baked into a copy kept as long as
 // the sprite is.
 function picOf(img: Bitmap, t: Tint): Pic {
   if (!t) {
@@ -208,7 +210,7 @@ function picOf(img: Bitmap, t: Tint): Pic {
   let p = m.get(t.key);
   if (!p) {
     const c = copyOf(img);
-    tintAll(c.data, t.rgb, t.k);
+    gradeAll(c.data, t);
     m.set(t.key, (p = { key: `s${idOf(img)}~${t.key}`, img: c }));
   }
   return p;
@@ -227,6 +229,40 @@ function memo<V>(m: Map<string, V>, key: string, cap: number, make: () => V): V 
   m.set(key, v);
   if (m.size > cap) m.delete(m.keys().next().value as string);
   return v;
+}
+
+// Paints `paint` into the opaque picture c as if before grade t: over a
+// copy ungraded, then graded again, where it painted. (A grade multiplies,
+// so ungrading and grading again gives back what it took to black and
+// what it left alone, but for rounding; what was laid over the grade
+// lighter than it allows, a ring or an emote, would not come back: so
+// only what `paint` changed is taken.)
+function graded(c: Canvas, t: Tint, paint: (pen: Pen) => void): void {
+  if (!t) return paint(c);
+  const B = new Bounds(c.width, c.height);
+  paint(B);
+  const x0 = Math.max(0, Math.floor(B.x0));
+  const y0 = Math.max(0, Math.floor(B.y0));
+  const x1 = Math.min(c.width, Math.ceil(B.x1));
+  const y1 = Math.min(c.height, Math.ceil(B.y1));
+  if (x1 <= x0 || y1 <= y0) return;
+  const rows = (b: Canvas, f: (px: Uint8ClampedArray) => void) => {
+    for (let y = y0; y < y1; y++) f(b.data.subarray((y * b.width + x0) * 4, (y * b.width + x1) * 4));
+  };
+  const onto = copyOf(c);
+  const same = copyOf(c);
+  for (const b of [onto, same]) rows(b, (px) => ungradeAll(px, t));
+  paint(onto);
+  for (const b of [onto, same]) rows(b, (px) => gradeAll(px, t));
+  const d = c.data;
+  for (let y = y0; y < y1; y++) {
+    for (let o = (y * c.width + x0) * 4, e = (y * c.width + x1) * 4; o < e; o += 4) {
+      if (onto.data[o] === same.data[o] && onto.data[o + 1] === same.data[o + 1] && onto.data[o + 2] === same.data[o + 2]) continue;
+      d[o] = onto.data[o];
+      d[o + 1] = onto.data[o + 1];
+      d[o + 2] = onto.data[o + 2];
+    }
+  }
 }
 
 // A world's outline colour.
@@ -254,7 +290,10 @@ export function propParts(c: Canvas, at: (u: number, v: number, z: number) => [n
   return split(c, mask);
 }
 
-const scopeOf = (f: SceneFrame) => `${f.world.id}|${idOf(f.room)}|${f.lit}|${inkOf(f.world)}`;
+const scopeOf = (f: SceneFrame) => `${f.world.id}.${idOf(f.world)}|${idOf(f.room)}|${f.lit}|${inkOf(f.world)}|${gradesOf(f.world, f.lit).key}`;
+
+// A workstation's picture's grade: its screen glows, the rest is furniture.
+const deskTone = (id: string): Tone => (id.startsWith('screen:') ? 'emit' : 'room');
 
 // Where a thing's ambient steps fall (0..1), so things drawn per step take
 // turns rather than all at once.
@@ -326,7 +365,7 @@ export class Scene {
     const l = this.layerAt(f, s);
     l.used = this.renders;
     for (const [k, b] of l.builds) if (this.renders - b.seen > 30) l.builds.delete(k);
-    const t = tintOf(f.world);
+    const gr = gradesOf(f.world, f.lit);
     const P: Project = (x, y, z) => [OX + (x - y) * s, OY + ((x + y) * s) / 2 - z * s];
     const ink = inkOf(f.world);
     // Pictures wholly off the canvas are left out.
@@ -339,8 +378,8 @@ export class Scene {
     for (let ty = r.y0; ty <= r.y1; ty++) for (let tx = r.x0; tx <= r.x1; tx++) put(`base:${tx},${ty}`, this.tile(f, l, tx, ty, true).pic, OX + tx * TILE, OY + ty * TILE);
     const floors: Item[] = [];
     const items = this.items(f, l, P, s, OX, OY, ink, w, h, floors);
-    for (const it of floors) put(it.id, picOf(it.img!, t), it.x, it.y);
-    this.floorPics(f, P, s, t, put);
+    for (const it of floors) put(it.id, picOf(it.img!, gr[it.tone ?? 'room']), it.x, it.y);
+    this.floorPics(f, P, s, put);
 
     const order = depthOrder(items);
     const slots = this.slotted(f, P, items, order, w, h);
@@ -348,38 +387,39 @@ export class Scene {
     this.thaw(f, l, OX, OY, slots, anchor);
     for (let k = 0; k <= order.length; k++) {
       const ps = slots[k];
-      if (ps) for (const { id, v } of this.bitsPics(anchor(k), ps, f, P, s, OX, OY, w, h, t)) put(id, v.pic, OX + v.x, OY + v.y, true);
+      if (ps) for (const { id, v } of this.bitsPics(anchor(k), ps, f, P, s, OX, OY, w, h, gr.room)) put(id, v.pic, OX + v.x, OY + v.y, true);
       if (k === order.length) break;
       const it = items[order[k]];
+      const tone = gr[it.tone ?? 'room'];
       if (it.anim?.local) {
-        const v = this.cyclePic(it, f, l, s, t);
+        const v = this.cyclePic(it, f, l, s, tone);
         if (v) put(it.id, v.pic, OX + v.x, OY + v.y);
       } else if (it.anim) {
-        const v = this.animPic(it, f, l, s, t);
+        const v = this.animPic(it, f, l, s, tone);
         put(it.id, v.pic, OX + v.x, OY + v.y, true);
-      } else put(it.id, picOf(it.img!, t), it.x, it.y);
+      } else put(it.id, picOf(it.img!, tone), it.x, it.y);
     }
 
     for (const g of f.figures) {
       if (!g.emote) continue;
       const sp = emoteSprite(g.emote.kind, g.emote.t, s, ink);
       const [x, y] = P(g.x, g.y, g.z + figureTop(g) + EMOTE.gap);
-      put(`emote:${g.id}`, picOf(sp.img, t), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
+      put(`emote:${g.id}`, picOf(sp.img, null), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
     const cr = f.critter;
     if (cr && cr.heart !== undefined) {
       const sp = emoteSprite('heart', cr.heart, s, ink);
       const [x, y] = P(cr.x, cr.y, cr.z + critterTop(cr.kind));
-      put('emote:critter', picOf(sp.img, t), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
+      put('emote:critter', picOf(sp.img, null), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
     for (const n of f.npcs ?? []) {
       if (!n.emote) continue;
       const sp = emoteSprite(n.emote.kind, n.emote.t, s, ink);
       const [x, y] = P(n.x, n.y, n.top + EMOTE.gap);
-      put(`emote:npc:${n.k}`, picOf(sp.img, t), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
+      put(`emote:npc:${n.k}`, picOf(sp.img, null), Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
-    if (f.world.room.overlay) for (const { id, v } of this.overlayPics(f, l, t, OX, OY, w, h)) put(id, v.pic, OX + v.x, OY + v.y, true);
-    if (f.lit) this.glowPics(f, P, s, put);
+    if (f.world.room.overlay) for (const { id, v } of this.overlayPics(f, l, gr.room, OX, OY, w, h)) put(id, v.pic, OX + v.x, OY + v.y, true);
+    this.glowPics(f, P, s, put);
     f.labels.forEach((lb, n) => {
       const b = cellBox(cam, lb.col, lb.row, lb.w);
       const strong = lb.kind === 'error';
@@ -416,7 +456,9 @@ export class Scene {
   // The frame painted straight into one picture, layer by layer, the way
   // the scene was drawn before plates: what the plate composites to but for
   // rounding, the glows (here blended 'screen') and what the plate snaps to
-  // whole pixels or takes in steps (rings, pulses, fades). For tests.
+  // whole pixels or takes in steps (rings, pulses, fades). What is drawn
+  // live (animated props, bits, the overlay) is painted graded: over the
+  // picture so far ungraded, then graded again (see graded). For tests.
   flat(f: SceneFrame): Canvas {
     const cam = f.camera;
     const w = Math.max(1, Math.round(cam.w));
@@ -425,15 +467,17 @@ export class Scene {
     const OY = Math.round(cam.oy);
     const s = cam.s;
     const l = this.layerAt(f, s);
+    const gr = gradesOf(f.world, f.lit);
     const P: Project = (x, y, z) => [OX + (x - y) * s, OY + ((x + y) * s) / 2 - z * s];
     const ink = inkOf(f.world);
     const c = this.ground(f, l, -OX, -OY, w, h);
     const floors: Item[] = [];
     const items = this.items(f, l, P, s, OX, OY, ink, w, h, floors);
     const draw = (it: Item) => {
-      if (!it.anim) return c.drawImage(it.img!, it.x, it.y);
+      const t = gr[it.tone ?? 'room'];
+      if (!it.anim) return c.drawImage(picOf(it.img!, t).img, it.x, it.y);
       const { p, i, active, local } = it.anim;
-      this.drawProp(c, p, (u, v, z) => P(...toWorld(p, u, v, z)), s, local ? cycleStep(f.t, i) / AMBIENT_FPS : f.t, active);
+      graded(c, t, (pen) => this.drawProp(pen, p, (u, v, z) => P(...toWorld(p, u, v, z)), s, local ? cycleStep(f.t, i) / AMBIENT_FPS : f.t, active, f.lit));
     };
     for (const it of floors) draw(it);
     this.decals(c, f, P, s);
@@ -442,9 +486,11 @@ export class Scene {
     const bits = (k: number) => {
       const ps = slots[k];
       if (!ps) return;
-      c.save();
-      for (const p of ps) drawParticle(c, P, p, s, f.t);
-      c.restore();
+      graded(c, gr.room, (pen) => {
+        pen.save();
+        for (const p of ps) drawParticle(pen, P, p, s, f.t);
+        pen.restore();
+      });
     };
     for (let k = 0; k < order.length; k++) {
       bits(k);
@@ -469,14 +515,15 @@ export class Scene {
       const [x, y] = P(n.x, n.y, n.top + EMOTE.gap);
       c.drawImage(sp.img, Math.round(x) - sp.ax, Math.round(y) - sp.ay);
     }
-    if (f.world.room.overlay) {
-      c.save();
-      f.world.room.overlay(this.roomView(f, c, P, s));
-      c.restore();
+    const over = f.world.room.overlay;
+    if (over) {
+      graded(c, gr.room, (pen) => {
+        pen.save();
+        over(this.roomView(f, pen, P, s));
+        pen.restore();
+      });
     }
-    const t = tintOf(f.world);
-    if (t) tintAll(c.data, t.rgb, t.k);
-    if (f.lit) this.glows(c, f, P, s, w, h);
+    this.glows(c, f, P, s, w, h);
     for (const lb of f.labels) {
       const b = cellBox(f.camera, lb.col, lb.row, lb.w);
       pill(c, b.x0, b.y0, b.x1, b.y1, lb.color, lb.alpha, ink, lb.kind === 'error');
@@ -521,7 +568,7 @@ export class Scene {
 
   private roomView(f: SceneFrame, pen: Pen, at: Project, s: number): RoomView {
     const L = f.room.L;
-    return { pen, s, at, W: L.W, D: L.D, H: L.H, T: L.T, t: f.t, seed: hashString(f.world.id) };
+    return { pen, s, at, W: L.W, D: L.D, H: L.H, T: L.T, t: f.t, seed: hashString(f.world.id), lit: f.lit };
   }
 
   // ── layers and tiles ──────────────────────────────────────────────────
@@ -539,7 +586,7 @@ export class Scene {
     }
     let no = layerNos.get(key);
     if (no === undefined) layerNos.set(key, (no = layerNos.size + 1));
-    l = { key, scope, s, no, props: [], builds: new Map(), piles: new Map(), warmed: new Set(), cycles: new Map(), used: this.renders };
+    l = { key, scope, s, no, lit: f.lit, props: [], builds: new Map(), piles: new Map(), warmed: new Set(), cycles: new Map(), used: this.renders };
     this.layers.push(l);
     return l;
   }
@@ -559,19 +606,13 @@ export class Scene {
     const img = new Canvas(TILE, TILE);
     this.paintStatic(img, f, l.s, tx * TILE, ty * TILE);
     this.stats.tiles++;
-    const t = tintOf(f.world);
-    let shown: Canvas = img;
-    if (t) {
-      shown = copyOf(img);
-      tintAll(shown.data, t.rgb, t.k);
-    }
-    tl = { img, pic: { key: `b${l.no}.${tx}.${ty}`, img: shown, opaque: true } };
+    tl = { img, pic: { key: `b${l.no}.${tx}.${ty}`, img, opaque: true } };
     this.tiles.set(key, tl);
     while (this.tiles.size > TILES) this.tiles.delete(this.tiles.keys().next().value as string);
     return tl;
   }
 
-  // The base (untinted) under world pixels (x, y, w, h), from its tiles.
+  // The base (graded, lit) under world pixels (x, y, w, h), from its tiles.
   private ground(f: SceneFrame, l: Layer, x: number, y: number, w: number, h: number): Canvas {
     const c = new Canvas(w, h);
     for (let ty = Math.floor(y / TILE); ty * TILE < y + h; ty++) for (let tx = Math.floor(x / TILE); tx * TILE < x + w; tx++) c.drawImage(this.tile(f, l, tx, ty, false).img, tx * TILE - x, ty * TILE - y);
@@ -579,7 +620,10 @@ export class Scene {
   }
 
   // The backdrop with a soft light behind the room, and the room shell, at
-  // scale s, into `c`, whose (0, 0) is world pixel (x, y).
+  // scale s, into `c`, whose (0, 0) is world pixel (x, y): the shell lit by
+  // the shared pass, graded (drawn on its own first, so the backdrop round
+  // it is not: the picture's edge meets the terminal's), then the light
+  // the world declares laid over it.
   private paintStatic(c: Canvas, f: SceneFrame, s: number, x: number, y: number): void {
     const L = f.room.L;
     const P: Project = (wx, wy, wz) => [-x + (wx - wy) * s, -y + ((wx + wy) * s) / 2 - wz * s];
@@ -595,9 +639,22 @@ export class Scene {
     g.addColorStop(1, hexOf(back, 0));
     c.fillStyle = g;
     c.fillRect(0, 0, c.width, c.height);
-    c.save();
-    f.world.room.draw({ pen: c, s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t: 0, seed: hashString(f.world.id) });
-    c.restore();
+    const grade = gradesOf(f.world, f.lit).room;
+    const shell = grade ? new Canvas(c.width, c.height) : c;
+    const tune = tuneOf(f.world);
+    shell.save();
+    f.world.room.draw({ pen: shell, s, at: P, W: L.W, D: L.D, H: L.H, T: L.T, t: 0, seed: hashString(f.world.id), lit: f.lit });
+    shell.restore();
+    shellLight(shell, L, f.room.props, rgbOf(inkOf(f.world)), s, -x, -y, tune);
+    const rig = rigOf(f.world, f.room, f.lit);
+    if (grade) {
+      const orig = rig.glows.length ? shell.data.slice() : null;
+      gradeAll(shell.data, grade);
+      if (orig) keepGlows(shell.data, orig, shell.width, shell.height, rig, s, -x, -y);
+      c.drawImage(shell, 0, 0);
+    }
+    paintLights(c, L, rig, s, -x, -y, tune.pools);
+    c.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   // ── warming ───────────────────────────────────────────────────────────
@@ -683,7 +740,7 @@ export class Scene {
     const OY = Math.round(c.oy);
     const w = Math.round(c.w);
     const h = Math.round(c.h);
-    const t = tintOf(f.world);
+    const gr = gradesOf(f.world, f.lit);
     const ink = inkOf(f.world);
     const seen = (b: { sx0: number; sy0: number; sx1: number; sy1: number }) => b.sx1 > 0 && b.sy1 > 0 && b.sx0 < w && b.sy0 < h;
     for (let i = 0; i < f.room.props.length; i++) {
@@ -697,13 +754,14 @@ export class Scene {
           this.drawProp(new Bounds(w, h), p, (u, v, z) => {
             const [x, y, zz] = toWorld(p, u, v, z);
             return [(x - y) * s, ((x + y) * s) / 2 - zz * s];
-          }, s, f.t, active);
+          }, s, f.t, active, f.lit);
         };
         continue;
       }
       if (l.props[i]?.[active ? 1 : 0]) continue;
       yield () => {
         const sp = this.propSprite(l, i, p, active);
+        const t = gr[glowsIn(p.art, f.lit) ? 'emit' : 'room'];
         for (const part of [sp.body, sp.floor]) if (part) out.push(picOf(part.img, t));
       };
     }
@@ -711,11 +769,11 @@ export class Scene {
       if ((b.blocks.length || b.pending.length) && !l.builds.has(this.buildKey(b))) {
         yield () => {
           const e = this.buildAt(l, b, ink);
-          if (e.sprite) out.push(picOf(e.sprite.img, t));
+          if (e.sprite) out.push(picOf(e.sprite.img, gr.room));
         };
       }
       if (b.pile && !l.piles.has(this.pileKey(b.pile))) {
-        yield () => out.push(picOf(this.pileAt(l, b, ink).img, t));
+        yield () => out.push(picOf(this.pileAt(l, b, ink).img, gr.room));
       }
     }
   }
@@ -724,15 +782,15 @@ export class Scene {
   // contact shadows, the ring each would have if picked, and their emotes;
   // the workstations and the desk upgrades.
   private *figureChores(f: SceneFrame, s: number, out: Pic[]): Generator<() => void> {
-    const t = tintOf(f.world);
+    const gr = gradesOf(f.world, f.lit);
     const ink = inkOf(f.world);
-    const made = (img: Bitmap, fresh: boolean) => {
+    const made = (img: Bitmap, fresh: boolean, t: Tint = gr.fig) => {
       if (fresh || !hasPic(img, t)) out.push(picOf(img, t));
     };
     if (!this.shadows.has(s)) {
       yield () => {
         const sh = this.shadowsAt(s);
-        for (const d of [sh.fig, sh.nap, sh.pet]) made(d.img, true);
+        for (const d of [sh.fig, sh.nap, sh.pet]) made(d.img, true, null);
       };
     }
     for (const g of f.figures) {
@@ -743,10 +801,10 @@ export class Scene {
         if (g.emote) {
           const e = spriteStats.misses;
           const es = emoteSprite(g.emote.kind, g.emote.t, s, ink);
-          made(es.img, spriteStats.misses > e);
+          made(es.img, spriteStats.misses > e, null);
         }
         const key = `${s}|3.6|${pack(g.traits.color)}|1`;
-        if (!this.rings.has(key)) made(memo(this.rings, key, 64, () => ringSprite(3.6, s, g.traits.color, 1)).img, true);
+        if (!this.rings.has(key)) made(memo(this.rings, key, 64, () => ringSprite(3.6, s, g.traits.color, 1)).img, true, null);
       };
     }
     const cr = f.critter;
@@ -774,7 +832,7 @@ export class Scene {
     for (const d of f.desks ?? []) {
       if (d.grow <= 0) continue;
       yield () => {
-        for (const { sp, fresh } of deskPictures(f.world, d, f.t, s, ink)) made(sp.img, fresh);
+        for (const { sp, fresh, id } of deskPictures(f.world, d, f.t, s, ink, f.lit)) made(sp.img, fresh, gr[deskTone(id)]);
       };
       // Every frame of its loops at s, lit, and the still one unlit. This
       // runs only at the scales of the cameras a key away (see chores), so
@@ -789,8 +847,8 @@ export class Scene {
         for (let i = 0; i <= n; i++) {
           yield () => {
             const m = deskStats.misses;
-            const sp = loopSprite(f.world, k, i % n, i < n, d.wall, s, ink);
-            made(sp.img, deskStats.misses > m);
+            const sp = loopSprite(f.world, k, i % n, i < n, d.wall, s, ink, f.lit);
+            made(sp.img, deskStats.misses > m, gr.room);
           };
         }
       }
@@ -799,7 +857,7 @@ export class Scene {
       yield () => {
         const m = spriteStats.misses;
         const sp = trinketSprite(tk.kind, tk.color, s, ink);
-        made(sp.img, spriteStats.misses > m);
+        made(sp.img, spriteStats.misses > m, gr.room);
       };
     }
   }
@@ -847,7 +905,9 @@ export class Scene {
   // Contact shadows and rings as sprites: a ring snapped to the pixel under
   // its figure's feet, the hurt pulse and a floating critter's fading
   // shadow in steps.
-  private floorPics(f: SceneFrame, P: Project, s: number, t: Tint, put: (id: string, pic: Pic, x: number, y: number) => void): void {
+  // Rings and shadows are not graded: shadows are black, rings marks.
+  private floorPics(f: SceneFrame, P: Project, s: number, put: (id: string, pic: Pic, x: number, y: number) => void): void {
+    const t = null;
     const sh = this.shadowsAt(s);
     const ring = (id: string, x: number, y: number, r: number, color: RGB, a: number) => {
       const rg = memo(this.rings, `${s}|${r}|${pack(color)}|${a}`, 64, () => ringSprite(r, s, color, a));
@@ -947,16 +1007,17 @@ export class Scene {
       const vol = propBox(p, s, OX, OY);
       if (!seen(vol)) return;
       const active = !!f.active[i];
+      const tone: Tone = glowsIn(p.art, f.lit) ? 'emit' : 'room';
       if (p.art.animated) {
-        const it: Item = { ...box, ...vol, id: `prop:${i}`, x: 0, y: 0, anim: { p, i, active, local: worked.has(i) } };
+        const it: Item = { ...box, ...vol, id: `prop:${i}`, x: 0, y: 0, tone, anim: { p, i, active, local: worked.has(i) } };
         out.push(it);
         propItem.set(i, it);
         return;
       }
       const sp = this.propSprite(l, i, p, active);
-      if (sp.floor) floors.push(sprite(`floor:${i}`, sp.floor, box));
+      if (sp.floor) floors.push({ ...sprite(`floor:${i}`, sp.floor, box), tone });
       if (sp.body) {
-        const it = sprite(`prop:${i}`, sp.body, box);
+        const it: Item = { ...sprite(`prop:${i}`, sp.body, box), tone };
         out.push(it);
         propItem.set(i, it);
       }
@@ -975,7 +1036,7 @@ export class Scene {
       // slotted by it): a bit of one at its edge does not slip under it.
       let body: DeskSprite | undefined;
       let bodyItem: Item | undefined;
-      for (const { sp, at, sortAs, id } of deskPictures(f.world, d, f.t, s, ink)) {
+      for (const { sp, at, sortAs, id } of deskPictures(f.world, d, f.t, s, ink, f.lit)) {
         body ??= sp;
         const dx = Math.round(x) - sp.ax;
         const dy = Math.round(y) - sp.ay;
@@ -983,12 +1044,12 @@ export class Scene {
         let it: Item;
         if (at) {
           const [px, py] = toWorld(d, at[0], at[1], 0);
-          it = { x0: px, y0: py, x1: px, y1: py, h: at[2], point: true, ...own, on: bodyItem, id, img: sp.img, x: dx, y: dy };
+          it = { x0: px, y0: py, x1: px, y1: py, h: at[2], point: true, ...own, on: bodyItem, id, img: sp.img, x: dx, y: dy, tone: deskTone(id) };
         } else {
           const bx = Math.round(x) - body.ax;
           const by = Math.round(y) - body.ay;
           const sz = { sx0: bx, sy0: by, sx1: bx + body.img.width, sy1: by + body.img.height };
-          it = { ...box, ...(sortAs ? sz : own), id, img: sp.img, x: dx, y: dy };
+          it = { ...box, ...(sortAs ? sz : own), id, img: sp.img, x: dx, y: dy, tone: deskTone(id) };
         }
         if (seen(it)) {
           out.push(it);
@@ -1020,7 +1081,7 @@ export class Scene {
       const [x, y] = P(g.x, g.y, g.z + (g.hop ?? 0));
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: g.x, y0: g.y, x1: g.x, y1: g.y, h: g.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `fig:${g.id}`, img: sp.img, x: dx, y: dy };
+      const it: Item = { x0: g.x, y0: g.y, x1: g.x, y1: g.y, h: g.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `fig:${g.id}`, img: sp.img, x: dx, y: dy, tone: 'fig' };
       if (seen(it)) out.push(it);
     }
     for (const n of f.npcs ?? []) {
@@ -1031,7 +1092,7 @@ export class Scene {
       const [x, y] = P(n.x, n.y, n.z);
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: n.x, y0: n.y, x1: n.x, y1: n.y, h: n.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `npc:${n.k}`, img: sp.img, x: dx, y: dy };
+      const it: Item = { x0: n.x, y0: n.y, x1: n.x, y1: n.y, h: n.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: `npc:${n.k}`, img: sp.img, x: dx, y: dy, tone: 'fig' };
       if (n.on) it.on = propItem.get(n.prop);
       if (seen(it)) out.push(it);
     }
@@ -1053,7 +1114,7 @@ export class Scene {
       const [x, y] = P(cr.x, cr.y, cr.z);
       const dx = Math.round(x) - sp.ax;
       const dy = Math.round(y) - sp.ay;
-      const it: Item = { x0: cr.x, y0: cr.y, x1: cr.x, y1: cr.y, h: cr.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: 'critter', img: sp.img, x: dx, y: dy };
+      const it: Item = { x0: cr.x, y0: cr.y, x1: cr.x, y1: cr.y, h: cr.z, point: true, sx0: dx, sy0: dy, sx1: dx + sp.img.width, sy1: dy + sp.img.height, id: 'critter', img: sp.img, x: dx, y: dy, tone: 'fig' };
       if (seen(it)) out.push(it);
     }
     return out;
@@ -1130,7 +1191,7 @@ export class Scene {
         });
         const crop = cropped(c);
         if (!crop) continue;
-        if (t) tintAll(crop.img.data, t.rgb, t.k);
+        if (t) gradeAll(crop.img.data, t);
         out.push({ name: `${out.length}`, img: crop.img, x: b.x0 + crop.x - OX, y: b.y0 + crop.y - OY });
       }
       return out;
@@ -1172,8 +1233,7 @@ export class Scene {
   }
 
   // Prop p (the i-th) drawn whole at clock `time`, worked or not (world
-  // pixels), cropped: light it lays on with 'screen' is lifted off the base
-  // under it (see lift); tinted.
+  // pixels), graded t, cropped (see laid).
   private animDrawn(p: PlacedProp, i: number, f: SceneFrame, l: Layer, s: number, time: number, active: boolean, t: Tint): Drawn {
     this.stats.animated++;
     l.warmed.add(i);
@@ -1182,25 +1242,39 @@ export class Scene {
       return [(x - y) * s, ((x + y) * s) / 2 - zz * s];
     };
     const B = new Bounds(TILE, TILE);
-    this.drawProp(B, p, rel, s, time, active);
+    this.drawProp(B, p, rel, s, time, active, f.lit);
     if (!(B.x1 > B.x0 && B.y1 > B.y0)) return null;
     const { x0, y0, x1, y1 } = B;
     const at = (u: number, v: number, z: number): [number, number] => {
       const q = rel(u, v, z);
       return [q[0] - x0, q[1] - y0];
     };
-    let img = new Canvas(x1 - x0, y1 - y0);
-    this.drawProp(img, p, at, s, time, active);
-    if (B.light) {
-      const under = this.ground(f, l, x0, y0, x1 - x0, y1 - y0);
-      const onto = copyOf(under);
-      this.drawProp(onto, p, at, s, time, active);
-      img = lift(img, onto, under);
-    }
+    const img = this.laid(f, l, x0, y0, x1 - x0, y1 - y0, t, B.light, (c) => this.drawProp(c, p, at, s, time, active, f.lit));
     const crop = cropped(img);
     if (!crop) return null;
-    if (t) tintAll(crop.img.data, t.rgb, t.k);
     return { img: crop.img, x: x0 + crop.x, y: y0 + crop.y };
+  }
+
+  // What `paint` draws into a w x h picture whose (0, 0) is world pixel
+  // (x0, y0), graded t, as one picture to lay over the base there. Light it
+  // lays on with 'screen' (`light`) is lifted off the base under it (see
+  // lift), the base taken as if graded t too: its ungraded pixels found
+  // from the room's grade.
+  private laid(f: SceneFrame, l: Layer, x0: number, y0: number, w: number, h: number, t: Tint, light: boolean, paint: (c: Canvas) => void): Canvas {
+    const img = new Canvas(w, h);
+    paint(img);
+    if (t) gradeAll(img.data, t);
+    if (!light) return img;
+    const under = this.ground(f, l, x0, y0, w, h);
+    const room = gradesOf(f.world, f.lit).room;
+    if (room) ungradeAll(under.data, room);
+    const onto = copyOf(under);
+    paint(onto);
+    if (t) {
+      gradeAll(under.data, t);
+      gradeAll(onto.data, t);
+    }
+    return lift(img, onto, under);
   }
 
   // The room's overlay (world pixels) per ambient step: found in pieces
@@ -1233,15 +1307,7 @@ export class Scene {
         draw(this.roomView(f, c, at, s));
         c.restore();
       };
-      let img = new Canvas(b.x1 - b.x0, b.y1 - b.y0);
-      paint(img);
-      if (b.light) {
-        const under = this.ground(f, l, b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
-        const onto = copyOf(under);
-        paint(onto);
-        img = lift(img, onto, under);
-      }
-      if (t) tintAll(img.data, t.rgb, t.k);
+      const img = this.laid(f, l, b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, t, b.light, paint);
       drawn.set(n, img);
       return img;
     };
@@ -1280,9 +1346,9 @@ export class Scene {
     return out;
   }
 
-  private drawProp(pen: Pen, p: PlacedProp, at: (u: number, v: number, z: number) => [number, number], s: number, t: number, active: boolean): void {
+  private drawProp(pen: Pen, p: PlacedProp, at: (u: number, v: number, z: number) => [number, number], s: number, t: number, active: boolean, lit: boolean): void {
     pen.save();
-    p.art.draw({ pen, s, at, len: p.len, dep: p.dep, wall: p.wall, island: p.island, t, active, seed: p.seed });
+    p.art.draw({ pen, s, at, len: p.len, dep: p.dep, wall: p.wall, island: p.island, t, active, seed: p.seed, lit });
     pen.restore();
   }
 
@@ -1305,7 +1371,7 @@ export class Scene {
       const [x, y, zz] = toWorld(p, u, v, z);
       return [(x - y) * s - bx, ((x + y) * s) / 2 - zz * s - by];
     };
-    this.drawProp(tmp, p, at, s, 0, active);
+    this.drawProp(tmp, p, at, s, 0, active, l.lit);
     this.stats.props++;
     const parts = propParts(tmp, at, p.len, p.dep, p.art.height, s);
     const place = (c: Canvas): Sprite | null => {
@@ -1322,9 +1388,16 @@ export class Scene {
     return { r: p.kind === 'bolt' ? 3 : p.kind === 'glint' ? 2.4 : p.kind === 'ember' ? 2.2 : 1.8, a: p.kind === 'bolt' ? 0.7 : 0.5 };
   }
 
-  // Halos blended 'screen' into the picture (the old way).
+  // Halos blended 'screen' into the picture (the old way): the glow round
+  // each declared light that shines, and with the lights on round glowing
+  // bits and finished builds.
   private glows(c: Canvas, f: SceneFrame, P: Project, s: number, w: number, h: number): void {
     const d = c.data;
+    for (const g of halosOf(rigOf(f.world, f.room, f.lit), s)) {
+      const [x, y] = P(g.x, g.y, g.z);
+      addHalo(d, w, h, Math.round(x), Math.round(y), Math.max(1, Math.round(g.R)), g.color, g.a);
+    }
+    if (!f.lit) return;
     for (const p of f.particles) {
       if (!p.glow) continue;
       const a = opacity(p);
@@ -1343,14 +1416,20 @@ export class Scene {
     }
   }
 
-  // Halos as sprites, untinted: a bit's fade and the beacon's pulse in
-  // steps.
+  // Halos as sprites, ungraded: round each declared light that shines
+  // (placed alike frame to frame: they cost nothing once sent), and with
+  // the lights on a bit's fade and the beacon's pulse in steps.
   private glowPics(f: SceneFrame, P: Project, s: number, put: (id: string, pic: Pic, x: number, y: number) => void): void {
     const halo = (id: string, x: number, y: number, r: number, c: RGB, a: number) => {
       const R = Math.max(1, Math.round(r));
       const img = memo(this.halos, `${R}|${pack(c)}|${a}`, 256, () => haloSprite(R, c, a));
       put(id, picOf(img, null), Math.round(x) - R, Math.round(y) - R);
     };
+    halosOf(rigOf(f.world, f.room, f.lit), s).forEach((g, j) => {
+      const [x, y] = P(g.x, g.y, g.z);
+      halo(`light:${j}`, x, y, g.R, g.color, g.a);
+    });
+    if (!f.lit) return;
     for (const p of f.particles) {
       if (!p.glow) continue;
       const a = opacity(p);

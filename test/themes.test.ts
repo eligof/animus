@@ -13,7 +13,7 @@ import { footprint, planRoom, toWorld } from '../src/world/room.ts';
 import type { Particle, SlotKind } from '../src/world/types.ts';
 import { DESK, DESK_SPOT, deskZone } from '../src/world/desks.ts';
 import { FIGURE_H, FIGURE_HALF_W, project } from '../src/world/frame.ts';
-import type { P3, PropArt, PropView } from '../src/worlds/types.ts';
+import type { P3, PropArt, PropLight, PropView } from '../src/worlds/types.ts';
 import { workstationOf } from '../src/worlds/workstation.ts';
 import { S, canvasBox, partCheck, viewOf } from './desk-contract.ts';
 import { recordingPen } from './helpers.ts';
@@ -83,6 +83,38 @@ for (const w of [...THEMES, ...EXTRA.filter((e) => !THEMES.some((t) => t.id === 
       assert.ok(Number.isInteger(d.count) && d.count >= 0 && d.count <= 12, `decor count ${d.count}`);
       assert.ok(d.art.len > 0 && d.art.dep > 0 && d.art.len <= 24 && d.art.dep <= 24 && d.art.height > 0, 'decor size');
     }
+  });
+
+  test(`world ${w.id}: the light it declares is in range: its tuning, its ambient, the room's lights and its props'`, () => {
+    const share = (v: number | undefined, hi = 2) => v === undefined || (Number.isFinite(v) && v >= 0 && v <= hi);
+    const l = w.light;
+    if (l) {
+      for (const k of ['ao', 'falloff', 'top', 'turn', 'backs', 'pools'] as const) assert.ok(share(l[k]), `light.${k} ${l[k]}`);
+      if (l.night) assert.ok((l.night.tint === undefined || isRGB(l.night.tint)) && share(l.night.strength, 1) && share(l.night.figures, 1), 'light.night');
+    }
+    if (w.ambient) assert.ok(share(w.ambient.figures, 1), 'ambient.figures');
+    const L = planLayout(305, 215, w.id);
+    const room = planRoom(w, L, 1);
+    const hex = (c: string | undefined) => c === undefined || /^#[0-9a-f]{6}$/i.test(c);
+    const sane = (q: PropLight, tag: string, box: { len: number; dep: number; height: number }) => {
+      assert.ok(['lamp', 'fire', 'lava', 'glow', 'screen', 'window'].includes(q.kind), `${tag}: kind ${q.kind}`);
+      assert.ok(share(q.strength), `${tag}: strength`);
+      if (q.kind === 'window') {
+        assert.ok([q.u, q.w, q.z0, q.z1].every(Number.isFinite) && q.w > 0 && q.w <= 40 && q.z0 >= 0 && q.z1 > q.z0 && q.z1 <= box.height + 0.01, `${tag}: window ${q.u} ${q.w} ${q.z0}..${q.z1}`);
+        assert.ok(q.u - q.w / 2 >= -0.01 && q.u + q.w / 2 <= box.len + 0.01, `${tag}: window off its wall`);
+        assert.ok([q.bars, q.rails].every((n) => n === undefined || (Number.isInteger(n) && n >= 0 && n <= 8)), `${tag}: bars, rails`);
+        assert.ok(hex(q.color) && hex(q.night) && share(q.moon), `${tag}: window colours`);
+      } else {
+        assert.ok([q.u, q.v, q.z].every(Number.isFinite), `${tag}: not finite`);
+        assert.ok(q.u >= -1 && q.u <= box.len + 1 && q.v >= -1 && q.v <= box.dep + 1 && q.z >= 0 && q.z <= box.height + 4, `${tag}: at ${q.u}, ${q.v}, ${q.z}, off its frame`);
+        assert.ok(hex(q.color) && (q.r === undefined || (q.r > 0 && q.r <= 40)) && (q.halo === undefined || (q.halo >= 0 && q.halo <= 12)), `${tag}: colour, reach or glow`);
+      }
+    };
+    for (const q of w.room.lights?.({ W: L.W, D: L.D, H: L.H, T: L.T, seed: 1 }) ?? []) {
+      assert.ok(q.wall === 'left' || q.wall === 'right', 'a room light names its wall');
+      sane(q, `room ${q.kind}`, { len: q.wall === 'right' ? L.W : L.D, dep: Math.max(L.W, L.D), height: L.H });
+    }
+    for (const p of room.props) for (const q of p.art.light ?? []) sane(q, `${p.slot?.kind ?? 'decor'} ${q.kind}`, { len: p.len, dep: p.dep, height: p.art.height });
   });
 
   test(`world ${w.id}: the room and every prop draw with the pen, inside the canvas`, () => {
